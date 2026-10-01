@@ -1,0 +1,17 @@
+# Generated Gradle output
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/storage/uploads/
+
+# Local editor files
+.vscode/
+backend/.vscode/
+
+# Unity generated folders (when a Unity project is created later)
+frontend/Library/
+frontend/Temp/
+frontend/Logs/
+frontend/Obj/
+frontend/Build/
+frontend/Builds/
