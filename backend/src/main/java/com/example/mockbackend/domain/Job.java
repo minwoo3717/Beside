@@ -63,4 +63,9 @@ public class Job {
     private String errorMessage;
     /** v0 compatibility: worker start to completion in ms. */
     private long durationMs;
+    /**
+     * Upload as the server saw it: request arrival (RequestStartFilter, before multipart parsing) → photos stored.
+     * Null for jobs created outside an HTTP request. events.jsonl uploadMs (docs/METRICS.md §1).
+     */
+    private Long uploadMs;
 }

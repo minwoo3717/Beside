@@ -1,5 +1,6 @@
 package com.example.mockbackend.service;
 
+import com.example.mockbackend.config.RequestStartFilter;
 import com.example.mockbackend.domain.AssetVariant;
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
@@ -242,6 +243,7 @@ public class JobServiceImpl implements JobService {
         }
         job.setUploads(uploads);
         job.setResultPath(null);
+        job.setUploadMs(RequestStartFilter.elapsedMs());
         jobRepository.save(job);
 
         // Invoke another Spring bean so @Async runs through its proxy.
