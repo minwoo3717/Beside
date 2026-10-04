@@ -9,6 +9,7 @@
 - 계약을 바꿀 때 순서: `docs/api/openapi.yaml` 수정 → 코드 수정 → `JobV1ContractTest` 통과 → `docs/api/CHANGELOG.md` 기록. 계약 테스트가 실패하면 코드가 아니라 문서가 맞는지 먼저 확인한다.
 - 오류 응답: v1은 `{ "error": { "code", "message", "jobId?" } }`, 코드는 `exception/ErrorCode`와 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md)가 1:1. v0는 기존 평면 `{ "error": "문자열" }` 유지. 분기는 `GlobalExceptionHandler`가 요청 경로(`/api/v1/` 접두사)로 한다.
 - 서버 내부 경로(`resultPath`, 업로드 저장 경로)는 v1 응답에 넣지 않는다.
+- 실행을 끝낼 때(COMPLETED/FAILED)는 항상 `JobFinisher.complete/fail` 을 쓴다. 상태와 메타데이터를 한 번에 저장하고 `events.jsonl` 한 줄을 남기는 곳이 여기뿐이다. `setStatus(COMPLETED|FAILED)` 를 다른 곳에서 직접 부르지 않는다.
 - 워커는 `service/JobWorker` 인터페이스로만 호출한다. `MockJobWorker`는 profile `mock`, `RealJobWorker`는 profile `real`. 기본 profile은 `mock`(`spring.profiles.default`).
 - Job 상태 전이는 `PENDING → PROCESSING → COMPLETED | FAILED`, `FAILED → (retry) → PENDING`뿐이다. 결과 메타데이터와 `status` 는 한 번의 save 로 함께 바꾼다(저장소 호출마다 짧은 트랜잭션, 읽는 쪽은 COMPLETED 와 asset 을 함께 본다).
 - 저장소는 H2 파일 DB(`storage/db/beside-{mock|real}.mv.db`, Spring Data JPA)다. 스키마는 `ddl-auto=update`라서 테이블·컬럼 추가만 자동이고 이름 변경·삭제는 반영되지 않는다. 엔티티에 필드를 추가할 때는 박싱 타입(nullable)으로 한다. enum 컬럼은 `@Enumerated` 대신 변환기(`JobStatusColumnConverter`)를 쓴다: Hibernate 가 붙이는 CHECK 제약을 update 가 고치지 못한다.

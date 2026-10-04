@@ -6,7 +6,7 @@
 
 | 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-04) |
 |---|---|---|---|---|
-| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2 **[구현됨]**, events.jsonl·app.js v1 **[계획]**, GLB 교체 **직접 할 일** |
+| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl **[구현됨]**, app.js v1 **[계획]**, GLB 교체 **직접 할 일** |
 | 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | **[계획]** |
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현, 개선 실험 ≥ 2, GLB 변환 | **[계획]** |
@@ -53,7 +53,7 @@ gantt
 | Unity 프로젝트 생성(Unity Hub 2022.3 LTS, 패키지 설치) | **직접 할 일** | 1단계 선행 |
 | GPU 서버 확보 (학교/클라우드), 접속 정보 | **직접 할 일** | 3단계 선행 |
 | 메모리 저장소 → **H2 파일 DB** (Job + Idempotency-Key 영속화) | **[구현됨]** 2026-10-04 | `JobPersistenceTest`. 재시작 때 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry |
-| `events.jsonl` 기록기 (METRICS §1) | **[계획]** | COMPLETED/FAILED 시 한 줄 |
+| `events.jsonl` 기록기 (METRICS §1) | **[구현됨]** 2026-10-04 | 실행이 끝날 때마다 한 줄(`JobFinisher`). `JobEventsTest`. 실제 측정값은 아직 없음 |
 | 브라우저 Mock UI `app.js` → v1 전환 | **[계획]** | `mock-mvp.test.cjs` URL 단언 갱신 포함 |
 
 완료 기준(DoD):
@@ -112,7 +112,7 @@ DoD:
 
 담당 Backend + Generation, Unity 검증. 의존: 3단계 `/infer` 동작, 0단계 H2(완료).
 
-산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `events.jsonl`), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경), Unity 에서 real 프로파일 전체 흐름.
+산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `JobFinisher` 로 종료 → `events.jsonl` 은 자동), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경), Unity 에서 real 프로파일 전체 흐름.
 
 DoD:
 - [ ] `--spring.profiles.active=real` 로 `e2e_mock.ps1` 이 실제 생성 GLB 를 받는다

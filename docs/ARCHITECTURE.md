@@ -104,7 +104,7 @@ backend/storage/
 ├─ results/{jobId}/base.glb           # real 결과 [계획]
 ├─ results/{jobId}/hair.glb           # real 결과, options.hair [계획]
 ├─ results/{jobId}/*.metrics.json     # 변환기 출력 [계획]
-└─ events.jsonl                       # 측정 로그 (METRICS §1) [계획]
+└─ events.jsonl                       # 측정 로그, 실행이 끝날 때마다 한 줄 (METRICS §1, gitignore)
 ```
 
 서버 내부 경로는 어떤 API 응답에도 나가지 않는다. v1 은 `asset.url`(상대 경로)만 준다.

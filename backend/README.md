@@ -2,8 +2,8 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (브라우저 Mock UI 전용, 동결), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존).
-- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계), `events.jsonl`·app.js v1 전환(PLAN 0단계).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (브라우저 Mock UI 전용, 동결), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl`.
+- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계), app.js v1 전환(PLAN 0단계).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -74,6 +74,9 @@ src/main/
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
 │  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository 도 같은 폴더
 │  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
+│  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → EventLog 가 events.jsonl 한 줄
+│  ├─ domain/JobTimings.java             # queuedMs/processingMs/totalMs 계산 (API 응답과 events.jsonl 공용)
+│  ├─ config/RequestStartFilter.java     # 업로드 요청 도착 시각 (서버 uploadMs)
 │  ├─ exception/GlobalExceptionHandler.java  # /api/v1/ 는 ErrorResponse 봉투, 그 외는 v0 평면 오류
 │  ├─ exception/ErrorCode.java           # ERROR_CODES.md 와 1:1
 │  └─ config/OpenApiConfig.java
@@ -89,6 +92,7 @@ src/main/
 - 서버를 재시작해도 작업과 Idempotency-Key 는 남는다. 다만 처리 중이던 워커 스레드는 사라지므로, 시작할 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 되고 앱이 retry 로 다시 실행한다.
 - DB 파일 하나는 서버 하나만 연다. 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 개발 DB 를 비우려면 서버를 끄고 `storage/db/` 를 지운다.
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
+- 측정 로그: 실행이 끝날 때마다 `storage/events.jsonl` 에 한 줄(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1). 위치는 `--storage.events.path=...`, 빈 값이면 꺼진다. 재시작으로 끊긴 실행(`FAILED:INTERNAL_ERROR`)은 측정표에서 뺀다.
 
 ## v0 `/api/jobs` (동결) — 브라우저 Mock UI
 
@@ -117,6 +121,7 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobAsyncIntegrationTest` | v0: 홈페이지·정적 파일·404·잘못된 요청·비동기 상태 전이·다운로드 API (동결 보호) |
 | `JobV1ApiTest` | v1: 202/Location/jobId, 폴링, timings, asset 409→200, hair 404, retry 202/409, 검증 400, Idempotency-Key, 목록 cursor, healthz, 오류 봉투 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
+| `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 필드 이름·순서, uploadBytes/uploadMs/타이밍/result |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI 의 성공·오류·시간 초과·중복 클릭 (작은 DOM 대역에서 실제 app.js 실행) |

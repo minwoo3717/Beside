@@ -2,24 +2,33 @@
 
 세 트랙이 **같은 이름**으로 측정값을 남긴다. 이름은 여기서만 정의하고, 보고서·발표·실험 기록은 이 이름을 그대로 쓴다. 단위는 시간 ms(정수), 크기 bytes 또는 MB(정수), 비율 0~1. 측정 시점이 다른 값(예: 서버가 잰 `processingMs` 와 앱이 잰 `waitMs`)은 이름이 다르므로 섞지 않는다.
 
-상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 는 **[구현됨]**. 나머지 기록기(`events.jsonl`, 추론 서비스 metrics, 앱 `metrics.csv`)는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다.
+상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 추론 서비스 metrics 와 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock 동작 확인뿐).
 
-## 1. 서버 `events.jsonl` (Backend, [계획] PLAN 0단계)
+## 1. 서버 `events.jsonl` (Backend, [구현됨] PLAN 0단계)
 
-작업이 COMPLETED/FAILED 될 때 한 줄씩 추가한다. 위치 `backend/storage/events.jsonl`(gitignore).
+작업의 한 실행(run)이 COMPLETED/FAILED 로 끝날 때마다 한 줄씩 추가한다. retry 하면 같은 jobId 로 줄이 하나 더 생긴다(`attempt` 로 구분). 위치 `backend/storage/events.jsonl`(gitignore), 설정 `storage.events.path`(빈 값이면 꺼짐, 테스트는 끔). Mock·real 모두 같은 파일에 쓰고 `workerType` 으로 구분한다. 기록은 `JobFinisher` 한 곳에서만 한다.
 
 | 필드 | 타입 | 정의 | 측정 시점 |
 |---|---|---|---|
 | `jobId` | string | 작업 ID | — |
-| `uploadBytes` | int | 업로드된 사진 바이트 합 | 접수 시 |
-| `uploadMs` | int | 서버가 multipart 를 모두 읽고 저장하기까지 걸린 시간 | 접수 처리 중 |
-| `queuedMs` | int | PENDING 유지 시간 (= `timings.queuedMs` 최종값) | PROCESSING 전이 시 |
-| `processingMs` | int | PROCESSING 유지 시간 (= `timings.processingMs` 최종값) | 종료 시 |
+| `attempt` | int | 1 = 첫 실행, retry 마다 +1 (서버 전용 추가 필드) | — |
+| `finishedAt` | string | 실행이 끝난 시각, ISO 8601 UTC (서버 전용 추가 필드) | 종료 시 |
+| `uploadBytes` | int | 업로드된 사진 바이트 합. retry 해도 처음 업로드 값 | 접수 시 |
+| `uploadMs` | int \| null | 업로드 요청이 서버에 도착한 때(필터, multipart 파싱 전) → 사진 저장 완료. 수신·파싱·저장 포함. HTTP 밖에서 만든 작업은 null. retry 해도 처음 업로드 값 | 접수 처리 중 |
+| `queuedMs` | int | PENDING 유지 시간 (= `timings.queuedMs` 최종값, 같은 계산 `JobTimings`) | PROCESSING 전이 시 |
+| `processingMs` | int \| null | PROCESSING 유지 시간 (= `timings.processingMs` 최종값). PROCESSING 없이 끝나면 null | 종료 시 |
 | `totalMs` | int | 접수(또는 retry) → 종료 (= `timings.totalMs`) | 종료 시 |
 | `workerType` | string | `mock` \| `real` | — |
 | `result` | string | `COMPLETED` \| `FAILED:<error.code>` | 종료 시 |
 
-예: `{"jobId":"3fa8…","uploadBytes":1830321,"uploadMs":412,"queuedMs":2003,"processingMs":3001,"totalMs":5004,"workerType":"mock","result":"COMPLETED"}`
+예 (2026-10-04 Mock 동작 확인 때 실제로 남은 줄, 측정값 아님):
+
+```json
+{"jobId":"ee1985af-…","attempt":1,"finishedAt":"2026-10-04T08:35:21.148009200Z","uploadBytes":136,"uploadMs":46,"queuedMs":2122,"processingMs":3011,"totalMs":5133,"workerType":"mock","result":"COMPLETED"}
+{"jobId":"5ec50879-…","attempt":1,"finishedAt":"2026-10-04T08:35:34.072772100Z","uploadBytes":68,"uploadMs":26,"queuedMs":138,"processingMs":null,"totalMs":138,"workerType":"real","result":"FAILED:INFERENCE_UNAVAILABLE"}
+```
+
+주의: 서버 재시작으로 끊긴 실행은 `FAILED:INTERNAL_ERROR` 로 남고, `queuedMs`/`processingMs`/`totalMs` 에 서버가 꺼져 있던 시간이 들어간다. 측정표를 만들 때는 이런 줄을 빼고 계산한다. 서버 `uploadMs` 는 앱의 `uploadMs`(§3, 요청 시작 → 202 수신)보다 작다. 연결 설정과 응답 왕복이 빠지기 때문이며, 두 값은 섞지 않는다.
 
 ## 2. 추론 서비스 (3D Generation, [계획] PLAN 3·4단계)
 
