@@ -2,7 +2,7 @@
 
 결정됨(재논의하지 않는다): **Unity Android 앱(ARCore, glTFast) ↔ Spring Boot 공개 API(Job 상태·저장·에셋 서빙) ↔ Python 추론 서비스(FastAPI, GPU, AnimalLift + GLB 변환, 내부 전용 `POST /infer`)**. Spring 은 profile 로 `mock | real` 워커를 교체하고 real 워커가 Python 을 호출한다. Unity 는 Spring API 계약 v1 만 본다.
 
-상태: Spring(v0·v1·Mock 워커)과 계약 문서는 **[구현됨]**, Unity 앱·AnimalLift 추론·real 워커 호출은 **[계획]** ([PLAN.md](PLAN.md)).
+상태: Spring(v0·v1·Mock 워커·H2 저장소)과 계약 문서는 **[구현됨]**, Unity 앱·AnimalLift 추론·real 워커 호출은 **[계획]** ([PLAN.md](PLAN.md)).
 
 ## 구성 요소
 
@@ -15,7 +15,7 @@ flowchart LR
         S["공개 API /api/v1<br/>JobV1Controller · JobServiceImpl<br/>(v0 /api/jobs 는 동결, 브라우저 Mock UI 전용)"]
         W["JobWorker<br/>MockJobWorker (profile mock)<br/>RealJobWorker (profile real)"]
         FS[("storage/<br/>uploads · results")]
-        DB[("MemoryJobRepository<br/>→ H2 파일 DB [계획]")]
+        DB[("H2 파일 DB<br/>storage/db/beside-{mock,real}.mv.db")]
     end
     subgraph Gpu["GPU 서버 (:8001)"]
         P["FastAPI 추론 서비스 (내부)<br/>POST /infer · GET /healthz<br/>AnimalLift → convert_asset.py → GLB"]
@@ -70,11 +70,13 @@ stateDiagram-v2
     [*] --> PENDING: POST /jobs
     PENDING --> PROCESSING: 워커 시작
     PROCESSING --> COMPLETED: GLB 준비됨 (asset)
-    PROCESSING --> FAILED: error.code
-    PENDING --> FAILED: 워커 사용 불가 (real 스텁)
+    PROCESSING --> FAILED: error.code (서버 재시작 시 INTERNAL_ERROR)
+    PENDING --> FAILED: 워커 사용 불가 (real 스텁) · 서버 재시작
     FAILED --> PENDING: POST /retry (queuedAt 갱신)
     COMPLETED --> [*]
 ```
+
+서버가 다시 시작되면 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다. 작업 기록은 H2 에 남지만 워커 스레드는 남지 않기 때문이며, 앱은 retry 로 다시 실행한다 (`InterruptedJobRecovery`, 웹 서버가 요청을 받기 전에 실행).
 
 `timings.queuedMs` 는 PENDING 구간, `processingMs` 는 PROCESSING 구간, `totalMs` 는 접수(또는 retry)부터 종료까지. 상태는 결과 메타데이터를 채운 뒤 마지막에 바꾼다.
 
@@ -87,6 +89,7 @@ stateDiagram-v2
 | GPU | 불필요 | FastAPI 서비스가 GPU 서버에서 실행 |
 | 용도 | Unity·브라우저 개발, 계약 테스트, 데모 백업 | 4단계 실 연동 이후 |
 | healthz | `{ "profile": "mock", "workerType": "mock" }` | `{ "profile": "real", "workerType": "real" }` |
+| DB 파일 | `storage/db/beside-mock.mv.db` (+ `/h2-console`) | `storage/db/beside-real.mv.db` |
 
 실행: `.\gradlew.bat bootRun` / `.\gradlew.bat bootRun --args="--spring.profiles.active=real"`.
 
@@ -94,6 +97,8 @@ stateDiagram-v2
 
 ```text
 backend/storage/
+├─ db/beside-mock.mv.db               # 작업·Idempotency-Key (H2, profile mock, gitignore)
+├─ db/beside-real.mv.db               # 작업·Idempotency-Key (H2, profile real, gitignore)
 ├─ uploads/{jobId}_{원본파일명}        # 업로드 사진 (gitignore). 같은 이름이면 -2, -3 접미사
 ├─ results/sample-dog.glb             # Mock 샘플 — 현재 0바이트, 유효 GLB 로 교체(직접 할 일)
 ├─ results/{jobId}/base.glb           # real 결과 [계획]
@@ -110,6 +115,7 @@ backend/storage/
 - Spring ↔ Python: **같은 호스트 또는 공유 볼륨**(1차 가정). `/infer` 가 업로드 경로를 읽고 GLB 경로를 돌려준다. 분리 배포가 필요하면 바이너리 전송으로 바꾼다(계약 회의 안건).
 - 보안: 캡스톤 범위에서는 인증 없음. 공개 배포 시 HTTPS·인증·업로드 바이러스 검사는 향후 과제.
 - 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 GPU 1장 기준 순차 처리.
+- DB: 서버 하나가 H2 파일 하나를 연다(AUTO_SERVER 없음). 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 다른 인스턴스는 `--storage.db.path` 로 다른 파일을 쓴다.
 
 ## 계약 경계와 문서
 

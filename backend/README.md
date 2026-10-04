@@ -2,8 +2,8 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (브라우저 Mock UI 전용, 동결), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`.
-- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계), H2 파일 DB·`events.jsonl`·app.js v1 전환(PLAN 0단계).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (브라우저 Mock UI 전용, 동결), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존).
+- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계), `events.jsonl`·app.js v1 전환(PLAN 0단계).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -24,6 +24,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/swagger-ui/index.html | v1 스펙 브라우저 (springdoc) |
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
+| http://localhost:8080/h2-console | DB 보기 (mock 프로파일, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock`, 사용자 `sa`, 비밀번호 빈칸 |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
 
@@ -52,7 +53,7 @@ curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
 
 - 접수 후 `mock.worker.pending-ms`(기본 2000) 동안 PENDING(progress 0.0) → `mock.worker.processing-ms`(기본 3000) 동안 PROCESSING(progress 0.5) → COMPLETED(progress 1.0, `asset` = `storage.result.sample`).
 - **실패 재현**: 업로드 파일명에 `fail` 이 들어가면 FAILED, `error.code = INFERENCE_FAILED`. Unity 의 실패 UI 와 retry 흐름을 Mock 으로 테스트하기 위한 장치다. 토큰은 `mock.worker.fail-when-filename-contains`, 빈 값이면 비활성. 같은 사진으로 retry 하면 다시 실패한다(결정적).
-- `Idempotency-Key` 는 서버 프로세스가 살아 있는 동안만 기억한다(메모리). 영속화는 H2 전환과 함께.
+- `Idempotency-Key` 는 DB(`idempotency_keys`)에 저장돼 재시작 후에도 같은 키 → 같은 jobId 가 유지된다.
 
 ### 프로파일 `real` (TODO 스텁)
 
@@ -71,19 +72,22 @@ src/main/
 │  ├─ controller/JobController.java      # v0 /api/jobs (동결) + LegacyJobResponse
 │  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
-│  ├─ repository/MemoryJobRepository.java
+│  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository 도 같은 폴더
+│  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
 │  ├─ exception/GlobalExceptionHandler.java  # /api/v1/ 는 ErrorResponse 봉투, 그 외는 v0 평면 오류
 │  ├─ exception/ErrorCode.java           # ERROR_CODES.md 와 1:1
 │  └─ config/OpenApiConfig.java
 └─ resources/
-   ├─ application.properties             # 공통 (spring.profiles.default=mock, multipart 제한, springdoc)
-   ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로
-   ├─ application-real.properties        # inference.base-url, timeout
+   ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
+   ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
+   ├─ application-real.properties        # inference.base-url, timeout, DB 파일 beside-real
    └─ static/                            # 브라우저 Mock UI (v0)
 ```
 
 - Controller 가 요청을 받고 Service 가 파일과 Job 을 저장한다. 별도 Spring Bean 인 워커의 `@Async` 메서드가 백그라운드 작업을 수행한다.
-- Repository 는 메모리 기반이다. 서버를 재시작하면 Job 정보는 사라지고 업로드 파일은 디스크에 남는다. H2 파일 DB 전환은 PLAN 0단계.
+- 저장소는 H2 파일 DB 다. 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다.
+- 서버를 재시작해도 작업과 Idempotency-Key 는 남는다. 다만 처리 중이던 워커 스레드는 사라지므로, 시작할 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 되고 앱이 retry 로 다시 실행한다.
+- DB 파일 하나는 서버 하나만 연다. 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 개발 DB 를 비우려면 서버를 끄고 `storage/db/` 를 지운다.
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
 
 ## v0 `/api/jobs` (동결) — 브라우저 Mock UI
@@ -113,6 +117,7 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobAsyncIntegrationTest` | v0: 홈페이지·정적 파일·404·잘못된 요청·비동기 상태 전이·다운로드 API (동결 보호) |
 | `JobV1ApiTest` | v1: 202/Location/jobId, 폴링, timings, asset 409→200, hair 404, retry 202/409, 검증 400, Idempotency-Key, 목록 cursor, healthz, 오류 봉투 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
+| `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI 의 성공·오류·시간 초과·중복 클릭 (작은 DOM 대역에서 실제 app.js 실행) |
 

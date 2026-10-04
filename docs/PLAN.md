@@ -6,7 +6,7 @@
 
 | 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-04) |
 |---|---|---|---|---|
-| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서 **[구현됨]**, H2·events.jsonl·GLB 교체 **[계획]** |
+| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2 **[구현됨]**, events.jsonl·app.js v1 **[계획]**, GLB 교체 **직접 할 일** |
 | 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | **[계획]** |
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현, 개선 실험 ≥ 2, GLB 변환 | **[계획]** |
@@ -52,15 +52,15 @@ gantt
 | `convert_asset.py` 투입 (`generation/tools/`) | **직접 할 일** | 별도 세션 결과물, 인터페이스 맞추기 |
 | Unity 프로젝트 생성(Unity Hub 2022.3 LTS, 패키지 설치) | **직접 할 일** | 1단계 선행 |
 | GPU 서버 확보 (학교/클라우드), 접속 정보 | **직접 할 일** | 3단계 선행 |
-| 메모리 저장소 → **H2 파일 DB** (Job + Idempotency-Key 영속화) | **[계획]** | 서버 재시작 후에도 `GET /jobs/{id}` 200 |
+| 메모리 저장소 → **H2 파일 DB** (Job + Idempotency-Key 영속화) | **[구현됨]** 2026-10-04 | `JobPersistenceTest`. 재시작 때 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry |
 | `events.jsonl` 기록기 (METRICS §1) | **[계획]** | COMPLETED/FAILED 시 한 줄 |
 | 브라우저 Mock UI `app.js` → v1 전환 | **[계획]** | `mock-mvp.test.cjs` URL 단언 갱신 포함 |
 
 완료 기준(DoD):
 - [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0`
-- [ ] `cd backend; .\gradlew.bat test` 전부 통과, `node --test backend/src/test/js/mock-mvp.test.cjs` 통과
+- [x] `cd backend; .\gradlew.bat test` 전부 통과, `node --test backend/src/test/js/mock-mvp.test.cjs` 통과 (2026-10-04 확인)
 - [ ] `scripts/e2e_mock.ps1` 이 bytes > 0 인 GLB 를 받는다 (샘플 교체 후)
-- [ ] 서버 재시작 후 기존 jobId 조회가 200 (H2)
+- [x] 서버 재시작 후 기존 jobId 조회가 200 (H2) — 2026-10-04 jar 강제 종료·재시작으로 확인. 같은 Idempotency-Key 도 같은 jobId
 - [ ] Unity 프로젝트에서 `Assets/Beside` 가 오류 없이 컴파일된다
 
 ## 1단계 — Unity Mock 연동 (2026-10-13 ~ 10-26)
@@ -110,7 +110,7 @@ DoD:
 
 ## 4단계 — 실 연동 (2026-11-09 ~ 11-22)
 
-담당 Backend + Generation, Unity 검증. 의존: 3단계 `/infer` 동작, 0단계 H2.
+담당 Backend + Generation, Unity 검증. 의존: 3단계 `/infer` 동작, 0단계 H2(완료).
 
 산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `events.jsonl`), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경), Unity 에서 real 프로파일 전체 흐름.
 
@@ -141,5 +141,5 @@ DoD:
 | AnimalLift 재현 실패·품질 미달 | 핵심 가치 | 실패 사례를 실험 기록으로 남기고 전처리·후처리 개선에 집중. 최악의 경우 베이스라인 결과로 데모 |
 | 생성 시간 수 분 | UX | `progress` 와 예상 시간 표시, 완료 알림. 폴링 간격 2초, 최대 대기 600초 |
 | 파일시스템 공유 가정 불가 | 4단계 설계 | `/infer` 를 멀티파트 업로드 + GLB 바이너리 응답으로 변경(계약 회의) |
-| 메모리 저장소 재시작 유실 | 데모 중단 | 0단계 H2 전환 |
+| 서버 재시작 | 진행 중 작업 중단 | 작업은 H2 에 보존 **[구현됨]**. 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry. 자동 재개는 계약 회의 안건 |
 | 기기 성능 (FPS) | 2단계 | 삼각형 상한 하향, 텍스처 1024 로 축소 실험 |
