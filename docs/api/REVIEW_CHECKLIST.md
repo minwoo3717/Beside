@@ -13,6 +13,6 @@
 | 7 | 폴링·재시도 정책 | 폴링 1~2초, 최대 대기 Mock 60초 / real 600초(제안), retry 는 FAILED 에서만, 횟수 상한 없음 | retry 상한(예 3회) 도입 여부 · `progress` 를 real 에서 실제로 채울 수 있는지(없으면 null 유지) · 서버 재시작 때 진행 중이던 작업: 현재 FAILED(`INTERNAL_ERROR`) → 앱 retry / 대안: 서버가 자동 재개 | Unity, Backend, Generation | |
 | 8 | `healthz` | 경로 `/api/v1/healthz`, 필드 `status, profile, workerType` | (a) 유지 (b) 루트 `/healthz` 로 이동(변경 사항) (c) `apiVersion` 필드 추가(자유 추가) | Unity, Backend | |
 | 9 | 목록 API `GET /api/v1/jobs` | 개발·디버그용, 인증 없음, 최신순 cursor | (a) 유지 (b) 운영 빌드에서 비활성 프로파일 (c) 앱 "내 작업 기록" 화면에 사용 → 그러면 정식 기능으로 승격 | Backend, Unity | |
-| 10 | v0 `/api/jobs` 제거 시점 | 동결 유지, Unity v1 전환(1단계, ~10-26) 후 결정. 브라우저 Mock UI(app.js)는 0단계에서 v1 로 전환 예정 | 제거 날짜 확정 / 브라우저 UI 유지 여부 | Backend | |
+| 10 | v0 `/api/jobs` 제거 시점 | 동결 유지, Unity v1 전환(1단계, ~10-26) 후 결정. 브라우저 Mock UI(app.js)는 2026-10-04 v1 으로 전환 완료 → v0 의 리포 안 사용처는 보호 테스트뿐 | 제거 날짜 확정 / 브라우저 UI 유지 여부 | Backend | |
 
 회의 후 할 일: 결정 반영 → `openapi.yaml` 수정 → `JobV1ContractTest` 통과 → `CHANGELOG.md` → `git tag api-v1.0` → Unity DTO·FastAPI 스키마 동기화.

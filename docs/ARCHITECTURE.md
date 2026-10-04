@@ -12,7 +12,7 @@ flowchart LR
         U["Unity 앱<br/>AR Foundation · ARCore · glTFast · NativeGallery<br/>계약 DTO: unity/Assets/Beside/Api"]
     end
     subgraph Server["개발 PC / 서버 (Spring Boot, :8080)"]
-        S["공개 API /api/v1<br/>JobV1Controller · JobServiceImpl<br/>(v0 /api/jobs 는 동결, 브라우저 Mock UI 전용)"]
+        S["공개 API /api/v1<br/>JobV1Controller · JobServiceImpl<br/>(v0 /api/jobs 는 동결, 사용처 없음 — 제거 대기)"]
         W["JobWorker<br/>MockJobWorker (profile mock)<br/>RealJobWorker (profile real)"]
         FS[("storage/<br/>uploads · results")]
         DB[("H2 파일 DB<br/>storage/db/beside-{mock,real}.mv.db")]

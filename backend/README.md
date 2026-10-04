@@ -2,8 +2,8 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (브라우저 Mock UI 전용, 동결), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl`.
-- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계), app.js v1 전환(PLAN 0단계).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl`.
+- **[계획]** Real 워커의 Python `/infer` 호출(PLAN 4단계).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -20,7 +20,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 
 | 주소 | 내용 |
 |---|---|
-| http://localhost:8080/ | 브라우저 Mock UI (v0 사용) |
+| http://localhost:8080/ | 브라우저 Mock UI (v1 사용) |
 | http://localhost:8080/swagger-ui/index.html | v1 스펙 브라우저 (springdoc) |
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
@@ -94,16 +94,20 @@ src/main/
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
 - 측정 로그: 실행이 끝날 때마다 `storage/events.jsonl` 에 한 줄(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1). 위치는 `--storage.events.path=...`, 빈 값이면 꺼진다. 재시작으로 끊긴 실행(`FAILED:INTERNAL_ERROR`)은 측정표에서 뺀다.
 
-## v0 `/api/jobs` (동결) — 브라우저 Mock UI
+## 브라우저 Mock UI (`static/`, API v1)
 
-브라우저 Mock UI(`static/index.html`, `app.js`)가 사용하는 원래 API. Unity 가 v1 으로 옮긴 뒤 계약 회의에서 제거 시점을 정한다. 그때까지 바꾸지 않는다.
+서비스 흐름을 눈으로 확인하는 개발용 화면이다(제품의 웹 버전이 아니다). 2026-10-04 부터 v1 을 쓴다: `POST /api/v1/jobs` → `Location` 이 `/api/v1/jobs/{uuid}` 인지 확인 → 1초 간격 폴링(최대 60초, 요청당 15초 제한) → 완료 시 대표 사진으로 Mock 결과 표시. 오류와 실패는 `error.code` 로 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md) 문구를 보여 주고, 서버의 개발자용 `message` 는 보여 주지 않는다.
+
+테스트 순서: 홈에서 **사진 선택** → JPG/PNG/WEBP (장당 5MB, 최대 10장, 합계 18MB) → **3D 모델 생성** → `WAITING → PROCESSING → COMPLETED` (API 의 `PENDING` 을 `WAITING` 으로 표시) → Mock 결과 확인 → **다른 사진으로 다시 만들기**. 파일명에 `fail` 이 들어간 사진을 고르면 실패 문구까지 확인할 수 있다.
+
+## v0 `/api/jobs` (동결)
+
+처음 브라우저 Mock UI 가 쓰던 API. 지금은 리포 안의 사용처가 보호 테스트(`JobAsyncIntegrationTest`)뿐이다. Unity 가 v1 으로 옮긴 뒤 계약 회의에서 제거 시점을 정하고, 그때까지 바꾸지 않는다.
 
 - `POST /api/jobs`: multipart `photos` → **202 + 빈 본문 + Location: /api/jobs/{jobId}**. 타입 검증 없음(GIF 허용).
-- `GET /api/jobs/{jobId}`: `id, status, createdAt, updatedAt, uploadedFiles(서버 경로), resultPath, durationMs`. 브라우저는 `PENDING` 을 `WAITING` 으로 표시한다.
+- `GET /api/jobs/{jobId}`: `id, status, createdAt, updatedAt, uploadedFiles(서버 경로), resultPath, durationMs`.
 - `GET /api/jobs/{jobId}/result`: 샘플 GLB 다운로드. 미완료 시 **400**(v1 은 409).
 - 오류는 평면 `{ "error": "문자열" }`. 없는 페이지 404, 큰 업로드 413, 잘못된 방식 405.
-
-브라우저 테스트 순서: 홈에서 **사진 선택** → JPG/PNG/WEBP/GIF (장당 5MB, 최대 10장, 합계 18MB) → **3D 모델 생성** → `WAITING → PROCESSING → COMPLETED` → 대표 사진을 쓴 Mock 결과 확인 → **다른 사진으로 다시 만들기**. API 조회는 1초 간격, 최대 60초, 개별 요청 제한 15초.
 
 ## 검증
 
@@ -124,6 +128,6 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 필드 이름·순서, uploadBytes/uploadMs/타이밍/result |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
-| `mock-mvp.test.cjs` | 브라우저 Mock UI 의 성공·오류·시간 초과·중복 클릭 (작은 DOM 대역에서 실제 app.js 실행) |
+| `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).

@@ -6,7 +6,7 @@
 
 | 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-04) |
 |---|---|---|---|---|
-| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl **[구현됨]**, app.js v1 **[계획]**, GLB 교체 **직접 할 일** |
+| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl·app.js v1 **[구현됨]**, GLB 교체 등 **직접 할 일** 남음 |
 | 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | **[계획]** |
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현, 개선 실험 ≥ 2, GLB 변환 | **[계획]** |
@@ -54,7 +54,7 @@ gantt
 | GPU 서버 확보 (학교/클라우드), 접속 정보 | **직접 할 일** | 3단계 선행 |
 | 메모리 저장소 → **H2 파일 DB** (Job + Idempotency-Key 영속화) | **[구현됨]** 2026-10-04 | `JobPersistenceTest`. 재시작 때 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry |
 | `events.jsonl` 기록기 (METRICS §1) | **[구현됨]** 2026-10-04 | 실행이 끝날 때마다 한 줄(`JobFinisher`). `JobEventsTest`. 실제 측정값은 아직 없음 |
-| 브라우저 Mock UI `app.js` → v1 전환 | **[계획]** | `mock-mvp.test.cjs` URL 단언 갱신 포함 |
+| 브라우저 Mock UI `app.js` → v1 전환 | **[구현됨]** 2026-10-04 | Node 테스트 18개(실제 서버 라이브 포함) 통과. 오류 문구는 ERROR_CODES, GIF 거부. v0 API 는 동결 유지 |
 
 완료 기준(DoD):
 - [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0`

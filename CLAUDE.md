@@ -77,7 +77,7 @@ Beside/
 cd backend
 .\gradlew.bat test
 .\gradlew.bat bootRun
-# 브라우저 Mock UI(v0) 흐름 테스트
+# 브라우저 Mock UI(v1) 흐름 테스트
 node --test backend/src/test/js/mock-mvp.test.cjs
 # 서버가 떠 있을 때 v1 전체 흐름
 .\scripts\e2e_mock.ps1
