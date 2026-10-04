@@ -7,6 +7,8 @@ import com.example.mockbackend.repository.IdempotencyKeyEntry;
 import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.service.JobService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.boot.Banner;
@@ -22,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -118,6 +121,17 @@ class JobPersistenceTest {
                     .until(() -> jobs.getJobOrThrow(jobId).getStatus() == JobStatus.COMPLETED);
             assertThat(jobs.getJobOrThrow(jobId).getAttempt()).isEqualTo(2);
         }
+
+        // Both runs are measured: the one cut by the restart and the retried one (docs/METRICS.md §1).
+        List<JsonNode> events = new ArrayList<>();
+        for (String line : Files.readAllLines(dir.resolve("events.jsonl"), StandardCharsets.UTF_8)) {
+            JsonNode event = new ObjectMapper().readTree(line);
+            if (event.path("jobId").asText().equals(jobId)) {
+                events.add(event);
+            }
+        }
+        assertThat(events).extracting(e -> e.path("result").asText()).containsExactly("FAILED:INTERNAL_ERROR", "COMPLETED");
+        assertThat(events).extracting(e -> e.path("attempt").asInt()).containsExactly(1, 2);
     }
 
     private ConfigurableApplicationContext start() throws IOException {
@@ -133,6 +147,7 @@ class JobPersistenceTest {
                 .run("--spring.datasource.url=jdbc:h2:file:" + database + ";DB_CLOSE_ON_EXIT=FALSE",
                         "--storage.upload.dir=" + dir.resolve("uploads"),
                         "--storage.result.sample=" + sample,
+                        "--storage.events.path=" + dir.resolve("events.jsonl"),
                         "--mock.worker.pending-ms=50",
                         "--mock.worker.processing-ms=50");
     }
