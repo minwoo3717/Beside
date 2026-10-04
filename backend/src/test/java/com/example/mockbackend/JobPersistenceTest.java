@@ -2,8 +2,10 @@ package com.example.mockbackend;
 
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.repository.IdempotencyKeyEntry;
 import com.example.mockbackend.repository.IdempotencyKeyRepository;
+import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.service.JobService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,6 +23,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,6 +32,7 @@ import static org.awaitility.Awaitility.await;
 /**
  * H2 file database (PLAN stage 0): what a running server knew must still be there after a restart.
  * A restart is simulated by opening two Spring contexts, one after the other, on the same database file.
+ * Worker threads do not survive a restart, so jobs left PENDING/PROCESSING must end FAILED at the next startup.
  */
 class JobPersistenceTest {
     private static final byte[] SAMPLE_GLB = "glTF persisted sample".getBytes(StandardCharsets.UTF_8);
@@ -77,6 +81,42 @@ class JobPersistenceTest {
             assertThatThrownBy(() -> keys.saveAndFlush(new IdempotencyKeyEntry("same-key", "job-b", Instant.now())))
                     .isInstanceOf(DataIntegrityViolationException.class);
             assertThat(keys.findById("same-key")).map(IdempotencyKeyEntry::getJobId).contains("job-a");
+        }
+    }
+
+    @Test
+    void jobsInFlightAtShutdownAreFailedOnStartup() throws Exception {
+        String jobId = UUID.randomUUID().toString();
+        try (ConfigurableApplicationContext first = start()) {
+            // A crash mid-processing: the row says PROCESSING but no worker thread survives a restart.
+            Instant now = Instant.now();
+            Job job = new Job();
+            job.setId(jobId);
+            job.setStatus(JobStatus.PROCESSING);
+            job.setCreatedAt(now);
+            job.setUpdatedAt(now);
+            job.setQueuedAt(now);
+            job.setProcessingStartedAt(now);
+            job.setProgress(0.5);
+            job.setAttempt(1);
+            job.setUploads(List.of(new StoredUpload("crash.jpg", 1, dir.resolve("crash.jpg").toString())));
+            first.getBean(JobRepository.class).save(job);
+        }
+
+        try (ConfigurableApplicationContext second = start()) {
+            JobService jobs = second.getBean(JobService.class);
+            Job recovered = jobs.getJobOrThrow(jobId);
+            assertThat(recovered.getStatus()).as("clients must not poll forever").isEqualTo(JobStatus.FAILED);
+            assertThat(recovered.getErrorCode()).isEqualTo("INTERNAL_ERROR");
+            assertThat(recovered.getErrorMessage()).contains("restart");
+            assertThat(recovered.getProgress()).isNull();
+            assertThat(recovered.getFinishedAt()).isNotNull();
+
+            // The client can retry: the worker runs the stored uploads again.
+            jobs.retry(jobId);
+            await().pollInterval(Duration.ofMillis(25)).atMost(Duration.ofSeconds(5))
+                    .until(() -> jobs.getJobOrThrow(jobId).getStatus() == JobStatus.COMPLETED);
+            assertThat(jobs.getJobOrThrow(jobId).getAttempt()).isEqualTo(2);
         }
     }
 

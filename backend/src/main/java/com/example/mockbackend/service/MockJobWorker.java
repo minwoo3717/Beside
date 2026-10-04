@@ -84,20 +84,31 @@ public class MockJobWorker implements JobWorker {
             jobRepository.save(job);
             log.info("jobId={} stage=COMPLETED durationMs={}", jobId, job.getDurationMs());
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Job job = jobRepository.findById(jobId).orElse(null);
-            if (job != null) {
-                Instant now = Instant.now();
-                job.setErrorCode(ErrorCode.INTERNAL_ERROR.name());
-                job.setErrorMessage("Mock worker interrupted");
-                job.setProgress(null);
-                job.setFinishedAt(now);
-                job.setUpdatedAt(now);
-                job.setStatus(JobStatus.FAILED);
-                jobRepository.save(job);
+            // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
+            try {
+                markInterrupted(jobId);
+            } catch (RuntimeException databaseClosing) {
+                log.warn("jobId={} interrupted during shutdown; InterruptedJobRecovery fails it at the next startup", jobId);
+            } finally {
+                Thread.currentThread().interrupt();
             }
-            log.error("Mock worker interrupted for jobId={}", jobId, e);
         }
+    }
+
+    private void markInterrupted(String jobId) {
+        Job job = jobRepository.findById(jobId).orElse(null);
+        if (job == null) {
+            return;
+        }
+        Instant now = Instant.now();
+        job.setErrorCode(ErrorCode.INTERNAL_ERROR.name());
+        job.setErrorMessage("Mock worker interrupted (server shutting down)");
+        job.setProgress(null);
+        job.setFinishedAt(now);
+        job.setUpdatedAt(now);
+        job.setStatus(JobStatus.FAILED);
+        jobRepository.save(job);
+        log.warn("jobId={} stage=FAILED (mock worker interrupted)", jobId);
     }
 
     private boolean shouldFail(Job job) {
