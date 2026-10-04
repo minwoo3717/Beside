@@ -11,7 +11,7 @@
 | `TOO_MANY_PHOTOS` | 400 | POST /jobs | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. | 장수 줄인 후 |
 | `UNSUPPORTED_IMAGE_TYPE` | 400 | POST /jobs | image/jpeg · png · webp 외 Content-Type | JPG, PNG, WEBP 사진만 사용할 수 있어요. | 다른 사진으로 |
 | `PAYLOAD_TOO_LARGE` | 413 | POST /jobs | 장당 5 MB 또는 요청 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
-| `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry | 알 수 없는 jobId(Mock 서버 재시작 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
+| `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
 | `ASSET_NOT_FOUND` | 404 | /asset | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음) | 요청한 모델 파일이 없어요. | base 로 |
 | `NOT_FOUND` | 404 | 그 외 경로 | 알 수 없는 v1 경로·리소스 | 요청한 정보를 찾을 수 없어요. | 무의미 |
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
@@ -26,6 +26,7 @@
 | `INFERENCE_TIMEOUT` | real 워커 | 추론 서비스 응답이 `inference.timeout-ms` 를 넘김 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
 | `INFERENCE_UNAVAILABLE` | real 워커 | 추론 서비스에 연결할 수 없음, 또는 real 워커가 아직 구현되지 않음(현재 스텁 기본값) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | 추론 서비스·워커 | OBJ/PNG → GLB 변환 실패 또는 GLB_SPEC 검증 실패 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
+| `INTERNAL_ERROR` | 서버 | 서버 재시작·워커 중단으로 작업이 끊김. 재시작 때 PENDING/PROCESSING 이던 작업이 이 코드로 FAILED 가 된다 (HTTP 오류 코드와 같은 이름) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 
 ## 규칙
 

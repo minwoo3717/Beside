@@ -37,7 +37,7 @@ paths:
         multipart/form-data 의 `photos` 파트로 사진 1~10장을 보낸다. 장당 5 MB 이하, 요청 전체 20 MB 이하,
         Content-Type 은 image/jpeg · image/png · image/webp 만 허용한다(검사는 파트에 선언된 Content-Type 기준).
         접수 즉시 202 를 돌려주고 처리는 비동기로 진행된다. `Idempotency-Key` 헤더를 보내면 같은 키의 재요청에
-        같은 jobId 를 돌려준다(서버 프로세스 생존 범위, 영속화는 [계획]).
+        같은 jobId 를 돌려준다(서버 DB 에 저장되어 재시작 후에도 유지).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -371,7 +371,7 @@ components:
       properties:
         code:
           type: string
-          description: ERROR_CODES.md 의 Job 실패 코드(INFERENCE_FAILED, INFERENCE_TIMEOUT, INFERENCE_UNAVAILABLE, CONVERSION_FAILED). 알 수 없는 코드는 일반 실패 문구로 처리한다.
+          description: ERROR_CODES.md 의 Job 실패 코드(INFERENCE_FAILED, INFERENCE_TIMEOUT, INFERENCE_UNAVAILABLE, CONVERSION_FAILED, INTERNAL_ERROR). 알 수 없는 코드는 일반 실패 문구로 처리한다.
           example: INFERENCE_FAILED
         message:
           type: string

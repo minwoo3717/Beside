@@ -65,7 +65,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
-접수 → 2초 PENDING → 3초 PROCESSING → COMPLETED(샘플 GLB). 업로드 **파일명에 `fail`** 이 들어가면 FAILED `INFERENCE_FAILED`(실패 UI·retry 테스트용). `Idempotency-Key` 는 프로세스 생존 범위에서만 기억. 샘플 GLB 는 현재 0바이트(교체 필요).
+접수 → 2초 PENDING → 3초 PROCESSING → COMPLETED(샘플 GLB). 업로드 **파일명에 `fail`** 이 들어가면 FAILED `INFERENCE_FAILED`(실패 UI·retry 테스트용). 작업과 `Idempotency-Key` 는 서버 DB(H2)에 저장돼 재시작 후에도 남는다. 재시작 때 PENDING/PROCESSING 이던 작업은 FAILED `INTERNAL_ERROR` 로 바뀌며 retry 로 다시 실행한다. 샘플 GLB 는 현재 0바이트(교체 필요).
 
 ---
 
@@ -80,7 +80,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `TOO_MANY_PHOTOS` | 400 | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. |
 | `UNSUPPORTED_IMAGE_TYPE` | 400 | jpeg/png/webp 외 | JPG, PNG, WEBP 사진만 사용할 수 있어요. |
 | `PAYLOAD_TOO_LARGE` | 413 | 장당 5 MB 또는 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. |
-| `JOB_NOT_FOUND` | 404 | 알 수 없는 jobId(서버 재시작 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. |
+| `JOB_NOT_FOUND` | 404 | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. |
 | `ASSET_NOT_FOUND` | 404 | 완료됐지만 해당 variant 파일 없음 | 요청한 모델 파일이 없어요. |
 | `NOT_FOUND` | 404 | 알 수 없는 v1 경로 | 요청한 정보를 찾을 수 없어요. |
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
@@ -95,6 +95,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `INFERENCE_TIMEOUT` | 추론이 `inference.timeout-ms` 초과 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
 | `INFERENCE_UNAVAILABLE` | 추론 서버 연결 불가, real 워커 미구현(현재 스텁) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB 규격 위반 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
+| `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 
 모르는 코드는 일반 오류 문구로 처리한다. 문구는 제안이며 코드 이름은 유지한다.
 
@@ -163,7 +164,7 @@ Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `ht
 
 ## 7. 회의에서 결정할 것 (요약)
 
-1. `asset.url` 상대 경로 유지 여부 · 2. GIF/HEIC 허용 여부 · 3. 숫자 상한 확정 · 4. hair variant 의 v1.0 포함과 노출 방식 · 5. Idempotency-Key 유지(H2 영속화) 여부 · 6. Spring↔Python 파일 공유 vs 바이너리 전송 · 7. 폴링·retry 상한 · 8. healthz 경로·`apiVersion` 추가 · 9. 목록 API 공개 범위 · 10. v0 제거 시점. 상세와 결정 칸은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md).
+1. `asset.url` 상대 경로 유지 여부 · 2. GIF/HEIC 허용 여부 · 3. 숫자 상한 확정 · 4. hair variant 의 v1.0 포함과 노출 방식 · 5. Idempotency-Key 유지 여부(현재 DB 저장) · 6. Spring↔Python 파일 공유 vs 바이너리 전송 · 7. 폴링·retry 상한과 재시작 때 진행 중 작업 처리 · 8. healthz 경로·`apiVersion` 추가 · 9. 목록 API 공개 범위 · 10. v0 제거 시점. 상세와 결정 칸은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md).
 
 ## 8. 원본 문서
 
