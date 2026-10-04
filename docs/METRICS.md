@@ -21,18 +21,19 @@
 | `workerType` | string | `mock` \| `real` | — |
 | `result` | string | `COMPLETED` \| `FAILED:<error.code>` | 종료 시 |
 
-예 (2026-10-04 Mock 동작 확인 때 실제로 남은 줄, 측정값 아님):
+예 (2026-10-04 동작 확인 때 실제로 남은 줄, 측정값 아님 — mock, real 패스스루, real 추론 서비스 꺼짐):
 
 ```json
 {"jobId":"ee1985af-…","attempt":1,"finishedAt":"2026-10-04T08:35:21.148009200Z","uploadBytes":136,"uploadMs":46,"queuedMs":2122,"processingMs":3011,"totalMs":5133,"workerType":"mock","result":"COMPLETED"}
-{"jobId":"5ec50879-…","attempt":1,"finishedAt":"2026-10-04T08:35:34.072772100Z","uploadBytes":68,"uploadMs":26,"queuedMs":138,"processingMs":null,"totalMs":138,"workerType":"real","result":"FAILED:INFERENCE_UNAVAILABLE"}
+{"jobId":"9457aac8-…","attempt":1,"finishedAt":"2026-10-04T09:47:46.553329600Z","uploadBytes":136,"uploadMs":47,"queuedMs":110,"processingMs":71,"totalMs":181,"workerType":"real","result":"COMPLETED"}
+{"jobId":"2cd8dfbc-…","attempt":1,"finishedAt":"2026-10-04T09:49:13.554646700Z","uploadBytes":12,"uploadMs":3,"queuedMs":5,"processingMs":5,"totalMs":10,"workerType":"real","result":"FAILED:INFERENCE_UNAVAILABLE"}
 ```
 
-주의: 서버 재시작으로 끊긴 실행은 `FAILED:INTERNAL_ERROR` 로 남고, `queuedMs`/`processingMs`/`totalMs` 에 서버가 꺼져 있던 시간이 들어간다. 측정표를 만들 때는 이런 줄을 빼고 계산한다. 서버 `uploadMs` 는 앱의 `uploadMs`(§3, 요청 시작 → 202 수신)보다 작다. 연결 설정과 응답 왕복이 빠지기 때문이며, 두 값은 섞지 않는다.
+주의: 서버 재시작으로 끊긴 실행은 `FAILED:INTERNAL_ERROR` 로 남고, `queuedMs`/`processingMs`/`totalMs` 에 서버가 꺼져 있던 시간이 들어간다. 측정표를 만들 때는 이런 줄을 빼고 계산한다. 서버 `uploadMs` 는 앱의 `uploadMs`(§3, 요청 시작 → 202 수신)보다 작다. 연결 설정과 응답 왕복이 빠지기 때문이며, 두 값은 섞지 않는다. 추론 서비스가 패스스루(`BESIDE_SAMPLE_GLB`)로 답한 real 실행도 `workerType=real`, `COMPLETED` 로 남는다. 모델이 돌지 않았으므로 측정이 아니다(서버 로그에 jobId 마다 WARN). 측정 전에 `events.jsonl` 을 옮겨 두고, 패스스루를 끈 추론 서비스로 잰다.
 
 ## 2. 추론 서비스 (3D Generation, [계획] PLAN 3·4단계)
 
-`POST /infer` 응답의 `metrics` 와 실험 기록 표에 같은 이름을 쓴다. `convert_asset.py` 의 `metrics.json`(vertices, triangles, textureSize, bytes, convertMs) 과 겹치는 이름은 같은 의미다.
+`POST /infer` 응답의 `metrics` 와 실험 기록 표에 같은 이름을 쓴다. Spring real 워커는 응답 `metrics` 를 서버 로그(`stage=COMPLETED ... metrics=`)에만 남긴다 **[구현됨]**. 작업별 파일 저장(`results/{jobId}/*.metrics.json`)은 [계획]. `convert_asset.py` 의 `metrics.json`(vertices, triangles, textureSize, bytes, convertMs) 과 겹치는 이름은 같은 의미다.
 
 | 필드 | 타입 | 정의 | 측정 방법 |
 |---|---|---|---|

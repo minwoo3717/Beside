@@ -10,7 +10,7 @@
 | 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | **[계획]** |
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현, 개선 실험 ≥ 2, GLB 변환 | **[계획]** |
-| 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | **[계획]** |
+| 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer` **[구현됨]**(패스스루 검증), 실제 모델 연동 **[계획]** |
 | 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
 
 ```mermaid
@@ -43,7 +43,7 @@ gantt
 | API v1 계약 `openapi.yaml`, `ERROR_CODES.md`, `CHANGELOG.md` | **[구현됨]** 2026-10-04 | 계약 회의 후 `git tag api-v1.0` |
 | Spring v1 엔드포인트(create/get/asset/retry/list/healthz), Mock 워커(실패 트리거, Idempotency-Key, timings) | **[구현됨]** | `JobV1ApiTest` |
 | 계약 테스트 `openapi.yaml` ↔ `/v3/api-docs` | **[구현됨]** | `JobV1ContractTest` |
-| profile `mock \| real` 분리, real 워커 스텁 | **[구현됨]** | 실제 `/infer` 호출은 4단계 |
+| profile `mock \| real` 분리, real 워커 스텁 | **[구현됨]** | `/infer` 호출은 2026-10-04 4단계 선행으로 구현 |
 | `GLB_SPEC.md`, `METRICS.md`, `ARCHITECTURE.md` | **[구현됨]** | 숫자 상한은 제안값 |
 | Unity 계약 DTO (`unity/Assets/Beside/Api`) | **[구현됨]** | 알 수 없는 enum → Unknown |
 | FastAPI `/infer` 스텁 (501 + 패스스루) | **[구현됨]** | 모델 로드는 3단계 |
@@ -114,9 +114,16 @@ DoD:
 
 산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `JobFinisher` 로 종료 → `events.jsonl` 은 자동), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경), Unity 에서 real 프로파일 전체 흐름.
 
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| `RealJobWorker`: 추론 슬롯 대기(`inference.max-concurrency=1`) → PROCESSING → `/infer` 호출·타임아웃 → 오류 코드 매핑 → GLB 헤더 확인·복사 → `JobFinisher` | **[구현됨]** 2026-10-04 (선행) | `InferenceClientTest` 16개·`RealJobWorkerTest` 4개(가짜 `/infer`). 실제 FastAPI 스텁으로 패스스루 COMPLETED(48바이트 최소 GLB), 501·꺼짐 → `INFERENCE_UNAVAILABLE`, 0바이트 GLB → `CONVERSION_FAILED` 확인 |
+| 배포 구성(같은 호스트 또는 공유 볼륨) | **[계획]** | REVIEW_CHECKLIST #6 결정 후. 바이너리 전송이면 `InferenceClient` 만 교체 |
+| 실제 AnimalLift 모델로 전체 흐름 | **[계획]** | 3단계에서 `/infer` 에 모델 연결 후 |
+| Unity 에서 real 프로파일 전체 흐름 | **[계획]** | |
+
 DoD:
-- [ ] `--spring.profiles.active=real` 로 `e2e_mock.ps1` 이 실제 생성 GLB 를 받는다
-- [ ] 실패 경로 4종(`INFERENCE_FAILED / INFERENCE_TIMEOUT / INFERENCE_UNAVAILABLE / CONVERSION_FAILED`) 테스트
+- [ ] `--spring.profiles.active=real` 로 `e2e_mock.ps1` 이 실제 생성 GLB 를 받는다 (패스스루 샘플로는 2026-10-04 확인)
+- [x] 실패 경로 4종(`INFERENCE_FAILED / INFERENCE_TIMEOUT / INFERENCE_UNAVAILABLE / CONVERSION_FAILED`) 테스트 — 2026-10-04 `RealJobWorkerTest`(가짜 `/infer`), 실제 스텁으로 `INFERENCE_UNAVAILABLE`·`CONVERSION_FAILED` 재확인
 - [ ] Unity 실기기에서 실제 모델 AR 배치 (영상)
 - [ ] `events.jsonl` 작업 10건 이상 **[실험 결과]**
 
@@ -137,7 +144,7 @@ DoD:
 
 | 위험 | 영향 | 대응 |
 |---|---|---|
-| GPU 서버 확보 지연 | 3·4단계 지연 | 패스스루 모드로 Spring↔Python 연동을 먼저 끝낸다. 클라우드 GPU 시간제 사용 검토 |
+| GPU 서버 확보 지연 | 3·4단계 지연 | 패스스루 모드로 Spring↔Python 연동을 먼저 끝낸다 **[구현됨]** 2026-10-04. 클라우드 GPU 시간제 사용 검토 |
 | AnimalLift 재현 실패·품질 미달 | 핵심 가치 | 실패 사례를 실험 기록으로 남기고 전처리·후처리 개선에 집중. 최악의 경우 베이스라인 결과로 데모 |
 | 생성 시간 수 분 | UX | `progress` 와 예상 시간 표시, 완료 알림. 폴링 간격 2초, 최대 대기 600초 |
 | 파일시스템 공유 가정 불가 | 4단계 설계 | `/infer` 를 멀티파트 업로드 + GLB 바이너리 응답으로 변경(계약 회의) |

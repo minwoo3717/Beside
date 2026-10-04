@@ -57,7 +57,7 @@
 
 ## 6. 저장 · 서빙 규칙 (Spring)
 
-- 저장 경로: `backend/storage/results/{jobId}/base.glb`, `hair.glb`, `*.metrics.json` (real 워커, [계획]). Mock 은 `storage/results/sample-dog.glb` 하나를 모든 작업에 돌려준다.
+- 저장 경로: real 워커는 `/infer` 가 돌려준 GLB 를 `backend/storage/results/{jobId}/base.glb` 로 복사한다 **[구현됨]** 2026-10-04. 복사 전에 glTF 2.0 바이너리 헤더(magic `glTF`, version 2)만 확인하고 아니면 `CONVERSION_FAILED` 다. §1~§4 검증은 변환기 몫이다. `hair.glb`, `*.metrics.json` 은 [계획]. Mock 은 `storage/results/sample-dog.glb` 하나를 모든 작업에 돌려준다.
 - 응답 헤더: `Content-Type: model/gltf-binary`, `Content-Length`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`.
 - `JobResponse.asset` 은 base 에셋만 설명한다. hair 는 `?variant=hair` 로 요청하고 없으면 404(`ASSET_NOT_FOUND`). hair 가용 여부를 응답에 노출하는 방식은 계약 회의 안건.
 

@@ -2,7 +2,7 @@
 
 결정됨(재논의하지 않는다): **Unity Android 앱(ARCore, glTFast) ↔ Spring Boot 공개 API(Job 상태·저장·에셋 서빙) ↔ Python 추론 서비스(FastAPI, GPU, AnimalLift + GLB 변환, 내부 전용 `POST /infer`)**. Spring 은 profile 로 `mock | real` 워커를 교체하고 real 워커가 Python 을 호출한다. Unity 는 Spring API 계약 v1 만 본다.
 
-상태: Spring(v0·v1·Mock 워커·H2 저장소)과 계약 문서는 **[구현됨]**, Unity 앱·AnimalLift 추론·real 워커 호출은 **[계획]** ([PLAN.md](PLAN.md)).
+상태: Spring(v0·v1·Mock/real 워커·H2 저장소)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱·AnimalLift 추론은 **[계획]** ([PLAN.md](PLAN.md)).
 
 ## 구성 요소
 
@@ -24,7 +24,7 @@ flowchart LR
     S --> DB
     S -->|"dispatch(jobId) @Async"| W
     W -->|"mock: sample-dog.glb"| FS
-    W -->|"real: POST /infer (내부, [계획])"| P
+    W -->|"real: POST /infer (내부)"| P
     P -->|"glbPath (공유 파일시스템)"| FS
     S -->|"model/gltf-binary"| U
 ```
@@ -45,11 +45,11 @@ sequenceDiagram
         App->>API: GET /jobs/{id}
         API-->>App: JobResponse (status, progress, timings, asset|null, error|null)
     end
-    W->>W: PROCESSING (processingStartedAt)
-    alt profile real [계획]
+    W->>W: (real: 추론 슬롯 대기) → PROCESSING (processingStartedAt)
+    alt profile real [구현됨, 모델은 계획]
         W->>Py: POST /infer { jobId, imagePaths, options }
         Py-->>W: { glbPath, metrics } 또는 4xx/5xx
-        W->>W: GLB → storage/results/{jobId}/base.glb
+        W->>W: GLB 헤더 확인 → storage/results/{jobId}/base.glb
     else profile mock [구현됨]
         W->>W: sleep → sample-dog.glb (파일명에 fail 이 있으면 FAILED)
     end
@@ -71,7 +71,7 @@ stateDiagram-v2
     PENDING --> PROCESSING: 워커 시작
     PROCESSING --> COMPLETED: GLB 준비됨 (asset)
     PROCESSING --> FAILED: error.code (서버 재시작 시 INTERNAL_ERROR)
-    PENDING --> FAILED: 워커 사용 불가 (real 스텁) · 서버 재시작
+    PENDING --> FAILED: 서버 재시작·종료 (INTERNAL_ERROR)
     FAILED --> PENDING: POST /retry (queuedAt 갱신)
     COMPLETED --> [*]
 ```
@@ -84,10 +84,10 @@ stateDiagram-v2
 
 | | `mock` (기본, `spring.profiles.default`) | `real` |
 |---|---|---|
-| 워커 | `MockJobWorker`: 고정 지연 후 샘플 GLB. 파일명 `fail` 트리거 | `RealJobWorker`: `POST {inference.base-url}/infer` **[계획]** — 현재 스텁은 `INFERENCE_UNAVAILABLE` 로 FAILED |
-| 설정 파일 | `application-mock.properties` (`mock.worker.*`, `storage.result.sample`) | `application-real.properties` (`inference.base-url`, `inference.timeout-ms`) |
+| 워커 | `MockJobWorker`: 고정 지연 후 샘플 GLB. 파일명 `fail` 트리거 | `RealJobWorker`: 추론 슬롯 대기 → `POST {inference.base-url}/infer` → 결과 GLB 복사 **[구현됨]**. 실제 모델은 [계획](지금은 FastAPI 패스스루) |
+| 설정 파일 | `application-mock.properties` (`mock.worker.*`, `storage.result.sample`) | `application-real.properties` (`inference.base-url`, `inference.timeout-ms`, `inference.max-concurrency`, `storage.result.dir`) |
 | GPU | 불필요 | FastAPI 서비스가 GPU 서버에서 실행 |
-| 용도 | Unity·브라우저 개발, 계약 테스트, 데모 백업 | 4단계 실 연동 이후 |
+| 용도 | Unity·브라우저 개발, 계약 테스트, 데모 백업 | Spring↔Python 연동 시험(패스스루), 4단계 실 연동 |
 | healthz | `{ "profile": "mock", "workerType": "mock" }` | `{ "profile": "real", "workerType": "real" }` |
 | DB 파일 | `storage/db/beside-mock.mv.db` (+ `/h2-console`) | `storage/db/beside-real.mv.db` |
 
@@ -101,7 +101,7 @@ backend/storage/
 ├─ db/beside-real.mv.db               # 작업·Idempotency-Key (H2, profile real, gitignore)
 ├─ uploads/{jobId}_{원본파일명}        # 업로드 사진 (gitignore). 같은 이름이면 -2, -3 접미사
 ├─ results/sample-dog.glb             # Mock 샘플 — 현재 0바이트, 유효 GLB 로 교체(직접 할 일)
-├─ results/{jobId}/base.glb           # real 결과 [계획]
+├─ results/{jobId}/base.glb           # real 결과 [구현됨] — /infer 의 glbPath 를 복사 (gitignore)
 ├─ results/{jobId}/hair.glb           # real 결과, options.hair [계획]
 ├─ results/{jobId}/*.metrics.json     # 변환기 출력 [계획]
 └─ events.jsonl                       # 측정 로그, 실행이 끝날 때마다 한 줄 (METRICS §1, gitignore)
@@ -114,7 +114,7 @@ backend/storage/
 - 개발: 폰과 PC 는 같은 Wi-Fi, `http://<PC IP>:8080`, 방화벽 8080 허용, 앱은 개발용 cleartext 허용. 절차는 [unity/README.md](../unity/README.md).
 - Spring ↔ Python: **같은 호스트 또는 공유 볼륨**(1차 가정). `/infer` 가 업로드 경로를 읽고 GLB 경로를 돌려준다. 분리 배포가 필요하면 바이너리 전송으로 바꾼다(계약 회의 안건).
 - 보안: 캡스톤 범위에서는 인증 없음. 공개 배포 시 HTTPS·인증·업로드 바이러스 검사는 향후 과제.
-- 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 GPU 1장 기준 순차 처리.
+- 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 `inference.max-concurrency`(기본 1 = GPU 1장)건만 `/infer` 를 부르고 나머지는 PENDING 으로 기다린다 **[구현됨]**.
 - DB: 서버 하나가 H2 파일 하나를 연다(AUTO_SERVER 없음). 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 다른 인스턴스는 `--storage.db.path` 로 다른 파일을 쓴다.
 
 ## 계약 경계와 문서
@@ -122,6 +122,6 @@ backend/storage/
 | 경계 | 문서 | 보호 수단 |
 |---|---|---|
 | Unity ↔ Spring | [api/openapi.yaml](api/openapi.yaml), [api/ERROR_CODES.md](api/ERROR_CODES.md) | `JobV1ContractTest`, `JobV1ApiTest`, Unity DTO |
-| Spring ↔ Python | [generation/inference_service/README.md](../generation/inference_service/README.md) | FastAPI 스키마(pydantic), 4단계 통합 테스트 [계획] |
+| Spring ↔ Python | [generation/inference_service/README.md](../generation/inference_service/README.md) | FastAPI 스키마(pydantic), `InferenceClientTest`·`RealJobWorkerTest`(가짜 `/infer`) [구현됨], 실제 모델 통합 테스트 [계획] |
 | GLB 파일 | [asset/GLB_SPEC.md](asset/GLB_SPEC.md) | gltf-validator, 변환기 자체 검사, glTFast 로드 |
 | 측정 이름 | [METRICS.md](METRICS.md) | 세 트랙 공통 표기 |
