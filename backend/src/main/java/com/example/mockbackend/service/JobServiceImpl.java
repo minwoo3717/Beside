@@ -6,11 +6,14 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.exception.ApiException;
 import com.example.mockbackend.exception.ErrorCode;
+import com.example.mockbackend.repository.IdempotencyKeyEntry;
+import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,11 +26,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Job lifecycle: store uploads, create the job, hand it to the active JobWorker (mock | real).
@@ -43,10 +44,9 @@ public class JobServiceImpl implements JobService {
     static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     private final JobRepository jobRepository;
+    private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
-    /** Idempotency-Key → jobId. Process lifetime only; persisting it is part of the H2 switch (PLAN stage 0). */
-    private final Map<String, String> idempotencyKeys = new ConcurrentHashMap<>();
 
     @Value("${storage.upload.dir:storage/uploads}")
     private String uploadDir;
@@ -106,13 +106,10 @@ public class JobServiceImpl implements JobService {
                 throw ApiException.badRequest(ErrorCode.INVALID_REQUEST,
                         "Idempotency-Key must be 1~" + MAX_IDEMPOTENCY_KEY_LENGTH + " characters");
             }
-            String existingId = idempotencyKeys.get(idempotencyKey);
-            if (existingId != null) {
-                Optional<Job> existing = jobRepository.findById(existingId);
-                if (existing.isPresent()) {
-                    log.info("Idempotency-Key replay -> jobId={}", existingId);
-                    return existing.get();
-                }
+            Optional<Job> replay = findJobForKey(idempotencyKey);
+            if (replay.isPresent()) {
+                log.info("Idempotency-Key replay -> jobId={}", replay.get().getId());
+                return replay.get();
             }
         }
         Job job;
@@ -121,10 +118,7 @@ public class JobServiceImpl implements JobService {
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploads", e);
         }
-        if (keyed) {
-            idempotencyKeys.putIfAbsent(idempotencyKey, job.getId());
-        }
-        return job;
+        return keyed ? linkIdempotencyKey(idempotencyKey, job) : job;
     }
 
     @Override
@@ -196,6 +190,33 @@ public class JobServiceImpl implements JobService {
             throw ApiException.assetNotFound(id, variant.name());
         }
         return Path.of(path);
+    }
+
+    // ------------------------------------------------------------------ Idempotency-Key
+
+    /** The job already created for this key, if any. A key whose job no longer exists is released. */
+    private Optional<Job> findJobForKey(String key) {
+        Optional<IdempotencyKeyEntry> entry = idempotencyKeys.findById(key);
+        if (entry.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Job> job = jobRepository.findById(entry.get().getJobId());
+        if (job.isEmpty()) {
+            idempotencyKeys.deleteById(key);
+        }
+        return job;
+    }
+
+    /** Insert-only: when a concurrent request linked the key first, answer with that request's job. */
+    private Job linkIdempotencyKey(String key, Job job) {
+        try {
+            idempotencyKeys.saveAndFlush(new IdempotencyKeyEntry(key, job.getId(), Instant.now()));
+            return job;
+        } catch (DataIntegrityViolationException raced) {
+            Optional<Job> first = findJobForKey(key);
+            log.info("Idempotency-Key raced: jobId={} answers instead of {}", first.map(Job::getId).orElse("?"), job.getId());
+            return first.orElse(job);
+        }
     }
 
     // ------------------------------------------------------------------ shared
