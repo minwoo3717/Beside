@@ -3,15 +3,31 @@ backend/.gradle/
 backend/build/
 backend/bin/
 backend/storage/uploads/
+backend/storage/results/*/
 
 # Local editor files
 .vscode/
 backend/.vscode/
 
-# Unity generated folders (when a Unity project is created later)
-frontend/Library/
-frontend/Temp/
-frontend/Logs/
-frontend/Obj/
-frontend/Build/
-frontend/Builds/
+# Unity generated folders (Unity 프로젝트를 unity/ 안에 만들거나 복사했을 때)
+unity/Library/
+unity/Temp/
+unity/Logs/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/UserSettings/
+unity/*.csproj
+unity/*.sln
+unity/.vs/
+
+# Python (generation/)
+__pycache__/
+*.pyc
+.venv/
+generation/**/outputs/
+generation/**/*.ckpt
+generation/**/*.pth
+
+# e2e 스크립트 출력
+scripts/out/

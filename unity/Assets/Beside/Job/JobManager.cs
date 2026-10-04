@@ -14,7 +14,7 @@ namespace Beside.Job
         public void StartJob(string[] photoPaths)
         {
             // TODO: Construct BesideApiClient with baseUrl and upload the photos.
-            // Poll PENDING / PROCESSING, download on COMPLETED, stop on FAILED.
+            // Poll PENDING / PROCESSING, download on COMPLETED, stop on FAILED (retry: POST /api/v1/jobs/{jobId}/retry).
             // Apply pollingIntervalSeconds and maxWaitSeconds.
         }
 
