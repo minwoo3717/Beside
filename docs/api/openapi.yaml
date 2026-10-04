@@ -1,0 +1,444 @@
+openapi: 3.0.3
+info:
+  title: Beside API
+  version: 1.0.0
+  description: |
+    사진 기반 반려동물 3D 재현 서비스의 공개 API 계약 v1. Unity 앱이 보는 유일한 인터페이스이며
+    이 파일이 단일 진실 공급원(single source of truth)이다. backend 의 계약 테스트(JobV1ContractTest)가
+    springdoc 이 생성한 `/v3/api-docs` 와 이 문서를 비교한다(경로×메서드, operationId, 응답 상태 코드,
+    JobResponse 속성, enum 값, ErrorResponse 구조).
+
+    변경 규칙
+    - 응답 필드 "추가"는 PR 설명에 한 줄 기록한 뒤 자유. 클라이언트는 모르는 필드를 무시한다.
+    - 기존 필드의 이름/타입 변경·삭제, enum 값 변경, 상태 코드 변경은 주 1회 계약 회의에서만 결정하고
+      docs/api/CHANGELOG.md 에 기록, git tag api-v1.x 를 올린다.
+    - 모든 enum: 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+    - 서버 내부 경로(resultPath, 업로드 저장 경로 등)는 어떤 응답에도 노출하지 않는다.
+
+    흐름: POST /api/v1/jobs (202) → GET /api/v1/jobs/{jobId} 를 1~2초 간격으로 폴링 →
+    status=COMPLETED 이면 asset.url 로 GLB 다운로드 → status=FAILED 이면 error.code 로 문구 표시,
+    필요 시 POST /api/v1/jobs/{jobId}/retry.
+servers:
+  - url: http://localhost:8080
+    description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
+tags:
+  - name: jobs
+    description: 3D 생성 작업
+  - name: health
+    description: 서버 상태
+
+paths:
+  /api/v1/jobs:
+    post:
+      tags: [jobs]
+      operationId: createJob
+      summary: 사진을 업로드해 3D 생성 작업을 만든다
+      description: |
+        multipart/form-data 의 `photos` 파트로 사진 1~10장을 보낸다. 장당 5 MB 이하, 요청 전체 20 MB 이하,
+        Content-Type 은 image/jpeg · image/png · image/webp 만 허용한다(검사는 파트에 선언된 Content-Type 기준).
+        접수 즉시 202 를 돌려주고 처리는 비동기로 진행된다. `Idempotency-Key` 헤더를 보내면 같은 키의 재요청에
+        같은 jobId 를 돌려준다(서버 프로세스 생존 범위, 영속화는 [계획]).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  description: 반려동물 사진. 1~10장, 장당 ≤ 5 MB, 요청 전체 ≤ 20 MB, image/jpeg | image/png | image/webp.
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '202':
+          description: 작업 접수. Location 헤더와 본문의 jobId 로 상태를 폴링한다.
+          headers:
+            Location:
+              description: 생성된 작업의 조회 경로. 서버 루트 기준 상대 경로 `/api/v1/jobs/{jobId}`.
+              schema:
+                type: string
+                example: /api/v1/jobs/3fa85f64-5717-4562-b3fc-2c963f66afa6
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [jobs]
+      operationId: listJobs
+      summary: 작업 목록 (개발·디버그용)
+      description: |
+        최근 작업부터 돌려준다. 앱의 정상 흐름에서는 쓰지 않으며 개발·디버그·데모 정리용이다.
+        `nextCursor` 가 null 이 아니면 그 값을 `cursor` 로 넘겨 다음 페이지를 받는다. cursor 는 불투명 문자열이다.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: 작업 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}:
+    get:
+      tags: [jobs]
+      operationId: getJob
+      summary: 작업 상태 조회 (폴링)
+      description: 1~2초 간격으로 폴링한다. status 가 COMPLETED 또는 FAILED 가 되면 폴링을 멈춘다.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 작업 상태
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/asset:
+    get:
+      tags: [jobs]
+      operationId: downloadAsset
+      summary: 생성된 GLB 다운로드
+      description: |
+        status=COMPLETED 인 작업의 GLB 파일을 돌려준다. 파일 계약은 docs/asset/GLB_SPEC.md.
+        `variant` 를 생략하면 base. 잘못된 variant 값은 400, 작업은 완료됐지만 해당 variant 파일이 없으면 404,
+        작업이 아직 완료되지 않았거나 실패했으면 409 를 돌려준다.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/Variant'
+      responses:
+        '200':
+          description: GLB 바이너리
+          headers:
+            Content-Disposition:
+              description: attachment; filename="{jobId}-{variant}.glb"
+              schema:
+                type: string
+            Content-Length:
+              description: 파일 크기(바이트). JobResponse.asset.bytes 와 같다.
+              schema:
+                type: integer
+                format: int64
+          content:
+            model/gltf-binary:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/retry:
+    post:
+      tags: [jobs]
+      operationId: retryJob
+      summary: 실패한 작업을 같은 사진으로 다시 실행한다
+      description: |
+        status=FAILED 인 작업만 재시도할 수 있다. 성공하면 202 와 함께 같은 jobId 를 돌려주고 작업은 PENDING 으로 돌아간다.
+        error 는 비워지고 timings 는 재시도 시점부터 다시 측정한다. FAILED 가 아닌 작업은 409(JOB_NOT_FAILED).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '202':
+          description: 재시도 접수
+          headers:
+            Location:
+              description: 작업 조회 경로 `/api/v1/jobs/{jobId}`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreatedResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/healthz:
+    get:
+      tags: [health]
+      operationId: health
+      summary: 서버 상태와 활성 프로파일
+      description: 앱이 서버 주소 설정을 확인할 때 쓴다. 인증 없음.
+      responses:
+        '200':
+          description: 정상
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+components:
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      description: 작업 ID (UUID)
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: 선택. 1~128자. 같은 키로 다시 보내면 새 작업을 만들지 않고 같은 jobId 를 202 로 돌려준다.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    Variant:
+      name: variant
+      in: query
+      required: false
+      description: 에셋 종류. 생략 시 base. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+      schema:
+        type: string
+        enum: [base, hair]
+        default: base
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 페이지 크기 1~100, 기본 20.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: 이전 응답의 nextCursor. 불투명 문자열.
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND, NOT_FOUND)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    PayloadTooLarge:
+      description: 용량 초과 (PAYLOAD_TOO_LARGE) — 장당 5 MB 또는 요청 전체 20 MB 초과
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: 서버 오류 (INTERNAL_ERROR)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    JobResponse:
+      type: object
+      description: 작업 상태. 서버 내부 경로는 포함하지 않는다.
+      required: [id, status, createdAt, updatedAt, timings, uploadedFiles]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: |
+            작업 상태. PENDING(대기) → PROCESSING(생성 중) → COMPLETED(완료, asset 사용 가능) | FAILED(실패, error 참조).
+            FAILED 는 retry 로 PENDING 으로 돌아갈 수 있다.
+            클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+        progress:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: 진행률 0~1. 서버가 알 수 없으면 null. Mock 은 PENDING 0.0, PROCESSING 0.5, COMPLETED 1.0, FAILED null.
+        createdAt:
+          type: string
+          format: date-time
+          description: 작업 생성 시각 (ISO 8601, UTC)
+        updatedAt:
+          type: string
+          format: date-time
+          description: 마지막 상태 변경 시각 (ISO 8601, UTC)
+        timings:
+          $ref: '#/components/schemas/Timings'
+        asset:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AssetInfo'
+          description: COMPLETED 일 때 기본(base) 에셋 정보. 그 외 상태에서는 null.
+        error:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobError'
+          description: FAILED 일 때 실패 원인. 그 외 상태에서는 null.
+        uploadedFiles:
+          type: array
+          description: 업로드된 사진의 원본 파일명과 크기. 서버 저장 경로는 포함하지 않는다.
+          items:
+            $ref: '#/components/schemas/UploadedFile'
+    Timings:
+      type: object
+      description: |
+        단계별 소요 시간(ms). queuedMs 는 PENDING 동안의 경과(진행 중이면 현재까지, 이후 고정),
+        processingMs 는 PROCESSING 시작 전 null, 진행 중이면 현재까지, 종료 후 고정.
+        totalMs 는 COMPLETED/FAILED 전 null, 이후 (종료 시각 − 접수 시각). retry 하면 재시도 시점부터 다시 잰다.
+      required: [queuedMs]
+      properties:
+        queuedMs:
+          type: integer
+          format: int64
+        processingMs:
+          type: integer
+          format: int64
+          nullable: true
+        totalMs:
+          type: integer
+          format: int64
+          nullable: true
+    AssetInfo:
+      type: object
+      description: 다운로드 가능한 GLB 정보. 파일 계약은 docs/asset/GLB_SPEC.md.
+      required: [url, bytes, variant, contentType]
+      properties:
+        url:
+          type: string
+          description: 서버 루트 기준 상대 경로. 앱은 baseUrl 과 결합한다. 예 `/api/v1/jobs/{jobId}/asset?variant=base`
+        bytes:
+          type: integer
+          format: int64
+          description: 파일 크기(바이트). Mock 샘플이 0바이트이면 0 이 올 수 있다.
+        variant:
+          type: string
+          description: 에셋 종류. base = 몸체 메시, hair = 털 메시 포함. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+          enum: [base, hair]
+        contentType:
+          type: string
+          description: 항상 model/gltf-binary
+          example: model/gltf-binary
+    JobError:
+      type: object
+      description: 작업 실패 원인. code 목록과 앱 표시 문구는 docs/api/ERROR_CODES.md.
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: ERROR_CODES.md 의 Job 실패 코드(INFERENCE_FAILED, INFERENCE_TIMEOUT, INFERENCE_UNAVAILABLE, CONVERSION_FAILED). 알 수 없는 코드는 일반 실패 문구로 처리한다.
+          example: INFERENCE_FAILED
+        message:
+          type: string
+          description: 개발자용 설명(영문). 사용자에게 그대로 보여주지 않는다.
+    UploadedFile:
+      type: object
+      required: [name, bytes]
+      properties:
+        name:
+          type: string
+          description: 클라이언트가 보낸 원본 파일명(경로 제거)
+        bytes:
+          type: integer
+          format: int64
+    JobCreatedResponse:
+      type: object
+      required: [jobId]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+    JobListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResponse'
+        nextCursor:
+          type: string
+          nullable: true
+          description: 다음 페이지 cursor. 마지막 페이지면 null.
+    ErrorResponse:
+      type: object
+      description: 모든 오류 응답의 공통 봉투. v0(/api/jobs)의 평면 문자열 오류와 다르다.
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorDetail'
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: docs/api/ERROR_CODES.md 의 HTTP 오류 코드. 앱은 code 로 문구를 고르고, 알 수 없는 코드는 일반 오류 문구로 처리한다.
+          example: JOB_NOT_COMPLETED
+        message:
+          type: string
+          description: 개발자용 설명(영문). 사용자에게 그대로 보여주지 않는다.
+        jobId:
+          type: string
+          nullable: true
+          description: 오류가 특정 작업에 관한 것이면 그 jobId.
+    HealthResponse:
+      type: object
+      required: [status, profile, workerType]
+      properties:
+        status:
+          type: string
+          example: ok
+        profile:
+          type: string
+          description: 활성 Spring profile (mock | real)
+          example: mock
+        workerType:
+          type: string
+          description: 작업을 처리하는 워커 종류 (mock | real)
+          example: mock
