@@ -11,7 +11,23 @@ const resultPhoto = document.querySelector("#result-photo");
 const placeholder = document.querySelector("#result-placeholder");
 const progress = document.querySelector("#job-progress");
 const jobReference = document.querySelector("#job-reference");
-const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+// API v1 accepts JPEG, PNG and WEBP only (docs/api/openapi.yaml createJob).
+const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+// User-facing copy per error.code, from docs/api/ERROR_CODES.md. The server message is for developers only.
+const ERROR_MESSAGES = Object.freeze({
+  INVALID_REQUEST: "요청이 올바르지 않아요. 페이지를 새로고침한 뒤 다시 시도해 주세요.",
+  NO_PHOTOS: "사진을 1장 이상 선택해 주세요.",
+  TOO_MANY_PHOTOS: "사진은 최대 10장까지 올릴 수 있어요.",
+  UNSUPPORTED_IMAGE_TYPE: "JPG, PNG, WEBP 사진만 사용할 수 있어요.",
+  PAYLOAD_TOO_LARGE: "사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요.",
+  JOB_NOT_FOUND: "작업을 찾을 수 없어요. 사진을 다시 올려 주세요.",
+  NOT_FOUND: "요청한 정보를 찾을 수 없어요.",
+  INTERNAL_ERROR: "서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
+  INFERENCE_FAILED: "3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요.",
+  INFERENCE_TIMEOUT: "생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요.",
+  INFERENCE_UNAVAILABLE: "생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.",
+  CONVERSION_FAILED: "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요."
+});
 let selectedFiles = [];
 let previewUrls = [];
 let busy = false;
@@ -82,7 +98,7 @@ photoInput.addEventListener("change", () => {
     return;
   }
   if (files.some((file) => !allowedTypes.has(file.type) || file.size === 0 || file.size > 5 * 1024 * 1024)) {
-    showError("장당 5MB 이하의 JPG, PNG, WEBP, GIF 사진을 선택해 주세요. 빈 파일은 사용할 수 없어요.");
+    showError("장당 5MB 이하의 JPG, PNG, WEBP 사진을 선택해 주세요. 빈 파일은 사용할 수 없어요.");
     return;
   }
   selectedFiles = files;
@@ -105,6 +121,21 @@ photoInput.addEventListener("change", () => {
   setBusy(false);
 });
 
+// Known codes map to ERROR_CODES.md copy; unknown codes fall back to generic text instead of failing (contract rule).
+function copyFor(code) {
+  return typeof code === "string" && Object.hasOwn(ERROR_MESSAGES, code) ? ERROR_MESSAGES[code] : null;
+}
+
+// API v1 error responses are { error: { code, message, jobId? } }.
+function httpErrorMessage(status, text) {
+  let code = null;
+  try { code = JSON.parse(text)?.error?.code ?? null; } catch { /* not the v1 error envelope */ }
+  if (copyFor(code)) return copyFor(code);
+  if (status === 413) return ERROR_MESSAGES.PAYLOAD_TOO_LARGE;
+  if (status === 404) return ERROR_MESSAGES.JOB_NOT_FOUND;
+  return `요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. (HTTP ${status})`;
+}
+
 async function request(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   activeRequest = controller;
@@ -113,10 +144,8 @@ async function request(url, options = {}, timeoutMs = 15000) {
     const response = await fetch(url, { ...options, signal: controller.signal, cache: "no-store" });
     const text = await response.text();
     if (!response.ok) {
-      if (response.status === 413) throw new Error("사진 용량이 너무 큽니다. 더 작은 사진으로 다시 시도해 주세요.");
-      if (response.status === 404) throw new Error("작업을 찾을 수 없습니다. 서버가 재시작됐다면 다시 생성해 주세요.");
       console.error("Backend request failed", response.status, text);
-      throw new Error(`요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요. (HTTP ${response.status})`);
+      throw new Error(httpErrorMessage(response.status, text));
     }
     return { response, text };
   } catch (error) {
@@ -142,10 +171,10 @@ async function pollJob(jobId) {
   const deadline = performance.now() + 60000;
   while (performance.now() < deadline) {
     const remaining = deadline - performance.now();
-    const { text } = await request(`/api/jobs/${encodeURIComponent(jobId)}`, {}, Math.min(15000, Math.max(1, remaining)));
+    const { text } = await request(`/api/v1/jobs/${encodeURIComponent(jobId)}`, {}, Math.min(15000, Math.max(1, remaining)));
     if (performance.now() >= deadline) break;
     const job = parseJob(text, jobId);
-    if (job.status === "FAILED") throw new Error("Mock 작업이 실패했습니다. 다시 생성해 주세요.");
+    if (job.status === "FAILED") throw new Error(copyFor(job.error?.code) || "작업이 실패했습니다. 다시 생성해 주세요.");
     if (job.status === "COMPLETED") {
       setStatus("COMPLETED", "완료됐어요! 아래에서 Mock 결과를 확인해 보세요.");
       resultPhoto.src = previewUrls[0];
@@ -170,11 +199,11 @@ form.addEventListener("submit", async (event) => {
   try {
     const data = new FormData();
     selectedFiles.forEach((file, index) => data.append("photos", file, `${index + 1}-${file.name}`));
-    const { response } = await request("/api/jobs", { method: "POST", body: data });
+    const { response } = await request("/api/v1/jobs", { method: "POST", body: data });
     const location = response.headers.get("Location");
     if (response.status !== 202 || !location) throw new Error("서버에서 작업 ID를 받지 못했습니다.");
     const jobUrl = new URL(location, window.location.origin);
-    const match = jobUrl.pathname.match(/^\/api\/jobs\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+    const match = jobUrl.pathname.match(/^\/api\/v1\/jobs\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
     if (jobUrl.origin !== window.location.origin || !match || jobUrl.search || jobUrl.hash) throw new Error("올바르지 않은 작업 조회 주소입니다.");
     jobReference.textContent = `JOB ${match[1]}`;
     jobReference.hidden = false;

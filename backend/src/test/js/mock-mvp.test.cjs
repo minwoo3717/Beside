@@ -69,8 +69,14 @@ function setup(fetch, { realTime = false, requestTimeout = false } = {}) {
     clear: () => element("#clear-photos").emit("click")
   };
 }
-function accepted() { return new Response(null, { status: 202, headers: { Location: `/api/jobs/${id}` } }); }
-function job(status, jobId = id) { return Response.json({ id: jobId, status }); }
+// API v1 (docs/api/openapi.yaml): 202 + Location + { jobId }, JobResponse, and the { error: { code, message } } envelope.
+function accepted(location = `/api/v1/jobs/${id}`) {
+  return Response.json({ jobId: id }, { status: 202, headers: { Location: location } });
+}
+function job(status, jobId = id, extra = {}) { return Response.json({ id: jobId, status, ...extra }); }
+function apiError(status, code) {
+  return Response.json({ error: { code, message: "developer text", jobId: null } }, { status });
+}
 
 test("multiple previews, multipart contract, polling and representative result", async () => {
   const states = ["PENDING", "PROCESSING", "COMPLETED"];
@@ -78,14 +84,14 @@ test("multiple previews, multipart contract, polling and representative result",
   const app = setup(async (url, options) => {
     if (options.method === "POST") {
       uploads++;
-      assert.equal(url, "/api/jobs");
+      assert.equal(url, "/api/v1/jobs");
       const photos = options.body.getAll("photos");
       assert.equal(photos.length, 2);
       assert.notEqual(photos[0].name, photos[1].name);
       assert.equal(options.headers, undefined);
       return accepted();
     }
-    assert.equal(url, `/api/jobs/${id}`);
+    assert.equal(url, `/api/v1/jobs/${id}`);
     return job(states.shift());
   });
   try {
@@ -108,7 +114,7 @@ for (const [label, reply, afterUpload] of [
   ["HTTP 500", () => new Response("server error", { status: 500 })],
   ["oversized upload", () => new Response("too large", { status: 413 })],
   ["missing Location", () => new Response(null, { status: 202 })],
-  ["foreign Location", () => new Response(null, { status: 202, headers: { Location: `http://elsewhere.invalid/api/jobs/${id}` } })],
+  ["foreign Location", () => accepted(`http://elsewhere.invalid/api/v1/jobs/${id}`)],
   ["invalid JSON", () => new Response("not json"), true],
   ["unknown status", () => job("UNKNOWN"), true],
   ["wrong job ID", () => job("COMPLETED", "wrong-id"), true],
@@ -126,6 +132,39 @@ for (const [label, reply, afterUpload] of [
     } finally { await app.clear(); }
   });
 }
+
+test("v0 Location is not followed", async () => {
+  let polls = 0;
+  const app = setup(async (_url, options) => {
+    if (options.method === "POST") return accepted(`/api/jobs/${id}`);
+    polls++; return job("COMPLETED");
+  });
+  try {
+    await app.select(); await app.submit();
+    assert.equal(polls, 0);
+    assert.equal(app.element("#status-badge").textContent, "FAILED");
+  } finally { await app.clear(); }
+});
+
+test("v1 error envelope shows the ERROR_CODES copy, not the developer message", async () => {
+  const app = setup(async () => apiError(400, "UNSUPPORTED_IMAGE_TYPE"));
+  try {
+    await app.select(); await app.submit();
+    assert.equal(app.element("#status-badge").textContent, "FAILED");
+    assert.equal(app.element("#error-message").textContent, "JPG, PNG, WEBP 사진만 사용할 수 있어요.");
+  } finally { await app.clear(); }
+});
+
+test("failed job shows the copy for its error.code", async () => {
+  const app = setup(async (_url, options) => options.method === "POST" ? accepted()
+    : job("FAILED", id, { error: { code: "INFERENCE_FAILED", message: "developer text" } }));
+  try {
+    await app.select(); await app.submit();
+    assert.equal(app.element("#status-badge").textContent, "FAILED");
+    assert.match(app.element("#error-message").textContent, /3D 모델을 만들지 못했어요/);
+    assert.doesNotMatch(app.element("#error-message").textContent, /developer text/);
+  } finally { await app.clear(); }
+});
 
 test("polling stops at 60 seconds", async () => {
   let queries = 0;
@@ -152,10 +191,11 @@ test("stalled request aborts and restores controls", async () => {
   } finally { await app.clear(); }
 });
 
-test("empty, non-image and oversized selections do not upload", async () => {
+test("empty, non-image, GIF and oversized selections do not upload", async () => {
   let calls = 0;
   const app = setup(async () => { calls++; return accepted(); });
   for (const files of [[], [new File(["text"], "note.txt", { type: "text/plain" })],
+    [new File(["gif"], "dog.gif", { type: "image/gif" })],
     [new File([new Uint8Array(5 * 1024 * 1024 + 1)], "large.jpg", { type: "image/jpeg" })]]) {
     await app.select(files); await app.submit();
     assert.equal(app.element("#generate-button").disabled, true);
