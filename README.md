@@ -14,7 +14,7 @@ Beside/
 
 ## 현재 상태 (2026-10-04 기준)
 
-- **[구현됨]** Spring Mock 서버: v1 `/api/v1`(Unity 와 브라우저 Mock UI 가 쓰는 계약), v0 `/api/jobs`(동결, 제거 대기), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, 재시도), H2 파일 DB(재시작 후에도 작업 유지), 계약 테스트(openapi.yaml ↔ springdoc).
+- **[구현됨]** Spring Mock 서버: v1 `/api/v1`(Unity 와 브라우저 Mock UI 가 쓰는 계약), v0 `/api/jobs`(동결, 제거 대기), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, 재시도), H2 파일 DB(재시작 후에도 작업 유지), 계약 테스트(openapi.yaml ↔ springdoc). real 워커는 Python `/infer` 를 호출한다(FastAPI 스텁의 패스스루로 연동 확인, 실제 모델은 [계획]).
 - **[구현됨]** 계약 문서: 통합본 [docs/CONTRACT.md](docs/CONTRACT.md), 원본 [docs/api/openapi.yaml](docs/api/openapi.yaml), [ERROR_CODES](docs/api/ERROR_CODES.md), [GLB_SPEC](docs/asset/GLB_SPEC.md), [METRICS](docs/METRICS.md). Unity 계약 DTO([unity/Assets/Beside/Api](unity/Assets/Beside/Api)), FastAPI `/infer` 스텁([generation/inference_service](generation/inference_service)).
 - **[계획]** Unity 실제 프로젝트와 AR 배치, AnimalLift 추론 연동, 측정 자동화. 단계·일정·완료 기준은 [docs/PLAN.md](docs/PLAN.md).
 - **직접 할 일**: `backend/storage/results/sample-dog.glb`는 0바이트다. [GLB_SPEC](docs/asset/GLB_SPEC.md)을 만족하는 유효한 GLB로 교체해야 Unity 로드 검증을 할 수 있다.
