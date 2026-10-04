@@ -1,0 +1,5 @@
+# Inference service stub. The AnimalLift environment (torch, CUDA, model deps) is added in PLAN stage 3
+# in its own conda/venv; keep this file to what the API layer needs.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
