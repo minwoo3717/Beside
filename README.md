@@ -5,7 +5,7 @@
 ```text
 Beside/
 ├─ CLAUDE.md        공통 작업 원칙, 아키텍처, 계약 변경 규칙
-├─ docs/            아키텍처, 단계별 계획, API v1 계약(openapi.yaml), GLB 에셋 계약, 측정 항목
+├─ docs/            CONTRACT.md(계약 통합본), 아키텍처, 단계별 계획, openapi.yaml, GLB 에셋 계약, 측정 항목
 ├─ backend/         Spring Boot 3.2 / Java 17 — API v0(동결)·v1, Mock/Real 워커, 브라우저 Mock UI
 ├─ unity/           Unity Android AR 클라이언트 — 계약 DTO와 C# 틀 (Assets/Beside)
 ├─ generation/      3D 생성 트랙 — AnimalLift 실험 기록, FastAPI 추론 서비스 스텁, GLB 변환 도구 자리
@@ -15,7 +15,7 @@ Beside/
 ## 현재 상태 (2026-10-04 기준)
 
 - **[구현됨]** Spring Mock 서버: v0 `/api/jobs`(브라우저 Mock UI가 사용), v1 `/api/v1`(Unity가 보는 계약), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, 재시도), 계약 테스트(openapi.yaml ↔ springdoc).
-- **[구현됨]** 계약 문서: [docs/api/openapi.yaml](docs/api/openapi.yaml), [ERROR_CODES](docs/api/ERROR_CODES.md), [GLB_SPEC](docs/asset/GLB_SPEC.md), [METRICS](docs/METRICS.md). Unity 계약 DTO([unity/Assets/Beside/Api](unity/Assets/Beside/Api)), FastAPI `/infer` 스텁([generation/inference_service](generation/inference_service)).
+- **[구현됨]** 계약 문서: 통합본 [docs/CONTRACT.md](docs/CONTRACT.md), 원본 [docs/api/openapi.yaml](docs/api/openapi.yaml), [ERROR_CODES](docs/api/ERROR_CODES.md), [GLB_SPEC](docs/asset/GLB_SPEC.md), [METRICS](docs/METRICS.md). Unity 계약 DTO([unity/Assets/Beside/Api](unity/Assets/Beside/Api)), FastAPI `/infer` 스텁([generation/inference_service](generation/inference_service)).
 - **[계획]** Unity 실제 프로젝트와 AR 배치, AnimalLift 추론 연동, H2 저장소, 측정 자동화. 단계·일정·완료 기준은 [docs/PLAN.md](docs/PLAN.md).
 - **직접 할 일**: `backend/storage/results/sample-dog.glb`는 0바이트다. [GLB_SPEC](docs/asset/GLB_SPEC.md)을 만족하는 유효한 GLB로 교체해야 Unity 로드 검증을 할 수 있다.
 

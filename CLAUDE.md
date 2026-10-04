@@ -35,6 +35,7 @@ Beside/
 ├─ CLAUDE.md                      # 이 파일 (공통 규칙)
 ├─ README.md                      # 프로젝트 소개와 진입점
 ├─ docs/
+│  ├─ CONTRACT.md                 # 계약 통합본 (사람이 읽는 한 파일: API·오류 코드·GLB·측정·/infer·변경 규칙)
 │  ├─ ARCHITECTURE.md             # 시스템 그림(mermaid), 데이터 흐름, 프로파일
 │  ├─ PLAN.md                     # 단계별 계획·주차·담당·완료 기준(DoD)
 │  ├─ METRICS.md                  # 세 트랙이 같은 이름으로 쓰는 측정 항목
