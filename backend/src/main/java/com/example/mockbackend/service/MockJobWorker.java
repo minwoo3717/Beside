@@ -12,20 +12,20 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 
 /**
  * Profile "mock" (default): no GPU. PENDING for pending-ms, PROCESSING for processing-ms, then COMPLETED
  * with the sample GLB, or FAILED (INFERENCE_FAILED) when an uploaded filename contains the fail token.
- * Separate bean so calls from JobServiceImpl pass through Spring's async proxy.
+ * Separate bean so calls from JobServiceImpl pass through Spring's async proxy. Runs end through JobFinisher.
  */
 @Service
 @Profile("mock")
 @RequiredArgsConstructor
 public class MockJobWorker implements JobWorker {
     private final JobRepository jobRepository;
+    private final JobFinisher jobFinisher;
     private final Logger log = LoggerFactory.getLogger(MockJobWorker.class);
 
     @Value("${storage.result.sample:storage/results/sample-dog.glb}")
@@ -62,26 +62,13 @@ public class MockJobWorker implements JobWorker {
             log.info("jobId={} stage=PROCESSING", jobId);
 
             Thread.sleep(processingMs);
-            Instant finished = Instant.now();
             if (shouldFail(job)) {
-                job.setErrorCode(ErrorCode.INFERENCE_FAILED.name());
-                job.setErrorMessage("Mock failure: an uploaded filename contains '" + failToken + "'");
-                job.setProgress(null);
-                job.setFinishedAt(finished);
-                job.setUpdatedAt(finished);
-                job.setStatus(JobStatus.FAILED);
-                jobRepository.save(job);
+                jobFinisher.fail(job, ErrorCode.INFERENCE_FAILED,
+                        "Mock failure: an uploaded filename contains '" + failToken + "'", type());
                 log.info("jobId={} stage=FAILED (mock trigger)", jobId);
                 return;
             }
-            job.setResultPath(sampleResultPath);
-            job.setFinishedAt(finished);
-            job.setUpdatedAt(finished);
-            job.setDurationMs(Duration.between(start, finished).toMillis());
-            job.setProgress(1.0);
-            // Publish completion only after the download path and metadata are ready.
-            job.setStatus(JobStatus.COMPLETED);
-            jobRepository.save(job);
+            jobFinisher.complete(job, sampleResultPath, start, type());
             log.info("jobId={} stage=COMPLETED durationMs={}", jobId, job.getDurationMs());
         } catch (InterruptedException e) {
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
@@ -100,14 +87,7 @@ public class MockJobWorker implements JobWorker {
         if (job == null) {
             return;
         }
-        Instant now = Instant.now();
-        job.setErrorCode(ErrorCode.INTERNAL_ERROR.name());
-        job.setErrorMessage("Mock worker interrupted (server shutting down)");
-        job.setProgress(null);
-        job.setFinishedAt(now);
-        job.setUpdatedAt(now);
-        job.setStatus(JobStatus.FAILED);
-        jobRepository.save(job);
+        jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Mock worker interrupted (server shutting down)", type());
         log.warn("jobId={} stage=FAILED (mock worker interrupted)", jobId);
     }
 

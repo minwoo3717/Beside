@@ -1,7 +1,6 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
-import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,8 +11,6 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-
 /**
  * Profile "real": delegates 3D generation to the Python inference service (generation/inference_service).
  * <p>
@@ -22,9 +19,9 @@ import java.time.Instant;
  *   <li>Set PROCESSING, then POST {inference.base-url}/infer with
  *       {@code { jobId, imagePaths: uploads[].path, options: { hair: false } }} (timeout = inference.timeout-ms).</li>
  *   <li>Copy the returned glbPath to storage/results/{jobId}/base.glb (same host or shared volume is assumed,
- *       see docs/ARCHITECTURE.md), fill resultPath/progress/finishedAt, append metrics to events.jsonl.</li>
+ *       see docs/ARCHITECTURE.md) and end the run with JobFinisher.complete (it writes events.jsonl).</li>
  *   <li>Map failures: timeout → INFERENCE_TIMEOUT, connection refused / 5xx / 501 → INFERENCE_UNAVAILABLE,
- *       4xx → INFERENCE_FAILED, converter errors → CONVERSION_FAILED.</li>
+ *       4xx → INFERENCE_FAILED, converter errors → CONVERSION_FAILED (JobFinisher.fail).</li>
  * </ol>
  * Until then every job fails fast with INFERENCE_UNAVAILABLE so the rest of the flow stays testable.
  */
@@ -33,6 +30,7 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class RealJobWorker implements JobWorker {
     private final JobRepository jobRepository;
+    private final JobFinisher jobFinisher;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
     @Value("${inference.base-url:http://localhost:8001}")
@@ -54,15 +52,8 @@ public class RealJobWorker implements JobWorker {
             log.warn("jobId={} not found for real worker", jobId);
             return;
         }
-        Instant now = Instant.now();
-        job.setErrorCode(ErrorCode.INFERENCE_UNAVAILABLE.name());
-        job.setErrorMessage("Real worker is not implemented yet (TODO). Target: POST " + inferenceBaseUrl
-                + "/infer, timeoutMs=" + timeoutMs);
-        job.setProgress(null);
-        job.setFinishedAt(now);
-        job.setUpdatedAt(now);
-        job.setStatus(JobStatus.FAILED);
-        jobRepository.save(job);
+        jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "Real worker is not implemented yet (TODO). Target: POST "
+                + inferenceBaseUrl + "/infer, timeoutMs=" + timeoutMs, type());
         log.warn("jobId={} stage=FAILED (real worker stub, inference service {})", jobId, inferenceBaseUrl);
     }
 }
