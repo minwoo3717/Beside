@@ -91,11 +91,11 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | code | 상황 | 앱 표시 문구 | retry |
 |---|---|---|---|
-| `INFERENCE_FAILED` | 3D 생성 실패, 입력 품질. Mock 의 `fail` 트리거 | 3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요. | 예 |
+| `INFERENCE_FAILED` | 3D 생성 실패, 입력 품질(real: 추론 서비스의 4xx·500). Mock 의 `fail` 트리거 | 3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요. | 예 |
 | `INFERENCE_TIMEOUT` | 추론이 `inference.timeout-ms` 초과 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
-| `INFERENCE_UNAVAILABLE` | 추론 서버 연결 불가, real 워커 미구현(현재 스텁) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
-| `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB 규격 위반 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
-| `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
+| `INFERENCE_UNAVAILABLE` | 추론 서버 연결 불가, 모델 미준비(501~504) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
+| `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB 규격 위반, real 워커가 받은 GLB 가 없거나 glTF 2.0 이 아님 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
+| `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김, real 워커의 예기치 못한 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 
 모르는 코드는 일반 오류 문구로 처리한다. 문구는 제안이며 코드 이름은 유지한다.
 
@@ -116,7 +116,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | 파일 크기 | ≤ 10 MB (제안값) |
 | 검증 | gltf-validator 오류 0, Unity glTFast 로드, 바닥 접지·정면 확인 |
 | 변환기 출력 | `{jobId}-base.glb` (+ `-hair.glb`) + `metrics.json { vertices, triangles, textureSize, bytes, convertMs }` |
-| 서버 저장 | `backend/storage/results/{jobId}/base.glb`, `hair.glb` (real, 계획). Mock 은 `results/sample-dog.glb` |
+| 서버 저장 | real: `backend/storage/results/{jobId}/base.glb` [구현됨] — 받은 GLB 의 glTF 헤더만 확인하고 복사. `hair.glb` [계획]. Mock 은 `results/sample-dog.glb` |
 | 앱 배치 | 캐시 `persistentDataPath/models/{jobId}-{variant}.glb`. 기본 스케일 **0.6**, 핀치 **0.2~1.5**, 바닥 평면에 원점 접지, 초기 정면이 카메라를 향하도록 Y축 회전 |
 
 애니메이션·리깅은 확장 기능(없음).
@@ -136,7 +136,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 ---
 
-## 6. 내부 계약: Spring real 워커 ↔ Python 추론 서비스 — [구현됨: 스텁] / [계획: 모델]
+## 6. 내부 계약: Spring real 워커 ↔ Python 추론 서비스 — [구현됨: Spring 호출·FastAPI 스텁] / [계획: 모델]
 
 Unity 는 호출하지 않는다. 같은 호스트 또는 공유 볼륨 가정(분리 배포 시 바이너리 전송으로 변경, 회의 안건).
 
@@ -154,11 +154,16 @@ Unity 는 호출하지 않는다. 같은 호스트 또는 공유 볼륨 가정(�
 | 400 | `INFERENCE_FAILED` | `INFERENCE_FAILED` |
 | 500 | `CONVERSION_FAILED` | `CONVERSION_FAILED` |
 | 501 | `INFERENCE_UNAVAILABLE` (모델 미구현, 현재 기본) | `INFERENCE_UNAVAILABLE` |
+| 501~504 | 없음·모르는 코드 | `INFERENCE_UNAVAILABLE` |
+| 그 밖의 4xx·5xx | 없음·모르는 코드 | `INFERENCE_FAILED` |
+| 200 | — (`glbPath` 없음·파일 없음·glTF 2.0 바이너리 아님) | `CONVERSION_FAILED` |
 | 연결 실패 / 타임아웃 | — | `INFERENCE_UNAVAILABLE` / `INFERENCE_TIMEOUT` |
+
+`detail.code` 가 Job 실패 코드면 HTTP 상태와 관계없이 그 코드를 쓴다. Spring 은 `/infer` 를 `inference.max-concurrency`(기본 1)건만 동시에 부르고, `error.message` 에 경로·내부 주소·추론 서비스 원문 메시지를 싣지 않는다(서버 로그에만).
 
 `GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드.
 
-Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 600000).
+Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 600000), `inference.max-concurrency`(기본 1), `storage.result.dir`(기본 `storage/results`).
 
 ---
 

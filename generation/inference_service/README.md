@@ -2,7 +2,7 @@
 
 Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는 호출하지 않는다. 담당은 3D Generation 트랙, `/infer` 계약 변경은 Backend 와 합의한다.
 
-상태: **[구현됨]** 스키마·`/healthz`·501 응답·패스스루 모드. **[계획]** AnimalLift 모델 로드·추론, `tools/convert_asset.py` 호출 (`app.py` 의 TODO).
+상태: **[구현됨]** 스키마·`/healthz`·501 응답·패스스루 모드. **[계획]** AnimalLift 모델 로드·추론, `tools/convert_asset.py` 호출 (`app.py` 의 TODO). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다.
 
 ## GPU 서버 실행
 
@@ -22,7 +22,7 @@ curl -s -X POST http://localhost:8001/infer -H "Content-Type: application/json" 
   -d '{"jobId":"test","imagePaths":["/data/dog1.jpg"],"options":{"hair":false}}'
 ```
 
-Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정은 `backend/src/main/resources/application-real.properties` 의 `inference.base-url`, `inference.timeout-ms`.
+Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정은 `backend/src/main/resources/application-real.properties` 의 `inference.base-url`, `inference.timeout-ms`, `inference.max-concurrency`. Spring 과 함께 이 PC 에서 시험하는 절차는 [backend/README.md](../../backend/README.md) '프로파일 real'.
 
 ## 계약 v0 (내부)
 
@@ -58,6 +58,11 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 | 500 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB_SPEC 위반 | `CONVERSION_FAILED` |
 | 501 | `INFERENCE_UNAVAILABLE` | 모델 미구현/미로드 | `INFERENCE_UNAVAILABLE` |
 | (연결 실패·타임아웃) | — | 서비스 다운, `inference.timeout-ms` 초과 | `INFERENCE_UNAVAILABLE` / `INFERENCE_TIMEOUT` |
+| 501~504 | 없음·모르는 코드 | 프록시·서비스 준비 안 됨 | `INFERENCE_UNAVAILABLE` |
+| 그 밖의 4xx·5xx | 없음·모르는 코드 | 처리하지 않은 예외(FastAPI 기본 500), 요청 검증 실패 422 | `INFERENCE_FAILED` |
+| 200 | — | `glbPath` 없음, 파일 없음, glTF 2.0 바이너리 아님(Spring 이 헤더 magic `glTF`·version 2 만 확인) | `CONVERSION_FAILED` |
+
+`detail.code` 가 위 Job 실패 코드면 HTTP 상태와 관계없이 그 코드가 기록된다. Spring 은 `detail.message` 를 앱 응답에 싣지 않고 서버 로그에만 남기므로 message 에 경로를 넣어도 된다.
 
 ### `GET /healthz`
 
@@ -69,4 +74,4 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 - Spring ↔ Python **파일시스템 공유**(같은 호스트 또는 NFS/SMB 볼륨): 업로드 경로를 그대로 넘기고 GLB 경로를 돌려받는다. 분리 배포가 필요해지면 `/infer` 를 multipart 업로드 + GLB 바이너리 응답으로 바꾼다(PLAN 4단계에서 결정).
 - 동기 호출: Spring 워커 스레드가 응답까지 기다린다(기본 600초). 추론이 더 길어지면 작업 큐·콜백 방식으로 바꾼다.
-- 동시성: GPU 1장 기준 요청 1개씩 처리. 두 번째 요청은 대기한다(uvicorn 단일 워커).
+- 동시성: GPU 1장 기준 요청 1개씩. Spring 이 `inference.max-concurrency`(기본 1)건만 동시에 보내고 나머지 작업은 Spring 에서 PENDING 으로 기다린다 **[구현됨]**. 그래서 `inference.timeout-ms` 는 그 작업 자신의 추론 시간에만 걸린다.
