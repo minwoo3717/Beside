@@ -15,10 +15,14 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    // API v1 스펙 생성 (/v3/api-docs, /swagger-ui). 계약 테스트가 docs/api/openapi.yaml 과 비교한다.
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
     implementation("org.projectlombok:lombok:1.18.28")
     compileOnly("org.projectlombok:lombok:1.18.28")
     annotationProcessor("org.projectlombok:lombok:1.18.28")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    // 계약 테스트에서 openapi.yaml 을 읽는다.
+    testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
 }
 
 tasks.withType(JavaCompile::class.java) {
@@ -27,9 +31,14 @@ tasks.withType(JavaCompile::class.java) {
 
 tasks.test {
     useJUnitPlatform()
+    // 계약 테스트의 문서 경로 재정의: ./gradlew.bat test -Dbeside.openapi=<path> (기본 ../docs/api/openapi.yaml)
+    System.getProperty("beside.openapi")?.let { systemProperty("beside.openapi", it) }
+    testLogging {
+        events("passed", "failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 tasks.named("jar") {
     enabled = true
 }
-
