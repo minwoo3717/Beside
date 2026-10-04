@@ -3,6 +3,7 @@ backend/.gradle/
 backend/build/
 backend/bin/
 backend/storage/uploads/
+backend/storage/db/
 backend/storage/results/*/
 
 # Local editor files

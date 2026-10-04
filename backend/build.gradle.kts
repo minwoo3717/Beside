@@ -15,6 +15,9 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    // 작업·Idempotency-Key 저장소: H2 파일 DB (storage/db). 테스트는 컨텍스트마다 인메모리 H2.
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    runtimeOnly("com.h2database:h2")
     // API v1 스펙 생성 (/v3/api-docs, /swagger-ui). 계약 테스트가 docs/api/openapi.yaml 과 비교한다.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
     implementation("org.projectlombok:lombok:1.18.28")
