@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using GLTFast;
 using UnityEngine;
 using UnityEngine.Networking;
+using Newtonsoft.Json.Linq;
 using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 
 /// <summary>
@@ -27,12 +28,18 @@ public class RuntimeModelLoader : MonoBehaviour
     public int replaceSlot = 0;
 
     public enum NormalizeMode { None, Height, LongestAxis }
+    public enum ModelFacing { PlusZ, MinusZ, PlusX, MinusX }
 
     [Header("Model Fitting")]
     [Tooltip("Height: scale so the model is Target Size tall. LongestAxis: longest side = Target Size (GLB_SPEC: generator normalizes to 1 m, app shows at 0.6). None: use GLB units as-is.")]
     public NormalizeMode normalizeMode = NormalizeMode.Height;
     [Tooltip("Target size in meters for the chosen Normalize Mode.")]
     public float targetSize = 0.4f;
+
+    [Tooltip("Which local axis the model's head points to after import. The loader turns it so the head faces +Z, " +
+             "which the ObjectSpawner points at the camera. Current AnimalLift/SMAL output: head along -X in Unity. " +
+             "Set PlusZ once the converter exports +Z-forward GLBs (GLB_SPEC).")]
+    public ModelFacing modelFacing = ModelFacing.MinusX;
 
     [Header("Materials")]
     [Tooltip("Optional URP/Lit material (e.g. Dog_Mat). If set, the GLB's own materials are replaced by copies of it " +
@@ -43,6 +50,10 @@ public class RuntimeModelLoader : MonoBehaviour
     [Tooltip("Material with the Custom/ShellFur shader. Leave empty to skip fur.")]
     public Material furMaterialTemplate;
     [Range(4, 64)] public int furShellCount = 20;
+
+    [Tooltip("Hair maps used when the GLB carries none (e.g. the old sample). Leave empty to skip fur for such models.")]
+    public Texture2D fallbackHairLength;
+    public Texture2D fallbackHairFlow;
 
     [Header("Test (loads on Start if set)")]
     [Tooltip("http(s) URL or absolute file path of a .glb")]
@@ -108,16 +119,62 @@ public class RuntimeModelLoader : MonoBehaviour
             gltf.Dispose();
             return null;
         }
-        Texture2D lengthMap = hairLengthPng == null ? null : LinearTexture(hairLengthPng);
-        Texture2D flowMap   = hairFlowPng   == null ? null : LinearTexture(hairFlowPng);
-        return await BuildAndRegister(gltf, name, lengthMap, flowMap);
+        float furLength = -1f;
+        if (hairLengthPng == null && TryReadEmbeddedHair(glbBytes, out var embLen, out var embFlow, out var embFur))
+        {
+            hairLengthPng = embLen; hairFlowPng = embFlow; furLength = embFur;
+            Debug.Log($"[RuntimeModelLoader] fur maps found in GLB (fur length {embFur})");
+        }
+        Texture2D lengthMap = hairLengthPng == null ? fallbackHairLength : LinearTexture(hairLengthPng);
+        Texture2D flowMap   = hairFlowPng   == null ? fallbackHairFlow   : LinearTexture(hairFlowPng);
+        if (lengthMap == null) Debug.Log("[RuntimeModelLoader] no fur maps in GLB and no fallback set: fur skipped");
+        return await BuildAndRegister(gltf, name, lengthMap, flowMap, furLength);
+    }
+
+    /// <summary>
+    /// Reads the hair maps convert_to_ar_assets.py embeds in the GLB: extras.beside.{hairLengthImage, hairFlowImage, furLength}
+    /// point at images whose bufferViews live in the binary chunk.
+    /// </summary>
+    public static bool TryReadEmbeddedHair(byte[] glb, out byte[] lengthPng, out byte[] flowPng, out float furLength)
+    {
+        lengthPng = flowPng = null; furLength = -1f;
+        try
+        {
+            if (!IsGlb(glb)) return false;
+            int jsonLen = BitConverter.ToInt32(glb, 12);
+            var root = JObject.Parse(System.Text.Encoding.UTF8.GetString(glb, 20, jsonLen));
+            var beside = root["extras"]?["beside"];
+            if (beside == null) return false;
+
+            int binStart = 20 + jsonLen + 8;                       // skip BIN chunk header
+            byte[] Image(JToken idx)
+            {
+                if (idx == null) return null;
+                var img = root["images"]?[(int)idx];
+                var view = img?["bufferView"] != null ? root["bufferViews"]?[(int)img["bufferView"]] : null;
+                if (view == null) return null;
+                int off = (int?)view["byteOffset"] ?? 0, len = (int)view["byteLength"];
+                var bytes = new byte[len];
+                Buffer.BlockCopy(glb, binStart + off, bytes, 0, len);
+                return bytes;
+            }
+            lengthPng = Image(beside["hairLengthImage"]);
+            flowPng = Image(beside["hairFlowImage"]);
+            furLength = (float?)beside["furLength"] ?? -1f;
+            return lengthPng != null;
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning($"[RuntimeModelLoader] could not read embedded hair maps: {e.Message}");
+            return false;
+        }
     }
 
     /// <summary>True if the bytes start with the glTF binary magic "glTF".</summary>
     public static bool IsGlb(byte[] data) =>
         data != null && data.Length > 12 && data[0] == 0x67 && data[1] == 0x6C && data[2] == 0x54 && data[3] == 0x46;
 
-    async Task<GameObject> BuildAndRegister(GltfImport gltf, string name, Texture2D lengthMap, Texture2D flowMap)
+    async Task<GameObject> BuildAndRegister(GltfImport gltf, string name, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f)
     {
         if (shellPrefab == null) { Debug.LogError("[RuntimeModelLoader] Shell Prefab is not set."); gltf.Dispose(); return null; }
         imports.Add(gltf);
@@ -138,6 +195,8 @@ public class RuntimeModelLoader : MonoBehaviour
         if (baseMaterialTemplate != null)
             ReplaceMaterials(modelRoot, gltf);
 
+        modelRoot.localRotation = FacingToPlusZ(modelFacing);   // head -> +Z (faces the camera on spawn)
+
         if (!FitModel(template.transform, modelRoot))
         {
             Debug.LogError("[RuntimeModelLoader] GLB contains no meshes.");
@@ -146,7 +205,7 @@ public class RuntimeModelLoader : MonoBehaviour
         }
 
         if (furMaterialTemplate != null && lengthMap != null)
-            AddFur(modelRoot, lengthMap, flowMap);
+            AddFur(modelRoot, lengthMap, flowMap, furLength);
 
         Register(template);
         Debug.Log($"[RuntimeModelLoader] Ready: {template.name}");
@@ -194,12 +253,22 @@ public class RuntimeModelLoader : MonoBehaviour
         model.localScale = Vector3.one * scale;
         model.localPosition = new Vector3(-b.center.x, -b.min.y, -b.center.z) * scale;
 
-        // Collider in the model root's local space (= unscaled bounds)
+        // Collider in the model root's local space: undo the facing rotation (bounds are unscaled)
+        Quaternion inv = Quaternion.Inverse(model.localRotation);
+        Vector3 size = inv * b.size;
         var col = model.gameObject.AddComponent<BoxCollider>();
-        col.center = b.center;
-        col.size = b.size;
+        col.center = inv * b.center;
+        col.size = new Vector3(Mathf.Abs(size.x), Mathf.Abs(size.y), Mathf.Abs(size.z));
         return true;
     }
+
+    static Quaternion FacingToPlusZ(ModelFacing f) => f switch
+    {
+        ModelFacing.MinusZ => Quaternion.Euler(0f, 180f, 0f),
+        ModelFacing.PlusX  => Quaternion.Euler(0f, -90f, 0f),
+        ModelFacing.MinusX => Quaternion.Euler(0f, 90f, 0f),
+        _ => Quaternion.identity
+    };
 
     // ---------- materials ----------
 
@@ -228,11 +297,12 @@ public class RuntimeModelLoader : MonoBehaviour
 
     // ---------- fur ----------
 
-    void AddFur(Transform model, Texture2D lengthMap, Texture2D flowMap)
+    void AddFur(Transform model, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f)
     {
         foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
         {
             var mat = new Material(furMaterialTemplate);
+            if (furLength > 0f) mat.SetFloat("_FurLength", furLength);   // value from the converter, model units
             mat.SetTexture("_LengthMap", lengthMap);
             if (flowMap != null) mat.SetTexture("_FlowMap", flowMap);
 

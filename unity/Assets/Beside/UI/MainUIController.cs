@@ -30,6 +30,7 @@ namespace Beside.UI
         RawImage previewImage;
         GameObject readyTemplate;
         bool placed;
+        GameObject uiRoot;
 
         void Awake()
         {
@@ -38,12 +39,14 @@ namespace Beside.UI
             if (preview == null) preview = GetComponent<ModelPreview>() ?? FindFirstObjectByType<ModelPreview>();
             if (guidance == null) guidance = GetComponent<ARGuidance>() ?? FindFirstObjectByType<ARGuidance>();
             if (jobManager == null) { Debug.LogError("[MainUI] JobManager missing"); enabled = false; return; }
-            Build();
+            // Awake runs even when this component is unchecked, so the UI is built in OnEnable instead.
         }
 
         void OnEnable()
         {
             if (jobManager == null) return;
+            if (uiRoot == null) Build();
+            uiRoot.SetActive(true);
             jobManager.StateChanged += OnStateChanged;
             jobManager.JobFailed += OnJobFailed;
             jobManager.ModelReady += OnModelReady;
@@ -53,6 +56,7 @@ namespace Beside.UI
 
         void OnDisable()
         {
+            if (uiRoot != null) uiRoot.SetActive(false);
             if (jobManager == null) return;
             jobManager.StateChanged -= OnStateChanged;
             jobManager.JobFailed -= OnJobFailed;
@@ -73,7 +77,9 @@ namespace Beside.UI
 
         void Build()
         {
-            var canvas = UiKit.Canvas("BesideUI").transform;
+            var canvasComp = UiKit.Canvas("BesideUI");
+            uiRoot = canvasComp.gameObject;
+            var canvas = canvasComp.transform;
 
             // top guidance banner (AR blockers)
             guidanceBanner = UiKit.Rect("Guidance", canvas, new Vector2(0, 1), new Vector2(1, 1), new Vector2(32, -300), new Vector2(-32, -80));

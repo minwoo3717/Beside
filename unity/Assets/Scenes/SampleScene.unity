@@ -1129,6 +1129,10 @@ PrefabInstance:
       propertyPath: m_PlanePrefab
       value: 
       objectReference: {fileID: 1585201990951412, guid: 886609fc1566e4c27b399f1095d6de18, type: 3}
+    - target: {fileID: 2512387470528047737, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
+      propertyPath: m_DetectionMode
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2512387470528047738, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
       propertyPath: m_RootOrder
       value: 4
@@ -1462,7 +1466,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_ARInteractor: {fileID: 331264286}
-  m_RequireHorizontalUpSurface: 0
+  m_RequireHorizontalUpSurface: 1
   m_SpawnTriggerType: 0
   m_SpawnObjectInput:
     m_InputSourceMode: 2
@@ -5472,11 +5476,14 @@ MonoBehaviour:
   objectSpawner: {fileID: 0}
   shellPrefab: {fileID: 8986328500875594450, guid: 7f523e5c74e04114ca8d113433523035, type: 3}
   replaceSlot: 0
-  normalizeMode: 1
-  targetSize: 0.4
+  normalizeMode: 2
+  targetSize: 0.6
+  modelFacing: 0
   baseMaterialTemplate: {fileID: 2100000, guid: 92dae8500cdb30c40b93806c36e00f7f, type: 2}
   furMaterialTemplate: {fileID: 2100000, guid: 59332edc582932c409d4b5c70dafae40, type: 2}
   furShellCount: 20
+  fallbackHairLength: {fileID: 0}
+  fallbackHairFlow: {fileID: 0}
   testGlbUrl: 
   testHairLengthUrl: 
   testHairFlowUrl: 
@@ -7302,6 +7309,8 @@ GameObject:
   - component: {fileID: 2046210315}
   - component: {fileID: 2046210314}
   - component: {fileID: 2046210317}
+  - component: {fileID: 2046210318}
+  - component: {fileID: 2046210319}
   m_Layer: 0
   m_Name: Beside
   m_TagString: Untagged
@@ -7435,6 +7444,8 @@ MonoBehaviour:
   modelLoader: {fileID: 0}
   font: {fileID: 0}
   heroImage: {fileID: 0}
+  showARInstructions: 1
+  reshowOnNewMessage: 0
   hideTemplateObjects:
   - Create Button
   - Delete Button
@@ -7443,6 +7454,35 @@ MonoBehaviour:
   - Object Menu Animator
   - Greeting Prompt
   - DebugMenu
+--- !u!114 &2046210318
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2046210309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81824c17d5340ef429525ee82672a100, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Beside.AR.SpawnLimiter
+  maxInstances: 1
+  mode: 0
+  floorOnly: 1
+  verbose: 1
+--- !u!114 &2046210319
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2046210309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 66f30a47b6e798f4bb4c594b4919b5f1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Beside.AR.PlaneVisibility
+  hideWhenPlaced: 1
 --- !u!1 &2047503719
 GameObject:
   m_ObjectHideFlags: 0

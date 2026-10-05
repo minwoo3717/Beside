@@ -31,6 +31,13 @@ namespace Beside.UI.Designed
         [Tooltip("Hero image on the home screen. Empty = soft color block.")]
         [SerializeField] private Sprite heroImage;
 
+        [Header("AR messages")]
+        [Tooltip("Show the instruction card at the top of the AR screen. The user can also close it with ×.")]
+        [SerializeField] private bool showARInstructions = true;
+
+        [Tooltip("After the user closes the card, show it again when the message changes (e.g. after placing).")]
+        [SerializeField] private bool reshowOnNewMessage = false;
+
         [Header("Template UI")]
         [Tooltip("Template UI objects to hide so they don't overlap this UI. Coaching UI stays.")]
         [SerializeField] private string[] hideTemplateObjects = { "Create Button", "Delete Button", "Options Button", "Options Modal", "Object Menu Animator", "Greeting Prompt", "DebugMenu" };
@@ -49,6 +56,12 @@ namespace Beside.UI.Designed
         Text arPill, arInstruction, arModelName; Image arPillDot; RectTransform arBeforePlace, arAfterPlace; Text arToast; bool placed;
         // error
         Text errorTitle, errorBody, errorCode, errorStage, errorRetry; Button errorRetryButton;
+        SpawnLimiter limiter;
+        RectTransform arInstructionCard;
+        bool instructionDismissed;
+        RectTransform bottomToggle; Text bottomToggleLabel;
+        bool bottomHidden;
+        UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner spawner;
 
         void Awake()
         {
@@ -57,8 +70,15 @@ namespace Beside.UI.Designed
             if (preview == null) preview = GetComponent<ModelPreview>() ?? FindFirstObjectByType<ModelPreview>();
             if (guidance == null) guidance = GetComponent<ARGuidance>() ?? FindFirstObjectByType<ARGuidance>();
             if (centerPlacer == null) centerPlacer = GetComponent<CenterPlacer>() ?? gameObject.AddComponent<CenterPlacer>();
+            limiter = FindFirstObjectByType<SpawnLimiter>();
+            spawner = FindFirstObjectByType<UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner>();
             if (modelLoader == null) modelLoader = FindFirstObjectByType<RuntimeModelLoader>();
             if (jobManager == null) { Debug.LogError("[DesignedUI] JobManager missing"); enabled = false; return; }
+        }
+
+        void BuildOnce()
+        {
+            if (canvas != null) return;
             DesignKit.Font = font;
             Build();
             HideTemplateUI();
@@ -68,6 +88,8 @@ namespace Beside.UI.Designed
         void OnEnable()
         {
             if (jobManager == null) return;
+            BuildOnce();                    // Awake runs even when unchecked, so build here
+            canvas.gameObject.SetActive(true);
             jobManager.StateChanged += OnStateChanged;
             jobManager.JobFailed += OnJobFailed;
             jobManager.ModelReady += OnModelReady;
@@ -88,13 +110,74 @@ namespace Beside.UI.Designed
 
         void Update()
         {
-            if (arOverlay != null && arOverlay.gameObject.activeSelf && !placed && guidance != null)
+            if (arOverlay == null || !arOverlay.gameObject.activeSelf) return;
+
+            // The buttons follow what is actually on the floor, however it got there (tap, center button, reset)
+            bool hasModel = HasPlacedModel();
+            if (hasModel != placed) SetPlaced(hasModel);
+
+            if (!placed && guidance != null)
             {
                 bool plane = guidance.PlaneDetected;
                 arPill.text = plane ? "바닥 인식됨" : "바닥 인식 중";
                 arPillDot.color = plane ? DesignKit.Mint : DesignKit.Peach;
-                arInstruction.text = plane ? "초록색 바닥을 터치하면 그 자리에 놓여요" : "폰을 좌우로 천천히 움직여 바닥을 비춰 주세요";
+                arInstruction.text = plane ? "흰 점이 보이는 바닥을 터치하면 그 자리에 놓여요" : "폰을 좌우로 천천히 움직여 바닥을 비춰 주세요";
             }
+        }
+
+        void ToggleBottomPanels()
+        {
+            bottomHidden = !bottomHidden;
+            ApplyBottomPanels();
+        }
+
+        /// <summary>Shows the right bottom panel for the placement state, unless the user hid the buttons.</summary>
+        void ApplyBottomPanels()
+        {
+            arBeforePlace.gameObject.SetActive(!bottomHidden && !placed);
+            arAfterPlace.gameObject.SetActive(!bottomHidden && placed);
+            bottomToggleLabel.text = bottomHidden ? "버튼 보기" : "버튼 숨기기";
+            // sits just above the panel when shown, drops to the bottom edge when hidden
+            bottomToggle.anchoredPosition = new Vector2(-64, bottomHidden ? 90 : 440);
+        }
+
+        void DismissInstruction()
+        {
+            instructionDismissed = true;
+            arInstructionCard.gameObject.SetActive(false);
+        }
+
+        void RefreshInstructionCard()
+        {
+            if (arInstructionCard != null) arInstructionCard.gameObject.SetActive(showARInstructions && !instructionDismissed);
+        }
+
+        void SetPlaced(bool value)
+        {
+            if (value != placed && reshowOnNewMessage) instructionDismissed = false;
+            placed = value;
+            RefreshInstructionCard();
+            ApplyBottomPanels();
+            if (value)
+            {
+                arPill.text = "배치됨";
+                arPillDot.color = DesignKit.Mint;
+                arInstruction.text = "배치 완료! 한 손가락으로 옮기고, 두 손가락으로 돌리거나 키울 수 있어요.";
+            }
+        }
+
+        bool HasPlacedModel()
+        {
+            if (limiter != null) return limiter.Count > 0;
+            if (spawner == null) return placed;
+            foreach (Transform c in spawner.transform) if (c.gameObject.activeInHierarchy) return true;
+            return false;
+        }
+
+        void ClearPlacedModels()
+        {
+            if (limiter != null) { limiter.ClearAll(); return; }
+            if (spawner != null) foreach (Transform c in spawner.transform) Destroy(c.gameObject);
         }
 
         // =====================================================================
@@ -250,9 +333,17 @@ namespace Beside.UI.Designed
             // instruction card under the pill
             var card = UiKit.Rect("Instruction", arOverlay, new Vector2(0, 1), new Vector2(1, 1), new Vector2(64, -350), new Vector2(-64, -230));
             DesignKit.Box(card, DesignKit.DarkScrim, 50f);
+            arInstructionCard = card;
             arInstruction = UiKit.Text("Text", card, "", 36, DesignKit.OnDark, TextAnchor.MiddleLeft);
-            arInstruction.rectTransform.offsetMin = new Vector2(44, 0); arInstruction.rectTransform.offsetMax = new Vector2(-44, 0);
+            arInstruction.rectTransform.offsetMin = new Vector2(44, 0); arInstruction.rectTransform.offsetMax = new Vector2(-130, 0);
             if (font != null) arInstruction.font = font;
+
+            // × close button on the right of the card
+            var close = DesignKit.RoundedButton("Close", card, "×", new Color(1, 1, 1, 0.08f), DesignKit.OnDarkSoft, DismissInstruction, 96, 56, FontStyle.Normal);
+            var crt = close.GetComponent<RectTransform>();
+            crt.anchorMin = crt.anchorMax = new Vector2(1, 0.5f); crt.pivot = new Vector2(1, 0.5f);
+            crt.anchoredPosition = new Vector2(-14, 0); crt.sizeDelta = new Vector2(96, 96);
+            Destroy(close.GetComponent<LayoutElement>());
 
             // bottom: before placement
             arBeforePlace = DesignKit.Column("Before", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 420), 32, 0);
@@ -271,6 +362,14 @@ namespace Beside.UI.Designed
             var toastRt = DesignKit.Pill("Toast", arOverlay, "", DesignKit.DarkScrim, DesignKit.OnDark, out arToast, 520);
             toastRt.anchorMin = toastRt.anchorMax = new Vector2(0.5f, 0); toastRt.anchoredPosition = new Vector2(0, 560);
             toastRt.gameObject.SetActive(false);
+
+            // show / hide the bottom buttons
+            var tb = DesignKit.RoundedButton("BottomToggle", arOverlay, "버튼 숨기기", DesignKit.DarkScrim, DesignKit.OnDark, ToggleBottomPanels, 84, 30, FontStyle.Normal);
+            bottomToggle = tb.GetComponent<RectTransform>();
+            bottomToggle.anchorMin = bottomToggle.anchorMax = new Vector2(1, 0); bottomToggle.pivot = new Vector2(1, 0);
+            bottomToggle.sizeDelta = new Vector2(260, 84);
+            bottomToggleLabel = tb.GetComponentInChildren<Text>();
+            Destroy(tb.GetComponent<LayoutElement>());
 
             // back to preview
             var back = DesignKit.RoundedButton("Back", arOverlay, "‹", DesignKit.DarkScrim, DesignKit.OnDark, () => Show(Screen.Preview), 120, 56, FontStyle.Normal);
@@ -329,7 +428,7 @@ namespace Beside.UI.Designed
             if (s == Screen.Preview && preview != null && readyTemplate != null) preview.Show(readyTemplate);
             else if (preview != null) preview.Hide();
 
-            if (s == Screen.AR) { arBeforePlace.gameObject.SetActive(!placed); arAfterPlace.gameObject.SetActive(placed); }
+            if (s == Screen.AR) SetPlaced(HasPlacedModel());
         }
 
         // ---------- events ----------
@@ -390,7 +489,7 @@ namespace Beside.UI.Designed
         void OnModelPlaced(string jobId, GameObject instance)
         {
             placed = true;
-            if (arOverlay.gameObject.activeSelf) { arBeforePlace.gameObject.SetActive(false); arAfterPlace.gameObject.SetActive(true); }
+            if (arOverlay.gameObject.activeSelf) ApplyBottomPanels();
             arInstruction.text = "배치 완료! 한 손가락으로 옮기고, 두 손가락으로 돌리거나 키울 수 있어요.";
         }
 
@@ -457,8 +556,10 @@ namespace Beside.UI.Designed
 
         void EnterAR()
         {
-            placed = false;
+            instructionDismissed = false;   // a new AR session starts with the hint visible
+            bottomHidden = false;           // ...and with the buttons visible
             Show(Screen.AR);
+            SetPlaced(HasPlacedModel());
         }
 
         void PlaceAtCenter()
@@ -469,12 +570,9 @@ namespace Beside.UI.Designed
 
         void ResetPlacement()
         {
-            // remove placed copies of the current model, then wait for a new tap
-            if (readyTemplate != null)
-                foreach (var go in FindObjectsByType<GameObject>(FindObjectsSortMode.None))
-                    if (go.name.StartsWith(readyTemplate.name) && go.name.EndsWith("(Clone)")) Destroy(go);
-            placed = false;
-            Show(Screen.AR);
+            // remove the placed model, then wait for a new tap
+            ClearPlacedModels();
+            SetPlaced(false);
         }
 
         IEnumerator SavePhoto()
@@ -505,6 +603,7 @@ namespace Beside.UI.Designed
 
         void StartOver()
         {
+            ClearPlacedModels();
             readyTemplate = null; placed = false; pendingPhotos.Clear();
             jobManager.ClearSavedJob();
             Show(Screen.Home);
