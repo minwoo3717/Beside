@@ -94,6 +94,22 @@ cd backend
 
 패스스루로 끝난 실행도 `events.jsonl` 과 `job_runs` 에 `workerType=real`, `COMPLETED` 로 남는다. 모델이 돌지 않았으므로 측정이 아니다(서버 로그에 jobId 마다 WARN). `passthrough=true` 로 기록되므로 측정표에서는 이 값으로 거른다.
 
+### GPU PC 에 real 배치 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
+
+결정(2026-10-05): Spring 과 Python 추론 서비스를 **팀원 GPU PC 한 대**에 함께 띄운다(공유 파일시스템 가정 그대로, [REVIEW_CHECKLIST](../docs/api/REVIEW_CHECKLIST.md) #6 (a)). 폰과 다른 PC 는 그 PC 의 IP 로 붙는다.
+
+준비(한 번):
+
+1. Java 17, Git. 리포를 **ASCII·공백 없는 경로**에 클론한다(예 `C:\beside`). OneDrive 의 `바탕 화면` 같은 한글·공백 경로는 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` 가 날 수 있다.
+2. 추론 서비스 환경: `cd generation\inference_service; python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt`. AnimalLift 가 별도 conda env 면 `app.py` 가 그 env 의 python 을 subprocess 로 부른다(3D 담당).
+3. 방화벽 8080 인바운드 허용(관리자 PowerShell): `netsh advfirewall firewall add rule name="Beside 8080" dir=in action=allow protocol=TCP localport=8080`. 8001 은 열지 않는다(추론 서비스는 127.0.0.1 전용).
+
+실행(세션마다): 리포 루트에서 `.\scripts\run_real.ps1` — 추론 서비스와 Spring real 이 새 창 두 개로 뜨고, 두 healthz 가 응답하면 폰에서 쓸 IP 를 출력한다. 모델이 아직 없으면 `-SampleGlb <유효한 .glb>` 로 패스스루(연동 확인용, 측정 아님). 폰 쪽 절차는 [unity/README.md](../unity/README.md) 'GPU PC real 서버'. 폰보다 먼저 PC 에서 `.\scripts\e2e_mock.ps1 -BaseUrl http://<IP>:8080 -Photos <실제 사진> -TimeoutSeconds 600` 으로 전체 흐름을 점검한다.
+
+파일 위치(모두 그 PC, gitignore): H2 `backend\storage\db\beside-real.mv.db`(서버 하나만 연다), 업로드 `backend\storage\uploads\`, 결과 `backend\storage\results\{jobId}\base.glb`, `backend\storage\events.jsonl`. 세션이 끝나면 `job_runs` 를 CSV 로 내보내고(아래 '측정 내보내기') `events.jsonl` 사본과 함께 `generation/experiments/<exp 폴더>/` 에 넣어 커밋한다. DB 파일 자체는 커밋하지 않는다.
+
+타임아웃(제안값): exp-01 에서 잰 1건 추론 시간의 약 3배를 `--inference.timeout-ms`(기본 600000 = 10분)로, Unity `maxWaitSeconds` 는 600. 앱의 대기는 큐 대기(PENDING)를 포함하고 서버는 `/infer` 를 1건씩 부르므로, 둘이 동시에 올리면 뒤 작업은 앞 작업 시간만큼 더 기다린다(REVIEW_CHECKLIST #7).
+
 ### 측정 내보내기 (`job_runs`)
 
 실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다.
