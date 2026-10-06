@@ -1,5 +1,6 @@
 package com.example.mockbackend.service;
 
+import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,6 +44,8 @@ public class InferenceClient {
     private static final Set<ErrorCode> SERVICE_CODES = EnumSet.of(ErrorCode.INFERENCE_FAILED,
             ErrorCode.INFERENCE_TIMEOUT, ErrorCode.INFERENCE_UNAVAILABLE, ErrorCode.CONVERSION_FAILED);
     private static final int MAX_QUOTED_BODY = 300;
+    /** job_runs.model_version column length. */
+    private static final int MAX_MODEL_VERSION = 128;
 
     private final URI inferUri;
     private final Duration timeout;
@@ -61,8 +64,23 @@ public class InferenceClient {
                 .build();
     }
 
-    /** What /infer answered with: the GLB to serve, the METRICS.md section 2 numbers, and the passthrough flag. */
-    public record Result(Path glbPath, JsonNode metrics, boolean passthrough) {
+    /**
+     * What /infer answered with: the GLB to serve, the METRICS.md section 2 numbers, the passthrough flag and the
+     * optional model version (additive contract field; null when the service sends none).
+     */
+    public record Result(Path glbPath, JsonNode metrics, boolean passthrough, String modelVersion) {
+
+        /** The per-run measurements for JobFinisher; {@code glbBytes} is the size of the GLB the server stored. */
+        public RunDetails details(long glbBytes) {
+            return new RunDetails(number("inferMs"), number("gpuPeakMB"), number("modelParams"), number("outputVertices"),
+                    number("outputTriangles"), number("convertMs"), glbBytes, passthrough, modelVersion);
+        }
+
+        /** A metric counts only when it is a JSON number; absent, null or text (e.g. "n/a") becomes null, never an error. */
+        private Long number(String name) {
+            JsonNode node = metrics == null ? null : metrics.path(name);
+            return node != null && node.isNumber() ? node.longValue() : null;
+        }
     }
 
     public URI inferUri() {
@@ -143,11 +161,22 @@ public class InferenceClient {
                     "POST " + inferUri + " -> HTTP 200: " + quote(body));
         }
         try {
-            return new Result(Path.of(glbPath), root.path("metrics"), root.path("passthrough").asBoolean(false));
+            return new Result(Path.of(glbPath), root.path("metrics"), root.path("passthrough").asBoolean(false),
+                    modelVersion(root));
         } catch (InvalidPathException e) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 with an invalid glbPath",
                     "POST " + inferUri + " -> HTTP 200 glbPath=" + glbPath);
         }
+    }
+
+    /** Optional answer field: absent, null or blank is null; longer values are cut to the column length. */
+    private static String modelVersion(JsonNode root) {
+        String text = root.path("modelVersion").asText(null);
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        text = text.strip();
+        return text.length() <= MAX_MODEL_VERSION ? text : text.substring(0, MAX_MODEL_VERSION);
     }
 
     private static ErrorCode serviceCode(String code) {

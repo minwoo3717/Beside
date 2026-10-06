@@ -58,6 +58,11 @@ class InferResponse(BaseModel):
     hairGlbPath: Optional[str] = Field(default=None, description="Absolute path of {jobId}-hair.glb when options.hair")
     metrics: InferMetrics
     passthrough: bool = Field(default=False, description="True when the sample GLB was returned instead of a real result")
+    modelVersion: Optional[str] = Field(
+        default=None,
+        description="Model/weights that produced the GLB, e.g. animallift-baseline@<commit>. Optional (contract v0 addition, "
+        "2026-10-06); None in passthrough. Spring stores it per run (job_runs.model_version) to tell baseline from improved models.",
+    )
 
 
 class HealthResponse(BaseModel):
@@ -115,7 +120,7 @@ def infer(request: InferRequest) -> InferResponse:
     #      measure inferMs, gpuPeakMB (torch.cuda.max_memory_allocated), modelParams
     #   2. run tools/convert_asset.py -> {jobId}-base.glb (+ -hair.glb) + metrics.json (vertices, triangles, textureSize, bytes, convertMs)
     #      enforce docs/asset/GLB_SPEC.md; on violation raise 500 with code CONVERSION_FAILED
-    #   3. return InferResponse(glbPath=..., hairGlbPath=..., metrics=...)
+    #   3. return InferResponse(glbPath=..., hairGlbPath=..., metrics=..., modelVersion="animallift-baseline@<commit>")
     raise HTTPException(
         status_code=501,
         detail={

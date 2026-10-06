@@ -45,10 +45,18 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 ```json
 { "glbPath": "/srv/beside/results/3fa85f64-…/base.glb", "hairGlbPath": null,
   "metrics": { "inferMs": 48210, "gpuPeakMB": 9120, "modelParams": 312000000, "outputVertices": 10342, "outputTriangles": 19876, "convertMs": 850 },
-  "passthrough": false }
+  "passthrough": false, "modelVersion": "animallift-baseline@3f2a1c9" }
 ```
 
 `metrics` 의 이름은 [docs/METRICS.md](../../docs/METRICS.md) §2 와 같다. `passthrough: true` 는 모델 대신 `BESIDE_SAMPLE_GLB` 를 돌려줬다는 뜻이다.
+
+| 응답 필드 | 타입 | 설명 |
+|---|---|---|
+| `glbPath` | string | base GLB 의 절대 경로. Spring 이 헤더를 확인하고 `storage/results/{jobId}/base.glb` 로 복사한다 |
+| `hairGlbPath` | string \| null | `options.hair` 일 때 hair GLB 경로 (Spring 쪽 저장은 [계획]) |
+| `metrics.*` | int \| null | §2 의 여섯 수치. 숫자가 아니면 Spring 이 null 로 기록한다 |
+| `passthrough` | bool | 샘플을 돌려줬으면 true. Spring 이 실행마다 저장하므로 측정표에서 거를 수 있다 |
+| `modelVersion` | string \| null | **선택**(2026-10-06 추가). GLB 를 만든 모델·가중치 버전, 예 `animallift-baseline@<커밋>`. Spring 이 실행마다 `job_runs.model_version` 에 저장해 베이스라인과 개선안을 구분한다. 패스스루는 None, 128자까지 |
 
 오류 (`detail` 에 `{ code, message }`, code 는 [docs/api/ERROR_CODES.md](../../docs/api/ERROR_CODES.md) 의 Job 실패 코드):
 

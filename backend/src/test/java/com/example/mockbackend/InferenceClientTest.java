@@ -1,5 +1,6 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.service.InferenceClient;
 import com.example.mockbackend.service.InferenceFailure;
@@ -87,8 +88,9 @@ class InferenceClientTest {
         Path glb = dir.resolve("job-1").resolve("base.glb");
         ObjectNode ok = JSON.createObjectNode();
         ok.put("glbPath", glb.toString());
-        ok.putObject("metrics").put("inferMs", 12).put("outputTriangles", 19876);
+        ok.putObject("metrics").put("inferMs", 12).put("outputTriangles", 19876).put("gpuPeakMB", "n/a");
         ok.put("passthrough", true);
+        ok.put("modelVersion", "animallift-paper");
         answer(200, ok.toString());
 
         InferenceClient.Result result = client(5_000).infer("job-1", List.of(Path.of("storage/uploads/job-1_dog.jpg")));
@@ -96,6 +98,17 @@ class InferenceClientTest {
         assertThat(result.glbPath()).isEqualTo(glb);
         assertThat(result.passthrough()).isTrue();
         assertThat(result.metrics().path("inferMs").asInt()).isEqualTo(12);
+        assertThat(result.modelVersion()).isEqualTo("animallift-paper");
+
+        // The per-run measurements JobFinisher stores (job_runs, events.jsonl): numbers only, the rest is null.
+        RunDetails details = result.details(1234L);
+        assertThat(details.inferMs()).isEqualTo(12L);
+        assertThat(details.outputTriangles()).isEqualTo(19876L);
+        assertThat(details.gpuPeakMB()).as("a metric that is not a number is dropped, not an error").isNull();
+        assertThat(details.modelParams()).as("absent metric").isNull();
+        assertThat(details.glbBytes()).isEqualTo(1234L);
+        assertThat(details.passthrough()).isTrue();
+        assertThat(details.modelVersion()).isEqualTo("animallift-paper");
 
         assertThat(requests).hasSize(1);
         JsonNode sent = requests.get(0);
@@ -108,6 +121,37 @@ class InferenceClientTest {
         assertThat(sent.path("options").path("hair").isBoolean()).isTrue();
         assertThat(sent.path("options").path("hair").asBoolean()).isFalse();
         assertThat(contentTypes).containsExactly("application/json");
+    }
+
+    @Test
+    void optionalAnswerFieldsDefaultToNullOrFalse() throws Exception {
+        Path glb = dir.resolve("base.glb");
+        ObjectNode onlyPath = JSON.createObjectNode();
+        onlyPath.put("glbPath", glb.toString());
+        answer(200, onlyPath.toString());
+
+        InferenceClient.Result result = client(5_000).infer("job-6", List.of(dir.resolve("dog.jpg")));
+
+        assertThat(result.glbPath()).isEqualTo(glb);
+        assertThat(result.passthrough()).isFalse();
+        assertThat(result.modelVersion()).isNull();
+        assertThat(result.details(0L)).isEqualTo(new RunDetails(null, null, null, null, null, null, 0L, false, null));
+    }
+
+    @Test
+    void blankOrOverlongModelVersionIsNormalized() throws Exception {
+        ObjectNode blank = JSON.createObjectNode();
+        blank.put("glbPath", dir.resolve("base.glb").toString());
+        blank.put("modelVersion", "   ");
+        answer(200, blank.toString());
+        assertThat(client(5_000).infer("job-7", List.of(dir.resolve("dog.jpg"))).modelVersion()).isNull();
+
+        ObjectNode overlong = JSON.createObjectNode();
+        overlong.put("glbPath", dir.resolve("base.glb").toString());
+        overlong.put("modelVersion", "v".repeat(200));
+        answer(200, overlong.toString());
+        assertThat(client(5_000).infer("job-8", List.of(dir.resolve("dog.jpg"))).modelVersion())
+                .as("fits the job_runs.model_version column").hasSize(128);
     }
 
     static Stream<Arguments> answers() {
