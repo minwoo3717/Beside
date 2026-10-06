@@ -112,14 +112,14 @@ cd backend
 
 ### 측정 내보내기 (`job_runs`)
 
-실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다.
+실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다(모든 열에 따옴표 별칭 — 별칭이 없으면 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
- 'SELECT job_id AS "jobId", attempt, finished_at AS "finishedAt", worker_type AS "workerType", status, error_code AS "errorCode",
+ 'SELECT job_id AS "jobId", attempt AS "attempt", finished_at AS "finishedAt", worker_type AS "workerType", status AS "status", error_code AS "errorCode",
          upload_bytes AS "uploadBytes", upload_ms AS "uploadMs", queued_ms AS "queuedMs", processing_ms AS "processingMs", total_ms AS "totalMs",
          infer_ms AS "inferMs", gpu_peak_mb AS "gpuPeakMB", model_params AS "modelParams", output_vertices AS "outputVertices",
-         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough, model_version AS "modelVersion"
+         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough AS "passthrough", model_version AS "modelVersion"
   FROM job_runs
   WHERE worker_type = ''real'' AND status = ''COMPLETED'' AND passthrough = FALSE
   ORDER BY finished_at');

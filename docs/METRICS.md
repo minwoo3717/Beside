@@ -39,14 +39,14 @@
 
 같은 내용이 H2 파일 DB 의 테이블 `job_runs` 에도 실행마다 한 행씩 남는다(PK `{jobId}:{attempt}`, 삽입 전용). 컬럼은 위 줄의 필드를 snake_case 로 쓴 것(`job_id, attempt, finished_at, upload_bytes, upload_ms, queued_ms, processing_ms, total_ms, worker_type, infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms, glb_bytes, passthrough, model_version`)에 `status`(COMPLETED|FAILED)와 `error_code` 를 더한 것이다. `result` 는 `status`+`error_code` 로 대신한다. 서버 경로는 없다. 프로파일마다 DB 파일이 다르므로(`beside-mock.mv.db`, `beside-real.mv.db`) 측정표는 real 파일에서 뽑는다.
 
-5단계 측정표는 이 테이블에서 SQL 로 뽑는다. 서버가 켜진 상태에서 `http://localhost:8080/h2-console`(real 프로파일도 켜져 있음, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행하면 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 경로는 서버 작업 폴더(`backend/`) 기준이다.
+5단계 측정표는 이 테이블에서 SQL 로 뽑는다. 서버가 켜진 상태에서 `http://localhost:8080/h2-console`(real 프로파일도 켜져 있음, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행하면 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
- 'SELECT job_id AS "jobId", attempt, finished_at AS "finishedAt", worker_type AS "workerType", status, error_code AS "errorCode",
+ 'SELECT job_id AS "jobId", attempt AS "attempt", finished_at AS "finishedAt", worker_type AS "workerType", status AS "status", error_code AS "errorCode",
          upload_bytes AS "uploadBytes", upload_ms AS "uploadMs", queued_ms AS "queuedMs", processing_ms AS "processingMs", total_ms AS "totalMs",
          infer_ms AS "inferMs", gpu_peak_mb AS "gpuPeakMB", model_params AS "modelParams", output_vertices AS "outputVertices",
-         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough, model_version AS "modelVersion"
+         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough AS "passthrough", model_version AS "modelVersion"
   FROM job_runs
   WHERE worker_type = ''real'' AND status = ''COMPLETED'' AND passthrough = FALSE
   ORDER BY finished_at');
