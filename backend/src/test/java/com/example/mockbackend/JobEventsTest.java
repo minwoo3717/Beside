@@ -1,5 +1,8 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.domain.JobRun;
+import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.repository.JobRunRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -60,6 +63,9 @@ class JobEventsTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    JobRunRepository jobRuns;
+
     @Test
     void appendsOneLinePerFinishedJobWithSharedMetricNames() throws Exception {
         String completed = create(jpeg("dog-1.jpg", 3), jpeg("dog-2.jpg", 5));
@@ -77,8 +83,11 @@ class JobEventsTest {
         JsonNode ok = eventsOf(completed).get(0);
         List<String> names = new ArrayList<>();
         ok.fieldNames().forEachRemaining(names::add);
+        // The ten original fields keep their order; the inference numbers (METRICS §2) and run facts follow them.
         assertThat(names).containsExactly("jobId", "attempt", "finishedAt", "uploadBytes", "uploadMs",
-                "queuedMs", "processingMs", "totalMs", "workerType", "result");
+                "queuedMs", "processingMs", "totalMs", "workerType", "result",
+                "inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles", "convertMs",
+                "glbBytes", "passthrough", "modelVersion");
         assertThat(ok.path("attempt").asInt()).isEqualTo(1);
         assertThat(Instant.parse(ok.path("finishedAt").asText())).isBeforeOrEqualTo(Instant.now());
         assertThat(ok.path("uploadBytes").asLong()).isEqualTo(8);
@@ -90,12 +99,32 @@ class JobEventsTest {
                 .isGreaterThanOrEqualTo(ok.path("queuedMs").asLong() + ok.path("processingMs").asLong() - 1);
         assertThat(ok.path("workerType").asText()).isEqualTo("mock");
         assertThat(ok.path("result").asText()).isEqualTo("COMPLETED");
+        for (String inference : List.of("inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles",
+                "convertMs", "glbBytes", "passthrough", "modelVersion")) {
+            assertThat(ok.get(inference)).as("%s is present (as null): the mock worker gets no /infer answer", inference).isNotNull();
+            assertThat(ok.get(inference).isNull()).as(inference).isTrue();
+        }
 
         List<JsonNode> failures = eventsOf(failed);
         assertThat(failures).extracting(e -> e.path("result").asText())
                 .containsExactly("FAILED:INFERENCE_FAILED", "FAILED:INFERENCE_FAILED");
         assertThat(failures).extracting(e -> e.path("attempt").asInt()).containsExactly(1, 2);
         assertThat(failures).extracting(e -> e.path("uploadBytes").asLong()).containsExactly(4L, 4L);
+
+        // The same runs as job_runs rows (docs/METRICS.md §1.1), built from the same object as the lines.
+        await().pollInterval(Duration.ofMillis(50)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(jobRuns.count()).isEqualTo(3));
+        JobRun completedRun = jobRuns.findById(completed + ":1").orElseThrow();
+        assertThat(completedRun.getStatus()).isEqualTo(JobStatus.COMPLETED);
+        assertThat(completedRun.getWorkerType()).isEqualTo("mock");
+        assertThat(completedRun.getUploadBytes()).isEqualTo(8L);
+        assertThat(completedRun.getUploadMs()).isEqualTo(ok.path("uploadMs").asLong());
+        assertThat(completedRun.getTotalMs()).isEqualTo(ok.path("totalMs").asLong());
+        assertThat(completedRun.getInferMs()).isNull();
+        assertThat(completedRun.getPassthrough()).isNull();
+        assertThat(jobRuns.findByJobIdOrderByAttemptAsc(failed))
+                .extracting(run -> run.getAttempt() + " " + run.result())
+                .containsExactly("1 FAILED:INFERENCE_FAILED", "2 FAILED:INFERENCE_FAILED");
     }
 
     private String create(MockMultipartFile... files) throws Exception {

@@ -41,7 +41,7 @@ public class JobFinisher {
         job.setProgress(1.0);
         job.setStatus(JobStatus.COMPLETED);
         jobRepository.save(job);
-        measure(job, JobRun.of(job, now, workerType, RunDetails.NONE), workerType);
+        measure(JobRun.of(job, now, workerType, RunDetails.NONE));
     }
 
     /** FAILED with a job failure code (docs/api/ERROR_CODES.md) and a developer message. */
@@ -54,11 +54,11 @@ public class JobFinisher {
         job.setUpdatedAt(now);
         job.setStatus(JobStatus.FAILED);
         jobRepository.save(job);
-        measure(job, JobRun.of(job, now, workerType, RunDetails.NONE), workerType);
+        measure(JobRun.of(job, now, workerType, RunDetails.NONE));
     }
 
     /** Insert-only row first (finishing one attempt twice is a bug and must not overwrite the first measurement), then the line. */
-    private void measure(Job job, JobRun run, String workerType) {
+    private void measure(JobRun run) {
         try {
             jobRunRepository.saveAndFlush(run);
         } catch (DataIntegrityViolationException twice) {
@@ -66,6 +66,6 @@ public class JobFinisher {
         } catch (RuntimeException e) {
             log.error("Could not store the job_runs row of jobId={} attempt={}: {}", run.getJobId(), run.getAttempt(), e.toString());
         }
-        eventLog.recordFinished(job, workerType);
+        eventLog.recordFinished(run);
     }
 }
