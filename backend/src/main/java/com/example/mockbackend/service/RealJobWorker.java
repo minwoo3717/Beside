@@ -30,7 +30,8 @@ import java.util.concurrent.Semaphore;
  *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
  *   <li>PROCESSING with progress null (the service reports none), then POST /infer through {@link InferenceClient}.</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
- *       asset endpoint serves. The run ends through JobFinisher (status, then the events.jsonl line).</li>
+ *       asset endpoint serves. The run ends through JobFinisher (status, then the job_runs row and the events.jsonl
+ *       line, carrying the /infer metrics, the passthrough flag, the model version and the GLB size).</li>
  * </ol>
  * Failures end the run FAILED with their job failure code (InferenceClient documents the mapping). An interrupted
  * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end.
@@ -101,13 +102,14 @@ public class RealJobWorker implements JobWorker {
 
         try {
             InferenceClient.Result result = inferenceClient.infer(jobId, imagePaths(job));
-            Path stored = storeBaseGlb(jobId, result.glbPath());
-            jobFinisher.complete(job, stored.toString(), start, type());
+            StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
+            jobFinisher.complete(job, stored.path().toString(), start, type(), result.details(stored.bytes()));
             if (result.passthrough()) {
                 log.warn("jobId={} stage=COMPLETED with the passthrough sample GLB: not an inference result, "
-                        + "leave it out of measurements", jobId);
+                        + "leave it out of measurements (job_runs.passthrough = true)", jobId);
             } else {
-                log.info("jobId={} stage=COMPLETED durationMs={} metrics={}", jobId, job.getDurationMs(), result.metrics());
+                log.info("jobId={} stage=COMPLETED durationMs={} modelVersion={} metrics={}", jobId, job.getDurationMs(),
+                        result.modelVersion(), result.metrics());
             }
         } catch (InferenceFailure failure) {
             jobFinisher.fail(job, failure.code(), failure.getMessage(), type());
@@ -123,8 +125,12 @@ public class RealJobWorker implements JobWorker {
         return job.getUploads().stream().map(upload -> Path.of(upload.path())).toList();
     }
 
+    /** The stored base GLB and its size (job_runs.glbBytes, the same number as asset.bytes). */
+    private record StoredGlb(Path path, long bytes) {
+    }
+
     /** GLB_SPEC section 6: the asset endpoint serves {storage.result.dir}/{jobId}/base.glb. */
-    private Path storeBaseGlb(String jobId, Path glb) throws InferenceFailure {
+    private StoredGlb storeBaseGlb(String jobId, Path glb) throws InferenceFailure {
         try {
             if (!Files.isRegularFile(glb)) {
                 throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
@@ -140,7 +146,7 @@ public class RealJobWorker implements JobWorker {
             if (!(Files.exists(target) && Files.isSameFile(glb, target))) {
                 Files.copy(glb, target, StandardCopyOption.REPLACE_EXISTING);
             }
-            return target;
+            return new StoredGlb(target, Files.size(target));
         } catch (IOException e) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
                     "Could not store the GLB (" + e.getClass().getSimpleName() + ")", "glbPath=" + glb + ": " + e);

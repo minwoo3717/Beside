@@ -153,7 +153,7 @@ class JobPersistenceTest {
             Job job = job("job-c", JobStatus.PROCESSING, null);
             context.getBean(JobRepository.class).save(job);
 
-            finisher.complete(job, dir.resolve("sample-dog.glb").toString(), Instant.now(), "mock");
+            finisher.complete(job, dir.resolve("sample-dog.glb").toString(), Instant.now(), "mock", RunDetails.NONE);
             // A second terminal transition of one attempt is a bug; it must break neither the worker nor the first measurement.
             assertThatCode(() -> finisher.fail(job, ErrorCode.INFERENCE_FAILED, "finished twice", "mock"))
                     .doesNotThrowAnyException();

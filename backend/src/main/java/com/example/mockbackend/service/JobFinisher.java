@@ -31,8 +31,11 @@ public class JobFinisher {
     private final EventLog eventLog;
     private final Logger log = LoggerFactory.getLogger(JobFinisher.class);
 
-    /** COMPLETED with the base GLB at {@code resultPath}; durationMs (v0) counts from {@code workerStart}. */
-    public void complete(Job job, String resultPath, Instant workerStart, String workerType) {
+    /**
+     * COMPLETED with the base GLB at {@code resultPath}; durationMs (v0) counts from {@code workerStart}.
+     * {@code details} is what the run produced beyond the GLB (the /infer numbers); the mock worker passes RunDetails.NONE.
+     */
+    public void complete(Job job, String resultPath, Instant workerStart, String workerType, RunDetails details) {
         Instant now = Instant.now();
         job.setResultPath(resultPath);
         job.setFinishedAt(now);
@@ -41,7 +44,7 @@ public class JobFinisher {
         job.setProgress(1.0);
         job.setStatus(JobStatus.COMPLETED);
         jobRepository.save(job);
-        measure(JobRun.of(job, now, workerType, RunDetails.NONE));
+        measure(JobRun.of(job, now, workerType, details));
     }
 
     /** FAILED with a job failure code (docs/api/ERROR_CODES.md) and a developer message. */

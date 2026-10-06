@@ -1,5 +1,8 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.domain.JobRun;
+import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.repository.JobRunRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -49,7 +52,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Profile "real" end to end against a fake inference service (docs/PLAN.md stage 4): upload → PENDING →
  * PROCESSING → POST /infer → COMPLETED with the returned GLB behind the asset endpoint, the four job failure codes,
- * retry, and one inference at a time. Stage 4 proper repeats the flow with the AnimalLift service.
+ * retry, one inference at a time, and the per-run measurements (job_runs row + events.jsonl line, docs/METRICS.md §1)
+ * carrying what /infer reported. Stage 4 proper repeats the flow with the AnimalLift service.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -138,6 +142,9 @@ class RealJobWorkerTest {
     @Autowired
     MockMvc mvc;
 
+    @Autowired
+    JobRunRepository jobRuns;
+
     @Test
     void processingCallsInferAndServesTheReturnedGlb() throws Exception {
         mvc.perform(get("/api/v1/healthz")).andExpect(jsonPath("$.workerType").value("real"));
@@ -168,10 +175,46 @@ class RealJobWorkerTest {
         assertThat(image.getFileName().toString()).endsWith("dog.png");
         assertThat(sent.path("options").path("hair").asBoolean(true)).isFalse();
 
+        // The run's measurements: the job_runs row and the events.jsonl line carry what /infer reported (METRICS §1, §2).
+        JobRun run = awaitRun(jobId, 1);
+        assertThat(run.getStatus()).isEqualTo(JobStatus.COMPLETED);
+        assertThat(run.getWorkerType()).isEqualTo("real");
+        assertThat(run.getUploadBytes()).isEqualTo(4L);
+        assertThat(run.getUploadMs()).isNotNull();
+        assertThat(run.getProcessingMs()).isNotNull();
+        assertThat(run.getInferMs()).isEqualTo(7L);
+        assertThat(run.getGpuPeakMB()).isEqualTo(512L);
+        assertThat(run.getModelParams()).isEqualTo(312_000_000L);
+        assertThat(run.getOutputVertices()).isEqualTo(10L);
+        assertThat(run.getOutputTriangles()).isEqualTo(12L);
+        assertThat(run.getConvertMs()).isEqualTo(3L);
+        assertThat(run.getGlbBytes()).isEqualTo((long) GLB.length);
+        assertThat(run.getPassthrough()).isFalse();
+        assertThat(run.getModelVersion()).isEqualTo("fake-animallift-0");
+
         assertThat(awaitEvents(jobId, 1)).singleElement().satisfies(event -> {
             assertThat(event.path("workerType").asText()).isEqualTo("real");
             assertThat(event.path("result").asText()).isEqualTo("COMPLETED");
+            assertThat(event.path("inferMs").asLong()).isEqualTo(7L);
+            assertThat(event.path("glbBytes").asLong()).isEqualTo(GLB.length);
+            assertThat(event.path("passthrough").asBoolean()).isFalse();
+            assertThat(event.path("modelVersion").asText()).isEqualTo("fake-animallift-0");
+            assertThat(event.path("totalMs").asLong()).as("line and row come from one object").isEqualTo(run.getTotalMs());
         });
+    }
+
+    @Test
+    void passthroughRunIsFlaggedSoMeasurementsCanExcludeIt() throws Exception {
+        answerOk(writeGlb("base-passthrough.glb"), true);
+
+        String jobId = create("dog.png");
+        awaitStatus(jobId, "COMPLETED");
+
+        JobRun run = awaitRun(jobId, 1);
+        assertThat(run.getPassthrough()).as("job_runs.passthrough: the sample came back, not a model result").isTrue();
+        assertThat(run.getModelVersion()).isNull();
+        assertThat(run.getGlbBytes()).isEqualTo((long) GLB.length);
+        assertThat(awaitEvents(jobId, 1).get(0).path("passthrough").asBoolean()).isTrue();
     }
 
     @Test
@@ -221,6 +264,12 @@ class RealJobWorkerTest {
                 .extracting(event -> event.path("attempt").asInt() + " " + event.path("result").asText())
                 .containsExactly("1 FAILED:INFERENCE_UNAVAILABLE", "2 COMPLETED");
         assertThat(requests.stream().filter(request -> request.path("jobId").asText().equals(jobId))).hasSize(2);
+
+        // One job_runs row per attempt; only the completed one has inference numbers.
+        assertThat(awaitRun(jobId, 2).getInferMs()).isEqualTo(7L);
+        assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId))
+                .extracting(run -> run.getId() + " " + run.result())
+                .containsExactly(jobId + ":1 FAILED:INFERENCE_UNAVAILABLE", jobId + ":2 COMPLETED");
     }
 
     @Test
@@ -250,6 +299,23 @@ class RealJobWorkerTest {
                 .doesNotContain(storage.toString()).doesNotContain("127.0.0.1");
         assertThat(failed.path("progress").isNull()).isTrue();
         assertThat(awaitEvents(jobId, 1).get(0).path("result").asText()).isEqualTo("FAILED:" + code);
+
+        JobRun run = awaitRun(jobId, 1);
+        assertThat(run.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(run.getErrorCode()).isEqualTo(code);
+        assertThat(run.result()).isEqualTo("FAILED:" + code);
+        assertThat(run.getInferMs()).as("a failed run has no inference numbers").isNull();
+        assertThat(run.getGlbBytes()).isNull();
+        assertThat(run.getPassthrough()).isNull();
+        assertThat(run.getModelVersion()).isNull();
+    }
+
+    /** JobFinisher writes the job_runs row right after the status save; wait for it like the events line. */
+    private JobRun awaitRun(String jobId, int attempt) {
+        String id = jobId + ":" + attempt;
+        await().pollInterval(Duration.ofMillis(50)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(jobRuns.findById(id)).isPresent());
+        return jobRuns.findById(id).orElseThrow();
     }
 
     private String create(String filename) throws Exception {
@@ -304,10 +370,19 @@ class RealJobWorkerTest {
     }
 
     private static void answerOk(Path glb) {
+        answerOk(glb, false);
+    }
+
+    /** A full answer as the real service sends it: the METRICS §2 numbers and, for a model result, its version. */
+    private static void answerOk(Path glb, boolean passthrough) {
         ObjectNode body = JSON.createObjectNode();
         body.put("glbPath", glb.toAbsolutePath().toString());
-        body.putObject("metrics").put("inferMs", 7);
-        body.put("passthrough", false);
+        body.putObject("metrics").put("inferMs", 7).put("gpuPeakMB", 512).put("modelParams", 312_000_000L)
+                .put("outputVertices", 10).put("outputTriangles", 12).put("convertMs", 3);
+        body.put("passthrough", passthrough);
+        if (!passthrough) {
+            body.put("modelVersion", "fake-animallift-0");
+        }
         answer(200, body.toString());
     }
 
