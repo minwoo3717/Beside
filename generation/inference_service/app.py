@@ -3,11 +3,11 @@
 [구현됨] request/response schemas, GET /healthz, passthrough mode (BESIDE_SAMPLE_GLB) for wiring tests.
 [계획]   AnimalLift model loading and inference, OBJ/PNG -> GLB conversion via tools/convert_asset.py (TODO below).
 
-Run (GPU server):
+Run (GPU PC; Spring runs on the same host, so 127.0.0.1 is enough — scripts/run_real.ps1 does this):
     pip install -r requirements.txt
-    uvicorn app:app --host 0.0.0.0 --port 8001
+    uvicorn app:app --host 127.0.0.1 --port 8001
 Passthrough (no model yet, returns a fixed sample GLB so Spring's real worker can be integrated first):
-    BESIDE_SAMPLE_GLB=/path/to/sample.glb uvicorn app:app --host 0.0.0.0 --port 8001
+    BESIDE_SAMPLE_GLB=/path/to/sample.glb uvicorn app:app --host 127.0.0.1 --port 8001
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ app = FastAPI(
 
 
 class InferOptions(BaseModel):
-    hair: bool = Field(default=False, description="Also produce the hair variant (hair.npz -> {jobId}-hair.glb)")
+    hair: bool = Field(default=False, description="Also produce the hair variant (hair.npz -> {jobId}/hair.glb)")
 
 
 class InferRequest(BaseModel):
@@ -54,8 +54,8 @@ class InferMetrics(BaseModel):
 
 
 class InferResponse(BaseModel):
-    glbPath: str = Field(..., description="Absolute path of {jobId}-base.glb (same host or shared volume as Spring)")
-    hairGlbPath: Optional[str] = Field(default=None, description="Absolute path of {jobId}-hair.glb when options.hair")
+    glbPath: str = Field(..., description="Absolute path of {jobId}/base.glb (same host as Spring, which copies it to storage/results/{jobId}/base.glb)")
+    hairGlbPath: Optional[str] = Field(default=None, description="Absolute path of {jobId}/hair.glb when options.hair")
     metrics: InferMetrics
     passthrough: bool = Field(default=False, description="True when the sample GLB was returned instead of a real result")
     modelVersion: Optional[str] = Field(
@@ -118,7 +118,7 @@ def infer(request: InferRequest) -> InferResponse:
     # TODO(PLAN stage 3 -> 4):
     #   1. preprocess request.imagePaths (crop/segment the animal, resize) and run AnimalLift -> mesh.obj + uv.png (+ hair.npz)
     #      measure inferMs, gpuPeakMB (torch.cuda.max_memory_allocated), modelParams
-    #   2. run tools/convert_asset.py -> {jobId}-base.glb (+ -hair.glb) + metrics.json (vertices, triangles, textureSize, bytes, convertMs)
+    #   2. run tools/convert_asset.py -> {jobId}/base.glb (+ hair.glb) + base.metrics.json (vertices, triangles, textureSize, bytes, convertMs)
     #      enforce docs/asset/GLB_SPEC.md; on violation raise 500 with code CONVERSION_FAILED
     #   3. return InferResponse(glbPath=..., hairGlbPath=..., metrics=..., modelVersion="animallift-baseline@<commit>")
     raise HTTPException(

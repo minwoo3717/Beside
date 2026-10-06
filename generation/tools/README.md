@@ -15,7 +15,8 @@ python tools/convert_asset.py \
   [--normalize-height 1.0] [--max-triangles 20000] [--max-texture 2048] [--max-bytes 10485760]
 ```
 
-- 출력 GLB 는 GLB_SPEC §1~§4 를 만족해야 한다: 텍스처 임베드, Y-up, 1 unit = 1 m, 원점 발바닥 중심(최저점 y = 0), 정면 +Z, 노드 이름 `base`/`hair`.
+- 출력 GLB 는 GLB_SPEC §1~§4 를 만족해야 한다: 텍스처 임베드, Y-up, 1 unit = 1 m, 원점 발바닥 중심(최저점 y = 0), 정면 +Z, 노드 이름 `base`/`hair`. 출력 경로 `results/<jobId>/base.glb` 는 추론 서비스가 `/infer` 응답의 `glbPath` 로 돌려주고 Spring 이 `storage/results/{jobId}/base.glb` 로 복사한다(GLB_SPEC §5·§6 과 같은 모양).
+- `--normalize-height 1.0` 은 GLB_SPEC §2 의 "바운딩 박스 **최장 축** 1.0 m" 와 다르다. 실제 스크립트를 투입할 때 플래그 이름과 의미를 §2 에 맞춘다(예 `--normalize-longest-axis 1.0`).
 - `metrics.json`: `{ "vertices", "triangles", "textureSize", "bytes", "convertMs" }` (이름 고정, [docs/METRICS.md](../../docs/METRICS.md)).
 - 상한 위반 시 종료 코드 ≠ 0 과 이유 출력 → 추론 서비스는 `CONVERSION_FAILED` 로 보고한다.
 - 검증: `gltf-validator` 오류 0 (`npm i -g gltf-validator` 또는 Khronos 바이너리), Unity 에디터 glTFast 로드.

@@ -45,7 +45,9 @@
 
 | 입력 | 출력 |
 |---|---|
-| `mesh.obj` + `uv.png` (+ `hair.npz`) | `{jobId}-base.glb`, 선택 `{jobId}-hair.glb`, 각 GLB 옆에 `{같은 이름}.metrics.json` |
+| `mesh.obj` + `uv.png` (+ `hair.npz`) | `{jobId}/base.glb`, 선택 `{jobId}/hair.glb`, 각 GLB 옆에 `base.metrics.json` / `hair.metrics.json` |
+
+경로 모양은 `tools/README.md` 의 CLI(`--out results/<jobId>/base.glb`)와 Spring 저장 규칙(§6, `storage/results/{jobId}/base.glb`)과 같다(2026-10-06 표기 통일 — 전에는 `{jobId}-base.glb` 로도 적혀 있었다). 입력 파일 형식(`mesh.obj + uv.png`)은 문서상 가정이며 exp-01 에서 공식 코드의 실제 출력으로 확인한다.
 
 `metrics.json` 은 다음 다섯 필드를 가진다(이름 고정, [METRICS.md](../METRICS.md) 와 동일).
 
