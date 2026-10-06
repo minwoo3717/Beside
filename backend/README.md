@@ -2,7 +2,7 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl`, real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인).
 - **[계획]** 실제 AnimalLift 모델과의 연동(PLAN 3·4단계), hair variant 결과, Spring↔Python 분리 배포 여부(REVIEW_CHECKLIST #6).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
@@ -24,7 +24,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/swagger-ui/index.html | v1 스펙 브라우저 (springdoc) |
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
-| http://localhost:8080/h2-console | DB 보기 (mock 프로파일, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock`, 사용자 `sa`, 비밀번호 빈칸 |
+| http://localhost:8080/h2-console | DB 보기 (mock·real 모두, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
 
@@ -92,7 +92,24 @@ cd backend
 .\scripts\e2e_mock.ps1        # healthz workerType=real → PROCESSING → COMPLETED → GLB 다운로드
 ```
 
-패스스루로 끝난 실행도 `events.jsonl` 에 `workerType=real`, `COMPLETED` 로 남는다. 모델이 돌지 않았으므로 측정이 아니다(서버 로그에 jobId 마다 WARN). 측정을 시작하기 전에 `events.jsonl` 을 옮겨 둔다.
+패스스루로 끝난 실행도 `events.jsonl` 과 `job_runs` 에 `workerType=real`, `COMPLETED` 로 남는다. 모델이 돌지 않았으므로 측정이 아니다(서버 로그에 jobId 마다 WARN). `passthrough=true` 로 기록되므로 측정표에서는 이 값으로 거른다.
+
+### 측정 내보내기 (`job_runs`)
+
+실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다.
+
+```sql
+CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
+ 'SELECT job_id AS "jobId", attempt, finished_at AS "finishedAt", worker_type AS "workerType", status, error_code AS "errorCode",
+         upload_bytes AS "uploadBytes", upload_ms AS "uploadMs", queued_ms AS "queuedMs", processing_ms AS "processingMs", total_ms AS "totalMs",
+         infer_ms AS "inferMs", gpu_peak_mb AS "gpuPeakMB", model_params AS "modelParams", output_vertices AS "outputVertices",
+         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough, model_version AS "modelVersion"
+  FROM job_runs
+  WHERE worker_type = ''real'' AND status = ''COMPLETED'' AND passthrough = FALSE
+  ORDER BY finished_at');
+```
+
+빠르게 보려면 `SELECT * FROM job_runs ORDER BY finished_at`. 서버가 켜져 있는 동안 다른 프로세스는 DB 파일을 열 수 없다(AUTO_SERVER 없음). 측정 행을 넣지 못해도(디스크·DB 오류) 서버 로그에 ERROR 만 남고 작업 결과는 바뀌지 않는다. 같은 attempt 를 두 번 끝내는 것은 버그이며 첫 행이 유지된다.
 
 ## 구조
 
@@ -108,10 +125,12 @@ src/main/
 │  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
 │  ├─ service/RealJobWorker.java         # real: 추론 슬롯 대기 → PROCESSING → /infer → GLB 헤더 확인·복사 → JobFinisher
-│  ├─ service/InferenceClient.java       # /infer 전송과 응답 → Job 실패 코드 매핑 (전송 방식이 바뀌면 여기만)
-│  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository 도 같은 폴더
+│  ├─ service/InferenceClient.java       # /infer 전송과 응답 → Job 실패 코드 매핑, metrics·passthrough·modelVersion → RunDetails (전송 방식이 바뀌면 여기만)
+│  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository·JobRunRepository 도 같은 폴더
 │  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
-│  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → EventLog 가 events.jsonl 한 줄
+│  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → job_runs 행 + events.jsonl 줄 (같은 JobRun)
+│  ├─ domain/JobRun.java                 # job_runs 행: 서버 타이밍 + /infer 수치 + glbBytes·passthrough·modelVersion (삽입 전용)
+│  ├─ domain/RunDetails.java             # 워커가 JobFinisher 에 넘기는 추론 결과 값 객체 (mock 은 NONE)
 │  ├─ domain/JobTimings.java             # queuedMs/processingMs/totalMs 계산 (API 응답과 events.jsonl 공용)
 │  ├─ config/RequestStartFilter.java     # 업로드 요청 도착 시각 (서버 uploadMs)
 │  ├─ exception/GlobalExceptionHandler.java  # /api/v1/ 는 ErrorResponse 봉투, 그 외는 v0 평면 오류
@@ -120,16 +139,16 @@ src/main/
 └─ resources/
    ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
-   ├─ application-real.properties        # inference.base-url·timeout-ms·max-concurrency, storage.result.dir, DB 파일 beside-real
+   ├─ application-real.properties        # inference.base-url·timeout-ms·max-concurrency, storage.result.dir, DB 파일 beside-real, h2-console
    └─ static/                            # 브라우저 Mock UI (v1)
 ```
 
 - Controller 가 요청을 받고 Service 가 파일과 Job 을 저장한다. 별도 Spring Bean 인 워커의 `@Async` 메서드가 백그라운드 작업을 수행한다.
-- 저장소는 H2 파일 DB 다. 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다.
+- 저장소는 H2 파일 DB 다. 테이블은 `jobs`(작업), `idempotency_keys`, `job_runs`(실행별 측정) 세 개. 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다. 스키마는 `ddl-auto=update` 가 기동 때 맞춘다(테이블·컬럼 추가만). `job_runs` 가 생기기 전에 끝난 실행은 행이 없다.
 - 서버를 재시작해도 작업과 Idempotency-Key 는 남는다. 다만 처리 중이던 워커 스레드는 사라지므로, 시작할 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 되고 앱이 retry 로 다시 실행한다.
 - DB 파일 하나는 서버 하나만 연다. 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 개발 DB 를 비우려면 서버를 끄고 `storage/db/` 를 지운다.
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
-- 측정 로그: 실행이 끝날 때마다 `storage/events.jsonl` 에 한 줄(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1). 위치는 `--storage.events.path=...`, 빈 값이면 꺼진다. 재시작으로 끊긴 실행(`FAILED:INTERNAL_ERROR`)은 측정표에서 뺀다.
+- 측정 로그: 실행이 끝날 때마다 `storage/events.jsonl` 에 한 줄(19개 필드, 정의 [docs/METRICS.md](../docs/METRICS.md) §1)과 `job_runs` 에 한 행. 위치는 `--storage.events.path=...`, 빈 값이면 파일 기록만 꺼진다. 재시작으로 끊긴 실행(`FAILED:INTERNAL_ERROR`)과 패스스루 실행(`passthrough=true`)은 측정표에서 뺀다.
 
 ## 브라우저 Mock UI (`static/`, API v1)
 
@@ -162,10 +181,10 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobAsyncIntegrationTest` | v0: 홈페이지·정적 파일·404·잘못된 요청·비동기 상태 전이·다운로드 API (동결 보호) |
 | `JobV1ApiTest` | v1: 202/Location/jobId, 폴링, timings, asset 409→200, hair 404, retry 202/409, 검증 400, Idempotency-Key, 목록 cursor, healthz, 오류 봉투 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
-| `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 필드 이름·순서, uploadBytes/uploadMs/타이밍/result |
-| `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry |
-| `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음 (가짜 추론 서버) |
-| `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, events `workerType=real`, 실패 4종 코드, retry, `/infer` 한 번에 1건 (가짜 추론 서버) |
+| `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
+| `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry. `job_runs`: 삽입 전용, 모든 컬럼 보존, 같은 attempt 두 번 종료해도 첫 행 유지·예외 없음, attempt 1·2 두 행 |
+| `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값 (가짜 추론 서버) |
+| `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, 실패 4종 코드, retry, `/infer` 한 번에 1건, `job_runs` 행과 events 줄이 같은 수치(inferMs·glbBytes·passthrough·modelVersion), 패스스루 실행 표시 (가짜 추론 서버) |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
