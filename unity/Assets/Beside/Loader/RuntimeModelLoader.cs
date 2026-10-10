@@ -32,14 +32,14 @@ public class RuntimeModelLoader : MonoBehaviour
 
     [Header("Model Fitting")]
     [Tooltip("Height: scale so the model is Target Size tall. LongestAxis: longest side = Target Size (GLB_SPEC: generator normalizes to 1 m, app shows at 0.6). None: use GLB units as-is.")]
-    public NormalizeMode normalizeMode = NormalizeMode.Height;
+    public NormalizeMode normalizeMode = NormalizeMode.LongestAxis;
     [Tooltip("Target size in meters for the chosen Normalize Mode.")]
-    public float targetSize = 0.4f;
+    public float targetSize = 0.6f;
 
     [Tooltip("Which local axis the model's head points to after import. The loader turns it so the head faces +Z, " +
-             "which the ObjectSpawner points at the camera. Current AnimalLift/SMAL output: head along -X in Unity. " +
-             "Set PlusZ once the converter exports +Z-forward GLBs (GLB_SPEC).")]
-    public ModelFacing modelFacing = ModelFacing.MinusX;
+             "which the ObjectSpawner points at the camera. Rigged GLBs (GLB_SPEC) are +Z already; the old OBJ-based sample was MinusX. " +
+             "Default PlusZ.")]
+    public ModelFacing modelFacing = ModelFacing.PlusZ;
 
     [Header("Materials")]
     [Tooltip("Optional URP/Lit material (e.g. Dog_Mat). If set, the GLB's own materials are replaced by copies of it " +
@@ -299,18 +299,22 @@ public class RuntimeModelLoader : MonoBehaviour
 
     void AddFur(Transform model, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f)
     {
-        foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true))
+        // static meshes (MeshFilter) and rigged meshes (SkinnedMeshRenderer) both get shells
+        var targets = new List<Renderer>();
+        foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true)) { var r = mf.GetComponent<MeshRenderer>(); if (r != null) targets.Add(r); }
+        targets.AddRange(model.GetComponentsInChildren<SkinnedMeshRenderer>(true));
+
+        foreach (var baseRenderer in targets)
         {
             var mat = new Material(furMaterialTemplate);
             if (furLength > 0f) mat.SetFloat("_FurLength", furLength);   // value from the converter, model units
             mat.SetTexture("_LengthMap", lengthMap);
             if (flowMap != null) mat.SetTexture("_FlowMap", flowMap);
 
-            var baseRenderer = mf.GetComponent<Renderer>();
-            Texture baseTex = baseRenderer != null ? GetBaseTexture(baseRenderer.sharedMaterial) : null;
+            Texture baseTex = GetBaseTexture(baseRenderer.sharedMaterial);
             if (baseTex != null) mat.SetTexture("_BaseMap", baseTex);
 
-            var fur = mf.gameObject.AddComponent<ShellFurRenderer>();
+            var fur = baseRenderer.gameObject.AddComponent<ShellFurRenderer>();
             fur.furMaterial = mat;
             fur.shellCount = furShellCount;
         }

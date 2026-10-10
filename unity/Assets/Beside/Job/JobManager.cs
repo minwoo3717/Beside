@@ -35,6 +35,9 @@ namespace Beside.Job
         public string LastErrorCode { get; private set; }
         public bool LastErrorRetryable { get; private set; }
         public string BaseUrl => baseUrl;
+        /// <summary>The URL set in the Inspector (build default). The app can override it at runtime.</summary>
+        public string DefaultBaseUrl { get; private set; }
+        const string BaseUrlPrefKey = "beside.baseUrl";
 
         /// <summary>(state, text to show the user)</summary>
         public event Action<State, string> StateChanged;
@@ -55,6 +58,9 @@ namespace Beside.Job
 
         void Awake()
         {
+            DefaultBaseUrl = baseUrl;
+            string saved = PlayerPrefs.GetString(BaseUrlPrefKey, "");
+            if (!string.IsNullOrWhiteSpace(saved)) baseUrl = saved;       // server chosen in the app wins
             api = new BesideApiClient(baseUrl);
             if (modelLoader == null) modelLoader = FindFirstObjectByType<RuntimeModelLoader>();
             if (metrics == null) metrics = FindFirstObjectByType<MetricsRecorder>();
@@ -134,6 +140,35 @@ namespace Beside.Job
         }
 
         public void CheckHealth(Action<HealthResponse> onOk, Action<ApiError> onError) => StartCoroutine(api.Health(onOk, onError));
+
+        /// <summary>Calls /healthz on a URL without switching to it (for the settings screen).</summary>
+        public void TestBaseUrl(string url, Action<HealthResponse> onOk, Action<ApiError> onError) =>
+            StartCoroutine(new BesideApiClient(NormalizeUrl(url)).Health(onOk, onError));
+
+        /// <summary>Switches the server at runtime and remembers it. Empty = back to the build default.
+        /// The saved job belongs to the old server, so it is cleared.</summary>
+        public void SetBaseUrl(string url)
+        {
+            if (IsBusy) return;
+            string n = NormalizeUrl(url);
+            if (string.IsNullOrEmpty(n)) { PlayerPrefs.DeleteKey(BaseUrlPrefKey); n = DefaultBaseUrl; }
+            else PlayerPrefs.SetString(BaseUrlPrefKey, n);
+            PlayerPrefs.Save();
+            if (n == baseUrl) return;
+            baseUrl = n;
+            api = new BesideApiClient(baseUrl);
+            ClearSavedJob();
+            Debug.Log($"[JobManager] server -> {baseUrl}");
+        }
+
+        /// <summary>Trims, adds http:// when no scheme is given, drops a trailing slash.</summary>
+        public static string NormalizeUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return "";
+            url = url.Trim();
+            if (!url.StartsWith("http://") && !url.StartsWith("https://")) url = "https://" + url;
+            return url.TrimEnd('/');
+        }
 
         public bool IsBusy => CurrentState is State.Uploading or State.Waiting or State.Downloading or State.Loading;
 

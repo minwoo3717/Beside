@@ -37,6 +37,8 @@ namespace Beside.AR
         Behaviour trigger;   // template's ARInteractorSpawnTrigger, found by type name (namespace differs by XRI version)
 
         public int Count { get { Refresh(); return spawned.Count; } }
+        /// <summary>Models currently on the floor, oldest first.</summary>
+        public List<GameObject> PlacedModels { get { Refresh(); return spawned; } }
         public bool IsFull => Count >= maxInstances;
         public bool CanSpawn => mode == Mode.Move || !IsFull;
 

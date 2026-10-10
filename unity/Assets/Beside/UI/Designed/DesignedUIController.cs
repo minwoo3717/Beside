@@ -4,6 +4,7 @@ using System.IO;
 using Beside.Api;
 using Beside.AR;
 using Beside.Job;
+using Beside.Pet;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -38,14 +39,20 @@ namespace Beside.UI.Designed
         [Tooltip("After the user closes the card, show it again when the message changes (e.g. after placing).")]
         [SerializeField] private bool reshowOnNewMessage = false;
 
+        [Header("AR scanning")]
+        [Tooltip("Find floors only after \"AR로 배치하기\". Other screens pause plane detection so random surfaces seen earlier don't get in the way.")]
+        [SerializeField] private bool scanOnlyInAR = true;
+
         [Header("Template UI")]
         [Tooltip("Template UI objects to hide so they don't overlap this UI. Coaching UI stays.")]
         [SerializeField] private string[] hideTemplateObjects = { "Create Button", "Delete Button", "Options Button", "Options Modal", "Object Menu Animator", "Greeting Prompt", "DebugMenu" };
 
-        enum Screen { Home, Confirm, Progress, Preview, AR, Error }
+        enum Screen { Home, Confirm, Progress, Preview, AR, Error, Settings }
 
         Canvas canvas;
-        RectTransform home, confirm, progress, previewScreen, arOverlay, error;
+        RectTransform home, confirm, progress, previewScreen, arOverlay, error, settings;
+        // settings
+        InputField urlInput; Text settingsStatus, homeServerText;
         // confirm
         RectTransform thumbGrid; Text confirmCount; List<Photo> pendingPhotos = new List<Photo>();
         // progress
@@ -57,9 +64,12 @@ namespace Beside.UI.Designed
         // error
         Text errorTitle, errorBody, errorCode, errorStage, errorRetry; Button errorRetryButton;
         SpawnLimiter limiter;
+        PlaneScanGate scanGate;
         RectTransform arInstructionCard;
         bool instructionDismissed;
         RectTransform bottomToggle; Text bottomToggleLabel;
+        string highlightedClip; float chipSyncHoldUntil;
+        PetAnimationPlayer petAnim; RectTransform arAnimRow; readonly Dictionary<string, Image> animChips = new Dictionary<string, Image>();
         bool bottomHidden;
         UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner spawner;
 
@@ -71,6 +81,8 @@ namespace Beside.UI.Designed
             if (guidance == null) guidance = GetComponent<ARGuidance>() ?? FindFirstObjectByType<ARGuidance>();
             if (centerPlacer == null) centerPlacer = GetComponent<CenterPlacer>() ?? gameObject.AddComponent<CenterPlacer>();
             limiter = FindFirstObjectByType<SpawnLimiter>();
+            scanGate = GetComponent<PlaneScanGate>() ?? gameObject.AddComponent<PlaneScanGate>();
+            petAnim = FindFirstObjectByType<PetAnimationPlayer>() ?? gameObject.AddComponent<PetAnimationPlayer>();
             spawner = FindFirstObjectByType<UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner>();
             if (modelLoader == null) modelLoader = FindFirstObjectByType<RuntimeModelLoader>();
             if (jobManager == null) { Debug.LogError("[DesignedUI] JobManager missing"); enabled = false; return; }
@@ -90,11 +102,13 @@ namespace Beside.UI.Designed
             if (jobManager == null) return;
             BuildOnce();                    // Awake runs even when unchecked, so build here
             canvas.gameObject.SetActive(true);
+            if (scanOnlyInAR && scanGate != null && !arOverlay.gameObject.activeSelf) scanGate.StopScan();
             jobManager.StateChanged += OnStateChanged;
             jobManager.JobFailed += OnJobFailed;
             jobManager.ModelReady += OnModelReady;
             jobManager.ModelPlaced += OnModelPlaced;
             if (guidance != null) guidance.GuidanceChanged += OnGuidance;
+            if (modelLoader != null) modelLoader.ModelReady += OnLoaderReady;
         }
 
         void OnDisable()
@@ -105,7 +119,9 @@ namespace Beside.UI.Designed
             jobManager.ModelReady -= OnModelReady;
             jobManager.ModelPlaced -= OnModelPlaced;
             if (guidance != null) guidance.GuidanceChanged -= OnGuidance;
+            if (modelLoader != null) modelLoader.ModelReady -= OnLoaderReady;
             if (canvas != null) canvas.gameObject.SetActive(false);
+            if (scanOnlyInAR && scanGate != null) scanGate.BeginScan(false);   // hand normal scanning back (e.g. basic UI)
         }
 
         void Update()
@@ -115,6 +131,7 @@ namespace Beside.UI.Designed
             // The buttons follow what is actually on the floor, however it got there (tap, center button, reset)
             bool hasModel = HasPlacedModel();
             if (hasModel != placed) SetPlaced(hasModel);
+            SyncChipWithPet();
 
             if (!placed && guidance != null)
             {
@@ -123,6 +140,32 @@ namespace Beside.UI.Designed
                 arPillDot.color = plane ? DesignKit.Mint : DesignKit.Peach;
                 arInstruction.text = plane ? "흰 점이 보이는 바닥을 터치하면 그 자리에 놓여요" : "폰을 좌우로 천천히 움직여 바닥을 비춰 주세요";
             }
+        }
+
+        void PlayAction(string clip)
+        {
+            if (petAnim == null) return;
+            petAnim.Play(clip);
+            HighlightChip(clip);
+            chipSyncHoldUntil = Time.unscaledTime + petAnim.fadeSeconds + 0.15f;   // let the cross-fade finish before syncing
+        }
+
+        /// <summary>Keeps the highlighted chip equal to what the pet is really doing (new placement, one-shot ending...).</summary>
+        void SyncChipWithPet()
+        {
+            if (petAnim == null || !placed || arAnimRow == null || !arAnimRow.gameObject.activeInHierarchy) return;
+            if (Time.unscaledTime < chipSyncHoldUntil) return;
+            string playing = petAnim.PlayingClip;
+            if (playing != null && playing != highlightedClip) HighlightChip(playing);
+        }
+
+        void HighlightChip(string clip)
+        {
+            highlightedClip = clip ?? "Idle";
+            foreach (var kv in animChips)
+                kv.Value.color = kv.Key == (clip ?? "Idle") ? DesignKit.Mint : DesignKit.DarkScrim;
+            foreach (var kv in animChips)
+                kv.Value.GetComponentInChildren<Text>().color = kv.Key == (clip ?? "Idle") ? DesignKit.DarkGround : DesignKit.OnDark;
         }
 
         void ToggleBottomPanels()
@@ -136,9 +179,12 @@ namespace Beside.UI.Designed
         {
             arBeforePlace.gameObject.SetActive(!bottomHidden && !placed);
             arAfterPlace.gameObject.SetActive(!bottomHidden && placed);
+            bool actions = placed && petAnim != null && petAnim.HasAnyAnimation;
+            arAnimRow.gameObject.SetActive(actions);
             bottomToggleLabel.text = bottomHidden ? "버튼 보기" : "버튼 숨기기";
             // sits just above the panel when shown, drops to the bottom edge when hidden
-            bottomToggle.anchoredPosition = new Vector2(-64, bottomHidden ? 90 : 440);
+            bottomToggle.anchoredPosition = new Vector2(-64, bottomHidden ? 90 : actions ? 580 : 440);
+            HighlightChip(petAnim != null ? petAnim.Current : null);
         }
 
         void DismissInstruction()
@@ -155,6 +201,7 @@ namespace Beside.UI.Designed
         void SetPlaced(bool value)
         {
             if (value != placed && reshowOnNewMessage) instructionDismissed = false;
+            if (value != placed && petAnim != null) { petAnim.ResetToIdle(); chipSyncHoldUntil = 0f; }
             placed = value;
             RefreshInstructionCard();
             ApplyBottomPanels();
@@ -194,6 +241,7 @@ namespace Beside.UI.Designed
             BuildPreview(root);
             BuildAR(root);
             BuildError(root);
+            BuildSettings(root);
         }
 
         void BuildHome(Transform root)
@@ -204,13 +252,18 @@ namespace Beside.UI.Designed
             var brand = DesignKit.Row("Brand", col, 70, 24);
             brand.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
             DesignKit.Label("BrandText", brand, "Beside", 60, DesignKit.Ink, 70, TextAnchor.MiddleLeft, FontStyle.Bold);
+            var brandFill = UiKit.Rect("Fill", brand, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            brandFill.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            var serverBtn = DesignKit.RoundedButton("Server", brand, "서버 설정", DesignKit.CardBg, DesignKit.InkSoft, OpenSettings, 70, 30, FontStyle.Normal, DesignKit.Line);
+            var sle = serverBtn.GetComponent<LayoutElement>(); sle.preferredWidth = 240; sle.minWidth = 240; sle.flexibleWidth = 0;
+            homeServerText = serverBtn.GetComponentInChildren<Text>();
 
             DesignKit.Spacer(col);
 
             var hero = UiKit.Rect("Hero", col, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var heroImg = DesignKit.Box(hero, DesignKit.AccentSoft, 76f);
             if (heroImage != null) { heroImg.sprite = heroImage; heroImg.type = Image.Type.Simple; heroImg.preserveAspect = true; heroImg.color = Color.white; }
-            UiKit.Height(hero, 760);
+            var hle = hero.gameObject.AddComponent<LayoutElement>(); hle.preferredHeight = 760; hle.minHeight = 240; hle.flexibleHeight = 1;
 
             DesignKit.Label("Title", col, "사진 한 장으로\n우리 아이를 3D로 만나요", 74, DesignKit.Ink, 200, TextAnchor.MiddleLeft, FontStyle.Bold);
             DesignKit.Label("Body", col, "얼굴과 몸 전체가 잘 보이는 사진을 고르면 2~3분 뒤 AR로 볼 수 있어요.", 40, DesignKit.InkSoft, 130);
@@ -353,7 +406,18 @@ namespace Beside.UI.Designed
             DesignKit.PrimaryButton("Center", arBeforePlace, "화면 가운데에 바로 놓기", PlaceAtCenter, DesignKit.Mint, DesignKit.DarkGround);
 
             // bottom: after placement
-            arAfterPlace = DesignKit.Column("After", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 420), 32, 0);
+            arAfterPlace = DesignKit.Column("After", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 560), 32, 0);
+            arAfterPlace.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.LowerCenter;   // stack from the bottom
+
+            // pet actions (only when the placed model has clips)
+            arAnimRow = DesignKit.Row("Actions", arAfterPlace, 110, 16);
+            foreach (var (clip, label) in PetAnimationPlayer.Actions)
+            {
+                string c = clip;
+                var chip = DesignKit.RoundedButton("Act_" + c, arAnimRow, label, DesignKit.DarkScrim, DesignKit.OnDark, () => PlayAction(c), 110, 32, FontStyle.Normal, new Color(1, 1, 1, 0.14f));
+                animChips[c] = chip.GetComponent<Image>();
+            }
+
             var row = DesignKit.Row("Row", arAfterPlace, 150, 28);
             DesignKit.SecondaryButton("Replace", row, "다시 배치", ResetPlacement, dark: true);
             DesignKit.SecondaryButton("Snap", row, "사진 찍기", () => StartCoroutine(SavePhoto()), dark: true);
@@ -377,6 +441,72 @@ namespace Beside.UI.Designed
             brt.anchorMin = brt.anchorMax = new Vector2(0, 1); brt.pivot = new Vector2(0, 1);
             brt.anchoredPosition = new Vector2(64, -92); brt.sizeDelta = new Vector2(120, 120);
             Destroy(back.GetComponent<LayoutElement>());
+        }
+
+        void BuildSettings(Transform root)
+        {
+            settings = DesignKit.Screen("Settings", root, DesignKit.Ground);
+            var col = DesignKit.Column("Col", settings, Vector2.zero, Vector2.one, new Vector2(64, 90), new Vector2(-64, -150), 44, 0);
+
+            var header = DesignKit.Row("Header", col, 120, 32);
+            header.GetComponent<HorizontalLayoutGroup>().childForceExpandWidth = false;
+            var back = DesignKit.SecondaryButton("Back", header, "‹", () => Show(Screen.Home));
+            var ble = back.GetComponent<LayoutElement>(); ble.preferredWidth = 120; ble.preferredHeight = 120;
+            DesignKit.Label("Title", header, "서버 설정", 56, DesignKit.Ink, 120, TextAnchor.MiddleLeft, FontStyle.Bold);
+
+            DesignKit.Label("Desc", col, "생성 서버 주소를 입력하세요. 터널(Cloudflare, ngrok)이나 클라우드 서버 주소를 넣으면 다른 네트워크에서도 쓸 수 있어요.", 36, DesignKit.InkSoft, 170);
+
+            // URL input field
+            var field = UiKit.Rect("UrlField", col, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            var bg = DesignKit.Box(field, DesignKit.CardBg, 40f);
+            UiKit.Height(field, 140);
+            var text = UiKit.Text("Text", field, "", 36, DesignKit.Ink, TextAnchor.MiddleLeft);
+            text.rectTransform.offsetMin = new Vector2(40, 0); text.rectTransform.offsetMax = new Vector2(-40, 0);
+            text.supportRichText = false; text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            if (font != null) text.font = font;
+            var placeholder = UiKit.Text("Placeholder", field, "https://example.trycloudflare.com", 36, DesignKit.InkMuted, TextAnchor.MiddleLeft);
+            placeholder.rectTransform.offsetMin = new Vector2(40, 0); placeholder.rectTransform.offsetMax = new Vector2(-40, 0);
+            if (font != null) placeholder.font = font;
+            urlInput = field.gameObject.AddComponent<InputField>();
+            urlInput.targetGraphic = bg; urlInput.textComponent = text; urlInput.placeholder = placeholder;
+            urlInput.lineType = InputField.LineType.SingleLine;
+            urlInput.keyboardType = TouchScreenKeyboardType.URL;
+
+            settingsStatus = DesignKit.Label("Status", col, "", 34, DesignKit.InkSoft, 90);
+
+            var row = DesignKit.Row("Row", col, 150, 28);
+            DesignKit.SecondaryButton("Test", row, "연결 확인", TestServer);
+            DesignKit.PrimaryButton("Save", row, "저장", SaveServer);
+
+            DesignKit.GhostButton("Default", col, "기본 주소로 되돌리기", () => { urlInput.text = jobManager.DefaultBaseUrl; settingsStatus.text = "기본 주소를 넣었어요. 저장을 누르면 적용돼요."; settingsStatus.color = DesignKit.InkSoft; });
+            DesignKit.Spacer(col);
+        }
+
+        void OpenSettings()
+        {
+            urlInput.text = jobManager.BaseUrl;
+            settingsStatus.text = "현재 주소로 연결을 확인하려면 \"연결 확인\"을 누르세요.";
+            settingsStatus.color = DesignKit.InkSoft;
+            Show(Screen.Settings);
+        }
+
+        void TestServer()
+        {
+            string url = JobManager.NormalizeUrl(urlInput.text);
+            if (string.IsNullOrEmpty(url)) { settingsStatus.text = "주소를 입력하세요."; settingsStatus.color = DesignKit.Danger; return; }
+            settingsStatus.text = "확인 중…"; settingsStatus.color = DesignKit.InkSoft;
+            jobManager.TestBaseUrl(url,
+                h => { settingsStatus.text = $"연결됨 · {h.profile}/{h.workerType}"; settingsStatus.color = DesignKit.Accent; },
+                e => { settingsStatus.text = "연결 안 됨 · " + e.code + (e.httpStatus > 0 ? $" (HTTP {e.httpStatus})" : ""); settingsStatus.color = DesignKit.Danger; });
+        }
+
+        void SaveServer()
+        {
+            if (jobManager.IsBusy) { settingsStatus.text = "작업이 진행 중이라 지금은 바꿀 수 없어요."; settingsStatus.color = DesignKit.Danger; return; }
+            jobManager.SetBaseUrl(urlInput.text);
+            urlInput.text = jobManager.BaseUrl;
+            settingsStatus.text = "저장했어요 · " + jobManager.BaseUrl;
+            settingsStatus.color = DesignKit.Accent;
         }
 
         void BuildError(Transform root)
@@ -424,6 +554,13 @@ namespace Beside.UI.Designed
             previewScreen.gameObject.SetActive(s == Screen.Preview);
             arOverlay.gameObject.SetActive(s == Screen.AR);
             error.gameObject.SetActive(s == Screen.Error);
+            settings.gameObject.SetActive(s == Screen.Settings);
+
+            if (scanOnlyInAR && scanGate != null)
+            {
+                if (s == Screen.AR) scanGate.BeginScan(freshStart: !HasPlacedModel());   // start finding the floor now
+                else scanGate.StopScan();
+            }
 
             if (s == Screen.Preview && preview != null && readyTemplate != null) preview.Show(readyTemplate);
             else if (preview != null) preview.Hide();
@@ -484,6 +621,13 @@ namespace Beside.UI.Designed
             FillStats(template, path);
             SetFur(furOn);
             Show(Screen.Preview);
+        }
+
+        /// <summary>Models loaded outside a job (RuntimeModelLoader "Test Glb Url") go straight to the preview.</summary>
+        void OnLoaderReady(GameObject template)
+        {
+            if (jobManager.IsBusy) return;          // part of a job: JobManager.ModelReady handles it
+            OnModelReady(null, null, template);
         }
 
         void OnModelPlaced(string jobId, GameObject instance)
@@ -629,7 +773,7 @@ namespace Beside.UI.Designed
             float height = box != null ? box.size.y * box.transform.lossyScale.y : 0f;
             statSize.text = height > 0 ? $"높이 {Mathf.RoundToInt(height * 100)}cm" : "–";
             statTris.text = tris.ToString("N0");
-            try { statFile.text = $"{new FileInfo(path).Length / 1024f / 1024f:0.0} MB"; } catch { statFile.text = "–"; }
+            try { statFile.text = string.IsNullOrEmpty(path) ? "–" : $"{new FileInfo(path).Length / 1024f / 1024f:0.0} MB"; } catch { statFile.text = "–"; }
             arModelName.text = statSize.text == "–" ? "우리 아이" : "우리 아이 · " + statSize.text;
         }
 

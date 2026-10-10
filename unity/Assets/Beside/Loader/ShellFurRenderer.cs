@@ -4,10 +4,10 @@ using UnityEngine.Rendering;
 /// <summary>
 /// Draws the mesh on this GameObject several extra times with the ShellFur material,
 /// each time a little further out along the normals, to create shell fur.
-/// Put it on the object that has the MeshFilter (for the dog model: "default").
+/// Put it on the object that has the MeshFilter, or the SkinnedMeshRenderer for rigged models.
+/// Skinned: the animated pose is baked once per frame (after animation) and every shell reuses that one mesh.
 /// </summary>
 [ExecuteAlways]
-[RequireComponent(typeof(MeshFilter))]
 public class ShellFurRenderer : MonoBehaviour
 {
     [Tooltip("Material using the Custom/ShellFur shader")]
@@ -42,13 +42,39 @@ public class ShellFurRenderer : MonoBehaviour
     Vector3 offset;      // current fur bend (world space, relative to fur length)
     Vector3 offsetVel;
 
+    [Header("Rigged models")]
+    [Tooltip("Turn on only if the fur appears at the wrong size on a scaled skinned model.")]
+    public bool bakeUseScale = false;
+
     MeshFilter meshFilter;
+    SkinnedMeshRenderer skinned;
+    Mesh bakedMesh;
+    int bakedFrame = -1;
     Renderer baseRenderer;
     MaterialPropertyBlock[] blocks;
+
+    /// <summary>The mesh to draw this frame: static mesh, or the skinned pose baked once per frame.</summary>
+    Mesh CurrentMesh()
+    {
+        if (skinned == null) return meshFilter != null ? meshFilter.sharedMesh : null;
+        if (bakedFrame != Time.frameCount)
+        {
+            if (bakedMesh == null) bakedMesh = new Mesh { name = "ShellFurBaked" };
+            skinned.BakeMesh(bakedMesh, bakeUseScale);
+            bakedFrame = Time.frameCount;
+        }
+        return bakedMesh;
+    }
+
+    void OnDestroy()
+    {
+        if (bakedMesh != null) { if (Application.isPlaying) Destroy(bakedMesh); else DestroyImmediate(bakedMesh); }
+    }
 
     void OnEnable()
     {
         meshFilter = GetComponent<MeshFilter>();
+        skinned = GetComponent<SkinnedMeshRenderer>();
         baseRenderer = GetComponent<Renderer>();
         BuildBlocks();
         RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
@@ -108,8 +134,8 @@ public class ShellFurRenderer : MonoBehaviour
 
     void OnBeginCameraRendering(ScriptableRenderContext context, Camera cam)
     {
-        if (furMaterial == null || meshFilter == null) return;
-        Mesh mesh = meshFilter.sharedMesh;
+        if (furMaterial == null) return;
+        Mesh mesh = CurrentMesh();
         if (mesh == null) return;
         if (blocks == null || blocks.Length != shellCount) BuildBlocks();
 

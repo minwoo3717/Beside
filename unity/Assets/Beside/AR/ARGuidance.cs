@@ -76,7 +76,8 @@ namespace Beside.AR
             {
                 PlaneDetected = planeManager != null && planeManager.trackables.count > 0;
                 if (PlaneDetected) planeTimer = 0f;
-                else if (ARSession.state == ARSessionState.SessionTracking) planeTimer += 1f;
+                else if (ARSession.state == ARSessionState.SessionTracking && planeManager != null && planeManager.enabled) planeTimer += 1f;
+                else if (planeManager != null && !planeManager.enabled) planeTimer = 0f;   // scanning paused (not on the AR screen)
                 if (!PlaneDetected && planeTimer >= noPlaneHintAfterSeconds) issue = Issue.NoPlane;
             }
 

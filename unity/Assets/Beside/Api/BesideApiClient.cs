@@ -175,6 +175,7 @@ namespace Beside.Api
         {
             req.timeout = TimeoutSeconds;
             req.SetRequestHeader("X-Request-Id", requestId);
+            req.SetRequestHeader("ngrok-skip-browser-warning", "1");   // ngrok free tier: skip the HTML warning page (ignored elsewhere)
         }
 
         /// <summary>True on HTTP 2xx. Otherwise fills error from the v1 error envelope when present.</summary>
