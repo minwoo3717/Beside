@@ -126,11 +126,19 @@ namespace Beside.UI.Designed
 
         void Update()
         {
+            // real generation takes minutes and has no progress %, so the "생성" step shows elapsed time
+            if (progress != null && progress.gameObject.activeSelf && jobManager.CurrentState == JobManager.State.Waiting && steps != null)
+            {
+                int sec = Mathf.FloorToInt(jobManager.ElapsedSeconds);
+                steps[1].right.text = sec < 60 ? $"{sec}초" : $"{sec / 60}분 {sec % 60:00}초";
+            }
+
             if (arOverlay == null || !arOverlay.gameObject.activeSelf) return;
 
             // The buttons follow what is actually on the floor, however it got there (tap, center button, reset)
             bool hasModel = HasPlacedModel();
             if (hasModel != placed) SetPlaced(hasModel);
+            PlaceBottomToggle();
             SyncChipWithPet();
 
             if (!placed && guidance != null)
@@ -181,10 +189,27 @@ namespace Beside.UI.Designed
             arAfterPlace.gameObject.SetActive(!bottomHidden && placed);
             bool actions = placed && petAnim != null && petAnim.HasAnyAnimation;
             arAnimRow.gameObject.SetActive(actions);
-            bottomToggleLabel.text = bottomHidden ? "버튼 보기" : "버튼 숨기기";
-            // sits just above the panel when shown, drops to the bottom edge when hidden
-            bottomToggle.anchoredPosition = new Vector2(-64, bottomHidden ? 90 : actions ? 580 : 440);
+            PlaceBottomToggle(forceLayout: true);
             HighlightChip(petAnim != null ? petAnim.Current : null);
+        }
+
+        void AddHideRow(RectTransform panel)
+        {
+            var row = DesignKit.Row("HideRow", panel, 84, 0);
+            var h = row.GetComponent<HorizontalLayoutGroup>();
+            h.childForceExpandWidth = false; h.childAlignment = TextAnchor.MiddleRight;
+            var fill = UiKit.Rect("Fill", row, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            fill.gameObject.AddComponent<LayoutElement>().flexibleWidth = 1;
+            var btn = DesignKit.RoundedButton("Hide", row, "버튼 숨기기", DesignKit.DarkScrim, DesignKit.OnDark, ToggleBottomPanels, 84, 30, FontStyle.Normal);
+            var le = btn.GetComponent<LayoutElement>(); le.preferredWidth = 260; le.minWidth = 260; le.flexibleWidth = 0;
+            row.SetSiblingIndex(0);   // top of the column
+        }
+
+        /// <summary>Only "버튼 보기" floats; "버튼 숨기기" lives inside the panels.</summary>
+        void PlaceBottomToggle(bool forceLayout = false)
+        {
+            if (bottomToggle != null && bottomToggle.gameObject.activeSelf != bottomHidden)
+                bottomToggle.gameObject.SetActive(bottomHidden);
         }
 
         void DismissInstruction()
@@ -399,14 +424,15 @@ namespace Beside.UI.Designed
             Destroy(close.GetComponent<LayoutElement>());
 
             // bottom: before placement
-            arBeforePlace = DesignKit.Column("Before", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 420), 32, 0);
+            arBeforePlace = DesignKit.Column("Before", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 800), 32, 0);
+            arBeforePlace.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.LowerCenter;
             var modelCard = DesignKit.Card("ModelCard", arBeforePlace, DesignKit.DarkScrim, 150, 50f, 4, 40);
             arModelName = DesignKit.Label("Name", modelCard, "우리 아이", 38, DesignKit.OnDark, 50, TextAnchor.MiddleLeft, FontStyle.Bold);
             DesignKit.Label("Sub", modelCard, "배치 후 손가락으로 옮기고 돌릴 수 있어요", 30, DesignKit.OnDarkSoft, 40);
             DesignKit.PrimaryButton("Center", arBeforePlace, "화면 가운데에 바로 놓기", PlaceAtCenter, DesignKit.Mint, DesignKit.DarkGround);
 
             // bottom: after placement
-            arAfterPlace = DesignKit.Column("After", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 560), 32, 0);
+            arAfterPlace = DesignKit.Column("After", arOverlay, new Vector2(0, 0), new Vector2(1, 0), new Vector2(64, 90), new Vector2(-64, 800), 32, 0);
             arAfterPlace.GetComponent<VerticalLayoutGroup>().childAlignment = TextAnchor.LowerCenter;   // stack from the bottom
 
             // pet actions (only when the placed model has clips)
@@ -427,11 +453,16 @@ namespace Beside.UI.Designed
             toastRt.anchorMin = toastRt.anchorMax = new Vector2(0.5f, 0); toastRt.anchoredPosition = new Vector2(0, 560);
             toastRt.gameObject.SetActive(false);
 
-            // show / hide the bottom buttons
-            var tb = DesignKit.RoundedButton("BottomToggle", arOverlay, "버튼 숨기기", DesignKit.DarkScrim, DesignKit.OnDark, ToggleBottomPanels, 84, 30, FontStyle.Normal);
+            // "버튼 숨기기" = first (top) row of each bottom panel, so it always sits above the buttons
+            AddHideRow(arBeforePlace);
+            AddHideRow(arAfterPlace);
+
+            // "버튼 보기" = shown alone at the bottom edge while the panels are hidden
+            var tb = DesignKit.RoundedButton("BottomToggle", arOverlay, "버튼 보기", DesignKit.DarkScrim, DesignKit.OnDark, ToggleBottomPanels, 84, 30, FontStyle.Normal);
             bottomToggle = tb.GetComponent<RectTransform>();
             bottomToggle.anchorMin = bottomToggle.anchorMax = new Vector2(1, 0); bottomToggle.pivot = new Vector2(1, 0);
             bottomToggle.sizeDelta = new Vector2(260, 84);
+            bottomToggle.anchoredPosition = new Vector2(-64, 90);
             bottomToggleLabel = tb.GetComponentInChildren<Text>();
             Destroy(tb.GetComponent<LayoutElement>());
 
@@ -471,6 +502,13 @@ namespace Beside.UI.Designed
             urlInput.targetGraphic = bg; urlInput.textComponent = text; urlInput.placeholder = placeholder;
             urlInput.lineType = InputField.LineType.SingleLine;
             urlInput.keyboardType = TouchScreenKeyboardType.URL;
+            urlInput.inputType = InputField.InputType.Standard;   // no autocorrect / suggestions rewriting the URL
+            urlInput.shouldHideMobileInput = false;               // type in the keyboard's own text box (stable caret on Android)
+
+            // typing a long URL on a phone keyboard is error-prone: paste it instead (copy on PC → messenger → phone)
+            var editRow = DesignKit.Row("EditRow", col, 120, 24);
+            DesignKit.SecondaryButton("Paste", editRow, "붙여넣기", PasteServerUrl);
+            DesignKit.SecondaryButton("Clear", editRow, "지우기", () => { urlInput.text = ""; settingsStatus.text = ""; });
 
             settingsStatus = DesignKit.Label("Status", col, "", 34, DesignKit.InkSoft, 90);
 
@@ -480,6 +518,18 @@ namespace Beside.UI.Designed
 
             DesignKit.GhostButton("Default", col, "기본 주소로 되돌리기", () => { urlInput.text = jobManager.DefaultBaseUrl; settingsStatus.text = "기본 주소를 넣었어요. 저장을 누르면 적용돼요."; settingsStatus.color = DesignKit.InkSoft; });
             DesignKit.Spacer(col);
+        }
+
+        void PasteServerUrl()
+        {
+            string clip = (GUIUtility.systemCopyBuffer ?? "").Trim();
+            if (string.IsNullOrEmpty(clip)) { settingsStatus.text = "클립보드가 비어 있어요. 주소를 먼저 복사해 주세요."; settingsStatus.color = DesignKit.Danger; return; }
+            // keep only the server part if a full healthz URL was copied
+            int api = clip.IndexOf("/api/", System.StringComparison.OrdinalIgnoreCase);
+            if (api > 0) clip = clip.Substring(0, api);
+            urlInput.text = clip.Split(' ', '\n', '\r', '\t')[0];
+            settingsStatus.text = "붙여넣었어요. \"연결 확인\"을 눌러 보세요.";
+            settingsStatus.color = DesignKit.InkSoft;
         }
 
         void OpenSettings()

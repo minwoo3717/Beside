@@ -1,0 +1,4 @@
+numpy
+pillow
+trimesh>=4.0
+scipy   # trimesh uses it for fast vertex normals (without it: "unable to use sparse matrix, falling back!")

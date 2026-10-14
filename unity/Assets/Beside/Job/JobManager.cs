@@ -52,6 +52,16 @@ namespace Beside.Job
         BesideApiClient api;
         Coroutine running;
         string requestId;
+        bool lastFailureWasJob;
+
+        /// <summary>Server timings of the job being waited for (null before the first status). Real jobs take minutes
+        /// and report no progress, so the UI shows elapsed time from these.</summary>
+        public JobResponse LastJobStatus { get; private set; }
+        /// <summary>Seconds since the job was created, from the server's timings (falls back to the local wait).</summary>
+        public float ElapsedSeconds => LastJobStatus?.timings != null
+            ? (LastJobStatus.timings.queuedMs + (LastJobStatus.timings.processingMs ?? 0)) / 1000f
+            : waitClock != null ? (float)waitClock.Elapsed.TotalSeconds : 0f;
+        Stopwatch waitClock;
         ObjectSpawner spawner;
         MetricsRecorder.Row pendingRow;      // waits for the first placement to record e2eMs
         Stopwatch pendingE2e;
@@ -119,7 +129,7 @@ namespace Beside.Job
         public void Retry()
         {
             if (IsBusy || string.IsNullOrEmpty(CurrentJobId)) return;
-            if (ErrorMessages.IsJobFailureCode(LastErrorCode)) running = StartCoroutine(RetryOnServer(CurrentJobId));
+            if (lastFailureWasJob || ErrorMessages.IsJobFailureCode(LastErrorCode)) running = StartCoroutine(RetryOnServer(CurrentJobId));
             else ResumeJob(CurrentJobId);
         }
 
@@ -207,6 +217,7 @@ namespace Beside.Job
             // 2. poll until COMPLETED / FAILED
             SetState(State.Waiting, "순서를 기다리고 있어요");
             var wait = Stopwatch.StartNew();
+            waitClock = wait; LastJobStatus = null;
             JobResponse job = null;
             while (true)
             {
@@ -220,6 +231,7 @@ namespace Beside.Job
                     yield break;
                 }
                 job = got;
+                LastJobStatus = got;
                 switch (job.Status)
                 {
                     case JobStatus.Pending:    SetState(State.Waiting, "순서를 기다리고 있어요"); break;
@@ -242,7 +254,7 @@ namespace Beside.Job
             {
                 string code = job.error?.code ?? "INFERENCE_FAILED";
                 MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", row.waitMs, code, job.error?.message);
-                Fail(code);
+                Fail(code, fromJob: true);   // e.g. INTERNAL_ERROR after a server restart -> POST /retry
                 yield break;
             }
             MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", row.waitMs);
@@ -305,11 +317,12 @@ namespace Beside.Job
 
         // ---------- helpers ----------
 
-        void Fail(string code)
+        void Fail(string code, bool fromJob = false)
         {
             running = null;
             LastErrorCode = code;
-            LastErrorRetryable = ErrorMessages.IsRetryable(code);
+            lastFailureWasJob = fromJob;
+            LastErrorRetryable = fromJob || ErrorMessages.IsRetryable(code);
             SetState(State.Failed, ErrorMessages.ForCode(code));
             JobFailed?.Invoke(code, ErrorMessages.ForCode(code), LastErrorRetryable);
         }
