@@ -33,3 +33,9 @@ generation/**/*.pth
 
 # e2e 스크립트 출력
 scripts/out/
+
+#추론 결과·로그, SMAL 파생 리깅 파일 (커밋 금지)
+generation/inference_service/work/
+logs/
+backend/storage/results/*.glb
+!backend/storage/results/sample-dog.glb

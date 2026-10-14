@@ -9,6 +9,8 @@
 .EXAMPLE
   .\scripts\run_real.ps1                                   # 모델이 연결된 추론 서비스 + Spring real
 .EXAMPLE
+  .\scripts\run_real.ps1 -AnimalLiftDir C:\beside\AnimalLift -InferencePython C:\miniconda3\envs\animallift\python.exe   # 실제 모델
+.EXAMPLE
   .\scripts\run_real.ps1 -SampleGlb C:\beside\sample.glb   # 패스스루: 모델 없이 연동만 확인 (측정 아님)
 .EXAMPLE
   .\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
@@ -18,6 +20,7 @@
 param(
     [string]$InferencePython = "",
     [string]$SampleGlb = "",
+    [string]$AnimalLiftDir = "",
     [string]$Jar = "",
     [int]$Port = 8080,
     [int]$InferencePort = 8001,
@@ -38,6 +41,7 @@ if (-not (Test-Path -LiteralPath $InferencePython)) {
     throw "추론 서비스용 python 이 없다: $InferencePython`n  cd generation\inference_service; python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt"
 }
 if ($SampleGlb -ne "" -and -not (Test-Path -LiteralPath $SampleGlb)) { throw "SampleGlb 가 없다: $SampleGlb" }
+if ($AnimalLiftDir -ne "" -and -not (Test-Path -LiteralPath (Join-Path $AnimalLiftDir "animallift\inference.py"))) { throw "AnimalLift 체크아웃이 아니다: $AnimalLiftDir" }
 if ($Jar -ne "" -and -not (Test-Path -LiteralPath $Jar)) { throw "Jar 가 없다: $Jar" }
 
 function Start-Window {
@@ -59,10 +63,12 @@ function Wait-Healthz {
 # 1. 추론 서비스 — 같은 PC 의 Spring 만 부르므로 127.0.0.1
 $inferenceCommand = "Set-Location -LiteralPath '$inferenceDir'; "
 if ($SampleGlb -ne "") { $inferenceCommand += "`$env:BESIDE_SAMPLE_GLB = '$SampleGlb'; " }
+if ($AnimalLiftDir -ne "") { $inferenceCommand += "`$env:BESIDE_ANIMALLIFT_DIR = '$AnimalLiftDir'; " }
 $inferenceCommand += "& '$InferencePython' -m uvicorn app:app --host 127.0.0.1 --port $InferencePort"
 Start-Window "Beside inference :$InferencePort" $inferenceCommand
 $inferHealth = Wait-Healthz "http://127.0.0.1:$InferencePort/healthz" "추론 서비스"
 Write-Host ("[1/2] inference  status={0} device={1} modelLoaded={2} passthrough={3}" -f $inferHealth.status, $inferHealth.device, $inferHealth.modelLoaded, $inferHealth.passthrough)
+if ($AnimalLiftDir -ne "" -and -not $inferHealth.modelLoaded) { Write-Warning "AnimalLift 를 백그라운드에서 불러오는 중이다(첫 실행은 VAE·DINOv2 다운로드 포함 수 분). 그동안 /infer 는 503 → 작업은 INFERENCE_UNAVAILABLE. 추론 창 로그에 'AnimalLift loaded' 가 뜬 뒤 사진을 올린다." }
 if ($inferHealth.passthrough) { Write-Warning "패스스루 모드: 어떤 사진을 올려도 샘플 GLB 가 온다. 연동 확인용이며 측정이 아니다(job_runs.passthrough=true)." }
 
 # 2. Spring real — 작업 폴더는 backend/ (storage/ 상대 경로 기준)
