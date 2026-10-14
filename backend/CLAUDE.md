@@ -9,7 +9,8 @@
 - 계약을 바꿀 때 순서: `docs/api/openapi.yaml` 수정 → 코드 수정 → `JobV1ContractTest` 통과 → `docs/api/CHANGELOG.md` 기록. 계약 테스트가 실패하면 코드가 아니라 문서가 맞는지 먼저 확인한다.
 - 오류 응답: v1은 `{ "error": { "code", "message", "jobId?" } }`, 코드는 `exception/ErrorCode`와 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md)가 1:1. v0는 기존 평면 `{ "error": "문자열" }` 유지. 분기는 `GlobalExceptionHandler`가 요청 경로(`/api/v1/` 접두사)로 한다.
 - 서버 내부 경로(`resultPath`, 업로드 저장 경로)는 v1 응답에 넣지 않는다. `error.message` 도 마찬가지다: real 워커는 경로·내부 주소·추론 서비스의 원문 메시지를 서버 로그에만 남긴다(`InferenceFailure` 의 message 와 logDetail).
-- 실행을 끝낼 때(COMPLETED/FAILED)는 항상 `JobFinisher.complete/fail` 을 쓴다. 상태와 메타데이터를 한 번에 저장하고 `events.jsonl` 한 줄을 남기는 곳이 여기뿐이다. `setStatus(COMPLETED|FAILED)` 를 다른 곳에서 직접 부르지 않는다.
+- 실행을 끝낼 때(COMPLETED/FAILED)는 항상 `JobFinisher.complete/fail` 을 쓴다. 상태와 메타데이터를 한 번에 저장하고, 그 뒤 `job_runs` 행과 `events.jsonl` 줄을 같은 `JobRun` 객체로 남기는 곳이 여기뿐이다. `setStatus(COMPLETED|FAILED)` 를 다른 곳에서 직접 부르지 않는다. 측정 기록(행 insert·파일 append)이 실패해도 로그만 남기고 작업 결과는 바꾸지 않는다. real 워커는 `/infer` 가 돌려준 수치를 `RunDetails` 로 `complete` 에 넘기고, mock 은 `RunDetails.NONE` 을 넘긴다.
+- 측정 필드를 추가하는 순서: `RunDetails` → `JobRun` 컬럼(박싱 타입, 필요하면 `@Column(name=...)`) → `EventLog` 의 줄 **끝**에 추가(앞 필드 순서 유지) → [docs/METRICS.md](../docs/METRICS.md) §1·§1.1 과 [docs/CONTRACT.md](../docs/CONTRACT.md) §5 → `JobEventsTest` 의 `containsExactly`. 이름은 METRICS 의 이름을 그대로 쓴다(이름 변경은 계약 회의).
 - 워커는 `service/JobWorker` 인터페이스로만 호출한다. `MockJobWorker`는 profile `mock`, `RealJobWorker`는 profile `real`. 기본 profile은 `mock`(`spring.profiles.default`).
 - real 워커의 `/infer` 전송은 `InferenceClient` 한 곳이다(내부 계약 v0, 공유 파일시스템 가정). REVIEW_CHECKLIST #6 이 바이너리 전송으로 정해지면 이 클래스만 바꾼다. 응답 → Job 실패 코드 매핑은 이 클래스 Javadoc 과 [generation/inference_service/README.md](../generation/inference_service/README.md) 의 오류 표가 같아야 한다(`InferenceClientTest`). `/infer` 는 `inference.max-concurrency`(기본 1)건만 동시에 부르고 나머지 작업은 PENDING 으로 기다린다.
 - Job 상태 전이는 `PENDING → PROCESSING → COMPLETED | FAILED`, `FAILED → (retry) → PENDING`뿐이다. 결과 메타데이터와 `status` 는 한 번의 save 로 함께 바꾼다(저장소 호출마다 짧은 트랜잭션, 읽는 쪽은 COMPLETED 와 asset 을 함께 본다).
@@ -29,14 +30,14 @@ cd backend
 - Swagger UI: http://localhost:8080/swagger-ui/index.html · 생성 스펙: http://localhost:8080/v3/api-docs
 - Mock 실패 재현: 업로드 파일명에 `fail`이 들어가면 FAILED(`error.code=INFERENCE_FAILED`). 토큰은 `mock.worker.fail-when-filename-contains`, 빈 값이면 비활성.
 - Mock 지연: `mock.worker.pending-ms`(기본 2000), `mock.worker.processing-ms`(기본 3000).
-- DB 보기: http://localhost:8080/h2-console (mock, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제.
+- DB 보기: http://localhost:8080/h2-console (mock·real, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `job_runs` 에서 `CALL CSVWRITE(...)` 로 뽑는다([README.md](README.md) '측정 내보내기').
 - GPU 없이 real 시험: 추론 서비스를 패스스루(`BESIDE_SAMPLE_GLB`)로 띄우고 real 로 bootRun → `e2e_mock.ps1`. 절차는 [README.md](README.md) '프로파일 real'.
 
 ## 테스트
 
 ```powershell
 cd backend
-.\gradlew.bat test                                               # Java 전체: v0 통합, v1 API, 계약, 영속화(재시작), 예외 핸들러, real 워커(가짜 /infer)
+.\gradlew.bat test                                               # Java 전체: v0 통합, v1 API, 계약, 영속화(재시작·job_runs), events.jsonl, 예외 핸들러, real 워커(가짜 /infer)
 .\gradlew.bat test --tests "com.example.mockbackend.JobV1ContractTest"
 node --test src/test/js/mock-mvp.test.cjs                        # 브라우저 Mock UI(v1) JS 흐름
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때

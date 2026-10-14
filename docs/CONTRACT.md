@@ -127,8 +127,9 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 주체 | 파일 | 필드 | 상태 |
 |---|---|---|---|
-| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` | [구현됨] (측정값은 아직 없음) |
-| 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` | [계획] |
+| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` + (2026-10-06 추가) `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion` | [구현됨] (측정값은 아직 없음) |
+| 서버 | H2 테이블 `job_runs` (`beside-{mock,real}.mv.db`, 실행마다 한 행, PK `jobId:attempt`) | 위 줄과 같은 필드를 snake_case 로 + `status, error_code`. 측정표는 SQL 로 뽑는다(METRICS §1.1) | [구현됨] 2026-10-06 |
+| 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` (+ 선택 `modelVersion`) — Spring 저장은 [구현됨], 서비스가 채우는 것은 [계획] | [계획] |
 | 앱 | `persistentDataPath/metrics/metrics.csv` 헤더 순서 고정 | `jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device` | [계획] |
 | 3D 품질 (사람, 1~5점, 평가자 2명 이상) | 실험 기록 표 | `faceShape`(얼굴 형태), `ears`(귀 모양/위치), `bodyProportion`(체형 비율), `furColor`(털 색상), `pattern`(무늬 재현), `textureArtifacts`(텍스처 번짐/seam) | [계획] |
 
@@ -146,8 +147,10 @@ Unity 는 호출하지 않는다. 같은 호스트 또는 공유 볼륨 가정(�
 요청  { "jobId": "uuid", "imagePaths": ["/abs/path/dog1.jpg"], "options": { "hair": false } }
 응답  { "glbPath": "/abs/results/{jobId}/base.glb", "hairGlbPath": null,
         "metrics": { "inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles", "convertMs" },
-        "passthrough": false }
+        "passthrough": false, "modelVersion": "animallift-baseline@3f2a1c9" }
 ```
+
+`modelVersion` 은 선택 필드(2026-10-06 추가, 없으면 null)로 GLB 를 만든 모델·가중치 버전이다. Spring 은 `metrics`·`passthrough`·`modelVersion` 을 실행마다 `job_runs` 행과 `events.jsonl` 줄에 저장한다(§5).
 
 | HTTP | `detail.code` | Spring 이 Job 에 기록 |
 |---|---|---|

@@ -1,9 +1,6 @@
 package com.example.mockbackend.service;
 
-import com.example.mockbackend.domain.Job;
-import com.example.mockbackend.domain.JobStatus;
-import com.example.mockbackend.domain.JobTimings;
-import com.example.mockbackend.domain.StoredUpload;
+import com.example.mockbackend.domain.JobRun;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,13 +12,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Server measurement log, docs/METRICS.md §1: one JSON line per run that ends COMPLETED or FAILED.
- * Field names are shared with the other tracks; attempt and finishedAt are server-only additions.
+ * Server measurement log, docs/METRICS.md §1: one JSON line per run that ends COMPLETED or FAILED, written from the
+ * same JobRun as the job_runs row so file and table never disagree. Field names are shared with the other tracks;
+ * attempt and finishedAt are server-only additions, and the inference numbers (§2) are null unless /infer answered.
  * Writing never throws: a full disk or a bad path must not fail the job itself.
  */
 @Component
@@ -35,24 +32,32 @@ public class EventLog {
         this.path = path == null || path.isBlank() ? null : Path.of(path);
     }
 
-    public synchronized void recordFinished(Job job, String workerType) {
+    public synchronized void recordFinished(JobRun run) {
         if (path == null) {
             return;
         }
         try {
-            Instant finishedAt = job.getFinishedAt() != null ? job.getFinishedAt() : Instant.now();
-            JobTimings timings = JobTimings.of(job, finishedAt);
             Map<String, Object> event = new LinkedHashMap<>();
-            event.put("jobId", job.getId());
-            event.put("attempt", job.getAttempt());
-            event.put("finishedAt", finishedAt.toString());
-            event.put("uploadBytes", job.getUploads().stream().mapToLong(StoredUpload::bytes).sum());
-            event.put("uploadMs", job.getUploadMs());
-            event.put("queuedMs", timings.queuedMs());
-            event.put("processingMs", timings.processingMs());
-            event.put("totalMs", timings.totalMs());
-            event.put("workerType", workerType);
-            event.put("result", job.getStatus() == JobStatus.FAILED ? "FAILED:" + job.getErrorCode() : String.valueOf(job.getStatus()));
+            event.put("jobId", run.getJobId());
+            event.put("attempt", run.getAttempt());
+            event.put("finishedAt", run.getFinishedAt().toString());
+            event.put("uploadBytes", run.getUploadBytes());
+            event.put("uploadMs", run.getUploadMs());
+            event.put("queuedMs", run.getQueuedMs());
+            event.put("processingMs", run.getProcessingMs());
+            event.put("totalMs", run.getTotalMs());
+            event.put("workerType", run.getWorkerType());
+            event.put("result", run.result());
+            // METRICS §2 numbers and the run facts come after the original ten fields (additive, 2026-10-06).
+            event.put("inferMs", run.getInferMs());
+            event.put("gpuPeakMB", run.getGpuPeakMB());
+            event.put("modelParams", run.getModelParams());
+            event.put("outputVertices", run.getOutputVertices());
+            event.put("outputTriangles", run.getOutputTriangles());
+            event.put("convertMs", run.getConvertMs());
+            event.put("glbBytes", run.getGlbBytes());
+            event.put("passthrough", run.getPassthrough());
+            event.put("modelVersion", run.getModelVersion());
             Path parent = path.toAbsolutePath().getParent();
             if (parent != null) {
                 Files.createDirectories(parent);
@@ -60,7 +65,7 @@ public class EventLog {
             Files.writeString(path, JSON.writeValueAsString(event) + "\n", StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException | RuntimeException e) {
-            log.warn("Could not append the event of jobId={} to {}: {}", job.getId(), path, e.toString());
+            log.warn("Could not append the event of jobId={} to {}: {}", run.getJobId(), path, e.toString());
         }
     }
 }

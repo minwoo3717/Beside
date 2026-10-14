@@ -197,6 +197,15 @@ AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입
 - 서버는 아직 털 지도를 내려주지 않는다. 리깅 모델 털은 `ModelLoader` 의 Test Glb Url + Test Hair Length/Flow Url(로컬 파일)로만 확인할 수 있다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다).
 - 다음 단계: ① 리깅 모델 털 확인 ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
 
+## 폰 ↔ GPU PC real 서버 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
+
+real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GPU PC)** 에서 돈다(결정 2026-10-05). 그 PC 에서 `.\scripts\run_real.ps1` 로 두 서버를 띄운다([backend/README.md](../backend/README.md) 'GPU PC 에 real 배치'). 앱 쪽에서 Mock 때와 달라지는 것:
+
+1. `JobManager.baseUrl` = `http://<GPU PC IP>:8080`. 폰 브라우저에서 `/api/v1/healthz` 가 `"profile":"real","workerType":"real"` 을 보이면 연결된 것이다. 방화벽 8080 허용은 Mock 과 같다.
+2. 수 분이 걸린다. `maxWaitSeconds` 를 600 으로 올린다(REVIEW_CHECKLIST #7 제안값). 앱의 대기는 서버 큐 대기(PENDING)도 포함한다: 서버는 `/infer` 를 한 번에 1건만 부르므로 두 사람이 동시에 올리면 뒤 작업은 앞 작업이 끝날 때까지 PENDING 이다.
+3. `progress` 는 PROCESSING 동안 `null` 이다(추론 서비스가 진행률을 주지 않는다). 퍼센트 대신 `timings.queuedMs`/`processingMs` 로 경과 시간을 보여 준다.
+4. 패스스루(`-SampleGlb`)로 띄운 서버는 어떤 사진을 올려도 같은 모델을 돌려준다 — 연동 확인용이지 결과가 아니다. 실제 모델이 돌 때만 `metrics.csv` 를 측정값으로 기록한다.
+
 ## API 사용 규칙 (v1)
 
 - 업로드: `UnityWebRequest.Post(url, List<IMultipartFormSection>)` + `MultipartFormFileSection("photos", bytes, fileName, mime)`. 서버는 **파트의 Content-Type** 으로 jpeg/png/webp 를 검사한다. 1~10장, 장당 ≤5MB, 전체 ≤20MB — `PhotoPicker` 가 갤러리 사진을 긴 변 1600px JPEG 로 재인코딩해 제한을 맞춘다.

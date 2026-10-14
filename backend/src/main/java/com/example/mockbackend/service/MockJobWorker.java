@@ -2,6 +2,7 @@ package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
@@ -68,7 +69,7 @@ public class MockJobWorker implements JobWorker {
                 log.info("jobId={} stage=FAILED (mock trigger)", jobId);
                 return;
             }
-            jobFinisher.complete(job, sampleResultPath, start, type());
+            jobFinisher.complete(job, sampleResultPath, start, type(), RunDetails.NONE);
             log.info("jobId={} stage=COMPLETED durationMs={}", jobId, job.getDurationMs());
         } catch (InterruptedException e) {
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
