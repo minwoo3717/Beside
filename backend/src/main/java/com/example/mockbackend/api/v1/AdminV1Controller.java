@@ -1,6 +1,7 @@
 package com.example.mockbackend.api.v1;
 
 import com.example.mockbackend.api.v1.dto.AdminJobList;
+import com.example.mockbackend.api.v1.dto.AdminJobSummary;
 import com.example.mockbackend.api.v1.dto.AdminOverview;
 import com.example.mockbackend.api.v1.dto.AdminRun;
 import com.example.mockbackend.api.v1.dto.AdminStats;
@@ -23,6 +24,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -118,6 +120,19 @@ public class AdminV1Controller {
     public AdminJobList adminJobs(
             @Parameter(description = "1~100, 기본 20") @RequestParam(value = "limit", required = false) Integer limit) {
         return adminService.recentJobs(limit);
+    }
+
+    @Operation(operationId = "adminJob", summary = "작업 하나의 요약 (작업 상세 페이지의 시도 횟수·modelVersion)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "작업 요약",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = AdminJobSummary.class))),
+            @ApiResponse(responseCode = "404", description = "없는 작업 (JOB_NOT_FOUND)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
+    @GetMapping(value = "/jobs/{jobId}", produces = JSON)
+    public AdminJobSummary adminJob(@PathVariable("jobId") String jobId) {
+        return adminService.jobSummary(jobId);
     }
 
     private static boolean isCsv(String format) {

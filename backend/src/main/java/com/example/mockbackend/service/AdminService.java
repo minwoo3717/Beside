@@ -343,6 +343,14 @@ public class AdminService {
         return new AdminJobList(page.stream().map(job -> summary(job, lastRuns.get(job.getId()), now)).toList());
     }
 
+    /** One job as a row of {@link #recentJobs} (the job detail page /job/). @throws ApiException 404 JOB_NOT_FOUND */
+    public AdminJobSummary jobSummary(String jobId) {
+        Job job = jobRepository.findById(jobId).orElseThrow(() -> ApiException.jobNotFound(jobId));
+        JobRun lastRun = jobRunRepository.findByJobIdOrderByAttemptAsc(jobId).stream()
+                .reduce((earlier, later) -> later).orElse(null);
+        return summary(job, lastRun, Instant.now());
+    }
+
     private static AdminJobSummary summary(Job job, JobRun lastRun, Instant now) {
         JobTimings timings = JobTimings.of(job, now);
         String errorCode = job.getStatus() != JobStatus.FAILED ? null
