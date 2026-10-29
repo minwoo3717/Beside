@@ -24,7 +24,8 @@
 	# 2) Basic 인증(팀 계정 하나).
 	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지.
 	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
-	@web path / /index.html /app.js /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet
+	#    작업의 원본 사진·썸네일·품질 평가(웹 작업 상세·보관함만 쓴다, 사진은 개인정보).
+	@web path / /index.html /app.js /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet /api/v1/jobs/*/photos/* /api/v1/jobs/*/thumbnail /api/v1/jobs/*/ratings /api/v1/jobs/*/ratings/*
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
@@ -48,8 +49,18 @@
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
+	#    공유 링크 취소. 링크를 받은 사람이 끊지 못하게, 보는 쪽(GET·HEAD)만 공개다.
+	@shareRevoke {
+		method DELETE
+		path /api/v1/shares/*
+	}
+	basic_auth @shareRevoke {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
 	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry), /api/v1/healthz,
-	#    공유 링크(/s/*, /share.*, /api/v1/shares/*), styles.css 같은 정적 파일.
+	#    POST /api/v1/jobs/{id}/cancel·/shares(작업 UUID 를 아는 쪽만 부를 수 있다),
+	#    공유 링크 보기(/s/*, /share.*, GET /api/v1/shares/*), styles.css 같은 정적 파일.
 	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 붙인다(prod 프로파일의 forward-headers 가 읽는다).
 	reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
 

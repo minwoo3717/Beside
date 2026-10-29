@@ -27,8 +27,8 @@
 | 처리 | 경로 |
 |---|---|
 | **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, 경로에 `;` 가 든 모든 요청 |
-| **Basic 인증** | `/`, `/index.html`, `/app.js`(Mock 업로드 UI), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `GET`·`HEAD /api/v1/jobs`(목록), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*` |
-| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET /api/v1/jobs/{id}`·`/asset`, `POST /retry`), `/api/v1/healthz`, 공유 링크(`/s/*`, `/share.*`, `/api/v1/shares/*`), `styles.css` 같은 정적 파일 |
+| **Basic 인증** | `/`, `/index.html`, `/app.js`(Mock 업로드 UI), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `GET`·`HEAD /api/v1/jobs`(목록), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/jobs/*/photos/*`·`/thumbnail`·`/ratings*`(원본 사진·썸네일·품질 평가), `DELETE /api/v1/shares/*`(공유 취소), `/api/v1/admin*`, `/api/v1/pets*` |
+| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET /api/v1/jobs/{id}`·`/asset`, `POST /retry`·`/cancel`·`/shares`), `/api/v1/healthz`, 공유 링크 보기(`/s/*`, `/share.*`, `GET /api/v1/shares/*` — Scene Viewer 가 인증 없이 GLB 를 받는다), `styles.css` 같은 정적 파일 |
 | **413** | 요청 본문 25MB 초과(Caddy). 20MB·장당 5MB 초과는 Spring 이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)로 413 |
 
 - `;` 를 막는 이유: Tomcat 은 `/api/v1/jobs;x=1`, `/api;x/v1/jobs`, `/api/jobs/{id};x` 를 `;` 뒤를 뗀 경로로 처리한다(로컬 real 서버에서 셋 다 200 을 확인). 열어 두면 인증·404 규칙을 비켜 간다.
