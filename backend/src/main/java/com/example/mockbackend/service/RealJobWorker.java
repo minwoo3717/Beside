@@ -29,6 +29,10 @@ import java.util.concurrent.Semaphore;
  * <ol>
  *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU). The job stays PENDING meanwhile, so
  *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
+ *   <li>With inference.offline-wait-ms &gt; 0 (prod): while {@link InferenceHealthMonitor} does not read UP (the GPU PC
+ *       is off or its model is still loading) the job keeps waiting as PENDING, checked every inference.offline-poll-ms,
+ *       and fails INFERENCE_UNAVAILABLE only after that long. 0 (default) keeps the old behaviour: no wait, a missing
+ *       service fails the run at once.</li>
  *   <li>PROCESSING with progress null (the service reports none), then POST /infer (inference.transfer=path) or
  *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}.</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
@@ -50,16 +54,25 @@ public class RealJobWorker implements JobWorker {
     private final InferenceClient inferenceClient;
     private final Path resultDir;
     private final Semaphore inferenceSlots;
+    private final InferenceHealthMonitor healthMonitor;
+    private final long offlineWaitMs;
+    private final long offlinePollMs;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
     public RealJobWorker(JobRepository jobRepository, JobFinisher jobFinisher, InferenceClient inferenceClient,
+                         InferenceHealthMonitor healthMonitor,
                          @Value("${storage.result.dir:storage/results}") String resultDir,
-                         @Value("${inference.max-concurrency:1}") int maxConcurrency) {
+                         @Value("${inference.max-concurrency:1}") int maxConcurrency,
+                         @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
+                         @Value("${inference.offline-poll-ms:5000}") long offlinePollMs) {
         this.jobRepository = jobRepository;
         this.jobFinisher = jobFinisher;
         this.inferenceClient = inferenceClient;
+        this.healthMonitor = healthMonitor;
         this.resultDir = Path.of(resultDir);
         this.inferenceSlots = new Semaphore(Math.max(1, maxConcurrency), true);
+        this.offlineWaitMs = Math.max(0, offlineWaitMs);
+        this.offlinePollMs = Math.max(10, offlinePollMs);
     }
 
     @Override
@@ -96,6 +109,14 @@ public class RealJobWorker implements JobWorker {
             log.warn("jobId={} not found for real worker", jobId);
             return;
         }
+        if (!awaitInferenceService(jobId)) {
+            InferenceHealthMonitor.Status status = healthMonitor.current();
+            jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "The inference service was not ready within "
+                    + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type());
+            log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE after waiting {} ms for the inference service ({})",
+                    jobId, offlineWaitMs, status.detail());
+            return;
+        }
         Instant processingStarted = Instant.now();
         job.setProcessingStartedAt(processingStarted);
         job.setProgress(null); // the inference service reports no progress (openapi: null when unknown)
@@ -126,6 +147,38 @@ public class RealJobWorker implements JobWorker {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
             // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.
             inferenceClient.cleanup(jobId);
+        }
+    }
+
+    /**
+     * True when the inference service reads UP, at once or within inference.offline-wait-ms; the job stays PENDING
+     * while this waits. Always true when the wait is off (0): the run then finds out from /infer itself.
+     */
+    private boolean awaitInferenceService(String jobId) throws InterruptedException {
+        if (offlineWaitMs == 0) {
+            return true;
+        }
+        // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
+        long deadline = System.nanoTime() + offlineWaitMs * 1_000_000;
+        boolean logged = false;
+        while (true) {
+            InferenceHealthMonitor.Status status = healthMonitor.refresh();
+            if (status.ready()) {
+                if (logged) {
+                    log.info("jobId={} inference service is UP again, starting", jobId);
+                }
+                return true;
+            }
+            long leftMs = (deadline - System.nanoTime()) / 1_000_000;
+            if (leftMs <= 0) {
+                return false;
+            }
+            if (!logged) {
+                log.info("jobId={} waits as PENDING: inference service {} ({}), up to {} s", jobId, status.state(),
+                        status.detail(), leftMs / 1000);
+                logged = true;
+            }
+            Thread.sleep(Math.min(offlinePollMs, leftMs));
         }
     }
 
