@@ -25,6 +25,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
 | http://localhost:8080/h2-console | DB 보기 (mock·real 모두, 이 PC 에서 직접 연 요청만 — 폰용 터널(cloudflared·ngrok)이나 프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
+| http://localhost:8080/admin | 운영 대시보드: 상태별 작업 수·대기열·GPU·디스크 카드, 최근 작업, 모델 버전별 통계, 측정표 CSV 받기. 5초마다 갱신(탭을 숨기면 멈춤). 디스크 카드는 `storage.root.dir`(기본 `storage`)가 있는 파일시스템. 배포에서는 Caddy Basic 인증 뒤 |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
 
@@ -38,6 +39,10 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | `POST /api/v1/jobs/{id}/retry` | 202 + `{ jobId }` | FAILED 만, 그 외 409 `JOB_NOT_FAILED` |
 | `GET /api/v1/jobs?limit=&cursor=` | 200 `{ items, nextCursor }` | 개발·디버그용, 최신순 |
 | `GET /api/v1/healthz` | 200 `{ status, profile, workerType }` | |
+| `GET /api/v1/admin/overview` | 200 `AdminOverview` (상태별 수, 대기열, 디스크, `inference` — 지금은 null) | 관리용, 앱은 쓰지 않음. 배포에서는 Caddy Basic 인증 |
+| `GET /api/v1/admin/runs?format=json\|csv&from=&to=&modelVersion=&includePassthrough=&workerType=` | 200 `AdminRun[]` 또는 `text/csv`(`job_runs.csv`) | 측정표(METRICS §1.1). 400 `INVALID_REQUEST` |
+| `GET /api/v1/admin/stats?from=&to=&includePassthrough=` | 200 `AdminStats` (modelVersion × workerType, p50/p95 nearest-rank) | 400 `INVALID_REQUEST` |
+| `GET /api/v1/admin/jobs?limit=` | 200 `AdminJobList` (최신순, 마지막 실행의 modelVersion) | 400 `INVALID_REQUEST` |
 
 오류는 `{ "error": { "code", "message", "jobId?" } }` 봉투, 코드와 앱 표시 문구는 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md). `JobResponse` 는 서버 경로를 노출하지 않는다(`asset.url` 은 `/api/v1/jobs/{id}/asset?variant=base` 상대 경로).
 
@@ -145,7 +150,16 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 
 ### 측정 내보내기 (`job_runs`)
 
-실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다(모든 열에 따옴표 별칭 — 별칭이 없으면 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다).
+실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1).
+
+5단계 측정표는 관리 API 로 뽑는다(2026-10-30). 헤더가 METRICS §1.1 이름·순서와 같은 CSV 이고, 기본으로 패스스루 행을 뺀다. 브라우저에서는 `/admin` 의 "측정표 CSV 받기".
+
+```powershell
+curl.exe -o job_runs.csv "http://localhost:8080/api/v1/admin/runs?format=csv&workerType=real"
+curl.exe "http://localhost:8080/api/v1/admin/stats"        # modelVersion × workerType 별 성공률, p50/p95 (완료된 실행만)
+```
+
+개발 PC 대안: 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해도 된다(배포의 prod 프로파일에서는 콘솔이 꺼진다). 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다(모든 열에 따옴표 별칭 — 별칭이 없으면 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
@@ -168,8 +182,12 @@ src/main/
 │  ├─ api/v1/JobV1Controller.java        # v1 엔드포인트 (operationId = 메서드명, @ApiResponses = 계약 상태 코드)
 │  ├─ api/v1/JobResponseMapper.java      # Job → JobResponse (timings 계산, asset.url)
 │  ├─ api/v1/ApiV1Paths.java             # 경로 상수
+│  ├─ api/v1/AdminV1Controller.java      # 관리 API /api/v1/admin/* (overview·runs·stats·jobs), 인증은 Caddy 몫
 │  ├─ api/v1/dto/                        # JobResponse, Timings, AssetInfo, JobError, UploadedFile, JobCreatedResponse,
-│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse (= openapi.yaml 스키마 이름)
+│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse, Admin* (= openapi.yaml 스키마 이름)
+│  ├─ service/AdminService.java          # 측정표 CSV·통계(nearest-rank)·현황·최근 작업 (읽기 전용)
+│  ├─ service/InferenceStatusSource.java # overview.inference 를 채울 빈 인터페이스 (GPU 감시가 구현, 지금은 없음 → null)
+│  ├─ config/AdminPageConfig.java        # /admin, /admin/ → static/admin/index.html
 │  ├─ controller/JobController.java      # v0 /api/jobs (동결) + LegacyJobResponse
 │  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
@@ -190,7 +208,7 @@ src/main/
    ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
    ├─ application-real.properties        # inference.base-url·transfer·token·timeout-ms·max-concurrency, storage.result.dir·tmp.dir, DB 파일 beside-real, h2-console
-   └─ static/                            # 브라우저 Mock UI (v1)
+   └─ static/                            # 브라우저 Mock UI (v1), admin/ = 운영 대시보드 (admin-format.js 는 node:test 로 확인)
 ```
 
 - Controller 가 요청을 받고 Service 가 파일과 Job 을 저장한다. 별도 Spring Bean 인 워커의 `@Async` 메서드가 백그라운드 작업을 수행한다.
