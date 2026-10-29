@@ -146,5 +146,5 @@ COMPLETED 실행이 없으면(다른 서버·프로파일의 작업, 실패한 �
 jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureArtifacts,comment,updatedAt,workerType,passthrough
 ```
 
-- 보고서 표(베이스라인 vs 개선안): `GET /api/v1/admin/ratings/summary` → modelVersion 별(`(none)` = 값 없음, §1.1 stats 와 같은 이름) 6항목 평균, `ratings`(평가 행 수), `raters`(서로 다른 평가자 수), `jobs`(평가된 작업 수). 평균은 **평가 행 전체의 산술 평균**이다(작업별 평균의 평균이 아님). 관리 페이지 `/admin` 의 "평가 요약" 표가 이 값을 보여 준다.
+- 보고서 표(베이스라인 vs 개선안): `GET /api/v1/admin/ratings/summary` → modelVersion 별(`(none)` = 값 없음, §1.1 stats 와 같은 이름) 6항목 평균, `ratings`(평가 행 수), `raters`(서로 다른 평가자 수), `jobs`(평가된 작업 수). 평균은 **평가 행 전체의 산술 평균**이다(작업별 평균의 평균이 아님). 관리 페이지 `/admin` 의 "품질 평가 요약" 표가 이 값을 보여 준다.
 - 제외 규칙: 기본으로 패스스루 실행(§1 `passthrough = TRUE`)의 평가는 측정표·요약에서 뺀다(`includePassthrough=true` 로 포함). `from`/`to` 는 평가의 `updatedAt` 기준(ISO 8601 instant, `to` 는 제외).

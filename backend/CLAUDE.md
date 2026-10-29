@@ -31,7 +31,8 @@ cd backend
 - Mock 실패 재현: 업로드 파일명에 `fail`이 들어가면 FAILED(`error.code=INFERENCE_FAILED`). 토큰은 `mock.worker.fail-when-filename-contains`, 빈 값이면 비활성.
 - Mock 지연: `mock.worker.pending-ms`(기본 2000), `mock.worker.processing-ms`(기본 3000).
 - DB 보기: http://localhost:8080/h2-console (mock·real, 이 PC 에서 직접 연 요청만. 터널·프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `GET /api/v1/admin/runs?format=csv`(관리 페이지 `/admin` 의 버튼, 헤더 = METRICS §1.1)로 뽑는다. 개발 PC 에서는 `job_runs` 에서 `CALL CSVWRITE(...)` 도 된다([README.md](README.md) '측정 내보내기').
-- 관리 API `/api/v1/admin/*` 와 `/admin` 페이지에는 Spring 인증 코드가 없다. 배포에서는 Caddy Basic 인증이 막는다. 읽기 전용이며 작업 상태를 바꾸지 않는다.
+- 관리 API `/api/v1/admin/*` 와 `/admin` 페이지에는 Spring 인증 코드가 없다. 배포에서는 Caddy Basic 인증이 막는다. 작업 상태를 바꾸지 않는다(쓰기는 앱 `metrics.csv` 가져오기 `POST /api/v1/admin/client-metrics` 뿐, `client_metrics` 테이블).
+- 작업 상세 페이지 `/job/?id=` 와 그 API(태그 quality: `GET /api/v1/jobs/{id}/photos/{index}`, `GET·PUT /api/v1/jobs/{id}/ratings[/{rater}]`)도 인증 코드가 없고 배포에서는 Caddy Basic 인증 뒤다(앱은 쓰지 않는다). 사진은 저장 파일명 확장자가 jpg·jpeg·png·webp 일 때만 이미지 타입으로 내준다(그 밖 octet-stream + nosniff). 평가 6항목·앱 측정 열 이름은 [docs/METRICS.md](../docs/METRICS.md) §3·§4 그대로, CSV 열 순서는 §3.1·§4.1(이름 변경은 계약 회의).
 - GPU 없이 real 시험: 추론 서비스를 패스스루(`BESIDE_SAMPLE_GLB`)로 띄우고 real 로 bootRun → `e2e_mock.ps1`. 절차는 [README.md](README.md) '프로파일 real'. 업로드 모드는 같은 절차에 `--inference.transfer=upload`(+ 양쪽 같은 토큰), [README.md](README.md) '업로드 모드'.
 
 ## 테스트
@@ -42,6 +43,8 @@ cd backend
 .\gradlew.bat test --tests "com.example.mockbackend.JobV1ContractTest"
 node --test src/test/js/mock-mvp.test.cjs                        # 브라우저 Mock UI(v1) JS 흐름
 node --test src/test/js/admin-format.test.cjs                    # 관리 페이지 포맷 함수(ms·바이트·퍼센트·GPU 카드 문구)
+node --test src/test/js/admin-measurement.test.cjs               # 관리 페이지 보고서 패널(평가 요약·metrics.csv 결과 문구·CSV 주소)
+node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs   # 작업 상세 페이지 규칙(평가자 이름·점수 본문)과 QR 인코더(다시 읽어 확인)
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL
