@@ -27,6 +27,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500 |
 | `GET /api/v1/jobs?limit=&cursor=` | `limit` 1~100(기본 20), `cursor` = 이전 `nextCursor` | **200** `{ items: JobResponse[], nextCursor: string\|null }` 최신순 | 400 `INVALID_REQUEST`, 500 |
 | `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile: "mock"\|"real", workerType: "mock"\|"real" }` | — |
+| `POST /api/v1/jobs/{jobId}/cancel` | 본문 없음. PENDING 일 때만 | **200** `JobResponse`(status=FAILED, `error.code=CANCELED`). 워커는 시작하지 않는다 | 409 `JOB_NOT_PENDING`(PROCESSING 은 GPU 연산을 멈출 수 없음, 이미 끝난·취소한 작업 포함), 404, 500 |
 
 ### JobResponse
 
@@ -40,13 +41,15 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
   "timings": { "queuedMs": 2015, "processingMs": 3000, "totalMs": 5015 },
   "asset": { "url": "/api/v1/jobs/{jobId}/asset?variant=base", "bytes": 5242880, "variant": "base", "contentType": "model/gltf-binary" },
   "error": { "code": "INFERENCE_FAILED", "message": "developer text" },
-  "uploadedFiles": [ { "name": "dog1.jpg", "bytes": 705356 } ]
+  "uploadedFiles": [ { "name": "dog1.jpg", "bytes": 705356 } ],
+  "queue": { "ahead": 2, "reason": null },
+  "estimate": { "remainingMs": 240000, "basedOnRuns": 12 }
 }
 ```
 
 | 필드 | 규칙 |
 |---|---|
-| `status` | `PENDING → PROCESSING → COMPLETED \| FAILED`, `FAILED → (retry) → PENDING`. 모르는 값은 UNKNOWN |
+| `status` | `PENDING → PROCESSING → COMPLETED \| FAILED`, `FAILED → (retry) → PENDING`, `PENDING → (cancel) → FAILED(CANCELED)`. 모르는 값은 UNKNOWN |
 | `progress` | 0~1, 모르면 `null`. Mock: PENDING 0.0, PROCESSING 0.5, COMPLETED 1.0, FAILED null |
 | `timings.queuedMs` | PENDING 경과. 진행 중이면 현재까지, 이후 고정 |
 | `timings.processingMs` | PROCESSING 시작 전 `null`, 진행 중 경과, 종료 후 고정 |
@@ -54,6 +57,8 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `asset` | COMPLETED 일 때만, base 에셋만 설명. `url` 은 **서버 루트 기준 상대 경로** → 앱이 baseUrl 과 결합 |
 | `error` | FAILED 일 때만. `code` 는 §3 의 Job 실패 코드, `message` 는 개발자용(사용자에게 그대로 표시 금지) |
 | `uploadedFiles` | 원본 파일명(경로 제거)과 크기. 서버 경로 없음 |
+| `queue` | PENDING 일 때만. `ahead` = 이 작업보다 먼저 처리될 작업 수(생성 중인 작업 포함, 0 = 다음 차례), `reason` = `INFERENCE_OFFLINE`(GPU 추론 서비스가 UP 이 아님, real) 또는 `null`, 모르는 값은 무시. 그 외 상태 `null` |
+| `estimate` | PENDING·PROCESSING 일 때만, **추정치**. `remainingMs` = 최근 완료 실행(같은 워커, 패스스루 제외, 20건)의 processingMs 중앙값 기준 남은 시간(GPU 1장 기준), `basedOnRuns` = 근거 실행 수. 근거 실행이 없으면 객체가 `null` |
 
 ### 오류 응답 봉투 (모든 v1 오류)
 
@@ -85,6 +90,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `NOT_FOUND` | 404 | 알 수 없는 v1 경로 | 요청한 정보를 찾을 수 없어요. |
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
+| `JOB_NOT_PENDING` | 409 | PENDING 아닌 작업에 cancel(PROCESSING 은 GPU 연산을 멈출 수 없음) | 이미 생성이 시작돼 취소할 수 없어요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
@@ -96,6 +102,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `INFERENCE_UNAVAILABLE` | 추론 서버 연결 불가, 모델 미준비(501~504) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB 규격 위반, real 워커가 받은 GLB 가 없거나 glTF 2.0 이 아님 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
 | `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김, real 워커의 예기치 못한 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
+| `CANCELED` | 사용자가 PENDING 작업을 취소(POST /cancel). 실행 기록에 `FAILED:CANCELED` 로 남고 실패율 통계에서는 뺀다 | 취소한 작업이에요. 다시 시도하면 처음부터 만들어요. | 예(처음부터) |
 
 모르는 코드는 일반 오류 문구로 처리한다. 문구는 제안이며 코드 이름은 유지한다.
 

@@ -17,7 +17,8 @@ info:
 
     흐름: POST /api/v1/jobs (202) → GET /api/v1/jobs/{jobId} 를 1~2초 간격으로 폴링 →
     status=COMPLETED 이면 asset.url 로 GLB 다운로드 → status=FAILED 이면 error.code 로 문구 표시,
-    필요 시 POST /api/v1/jobs/{jobId}/retry.
+    필요 시 POST /api/v1/jobs/{jobId}/retry. 기다리는 동안(PENDING) queue·estimate 로 "앞에 N명 · 약 M분" 을
+    보여 줄 수 있고, 그만두면 POST /api/v1/jobs/{jobId}/cancel 로 대기열에서 뺀다.
 servers:
   - url: http://localhost:8080
     description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
@@ -488,6 +489,33 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/jobs/{jobId}/cancel:
+    post:
+      tags: [jobs]
+      operationId: cancelJob
+      summary: 대기 중(PENDING)인 작업을 취소한다
+      description: |
+        status=PENDING 인 작업만 취소할 수 있다. 성공하면 200 과 함께 바뀐 작업을 돌려준다: status=FAILED,
+        error.code=CANCELED. 작업은 GPU 대기열에서 빠지고 워커는 그 작업을 시작하지 않는다(추론 서비스를 부르지 않는다).
+        취소한 작업도 retry 로 처음부터 다시 실행할 수 있다(맨 뒤에 다시 줄 선다).
+        PROCESSING 은 이미 시작한 GPU 연산을 멈출 수 없어 취소하지 않는다. PENDING 이 아닌 작업(이미 취소한 작업 포함)은
+        409(JOB_NOT_PENDING) 이므로, 앱은 409 를 받으면 GET 으로 현재 상태를 다시 읽는다.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 취소됨. status=FAILED, error.code=CANCELED 인 작업 상태
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     JobId:
@@ -565,7 +593,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED)
+      description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED, JOB_NOT_PENDING)
       content:
         application/json:
           schema:
@@ -602,7 +630,7 @@ components:
           type: string
           description: |
             작업 상태. PENDING(대기) → PROCESSING(생성 중) → COMPLETED(완료, asset 사용 가능) | FAILED(실패, error 참조).
-            FAILED 는 retry 로 PENDING 으로 돌아갈 수 있다.
+            FAILED 는 retry 로 PENDING 으로 돌아갈 수 있다. PENDING 은 cancel 로 FAILED(error.code=CANCELED)가 될 수 있다.
             클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
           enum: [PENDING, PROCESSING, COMPLETED, FAILED]
         progress:
@@ -637,6 +665,18 @@ components:
           description: 업로드된 사진의 원본 파일명과 크기. 서버 저장 경로는 포함하지 않는다.
           items:
             $ref: '#/components/schemas/UploadedFile'
+        queue:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobQueue'
+          description: PENDING 일 때 대기열 위치. 그 외 상태에서는 null.
+        estimate:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobEstimate'
+          description: |
+            PENDING·PROCESSING 일 때 남은 시간 추정치. 추정의 근거가 될 최근 완료 실행이 없으면(서버를 처음 띄운 직후 등)
+            객체 자체가 null. 그 외 상태에서는 null.
     Timings:
       type: object
       description: |
@@ -683,7 +723,7 @@ components:
       properties:
         code:
           type: string
-          description: ERROR_CODES.md 의 Job 실패 코드(INFERENCE_FAILED, INFERENCE_TIMEOUT, INFERENCE_UNAVAILABLE, CONVERSION_FAILED, INTERNAL_ERROR). 알 수 없는 코드는 일반 실패 문구로 처리한다.
+          description: ERROR_CODES.md 의 Job 실패 코드(INFERENCE_FAILED, INFERENCE_TIMEOUT, INFERENCE_UNAVAILABLE, CONVERSION_FAILED, INTERNAL_ERROR, CANCELED). 알 수 없는 코드는 일반 실패 문구로 처리한다.
           example: INFERENCE_FAILED
         message:
           type: string
@@ -1069,3 +1109,45 @@ components:
           type: string
           nullable: true
           description: 이 작업의 마지막으로 끝난 실행(attempt 가 가장 큰 job_runs 행)의 modelVersion. 끝난 실행이 없거나 값이 없으면 null.
+    JobQueue:
+      type: object
+      description: |
+        대기열 위치(status=PENDING 일 때만). 앱은 "앞에 {ahead}명" 처럼 보여 준다.
+        real 은 GPU 1장에서 한 번에 1건만 생성하고(inference.max-concurrency=1) 나머지는 접수(또는 retry) 순서로 기다린다.
+        mock 도 같은 식으로 계산한다(mock 은 실제로는 작업을 동시에 처리하므로 화면 확인용 값이다).
+      required: [ahead]
+      properties:
+        ahead:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 이 작업보다 먼저 처리될 작업 수. 지금 생성 중(PROCESSING)인 작업을 포함한다. 0 이면 바로 다음 차례.
+        reason:
+          type: string
+          nullable: true
+          description: |
+            평소보다 오래 기다릴 수 있는 이유. 현재 값은 `INFERENCE_OFFLINE`(GPU 추론 서비스가 꺼져 있거나 모델을 불러오는 중,
+            real 만) 또는 null. enum 이 아닌 문자열이며 클라이언트는 모르는 값을 무시한다.
+          example: INFERENCE_OFFLINE
+    JobEstimate:
+      type: object
+      description: |
+        남은 시간 추정치(status=PENDING·PROCESSING 일 때만). 보장값이 아니므로 앱은 "약 N분" 처럼 보여 준다.
+        최근 완료 실행(같은 워커 종류, status=COMPLETED, 패스스루 제외, 최근 20건)의 processingMs 중앙값 기준이고,
+        GPU 1장(한 번에 1건) 기준으로 계산한다.
+        PENDING: 중앙값 × (queue.ahead + 1) − 지금 생성 중인 작업이 이미 쓴 시간(작업마다 중앙값까지만 뺀다).
+        PROCESSING: 중앙값 − 이 작업의 경과, 0 이상(0 이면 평소보다 오래 걸리는 중).
+        queue.reason=INFERENCE_OFFLINE 일 때 GPU 가 돌아올 때까지의 시간은 넣지 않는다.
+      required: [basedOnRuns]
+      properties:
+        remainingMs:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          description: 이 작업이 끝날 때까지 남은 시간 추정(ms). 계산할 수 없으면 null.
+        basedOnRuns:
+          type: integer
+          format: int32
+          minimum: 1
+          description: 추정의 근거가 된 최근 완료 실행 수(최대 20). 적을수록 덜 정확하다.
