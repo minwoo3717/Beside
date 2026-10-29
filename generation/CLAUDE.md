@@ -20,7 +20,10 @@ cd generation/inference_service
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8001                        # 모델 미구현: POST /infer 는 501
 BESIDE_SAMPLE_GLB=/path/to/sample.glb uvicorn app:app --port 8001  # 패스스루: 샘플 GLB 경로를 돌려줘 Spring real 워커 연동을 먼저 시험
+BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 8001   # Spring 이 다른 기계(VM): 업로드 모드 + 토큰
 ```
+
+- 전송 모드 두 가지([inference_service/README.md](inference_service/README.md) '전송 모드'): 같은 PC 는 `POST /infer`(경로), 디스크를 공유하지 않는 VM ↔ GPU PC 는 `POST /infer/upload` + `GET/DELETE /artifacts/{jobId}`(업로드). 둘 다 같은 `_run` 을 쓰므로 모델 쪽 변경은 `_run` 한 곳에 한다. 127.0.0.1 밖에 열 때는 `BESIDE_INFERENCE_TOKEN` 을 꼭 건다.
 
 ## 테스트
 

@@ -2,7 +2,7 @@
 
 Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는 호출하지 않는다. 담당은 3D Generation 트랙, `/infer` 계약 변경은 Backend 와 합의한다.
 
-상태: **[구현됨]** 스키마·`/healthz`·501 응답·패스스루 모드. **[계획]** AnimalLift 모델 로드·추론, `tools/convert_asset.py` 호출 (`app.py` 의 TODO). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다.
+상태: **[구현됨]** 스키마·`/healthz`·501 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). **[계획]** AnimalLift 모델 로드·추론, `tools/convert_asset.py` 호출 (`app.py` 의 TODO). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다.
 
 ## GPU 서버 실행
 
@@ -22,7 +22,25 @@ curl -s -X POST http://localhost:8001/infer -H "Content-Type: application/json" 
   -d '{"jobId":"test","imagePaths":["/data/dog1.jpg"],"options":{"hair":false}}'
 ```
 
-Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정은 `backend/src/main/resources/application-real.properties` 의 `inference.base-url`, `inference.timeout-ms`, `inference.max-concurrency`. Spring 과 함께 이 PC 에서 시험하는 절차는 [backend/README.md](../../backend/README.md) '프로파일 real'.
+Spring 이 다른 기계(클라우드 VM)에 있을 때 — 업로드 모드. 사설망(Tailscale) 주소에만 열고 토큰을 건다:
+
+```bash
+# WSL2 + AnimalLift: 스크립트가 BESIDE_HOST·BESIDE_INFERENCE_TOKEN 을 받는다(기본 127.0.0.1, 토큰 없음 = 같은 PC 경로 모드)
+BESIDE_HOST=<이 PC 의 tailnet IP> BESIDE_INFERENCE_TOKEN=<비밀값> bash scripts/start_inference_wsl.sh
+# 또는 직접
+BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 8001
+
+# 확인 (VM 에서). /healthz 는 토큰 없이 열린다
+curl -s http://<IP>:8001/healthz
+curl -s -X POST http://<IP>:8001/infer/upload -H "X-Inference-Token: <비밀값>" \
+  -F 'request={"jobId":"test-1","options":{"hair":false}};type=application/json' -F "photos=@dog1.jpg"
+curl -s -o base.glb -H "X-Inference-Token: <비밀값>" http://<IP>:8001/artifacts/test-1/base.glb
+curl -s -X DELETE -H "X-Inference-Token: <비밀값>" http://<IP>:8001/artifacts/test-1
+```
+
+Spring 쪽은 `--inference.transfer=upload --inference.base-url=http://<IP>:8001` 과 같은 비밀값의 `inference.token`(환경변수 `INFERENCE_TOKEN` 권장 — 명령줄 인자는 프로세스 목록에 보인다).
+
+Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정은 `backend/src/main/resources/application-real.properties` 의 `inference.base-url`, `inference.transfer`, `inference.token`, `inference.timeout-ms`, `inference.max-concurrency`. Spring 과 함께 이 PC 에서 시험하는 절차는 [backend/README.md](../../backend/README.md) '프로파일 real'.
 
 ## 계약 v0 (내부)
 
@@ -72,7 +90,9 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 `detail.code` 가 위 Job 실패 코드면 HTTP 상태와 관계없이 그 코드가 기록된다. Spring 은 `detail.message` 를 앱 응답에 싣지 않고 서버 로그에만 남기므로 message 에 경로를 넣어도 된다.
 
-### 전송 모드: 경로(path) / 업로드(upload) — 업로드는 [계획]
+### 전송 모드: 경로(path) / 업로드(upload) — 업로드는 [구현됨] 2026-10-30
+
+업로드 모드는 이 서비스(FastAPI)와 Spring(`InferenceClient`) 양쪽 다 구현돼 있다. 확인한 것: Spring 가짜 서버 테스트(`InferenceClientTest`, `RealJobWorkerUploadTest`), 이 서비스의 TestClient 스모크(패스스루), 같은 PC 에서 패스스루 uvicorn(토큰 설정) ↔ Spring real(`inference.transfer=upload`) 으로 `scripts/e2e_mock.ps1` 전체 흐름. VM ↔ GPU PC(Tailscale) 실제 배치와 모델 모드의 업로드는 아직 돌려 보지 않았다 **[계획]**.
 
 2026-10-30 결정(REVIEW_CHECKLIST #6 (b)): Spring 을 클라우드 VM 에 두고 이 서비스는 팀원 GPU PC 에 남긴다(Tailscale 사설망). 두 기계는 디스크를 공유하지 않으므로 사진 파일을 올리고 GLB 를 내려받는 업로드 모드를 **추가**한다. 위 `POST /infer`(경로 모드)는 바뀌지 않는다.
 
