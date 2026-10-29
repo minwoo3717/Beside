@@ -33,8 +33,15 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
 
     public enum State { UNKNOWN, UP, LOADING, DOWN }
 
-    /** One reading. {@code since} is when the current state began; {@code detail} never names hosts or paths. */
-    public record Status(State state, String device, Instant checkedAt, Instant since, String detail) {
+    /**
+     * One reading. {@code since} is when the current state began; {@code detail} never names hosts or paths;
+     * {@code modelVersion} is the loaded model as /healthz names it (null when none or not reported).
+     */
+    public record Status(State state, String device, Instant checkedAt, Instant since, String detail, String modelVersion) {
+        public Status(State state, String device, Instant checkedAt, Instant since, String detail) {
+            this(state, device, checkedAt, since, detail, null);
+        }
+
         public boolean ready() {
             return state == State.UP;
         }
@@ -82,7 +89,8 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
         Status previous = status;
         Status reading = check();
         if (reading.state() == previous.state()) {
-            status = new Status(reading.state(), reading.device(), reading.checkedAt(), previous.since(), reading.detail());
+            status = new Status(reading.state(), reading.device(), reading.checkedAt(), previous.since(), reading.detail(),
+                    reading.modelVersion());
             return status;
         }
         status = reading;
@@ -105,7 +113,8 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
             JsonNode body = objectMapper.readTree(response.body());
             String device = body.path("device").isTextual() ? body.path("device").asText() : null;
             boolean ready = body.path("modelLoaded").asBoolean(false) || body.path("passthrough").asBoolean(false);
-            return new Status(ready ? State.UP : State.LOADING, device, now, now, ready ? "ok" : "no model loaded");
+            String modelVersion = body.path("modelVersion").isTextual() ? body.path("modelVersion").asText() : null;
+            return new Status(ready ? State.UP : State.LOADING, device, now, now, ready ? "ok" : "no model loaded", modelVersion);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Status(State.DOWN, null, now, now, "check interrupted");

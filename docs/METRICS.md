@@ -23,7 +23,7 @@
 | `inferMs`, `gpuPeakMB`, `modelParams`, `outputVertices`, `outputTriangles`, `convertMs` | int \| null | §2 의 수치를 `/infer` 응답에서 그대로 복사. real COMPLETED 에만 있고 mock·FAILED 는 null. 숫자가 아닌 값은 null | 종료 시 |
 | `glbBytes` | int \| null | 서버가 저장한 base GLB 의 크기(= `asset.bytes`). mock·FAILED 는 null | 종료 시 |
 | `passthrough` | bool \| null | true 면 추론 서비스가 모델 대신 샘플을 돌려준 것 → 측정에서 **제외**. `/infer` 응답이 없으면(mock·FAILED) null | 종료 시 |
-| `modelVersion` | string \| null | `/infer` 선택 필드. 베이스라인과 개선안을 구분하는 모델·가중치 이름(예 `animallift-baseline@3f2a1c9`) | 종료 시 |
+| `modelVersion` | string \| null | `/infer` 선택 필드. 베이스라인과 개선안을 구분하는 모델·가중치 이름(예 `animallift-baseline@3f2a1c9`). real 의 FAILED 행은 그때 추론 서비스 `/healthz` 가 알린 로드된 모델(모르면 null) — 실패도 그 모델의 성공률에 들어가게(검토 브랜치 v1.1) | 종료 시 |
 
 예 (2026-10-04 동작 확인 때 실제로 남은 줄, 측정값 아님 — mock, real 패스스루, real 추론 서비스 꺼짐. 2026-10-06 이후 줄에는 위 9개 키가 더 붙는다):
 

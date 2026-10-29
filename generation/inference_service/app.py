@@ -200,6 +200,11 @@ class HealthResponse(BaseModel):
     device: str
     modelLoaded: bool
     passthrough: bool
+    modelVersion: Optional[str] = Field(
+        None,
+        description="Version of the loaded model, as /infer reports it (+rig when a rig template is set). None while no "
+        "model is loaded. Spring records it on failed runs so job_runs can tell which model a failure belongs to.",
+    )
 
 
 # --------------------------------------------------------------------------- helpers
@@ -333,6 +338,7 @@ def healthz() -> HealthResponse:
         device=_device(),
         modelLoaded=MODEL is not None,  # false while loading or after a load error (see the service log)
         passthrough=bool(SAMPLE_GLB),
+        modelVersion=(MODEL.version + ("+rig" if RIG_TEMPLATE else ""))[:128] if MODEL is not None else None,
     )
 
 

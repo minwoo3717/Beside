@@ -155,8 +155,10 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false }
+{ "status": "ok", "device": "cuda", "modelLoaded": true, "passthrough": false, "modelVersion": "animallift@3f2a1c9:latest+rig" }
 ```
+
+`modelVersion` 은 로드된 모델의 버전(리깅 템플릿이 있으면 `+rig`), 모델이 없으면 null 이다(선택 필드, 2026-10-30 추가). Spring 은 이 값을 기억했다가 `/infer` 가 실패한 실행의 `job_runs.model_version` 에 남긴다 — 실패도 그 모델의 성공률에 들어간다.
 
 ## 가정과 열린 결정 (계약 회의 안건)
 

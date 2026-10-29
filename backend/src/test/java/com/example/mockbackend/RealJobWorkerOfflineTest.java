@@ -79,14 +79,18 @@ class RealJobWorkerOfflineTest {
         inference.createContext("/healthz", exchange -> {
             healthChecks.incrementAndGet();
             if (gpuUp.get()) {
-                respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":true,\"passthrough\":false}");
+                respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":true,\"passthrough\":false,\"modelVersion\":\"fake-animallift@1+rig\"}");
             } else {
                 respond(exchange, 503, "{\"detail\":\"model loading\"}");
             }
         });
         inference.createContext("/infer", exchange -> {
             inferCalls.incrementAndGet();
-            exchange.getRequestBody().readAllBytes();
+            String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (request.contains("broken-dog")) {
+                respond(exchange, 500, "{\"detail\":{\"code\":\"INFERENCE_FAILED\",\"message\":\"model error\"}}");
+                return;
+            }
             respond(exchange, 200, JSON.createObjectNode().put("glbPath", glb.toString()).put("passthrough", false).toString());
         });
         inference.start();
@@ -100,6 +104,9 @@ class RealJobWorkerOfflineTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    com.example.mockbackend.repository.JobRunRepository jobRuns;
 
     @BeforeEach
     void reset() {
@@ -171,9 +178,24 @@ class RealJobWorkerOfflineTest {
         assertThat(JSON.readTree(body).path("error").path("code").asText()).as("not INFERENCE_UNAVAILABLE").isEqualTo("CANCELED");
     }
 
+    @Test
+    void aFailedRunCountsAgainstTheModelTheServiceHasLoaded() throws Exception {
+        gpuUp.set(true);
+        String jobId = upload("broken-dog.png");
+        await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(jobId).equals("FAILED"));
+        await().atMost(Duration.ofSeconds(5)).until(() -> !jobRuns.findByJobIdOrderByAttemptAsc(jobId).isEmpty());
+        var run = jobRuns.findByJobIdOrderByAttemptAsc(jobId).get(0);
+        assertThat(run.getErrorCode()).isEqualTo("INFERENCE_FAILED");
+        assertThat(run.getModelVersion()).as("admin stats group the failure with that model").isEqualTo("fake-animallift@1+rig");
+    }
+
     private String upload() throws Exception {
+        return upload("dog.png");
+    }
+
+    private String upload(String filename) throws Exception {
         String body = mvc.perform(multipart("/api/v1/jobs")
-                        .file(new MockMultipartFile("photos", "dog.png", "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))
+                        .file(new MockMultipartFile("photos", filename, "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))
                 .andExpect(status().isAccepted())
                 .andReturn().getResponse().getContentAsString();
         return JSON.readTree(body).path("jobId").asText();

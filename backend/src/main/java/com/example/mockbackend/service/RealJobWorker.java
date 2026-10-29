@@ -1,6 +1,7 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
+import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.exception.ErrorCode;
 import org.slf4j.Logger;
@@ -134,12 +135,13 @@ public class RealJobWorker implements JobWorker {
                         result.modelVersion(), result.metrics());
             }
         } catch (InferenceFailure failure) {
-            jobFinisher.fail(job, failure.code(), failure.getMessage(), type());
+            jobFinisher.fail(job, failure.code(), failure.getMessage(), type(), failedRunDetails());
             log.warn("jobId={} stage=FAILED code={} {} [{}]", jobId, failure.code(), failure.getMessage(), failure.logDetail());
         } catch (RuntimeException unexpected) {
             log.error("jobId={} real worker error", jobId, unexpected);
             // The exception text may name server paths; it stays in the log.
-            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type());
+            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type(),
+                    failedRunDetails());
         } finally {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
             // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.
@@ -148,6 +150,11 @@ public class RealJobWorker implements JobWorker {
     }
 
     /** The offline wait is over: FAILED INFERENCE_UNAVAILABLE, unless the job was canceled at the last moment. */
+    /** A failed run reached the model: it counts against the model the service reports on /healthz (null if unknown). */
+    private RunDetails failedRunDetails() {
+        return new RunDetails(null, null, null, null, null, null, null, null, healthMonitor.current().modelVersion());
+    }
+
     private void failUnavailable(String jobId, int attempt) {
         InferenceHealthMonitor.Status status = healthMonitor.current();
         String message = "The inference service was not ready within " + offlineWaitMs / 1000 + " s (last check: "
