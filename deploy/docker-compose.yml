@@ -1,0 +1,69 @@
+# Beside 클라우드 VM 구성: Spring 백엔드(real,prod) + Caddy(자동 HTTPS · Basic 인증 · v0/H2/Swagger 차단).
+# GPU 추론 서비스는 VM 이 아니라 팀원 GPU PC 에 있고 Tailscale 사설망(100.x)으로 부른다.
+# 리포 루트에서:
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# 절차·확인·백업은 deploy/README.md.
+name: beside
+
+services:
+  backend:
+    build:
+      context: ../backend
+    image: beside-backend:local
+    restart: unless-stopped
+    environment:
+      # prod 가 마지막이어야 real 의 설정(H2 콘솔 등)을 덮어쓴다.
+      SPRING_PROFILES_ACTIVE: real,prod
+      # Spring 은 환경변수 이름을 점 → _, 대시 삭제, 대문자로 읽는다: inference.base-url ↔ INFERENCE_BASEURL.
+      INFERENCE_BASEURL: ${INFERENCE_BASE_URL:?deploy/.env 에 INFERENCE_BASE_URL 을 넣는다 (GPU PC 의 Tailscale 주소)}
+      # [계획] S2 병합 후 동작: 사진을 /infer/upload 로 올리고 GLB 를 받아 온다. 병합 전 서버는 이 값을 무시한다.
+      INFERENCE_TRANSFER: upload
+      # [계획] S2 병합 후 동작: X-Inference-Token 헤더. GPU PC 의 BESIDE_INFERENCE_TOKEN 과 같은 값.
+      INFERENCE_TOKEN: ${INFERENCE_TOKEN:?deploy/.env 에 INFERENCE_TOKEN 을 넣는다}
+    volumes:
+      # H2 DB · uploads · results · events.jsonl · (prod) logs. 컨테이너를 지워도 남는다.
+      - beside-storage:/app/storage
+    # 8080 은 compose 내부망에만 연다. 밖에서는 Caddy(80/443)로만 들어온다.
+    expose:
+      - "8080"
+    # 힙은 Dockerfile 의 -XX:MaxRAMPercentage=75 → 이 한도의 75%. 4GB VM 기준.
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/api/v1/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    # 컨테이너에서 Tailscale(100.x) 주소가 안 닿으면(README '문제 해결') backend 를 호스트 네트워크로 옮긴다.
+    #   backend: network_mode: host 를 넣고 expose 를 지운다. 환경변수 SERVER_ADDRESS: 127.0.0.1 (8080 을 VM 밖에 열지 않게).
+    #   caddy:   backend:8080 이라는 이름이 더는 안 보이므로 caddy 도 network_mode: host 로 바꾸고 ports 를 지운 뒤,
+    #            deploy/.env 에 BACKEND_UPSTREAM=127.0.0.1:8080 을 넣는다.
+
+  caddy:
+    image: caddy:2.11.7
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3. VM 방화벽에서 UDP 443 을 안 열어도 브라우저·앱은 TCP 443 으로 붙는다.
+      - "443:443/udp"
+    environment:
+      BESIDE_DOMAIN: ${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:?deploy/.env 에 BASIC_AUTH_USER 를 넣는다}
+      # bcrypt 해시의 $ 는 deploy/.env 에서 작은따옴표로 감싸야 그대로 들어온다(README '.env 채우기').
+      BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?deploy/.env 에 BASIC_AUTH_HASH 를 넣는다}
+      BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-backend:8080}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 인증서·ACME 계정. 지우면 인증서를 다시 받는다(Let's Encrypt 발급 횟수 제한 주의).
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  beside-storage:
+    # 백업 명령에서 쓰는 이름을 고정한다(프로젝트 접두사 없이 beside-storage).
+    name: beside-storage
+  caddy_data:
+  caddy_config:

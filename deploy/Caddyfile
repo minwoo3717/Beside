@@ -1,0 +1,58 @@
+# Beside VM 앞단 프록시 (Caddy 2.11). deploy/docker-compose.yml 이 /etc/caddy/Caddyfile 로 넣는다.
+# 환경변수는 compose 가 deploy/.env 에서 넘긴다: BESIDE_DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH, (선택) BACKEND_UPSTREAM.
+# 경로 규칙 표는 deploy/README.md '경로 규칙'. 규칙을 바꾸면 deploy/test_caddy_routes.sh 의 기대값도 같이 고친다.
+#
+# Caddy 매처 문법:
+#   - 한 매처 블록 안의 서로 다른 조건(method 와 path)은 AND, 한 path 줄에 적은 여러 경로는 OR.
+#   - path 는 대소문자를 가리지 않고, 퍼센트 인코딩을 풀고 ./.. 와 // 를 정리한 경로로 비교한다.
+#   - * 는 끝(접두사), 앞(접미사), 양끝(부분 문자열), 가운데(한 경로 조각) 에 쓸 수 있다.
+# 디렉티브는 적은 순서가 아니라 Caddy 의 정해진 순서로 돈다: request_body → basic_auth → respond → reverse_proxy.
+
+{$BESIDE_DOMAIN} {
+	# 업로드 본문 상한. Spring 은 요청 20MB(사진 5MB)를 넘으면 v1 오류 봉투로 413 을 주고,
+	# 그보다 훨씬 큰 본문은 여기서 413 으로 끊는다(25MB = 25,000,000 바이트).
+	request_body {
+		max_size 25MB
+	}
+
+	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서.
+	#    경로에 ; 가 있으면 함께 막는다. Tomcat 은 /api/jobs;x 나 /api;x/v1/jobs 를 ; 뒤를 뺀 경로로 처리하므로
+	#    ; 를 열어 두면 아래 인증 규칙과 이 404 규칙을 비켜 갈 수 있다. 앱과 웹은 ; 를 쓰지 않는다.
+	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* *;*
+	respond @blocked 404
+
+	# 2) Basic 인증(팀 계정 하나).
+	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지.
+	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
+	@web path / /index.html /app.js /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet
+	basic_auth @web {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	#    작업 목록(모든 작업과 GLB 가 보인다). Spring 은 HEAD 를 GET 처럼 처리하므로 둘 다.
+	#    같은 경로의 POST(앱 업로드)는 공개다.
+	@jobList {
+		method GET HEAD
+		path /api/v1/jobs /api/v1/jobs/
+	}
+	basic_auth @jobList {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	#    작업 삭제.
+	@jobDelete {
+		method DELETE
+		path /api/v1/jobs/*
+	}
+	basic_auth @jobDelete {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry), /api/v1/healthz,
+	#    공유 링크(/s/*, /share.*, /api/v1/shares/*), styles.css 같은 정적 파일.
+	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 붙인다(prod 프로파일의 forward-headers 가 읽는다).
+	reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
+
+	# 접근 로그 → docker compose logs caddy. Authorization 헤더는 Caddy 가 기본으로 가린다.
+	log
+}

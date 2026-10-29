@@ -35,6 +35,10 @@ generation/**/*.pth
 # e2e 스크립트 출력
 scripts/out/
 
+# VM 배포: 실제 비밀값(.env)과 볼륨 백업 (견본 deploy/.env.example 만 커밋)
+deploy/.env
+deploy/backups/
+
 #추론 결과·로그, SMAL 파생 리깅 파일 (커밋 금지)
 generation/inference_service/work/
 logs/
