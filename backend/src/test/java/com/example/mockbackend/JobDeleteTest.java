@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -175,6 +176,23 @@ class JobDeleteTest {
         mvc.perform(delete("/api/v1/jobs/{id}", jobId)).andExpect(status().isNoContent());
         assertThat(jobs.findById(jobId)).isEmpty();
         assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).extracting(JobRun::getErrorCode).containsExactly("INFERENCE_FAILED");
+    }
+
+    @Test
+    void ratingsOfADeletedJobStayInTheMeasurementTable() throws Exception {
+        String jobId = upload("dog.jpg");
+        awaitStatus(jobId, "COMPLETED");
+        mvc.perform(put("/api/v1/jobs/{id}/ratings/{rater}", jobId, "minwoo")
+                        .contentType("application/json")
+                        .content("{\"faceShape\":4,\"ears\":3,\"bodyProportion\":4,\"furColor\":5,\"pattern\":3,\"textureArtifacts\":4}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(delete("/api/v1/jobs/{id}", jobId)).andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/v1/jobs/{id}/ratings", jobId)).andExpect(status().isNotFound());
+        String csv = mvc.perform(get("/api/v1/admin/ratings").param("format", "csv"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(csv).as("a human rating is a measurement, like job_runs").contains(jobId).contains("minwoo");
     }
 
     // ------------------------------------------------------------------ helpers
