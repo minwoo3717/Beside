@@ -81,7 +81,8 @@ const BesideShare = (() => {
 
 if (typeof module === "object" && module.exports) {
   module.exports = BesideShare;
-} else if (typeof document !== "undefined") {
+} else if (typeof document !== "undefined" && document.getElementById("viewer-view")) {
+  // share.html. Other pages (the job detail page /job/) load this file only for BesideShare's clip helpers.
   startShareViewer(document, window);
 }
 
