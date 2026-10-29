@@ -3,7 +3,7 @@
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
 - **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인).
-- **[계획]** 실제 AnimalLift 모델과의 연동(PLAN 3·4단계), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
+- **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -57,7 +57,7 @@ curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
 
 ### 프로파일 `real` (Python 추론 서비스 호출)
 
-`RealJobWorker` 가 [내부 계약 v0](../generation/inference_service/README.md) 대로 `POST {inference.base-url}/infer` 를 부른다 **[구현됨]**(2026-10-04, PLAN 4단계 선행). 실제 AnimalLift 모델은 아직 없으므로(3단계) 지금은 추론 서비스의 패스스루 모드로 연동만 확인한다.
+`RealJobWorker` 가 [내부 계약 v0](../generation/inference_service/README.md) 대로 `POST {inference.base-url}/infer` 를 부른다 **[구현됨]**(2026-10-04, PLAN 4단계 선행). AnimalLift 모델 연결은 #1(2026-10-14)로 추론 서비스에 머지됐지만 실제 사진으로 돌린 기록은 아직 없어, 이 리포의 확인은 패스스루 모드 연동까지다.
 
 1. 추론 슬롯을 기다린다. `inference.max-concurrency`(기본 1 = GPU 1장)건만 동시에 `/infer` 를 부르고, 나머지 작업은 PENDING 으로 기다린다(`queuedMs` = 대기열 시간).
 2. PROCESSING(progress `null` — 추론 서비스가 진행률을 주지 않는다) → `{ jobId, imagePaths(절대 경로), options.hair=false }` 전송.
@@ -134,7 +134,7 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 준비(한 번):
 
 1. Java 17, Git. 리포를 **ASCII·공백 없는 경로**에 클론한다(예 `C:\beside`). OneDrive 의 `바탕 화면` 같은 한글·공백 경로는 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` 가 날 수 있다.
-2. 추론 서비스 환경: `cd generation\inference_service; python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt`. AnimalLift 가 별도 conda env 면 `app.py` 가 그 env 의 python 을 subprocess 로 부른다(3D 담당).
+2. 추론 서비스 환경: `cd generation\inference_service; python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt`. AnimalLift 를 쓸 때는 추론 서비스를 AnimalLift conda env 안에서 띄운다(같은 프로세스에서 모델을 불러온다 — [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md)).
 3. 방화벽 8080 인바운드 허용(관리자 PowerShell): `netsh advfirewall firewall add rule name="Beside 8080" dir=in action=allow protocol=TCP localport=8080`. 8001 은 열지 않는다(추론 서비스는 127.0.0.1 전용).
 
 실행(세션마다): 리포 루트에서 `.\scripts\run_real.ps1` — 추론 서비스와 Spring real 이 새 창 두 개로 뜨고, 두 healthz 가 응답하면 폰에서 쓸 IP 를 출력한다. 모델이 아직 없으면 `-SampleGlb <유효한 .glb>` 로 패스스루(연동 확인용, 측정 아님). 폰 쪽 절차는 [unity/README.md](../unity/README.md) 'GPU PC real 서버'. 폰보다 먼저 PC 에서 `.\scripts\e2e_mock.ps1 -BaseUrl http://<IP>:8080 -Photos <실제 사진> -TimeoutSeconds 600` 으로 전체 흐름을 점검한다.

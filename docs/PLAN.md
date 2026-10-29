@@ -1,15 +1,15 @@
 # 단계별 계획 (PLAN)
 
-기준일: **2026-10-06(월) 주차 시작**. 표기: **[구현됨]** 코드·테스트가 리포에 있음 / **[실험 결과]** 측정값이 기록됨 / **[계획]** 아직 안 함 / **직접 할 일** 코드로 해결되지 않아 사람이 해야 함. 아직 하지 않은 것을 한 것처럼 쓰지 않는다. 이 문서는 주 1회 계약 회의에서 갱신한다.
+기준일: **2026-10-06(월) 주차 시작**, 상태 갱신 2026-10-30(#1 머지·4b단계 반영). 표기: **[구현됨]** 코드·테스트가 리포에 있음 / **[실험 결과]** 측정값이 기록됨 / **[계획]** 아직 안 함 / **직접 할 일** 코드로 해결되지 않아 사람이 해야 함. 아직 하지 않은 것을 한 것처럼 쓰지 않는다. 이 문서는 주 1회 계약 회의에서 갱신한다.
 
 ## 한눈에 보기
 
 | 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-06) |
 |---|---|---|---|---|
 | 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl·app.js v1 **[구현됨]**, 계약 회의·GLB 교체 등 **직접 할 일** 남음 |
-| 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | 팀원이 완료 보고(2026-10-05), **PR 대기** — 머지 후 [구현됨] 표기 |
-| 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
-| 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | **[계획]** |
+| 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | 앱 코드 **머지됨**(#1, 2026-10-14). DoD 증빙(영상·logcat·metrics 10회)이 리포에 없어 [구현됨] 은 증빙 뒤 |
+| 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | AR 코드 **머지됨**(#1: 평면 배치·가운데 놓기·1마리 제한·애니메이션 칩 5종·셸 털). FPS 등 [실험 결과] 없음 |
+| 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | `/infer` 에 AnimalLift·변환기·자동 리깅 연결 코드 **머지됨**(#1 — 첫 사진 1장만 사용, 리깅은 템플릿이 있을 때만). exp-01~04 기록 없음 = 측정값 0건 |
 | 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증), 실제 모델 E2E **[계획]**(10-20 주 선행) |
 | 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음 | **[계획]** (2026-10-30 착수) |
 | 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
@@ -70,7 +70,7 @@ gantt
 
 담당 Unity. 의존: 0단계 계약 동결, Mock 서버, 유효 GLB.
 
-상태(2026-10-06): 팀원이 연동 완료를 보고했으나 PR 이 머지되지 않아 리포에는 없다 → 머지 후 아래 DoD 증빙(영상·logcat·metrics.csv)과 함께 **[구현됨]** 으로 바꾼다. real 연동(10-20 주) 때 바꿀 것: `maxWaitSeconds` 600, `progress` null 일 때 경과 시간 표시, `baseUrl` 을 GPU PC IP 로([unity/README.md](../unity/README.md) 'GPU PC real 서버').
+상태(2026-10-30): 앱 코드가 #1(2026-10-14)로 머지됐다(`unity/Assets/Beside`, 화면은 `UI/Designed/DesignedUIController.cs`). 아래 DoD 증빙(영상·logcat·metrics.csv)이 아직 리포에 없어 **[구현됨]** 표기는 증빙을 올린 뒤에 한다. real 연동 때 바꿀 것으로 적었던 최대 대기 600초와 `progress` null 일 때 경과 시간 표시는 앱에 들어가 있고, `baseUrl` 은 앱의 서버 설정 화면에서 넣는다(VM 이면 `https://<도메인>`, [deploy/README.md](../deploy/README.md) '폰 앱').
 
 산출물: NativeGallery 로 사진 선택(1~10장, 타입·용량 사전 검사) → `POST /api/v1/jobs` → 폴링(`JobStatus`, Unknown 처리) → `asset.url` 다운로드·캐시 → glTFast 로드(비AR 테스트 씬) → `error.code` 문구(ERROR_CODES) → retry 버튼 → `metrics.csv` 의 `uploadMs, waitMs, downloadMs, loadMs, e2eMs`.
 
@@ -126,8 +126,8 @@ DoD:
 | `RealJobWorker`: 추론 슬롯 대기(`inference.max-concurrency=1`) → PROCESSING → `/infer` 호출·타임아웃 → 오류 코드 매핑 → GLB 헤더 확인·복사 → `JobFinisher` | **[구현됨]** 2026-10-04 (선행) | `InferenceClientTest` 18개·`RealJobWorkerTest` 5개(가짜 `/infer`). 실제 FastAPI 스텁으로 패스스루 COMPLETED(48바이트 최소 GLB), 501·꺼짐 → `INFERENCE_UNAVAILABLE`, 0바이트 GLB → `CONVERSION_FAILED` 확인 |
 | 실행별 측정 `job_runs`(서버 타이밍 + `/infer` 수치 + `passthrough`·`modelVersion`·`glbBytes`), `events.jsonl` 19 필드 | **[구현됨]** 2026-10-06 | `JobPersistenceTest`·`JobEventsTest`·`RealJobWorkerTest`. 측정표는 real 프로파일 h2-console 에서 `CSVWRITE`(METRICS §1.1). `/infer` 선택 필드 `modelVersion` 추가(내부 계약) |
 | 배포 구성 | **결정됨** 2026-10-05 + 절차 **[구현됨]** 2026-10-06 | 팀원 GPU PC 한 대에 Spring + 추론 서비스(같은 호스트, #6 (a) 제안). `scripts/run_real.ps1`, [backend/README](../backend/README.md) 'GPU PC 에 real 배치'. 실제 설치는 10-20 주 **직접 할 일**. 바이너리 전송으로 바뀌면 `InferenceClient` 만 교체 |
-| 실제 AnimalLift 모델로 전체 흐름 | **[계획]** 10-20 주 선행 | 3단계에서 `/infer` 에 모델 연결 후 |
-| Unity 에서 real 프로파일 전체 흐름 | **[계획]** 10-20 주 선행 | `maxWaitSeconds` 600, `progress` null 처리 |
+| 실제 AnimalLift 모델로 전체 흐름 | **[계획]** — 모델 연결 코드는 #1 로 머지됨, 실제 사진으로 돌린 기록(job_runs·exp-02)은 아직 없음 | VM 배치는 업로드 모드(4b S2)로 같은 흐름 |
+| Unity 에서 real 프로파일 전체 흐름 | **[계획]** — 600초 대기·`progress` null 처리는 앱(#1)에 있음, 실기기 real 흐름 기록 없음 | |
 
 DoD:
 - [ ] `--spring.profiles.active=real` 로 `e2e_mock.ps1` 이 실제 생성 GLB 를 받는다 (패스스루 샘플로는 2026-10-04 확인)
