@@ -4,8 +4,10 @@ import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -45,4 +47,29 @@ public interface JobRepository extends JpaRepository<Job, String> {
     /** When each job in {@code status} started processing (QueueEstimator: how far the running jobs are). */
     @Query("select j.processingStartedAt from Job j where j.status = :status")
     List<Instant> findProcessingStartedAt(@Param("status") JobStatus status);
+
+    // ------------------------------------------------------------------ library (tag pets)
+
+    /** The jobs of one pet, newest first (createdAt desc, then id desc), like findAllNewestFirst. */
+    @Query("select j from Job j where j.petId = :petId order by j.createdAt desc, j.id desc")
+    List<Job> findByPetNewestFirst(@Param("petId") String petId);
+
+    /** The jobs of several pets, newest first (listPets groups them). */
+    @Query("select j from Job j where j.petId in :petIds order by j.createdAt desc, j.id desc")
+    List<Job> findByPetsNewestFirst(@Param("petIds") Collection<String> petIds);
+
+    /**
+     * Moves one job into a pet (null = unassigned). Job.petId is not updatable through saves, so this statement is the
+     * only way to change it; a worker saving its older copy of the job later keeps the new value.
+     */
+    @Modifying
+    @Transactional
+    @Query("update Job j set j.petId = :petId where j.id = :id")
+    int updatePetId(@Param("id") String id, @Param("petId") String petId);
+
+    /** Every job of the pet back to unassigned (deleting the pet without its jobs). */
+    @Modifying
+    @Transactional
+    @Query("update Job j set j.petId = null where j.petId = :petId")
+    int unassignPet(@Param("petId") String petId);
 }
