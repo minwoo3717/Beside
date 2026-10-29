@@ -2,7 +2,7 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 대기 순번·예상 시간(`JobResponse.queue`·`estimate`)과 PENDING 취소(`POST /cancel` → `CANCELED`), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인).
 - **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
@@ -37,6 +37,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | `GET /api/v1/jobs/{id}` | 200 `JobResponse` | 404 `JOB_NOT_FOUND` |
 | `GET /api/v1/jobs/{id}/asset?variant=base\|hair` | 200 `model/gltf-binary`, `Content-Disposition: attachment` | 409 `JOB_NOT_COMPLETED`, 404 `ASSET_NOT_FOUND`(Mock 은 hair 없음), 400 잘못된 variant |
 | `POST /api/v1/jobs/{id}/retry` | 202 + `{ jobId }` | FAILED 만, 그 외 409 `JOB_NOT_FAILED` |
+| `POST /api/v1/jobs/{id}/cancel` | 200 `JobResponse`(FAILED, `error.code=CANCELED`) | PENDING 만, 그 외(PROCESSING 포함) 409 `JOB_NOT_PENDING` |
 | `GET /api/v1/jobs?limit=&cursor=` | 200 `{ items, nextCursor }` | 개발·디버그용, 최신순 |
 | `GET /api/v1/healthz` | 200 `{ status, profile, workerType }` | |
 | `GET /api/v1/admin/overview` | 200 `AdminOverview` (상태별 수, 대기열, 디스크, `inference` — 지금은 null) | 관리용, 앱은 쓰지 않음. 배포에서는 Caddy Basic 인증 |
@@ -51,6 +52,7 @@ curl.exe -i -F "photos=@C:\photos\dog1.jpg" -F "photos=@C:\photos\dog2.jpg" http
 curl.exe -i http://localhost:8080/api/v1/jobs/<jobId>
 curl.exe -i -o model.glb "http://localhost:8080/api/v1/jobs/<jobId>/asset?variant=base"
 curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
+curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/cancel
 ..\scripts\e2e_mock.ps1        # 위 흐름을 한 번에
 ```
 
@@ -184,12 +186,15 @@ src/main/
 │  ├─ api/v1/ApiV1Paths.java             # 경로 상수
 │  ├─ api/v1/AdminV1Controller.java      # 관리 API /api/v1/admin/* (overview·runs·stats·jobs), 인증은 Caddy 몫
 │  ├─ api/v1/dto/                        # JobResponse, Timings, AssetInfo, JobError, UploadedFile, JobCreatedResponse,
-│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse, Admin* (= openapi.yaml 스키마 이름)
+│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse, JobQueue, JobEstimate, Admin*
+│  │                                     # (= openapi.yaml 스키마 이름)
 │  ├─ service/AdminService.java          # 측정표 CSV·통계(nearest-rank)·현황·최근 작업 (읽기 전용)
-│  ├─ service/InferenceStatusSource.java # overview.inference 를 채울 빈 인터페이스 (GPU 감시가 구현, 지금은 없음 → null)
+│  ├─ service/InferenceStatusSource.java # overview.inference 를 채우는 인터페이스 (real: InferenceHealthMonitor, mock: 없음 → null)
 │  ├─ config/AdminPageConfig.java        # /admin, /admin/ → static/admin/index.html
 │  ├─ controller/JobController.java      # v0 /api/jobs (동결) + LegacyJobResponse
-│  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
+│  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, cancel, 목록, 에셋 경로
+│  ├─ service/JobTransitions.java        # PENDING 을 떠나는 전이(워커 시작·cancel·대기 포기)를 한 잠금 안에서, 같은 attempt 일 때만
+│  ├─ service/QueueEstimator.java        # JobResponse.queue(앞선 작업 수·INFERENCE_OFFLINE)·estimate(최근 20건 processingMs 중앙값, 60초 캐시)
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
 │  ├─ service/RealJobWorker.java         # real: 추론 슬롯 대기 → PROCESSING → /infer → GLB 헤더 확인·복사 → JobFinisher
 │  ├─ service/InferenceClient.java       # 추론 서비스 전송(path: /infer, upload: /infer/upload + glbUrl 다운로드 + cleanup)과 응답 → Job 실패 코드 매핑,
@@ -254,6 +259,10 @@ Remove-Item Env:BESIDE_MVP_URL
 | `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값. 업로드 모드: multipart 파트·파일명(한글·따옴표)·바이트·토큰 헤더, 응답 12종 같은 매핑, `glbUrl` 없음·절대 URL·다운로드 404/500/503/끊김 → `CONVERSION_FAILED`, 401·403 → `INFERENCE_UNAVAILABLE`(두 모드), cleanup 의 삭제·DELETE·실패 무시 (가짜 추론 서버) |
 | `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, 실패 4종 코드, retry, `/infer` 한 번에 1건, `job_runs` 행과 events 줄이 같은 수치(inferMs·glbBytes·passthrough·modelVersion), 패스스루 실행 표시 (가짜 추론 서버) |
 | `RealJobWorkerUploadTest` | profile real + `inference.transfer=upload` + 토큰: 업로드 → COMPLETED → asset 서빙, 보낸 파트, 호출 순서 POST → GET → DELETE, 임시 폴더 정리, `job_runs` 행. GLB 404 면 `CONVERSION_FAILED` 이어도 DELETE·정리 (가짜 추론 서버) |
+| `RealJobWorkerOfflineTest` | profile real + `inference.offline-wait-ms`: GPU 가 꺼져 있으면 PENDING 으로 기다렸다 돌아오면 시작, 시간 초과면 `INFERENCE_UNAVAILABLE`, 대기 중 `queue.reason=INFERENCE_OFFLINE`, 대기 중 취소하면 `/healthz` 확인을 멈추고 `/infer` 없이 `CANCELED` 유지 (가짜 추론 서버) |
+| `JobV1CancelTest` | mock: PENDING 취소 → 200 FAILED `CANCELED`, 워커가 시작하지 않음, `job_runs` 행 `FAILED:CANCELED`, COMPLETED·이미 취소한 작업 409 `JOB_NOT_PENDING`, 없는 작업 404, 취소 → retry → COMPLETED(앞 attempt 의 워커가 새 attempt 를 건드리지 않음) |
+| `RealJobQueueTest` | profile real, GPU 슬롯 1개: 처리 중 1건 + 대기 2건의 `queue.ahead` 1·2, 완료 실행이 없으면 `estimate=null`, 생긴 뒤 `remainingMs`·`basedOnRuns`, PROCESSING 취소 409, 대기 중 취소하면 순번이 줄고 `/infer` 가 그 작업으로 불리지 않음 (가짜 추론 서버) |
+| `QueueEstimatorTest` | JPA 슬라이스: 최근 20건 중앙값(짝수는 가운데 둘의 평균), 실패·패스스루·다른 워커 제외, 근거 없음 → null, 같은 queuedAt 은 id 순, 처리 중 작업의 경과는 중앙값까지만 뺌, PROCESSING 은 0 이상, 60초 캐시와 완료 시 무효화 |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
