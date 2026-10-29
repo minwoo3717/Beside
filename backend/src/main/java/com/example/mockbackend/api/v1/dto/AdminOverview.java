@@ -15,7 +15,7 @@ public record AdminOverview(
         Map<String, Long> statusCounts,
         AdminQueue queue,
         AdminDisk disk,
-        @Schema(nullable = true, description = "추론 서비스(GPU) 상태. 지금은 항상 null — GPU 상태 감시(PLAN S3)를 병합할 때 "
-                + "InferenceStatusSource 빈으로 채운다.")
+        @Schema(nullable = true, description = "추론 서비스(GPU) 상태: real 의 InferenceHealthMonitor 마지막 값 "
+                + "(state, device, checkedAt, since, detail). mock 에서는 null.")
         Object inference) {
 }

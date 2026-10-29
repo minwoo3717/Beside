@@ -126,6 +126,17 @@ class RealJobWorkerOfflineTest {
         assertThat(inferCalls.get()).isZero();
     }
 
+    @Test
+    void adminOverviewShowsTheMonitorsGpuReading() throws Exception {
+        String body = mvc.perform(get("/api/v1/admin/overview")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        var inference = JSON.readTree(body).path("inference");
+        assertThat(inference.isObject()).isTrue();
+        assertThat(inference.path("state").asText()).isIn("UP", "LOADING", "DOWN", "UNKNOWN");
+        assertThat(inference.has("since")).isTrue();
+        assertThat(inference.path("detail").asText()).doesNotContain("127.0.0.1");
+    }
+
     private String upload() throws Exception {
         String body = mvc.perform(multipart("/api/v1/jobs")
                         .file(new MockMultipartFile("photos", "dog.png", "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))

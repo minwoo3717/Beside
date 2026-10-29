@@ -83,7 +83,7 @@ public class AdminService {
     private final JobRunRepository jobRunRepository;
     private final JobWorker jobWorker;
     private final Environment environment;
-    /** Empty until the GPU health monitor (PLAN S3) implements InferenceStatusSource. */
+    /** InferenceHealthMonitor in profile real; empty in mock (overview.inference = null). */
     private final ObjectProvider<InferenceStatusSource> inferenceStatusSource;
     private final AtomicReference<StorageScan> lastStorageScan = new AtomicReference<>();
     private final Logger log = LoggerFactory.getLogger(AdminService.class);

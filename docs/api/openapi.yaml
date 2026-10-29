@@ -320,7 +320,7 @@ paths:
       summary: 운영 현황 — 상태별 작업 수, 대기열, 디스크, GPU
       description: |
         관리 대시보드(/admin)가 5초마다 부른다. Spring 에는 인증 코드가 없고 배포에서는 Caddy Basic 인증이 막는다.
-        `inference` 는 아직 항상 null 이다(GPU 상태 감시가 연결되면 채워진다 — AdminOverview 설명 참고).
+        `inference` 는 real 프로파일에서 GPU 추론 서비스 감시(15초마다 /healthz)의 마지막 값이고, mock 에서는 null 이다.
       responses:
         '200':
           description: 현황
@@ -837,8 +837,10 @@ components:
           type: object
           nullable: true
           description: |
-            추론 서비스(GPU) 상태. **지금은 항상 null** 이다. GPU 상태 감시(PLAN S3, HealthResponse 의 inference)를 병합할 때
-            같은 객체로 채운다(서버의 InferenceStatusSource 빈). null 이면 대시보드는 "GPU 상태: 정보 없음" 을 보여준다.
+            추론 서비스(GPU) 상태 — real 프로파일의 감시(InferenceHealthMonitor)가 15초마다 /healthz 를 읽은 마지막 값.
+            필드: `state`(UNKNOWN | UP | LOADING | DOWN — 모르는 값은 무시), `device`(cuda | cpu | null), `checkedAt`·`since`
+            (ISO 8601, since = 지금 상태가 시작된 시각), `detail`(짧은 설명, 서버 주소·경로 없음). mock 에서는 null 이고
+            대시보드는 "GPU 상태: 정보 없음" 을 보여준다.
     AdminQueue:
       type: object
       description: 대기열. pending·processing 은 statusCounts 의 PENDING·PROCESSING 과 같다.

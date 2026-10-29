@@ -24,11 +24,11 @@ import java.time.Instant;
  * (still loading, failed to load or none configured), DOWN = an error status, an unreadable answer or no answer
  * within 2 s. The GPU is a teammate's PC that may be off: RealJobWorker reads this to keep jobs PENDING instead of
  * failing them at once, and every change of state is published as {@link StateChanged} (WebhookNotifier).
- * API v1 does not expose it yet; a healthz field is a contract addition for the meeting (REVIEW_CHECKLIST #11).
+ * The admin overview (GET /api/v1/admin/overview, inference) shows it; healthz does not (REVIEW_CHECKLIST #11).
  */
 @Component
 @Profile("real")
-public class InferenceHealthMonitor {
+public class InferenceHealthMonitor implements InferenceStatusSource {
     static final Duration CHECK_TIMEOUT = Duration.ofSeconds(2);
 
     public enum State { UNKNOWN, UP, LOADING, DOWN }
@@ -67,6 +67,12 @@ public class InferenceHealthMonitor {
 
     /** The latest reading (UNKNOWN until the first check). */
     public Status current() {
+        return status;
+    }
+
+    /** GET /api/v1/admin/overview: the latest reading as it is (state, device, checkedAt, since, detail). */
+    @Override
+    public Object inferenceStatus() {
         return status;
     }
 
