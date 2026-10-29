@@ -1,0 +1,18 @@
+# Build context of backend/Dockerfile: the image needs gradlew, gradle/, *.gradle.kts and src/main only.
+# Local build output and Gradle caches
+build/
+bin/
+.gradle/
+out/
+# Server data (H2 files, uploads, results, events.jsonl) lives in the /app/storage volume, never in the image
+storage/
+logs/
+# Tests run in CI, not in the image build
+src/test/
+# Editors and docs
+.vscode/
+.idea/
+*.iml
+*.md
+Dockerfile
+.dockerignore
