@@ -72,6 +72,65 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 `detail.code` 가 위 Job 실패 코드면 HTTP 상태와 관계없이 그 코드가 기록된다. Spring 은 `detail.message` 를 앱 응답에 싣지 않고 서버 로그에만 남기므로 message 에 경로를 넣어도 된다.
 
+### 전송 모드: 경로(path) / 업로드(upload) — 업로드는 [계획]
+
+2026-10-30 결정(REVIEW_CHECKLIST #6 (b)): Spring 을 클라우드 VM 에 두고 이 서비스는 팀원 GPU PC 에 남긴다(Tailscale 사설망). 두 기계는 디스크를 공유하지 않으므로 사진 파일을 올리고 GLB 를 내려받는 업로드 모드를 **추가**한다. 위 `POST /infer`(경로 모드)는 바뀌지 않는다.
+
+| 모드 | Spring 설정 | 쓰는 곳 |
+|---|---|---|
+| 경로 (기본) | `inference.transfer=path` | Spring 과 이 서비스가 같은 PC·공유 볼륨 (`scripts/run_real.ps1`) |
+| 업로드 | `inference.transfer=upload` | 디스크를 공유하지 않는 배치 (VM 의 Spring ↔ GPU PC 의 이 서비스) |
+
+### `POST /infer/upload` (multipart/form-data)
+
+| 파트 | 형식 | 설명 |
+|---|---|---|
+| `request` | `application/json` 텍스트 1개, 파일명 없음 | `{ "jobId": "3fa85f64-…", "options": { "hair": false } }`. `jobId` 는 `[A-Za-z0-9-]{1,64}`(Spring 은 UUID), `options` 는 `/infer` 와 같다 |
+| `photos` | 파일 1~10개 | 업로드 원래 파일명과 바이트. 파트 Content-Type 은 확장자로 정한다(jpg/jpeg·png·webp, 그 밖 `application/octet-stream`) |
+
+서비스는 사진을 `{BESIDE_WORK_DIR}/{jobId}/input/` 에 순번 접두사를 붙여 저장한다(`00_dog.jpg`, `01_dog.png`). 파일명에서 경로 구분자 앞부분은 버리고 영문·숫자·`._-` 밖의 글자는 `_` 로 바꾼다(모델 쪽 이미지 로더가 한글 경로를 못 읽는 문제를 피한다). 같은 `jobId` 가 다시 오면(retry) `input/` 을 비우고 새로 저장한다. 그다음 처리와 오류는 `/infer` 와 같다.
+
+응답 200 — `/infer` 와 같은 필드 + `glbUrl`:
+
+```json
+{ "glbPath": "/mnt/c/beside/work/3fa85f64-…/base.glb", "glbUrl": "/artifacts/3fa85f64-…/base.glb", "hairGlbPath": null,
+  "metrics": { "inferMs": 48210, "gpuPeakMB": 9120, "modelParams": 312000000, "outputVertices": 10342, "outputTriangles": 19876, "convertMs": 850 },
+  "passthrough": false, "modelVersion": "animallift-baseline@3f2a1c9" }
+```
+
+| 응답 필드 | 타입 | 설명 |
+|---|---|---|
+| `glbUrl` | string | 결과 GLB 의 **서비스 기준 상대 경로**(`/` 로 시작, 지금은 항상 `/artifacts/{jobId}/base.glb`). Spring 은 `inference.base-url` 뒤에 붙여 GET 한다. 절대 URL·`//` 로 시작하는 값은 받지 않는다 |
+| `glbPath` | string | 이 서비스 PC 안의 경로. 참고용이며 업로드 모드의 Spring 은 쓰지 않는다 |
+| 나머지 | | `/infer` 와 같다 |
+
+패스스루(`BESIDE_SAMPLE_GLB`)에서도 동작한다: 샘플을 `{BESIDE_WORK_DIR}/{jobId}/base.glb` 로 복사해 artifact 로 내준다(`passthrough: true`). GPU 없이 VM ↔ GPU PC 연동을 먼저 시험하기 위해서다.
+
+`request` 파트가 JSON 이 아니거나 `jobId` 가 패턴 밖이거나 사진이 0개·11개 이상이면 422(FastAPI 요청 검증과 같은 취급).
+
+### `GET /artifacts/{jobId}/base.glb`
+
+200 `model/gltf-binary`. `jobId` 는 `[A-Za-z0-9-]{1,64}` 만, 파일명은 화이트리스트(지금은 `base.glb` 만)라서 작업 폴더 밖의 파일은 열 수 없다. 패턴 밖·화이트리스트 밖·파일 없음은 404.
+
+### `DELETE /artifacts/{jobId}`
+
+그 작업 폴더 `{BESIDE_WORK_DIR}/{jobId}`(업로드 사진·모델 중간 산출물·결과 GLB)를 지운다. 없어도 204(멱등), `jobId` 가 패턴 밖이면 404. Spring 은 업로드 모드에서 GLB 를 저장한 뒤(작업 성공·실패 모두) 부르고, 이 호출이 실패해도 로그만 남긴다(작업 결과는 바뀌지 않는다). 그래서 업로드 모드에서는 GPU PC 에 작업 파일이 남지 않는다 — 실험용 중간 산출물이 필요하면 경로 모드로 돌린다.
+
+### 인증: `X-Inference-Token` (두 모드 공통)
+
+환경변수 `BESIDE_INFERENCE_TOKEN` 이 있으면 `/infer`, `/infer/upload`, `/artifacts/*` 는 요청 헤더 `X-Inference-Token` 이 그 값과 같아야 한다(상수 시간 비교). 없거나 다르면 본문을 읽기 전에 401 `{ "detail": { "code": "INFERENCE_UNAVAILABLE", "message": "…" } }`. `/healthz`(와 FastAPI 의 `/docs`·`/openapi.json`)는 토큰 없이 열려 있다. 환경변수가 없거나 빈 값이면 검사하지 않는다(지금 동작). Spring 은 `inference.token` 이 비어 있지 않으면 두 모드 모두 이 헤더를 보낸다.
+
+### Spring 쪽 매핑 추가 (위 오류 표에 더해)
+
+| 상황 | 모드 | Spring 이 Job 에 기록할 코드 |
+|---|---|---|
+| HTTP 401·403, `detail.code` 없음·모르는 코드 (토큰 누락·불일치, 프록시 거부) | 두 모드 | `INFERENCE_UNAVAILABLE` |
+| 200 인데 `glbUrl` 없음·빈 값·`/` 로 시작하지 않음 | 업로드 | `CONVERSION_FAILED` |
+| `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
+| 내려받은 파일이 glTF 2.0 바이너리 아님 | 업로드 | `CONVERSION_FAILED` (경로 모드와 같은 헤더 확인) |
+
+이 서비스가 직접 보내는 401 은 `detail.code` 가 `INFERENCE_UNAVAILABLE` 이라 위 규칙과 결과가 같다.
+
 ### `GET /healthz`
 
 ```json
@@ -80,6 +139,6 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 ## 가정과 열린 결정 (계약 회의 안건)
 
-- Spring ↔ Python **파일시스템 공유**(같은 호스트 또는 NFS/SMB 볼륨): 업로드 경로를 그대로 넘기고 GLB 경로를 돌려받는다. 분리 배포가 필요해지면 `/infer` 를 multipart 업로드 + GLB 바이너리 응답으로 바꾼다(PLAN 4단계에서 결정).
+- 경로 모드는 Spring ↔ Python **파일시스템 공유**(같은 호스트 또는 NFS/SMB 볼륨)를 가정한다: 업로드 경로를 그대로 넘기고 GLB 경로를 돌려받는다. 디스크를 공유하지 않는 분리 배포는 업로드 모드(`POST /infer/upload` + `GET /artifacts/…`)로 한다(2026-10-30 결정, REVIEW_CHECKLIST #6 (b)).
 - 동기 호출: Spring 워커 스레드가 응답까지 기다린다(기본 600초). 추론이 더 길어지면 작업 큐·콜백 방식으로 바꾼다.
 - 동시성: GPU 1장 기준 요청 1개씩. Spring 이 `inference.max-concurrency`(기본 1)건만 동시에 보내고 나머지 작업은 Spring 에서 PENDING 으로 기다린다 **[구현됨]**. 그래서 `inference.timeout-ms` 는 그 작업 자신의 추론 시간에만 걸린다.

@@ -139,7 +139,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 ## 6. 내부 계약: Spring real 워커 ↔ Python 추론 서비스 — [구현됨: Spring 호출·FastAPI 스텁] / [계획: 모델]
 
-Unity 는 호출하지 않는다. 같은 호스트 또는 공유 볼륨 가정(분리 배포 시 바이너리 전송으로 변경, 회의 안건).
+Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스트 또는 공유 볼륨을 가정한다. 디스크를 공유하지 않는 분리 배포는 §6.1 업로드 모드로 한다.
 
 `POST /infer`
 
@@ -166,7 +166,30 @@ Unity 는 호출하지 않는다. 같은 호스트 또는 공유 볼륨 가정(�
 
 `GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드.
 
-Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 600000), `inference.max-concurrency`(기본 1), `storage.result.dir`(기본 `storage/results`).
+### 6.1 업로드 모드 — [계획] (2026-10-30 결정, REVIEW_CHECKLIST #6 (b))
+
+Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망)라 디스크를 공유하지 않는다. 위 `/infer`(경로 모드)는 그대로 두고 사진을 올리고 GLB 를 내려받는 엔드포인트를 **추가**한다. Spring `inference.transfer=path|upload`(기본 `path`)로 고른다. 자세한 표는 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드'.
+
+```text
+POST   /infer/upload            multipart: request = {"jobId", "options": {"hair": false}} (application/json, 파일명 없음)
+                                           photos  = 사진 파일 1~10개 (원래 파일명)
+       → 200 /infer 와 같은 필드 + "glbUrl": "/artifacts/{jobId}/base.glb" (서비스 기준 상대 경로)
+GET    /artifacts/{jobId}/base.glb   → 200 model/gltf-binary (jobId [A-Za-z0-9-]{1,64}, 파일명 화이트리스트, 그 밖 404)
+DELETE /artifacts/{jobId}            → 204 작업 폴더(업로드 사진·결과) 삭제, 없어도 204
+```
+
+- 인증(두 모드 공통): 서비스에 `BESIDE_INFERENCE_TOKEN` 이 있으면 `/infer`·`/infer/upload`·`/artifacts/*` 는 헤더 `X-Inference-Token` 이 같아야 한다(상수 시간 비교, 아니면 401). `/healthz` 는 열어 둔다. Spring 은 `inference.token` 이 비어 있지 않으면 두 모드 모두 이 헤더를 보낸다.
+- 패스스루에서도 업로드 모드가 동작한다(샘플을 `{jobId}/base.glb` 로 복사해 artifact 로 서빙).
+- Spring 은 `glbUrl` 을 `inference.base-url` 뒤에 붙여 GET 하고 `storage/tmp/{jobId}/base.glb`(`storage.tmp.dir`)에 받은 뒤 경로 모드와 같은 헤더 확인·복사를 한다. 끝나면(성공·실패 모두) 임시 파일을 지우고 `DELETE /artifacts/{jobId}` 를 보낸다. DELETE 실패는 로그만 남긴다.
+
+| 상황 | 모드 | Spring 이 Job 에 기록 |
+|---|---|---|
+| HTTP 401·403, `detail.code` 없음·모르는 코드 | 두 모드 | `INFERENCE_UNAVAILABLE` |
+| 200 인데 `glbUrl` 없음·`/` 로 시작하지 않음 | 업로드 | `CONVERSION_FAILED` |
+| `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
+| 그 밖 | 업로드 | 위 표 그대로 |
+
+Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 600000), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
 
 ---
 
