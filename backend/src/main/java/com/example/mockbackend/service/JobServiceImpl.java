@@ -10,6 +10,7 @@ import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.IdempotencyKeyEntry;
 import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
+import com.example.mockbackend.repository.PetRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +56,8 @@ public class JobServiceImpl implements JobService {
     private final JobWorker jobWorker;
     private final JobTransitions jobTransitions;
     private final QueueClock queueClock;
+    private final PetRepository petRepository;
+    private final ThumbnailService thumbnails;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -98,7 +101,7 @@ public class JobServiceImpl implements JobService {
     // ------------------------------------------------------------------ v1
 
     @Override
-    public Job submitJobV1(List<MultipartFile> photos, String idempotencyKey) {
+    public Job submitJobV1(List<MultipartFile> photos, String idempotencyKey, String petId) {
         if (photos == null || photos.isEmpty()) {
             throw ApiException.badRequest(ErrorCode.NO_PHOTOS, "At least one photo is required in the 'photos' part");
         }
@@ -133,9 +136,13 @@ public class JobServiceImpl implements JobService {
                 return replay.get();
             }
         }
+        String pet = petId == null || petId.isBlank() ? null : petId.strip();
+        if (pet != null && !petRepository.existsById(pet)) {
+            throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown petId: " + pet);
+        }
         Job job;
         try {
-            job = saveUploads(photos);
+            job = saveUploads(photos, pet);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploads", e);
         }
@@ -154,6 +161,8 @@ public class JobServiceImpl implements JobService {
             }
             throw shuttingDown;
         }
+        // After the upload was measured (uploadMs) and the job dispatched; failures only mean "no thumbnail".
+        thumbnails.create(job.getId(), Path.of(job.getUploads().get(0).path()));
         return job;
     }
 
@@ -170,7 +179,7 @@ public class JobServiceImpl implements JobService {
             throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
                     "Only FAILED jobs can be retried; current status is " + job.getStatus());
         }
-        Instant now = Instant.now();
+        Instant now = queueClock.next(); // queue order = arrival order (QueueClock)
         job.setErrorCode(null);
         job.setErrorMessage(null);
         job.setResultPath(null);
@@ -179,7 +188,7 @@ public class JobServiceImpl implements JobService {
         job.setFinishedAt(null);
         job.setProgress(0.0);
         job.setAttempt(job.getAttempt() + 1);
-        job.setQueuedAt(queueClock.next());
+        job.setQueuedAt(now);
         job.setUpdatedAt(now);
         job.setStatus(JobStatus.PENDING);
         jobRepository.save(job);
@@ -284,7 +293,7 @@ public class JobServiceImpl implements JobService {
 
     /** v0: store and start at once. */
     private Job store(List<MultipartFile> photos) throws IOException {
-        Job job = saveUploads(photos);
+        Job job = saveUploads(photos, null);
         dispatch(job);
         return job;
     }
@@ -293,15 +302,16 @@ public class JobServiceImpl implements JobService {
      * Copies the photos and saves the job as PENDING; the caller dispatches it. When a copy or the save fails, the
      * photos already copied for this request are deleted again (no job owns them).
      */
-    Job saveUploads(List<MultipartFile> photos) throws IOException {
+    Job saveUploads(List<MultipartFile> photos, String petId) throws IOException {
         Job job = new Job();
         String jobId = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        Instant now = queueClock.next(); // never ties with the job submitted just before (queue order)
         job.setId(jobId);
+        job.setPetId(petId);
         job.setStatus(JobStatus.PENDING);
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
-        job.setQueuedAt(queueClock.next()); // never ties with the job submitted just before (queue order)
+        job.setQueuedAt(now);
         job.setProgress(0.0);
         job.setAttempt(1);
 
