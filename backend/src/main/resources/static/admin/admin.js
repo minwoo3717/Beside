@@ -1,8 +1,10 @@
 "use strict";
-// Admin dashboard (/admin): GET /api/v1/admin/overview, /jobs and /stats every 5 s while the tab is visible.
-// Formatting rules live in admin-format.js (tested with node:test). Server text is only ever set as textContent.
+// Admin dashboard (/admin): GET /api/v1/admin/overview, /jobs, /stats and /ratings/summary every 5 s while the tab is
+// visible, and the app metrics.csv upload. Formatting rules live in admin-format.js and admin-measurement.js (tested
+// with node:test). Server text is only ever set as textContent.
 (function () {
   const F = window.BesideAdminFormat;
+  const M = window.BesideAdminMeasurement;
   const REFRESH_MS = 5000;
   const JOBS_LIMIT = 20;
   const $ = (selector) => document.querySelector(selector);
@@ -30,15 +32,17 @@
     loading = true;
     clearTimeout(timer);
     try {
-      const [overview, jobs, stats] = await Promise.all([
+      const [overview, jobs, stats, ratingSummary] = await Promise.all([
         getJson("/api/v1/admin/overview"),
         getJson(`/api/v1/admin/jobs?limit=${JOBS_LIMIT}`),
-        getJson(F.statsUrl(passthroughBox.checked))
+        getJson(F.statsUrl(passthroughBox.checked)),
+        getJson(M.ratingSummaryUrl(passthroughBox.checked))
       ]);
       const now = Date.now();
       renderOverview(overview, now);
       renderJobs(Array.isArray(jobs.items) ? jobs.items : [], now);
       renderStats(Array.isArray(stats.groups) ? stats.groups : []);
+      renderRatingSummary(Array.isArray(ratingSummary.groups) ? ratingSummary.groups : []);
       lastSuccess = new Date(now);
       showConnection(true);
     } catch (error) {
@@ -128,10 +132,14 @@
     const rows = items.map((job) => {
       const row = document.createElement("tr");
       const idCell = document.createElement("td");
+      const link = document.createElement("a");
+      link.className = "job-link";
+      link.href = M.jobPageUrl(job.id);
+      link.title = `${job.id || ""} · 사진·모델·평가 보기`;
       const code = document.createElement("code");
       code.textContent = F.shortId(job.id);
-      code.title = job.id || "";
-      idCell.append(code);
+      link.append(code);
+      idCell.append(link);
 
       const statusCell = document.createElement("td");
       const badge = document.createElement("span");
@@ -178,10 +186,74 @@
     $("#stats-empty").hidden = rows.length > 0;
   }
 
+  function renderRatingSummary(groups) {
+    const rows = groups.map((group) => {
+      const row = document.createElement("tr");
+      row.append(
+        cell(group.modelVersion || F.DASH, "wrap"),
+        cell(F.formatCount(group.jobs), "num"),
+        cell(F.formatCount(group.ratings), "num"),
+        cell(F.formatCount(group.raters), "num"),
+        ...M.SCORE_COLUMNS.map((column) => cell(M.formatScore(group[column.name]), "num")));
+      return row;
+    });
+    $("#ratings-body").replaceChildren(...rows);
+    $("#ratings-empty").hidden = rows.length > 0;
+  }
+
+  // ------------------------------------------------------------------ app metrics.csv upload
+
+  const clientForm = $("#client-form");
+  const clientFile = $("#client-file");
+  const clientSubmit = $("#client-submit");
+  const clientResult = $("#client-result");
+
+  function showUpload(text, state, errors) {
+    clientResult.textContent = text;
+    clientResult.dataset.state = state || "";
+    $("#client-errors").replaceChildren(...(errors || []).map((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      return item;
+    }));
+  }
+
+  clientForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const file = clientFile.files && clientFile.files[0];
+    if (!file) {
+      showUpload("올릴 metrics.csv 파일을 골라 주세요.", "error");
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file, file.name);
+    clientSubmit.disabled = true;
+    showUpload("올리는 중…");
+    let response = null;
+    let json = null;
+    try {
+      response = await fetch(M.CLIENT_METRICS_URL, { method: "POST", body, headers: { Accept: "application/json" } });
+      json = await response.json().catch(() => null);
+    } catch (offline) {
+      response = null;
+    } finally {
+      clientSubmit.disabled = false;
+    }
+    if (!response || !response.ok) {
+      showUpload(M.uploadErrorText(response ? response.status : 0, json), "error");
+      return;
+    }
+    const summary = M.importSummary(json);
+    showUpload(summary.text, summary.errors.length > 0 ? "error" : "ok", summary.errors);
+    clientFile.value = "";
+  });
+
   // ------------------------------------------------------------------ controls
 
   function updateCsvLink() {
     csvLink.href = F.runsCsvUrl(passthroughBox.checked);
+    $("#ratings-csv-link").href = M.ratingsCsvUrl(passthroughBox.checked);
+    $("#e2e-csv-link").href = M.e2eCsvUrl(passthroughBox.checked);
   }
 
   passthroughBox.addEventListener("change", () => {

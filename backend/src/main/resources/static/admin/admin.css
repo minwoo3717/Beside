@@ -84,6 +84,19 @@ code { font: 11px Consolas, monospace; color: var(--ink); }
 .badge[data-status="FAILED"] { background: var(--bad-bg); color: var(--bad-ink); }
 .error-code { color: var(--bad-ink); font-weight: 600; }
 .empty { margin: 16px 0 0; padding: 18px; text-align: center; font-size: 12px; color: var(--muted); background: #f2f4ed; border-radius: 10px; }
+/* Report panels (quality rating summary, app metrics.csv upload) and the job detail links. */
+.job-link { color: inherit; text-decoration-color: #b8c4ad; text-underline-offset: 3px; }
+.job-link:hover code { color: var(--green); }
+.secondary-link { font-size: 12px; font-weight: 600; color: var(--green); }
+.primary-button:disabled { background: #a9b5aa; cursor: not-allowed; }
+button.primary-button { border: 0; cursor: pointer; }
+.upload-form { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.upload-form input[type="file"] { font-size: 12px; max-width: 100%; }
+.upload-result { min-height: 1.2em; margin: 12px 0 0; font-size: 13px; }
+.upload-result[data-state="error"] { color: var(--bad-ink); }
+.upload-result[data-state="ok"] { color: var(--ok-ink); }
+.upload-errors { margin: 8px 0 0; padding-left: 18px; font: 11px/1.7 Consolas, monospace; color: var(--bad-ink); }
+.upload-errors:empty { display: none; }
 
 footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; max-width: 1096px; margin: 0 auto; padding: 20px 0 28px; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); }
 footer > span:first-child { font-weight: 700; color: var(--ink); }

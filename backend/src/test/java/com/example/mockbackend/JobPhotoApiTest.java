@@ -145,6 +145,11 @@ class JobPhotoApiTest {
         for (String asset : List.of("/job/job.js", "/job/job-format.js", "/job/qr.js", "/job/job.css")) {
             mvc.perform(get(asset)).andExpect(status().isOk());
         }
+        // The dashboard links here and carries the report panels' helpers.
+        mvc.perform(get("/admin/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/admin/admin-measurement.js")));
+        mvc.perform(get("/admin/admin-measurement.js")).andExpect(status().isOk());
     }
 
     // ------------------------------------------------------------------ helpers
