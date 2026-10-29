@@ -284,6 +284,35 @@ class RatingApiTest {
     }
 
     @Test
+    void adminJobGivesTheDetailPageTheAttemptAndTheLastRunsModelVersion() throws Exception {
+        saveJob(JOB_A, JobStatus.COMPLETED);
+        Job retried = jobs.findById(JOB_A).orElseThrow();
+        retried.setAttempt(2);
+        jobs.save(retried);
+        run(JOB_A, 1, "real", "INFERENCE_FAILED", T0.minusSeconds(60), details(false, "old-model"));
+        run(JOB_A, 2, "real", null, T0.minusSeconds(30), details(false, "animallift-baseline@abc"));
+
+        mvc.perform(get("/api/v1/admin/jobs/{id}", JOB_A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(JOB_A))
+                .andExpect(jsonPath("$.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.attempt").value(2))
+                .andExpect(jsonPath("$.modelVersion").value("animallift-baseline@abc"))
+                .andExpect(jsonPath("$.errorCode").value((Object) null));
+
+        saveJob(JOB_B, JobStatus.PENDING);
+        mvc.perform(get("/api/v1/admin/jobs/{id}", JOB_B))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.modelVersion").value((Object) null))
+                .andExpect(jsonPath("$.timings.totalMs").value((Object) null));
+
+        mvc.perform(get("/api/v1/admin/jobs/{id}", JOB_C))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.jobId").value(JOB_C));
+    }
+
+    @Test
     void invalidAdminParametersAreInvalidRequest() throws Exception {
         List<MockHttpServletRequestBuilder> invalid = List.of(
                 get("/api/v1/admin/ratings").param("format", "xml"),
