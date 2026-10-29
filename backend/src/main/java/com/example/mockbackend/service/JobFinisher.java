@@ -10,6 +10,7 @@ import com.example.mockbackend.repository.JobRunRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +22,8 @@ import java.time.Instant;
  * COMPLETED without its asset), then measures the run: one job_runs row and one events.jsonl line, both built from
  * the same JobRun so the two sources cannot disagree. Workers and InterruptedJobRecovery use it, so every finished
  * run is measured exactly once. Measuring never changes the outcome: a failed row insert or file append is logged
- * and the job stays COMPLETED/FAILED as saved.
+ * and the job stays COMPLETED/FAILED as saved. Last, a JobFinishedEvent goes out for notifications (WebhookNotifier,
+ * asynchronous); a failure there is logged the same way.
  */
 @Component
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class JobFinisher {
     private final JobRepository jobRepository;
     private final JobRunRepository jobRunRepository;
     private final EventLog eventLog;
+    private final ApplicationEventPublisher events;
     private final Logger log = LoggerFactory.getLogger(JobFinisher.class);
 
     /**
@@ -70,5 +73,10 @@ public class JobFinisher {
             log.error("Could not store the job_runs row of jobId={} attempt={}: {}", run.getJobId(), run.getAttempt(), e.toString());
         }
         eventLog.recordFinished(run);
+        try {
+            events.publishEvent(JobFinishedEvent.of(run));
+        } catch (RuntimeException e) {
+            log.warn("jobId={} attempt={} finish notification not published: {}", run.getJobId(), run.getAttempt(), e.toString());
+        }
     }
 }
