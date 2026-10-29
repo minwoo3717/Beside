@@ -11,6 +11,7 @@
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | **[계획]** |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | **[계획]** |
 | 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증), 실제 모델 E2E **[계획]**(10-20 주 선행) |
+| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음 | **[계획]** (2026-10-30 착수) |
 | 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
 
 ```mermaid
@@ -133,6 +134,30 @@ DoD:
 - [x] 실패 경로 4종(`INFERENCE_FAILED / INFERENCE_TIMEOUT / INFERENCE_UNAVAILABLE / CONVERSION_FAILED`) 테스트 — 2026-10-04 `RealJobWorkerTest`(가짜 `/infer`), 실제 스텁으로 `INFERENCE_UNAVAILABLE`·`CONVERSION_FAILED` 재확인
 - [ ] Unity 실기기에서 실제 모델 AR 배치 (영상)
 - [ ] `events.jsonl` 작업 10건 이상 **[실험 결과]**
+
+## 4b단계 — 배포·확장 (2026-10-30 ~ 11-22)
+
+담당 Backend, `/infer` 변경은 Generation 리뷰. 결정(2026-10-30):
+- 백엔드는 클라우드 VM 한 대(Docker Compose + Caddy HTTPS)에 올린다.
+- GPU 추론은 팀원 GPU PC 에 남기고 Tailscale 사설망으로 잇는다.
+- 두 기계가 디스크를 공유하지 않으므로 `/infer` 에 업로드 전송 모드를 더한다(REVIEW_CHECKLIST #6 (b)). 경로 모드는 같은 PC 배치용으로 유지한다.
+- 사용 범위는 팀 내부 테스트다. 계정 없이 웹·관리·목록 경로만 Basic 인증 뒤에 둔다.
+- 새 화면은 Spring 정적 웹으로 만들고, Unity 변경은 선택 사항이다.
+
+| 조각 | 내용 | 계약 영향 | 상태 |
+|---|---|---|---|
+| S1 | prod 프로파일(H2 콘솔·Swagger off), 업로드 매직 바이트 검사, 결과 폴더 설정화 | 없음 | [계획] |
+| S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | [계획] |
+| S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | [계획] |
+| S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | [계획] |
+| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | [계획] — 계약 회의 전에는 검토 브랜치에만 |
+| S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
+| S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
+| S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |
+| S9 | 반려동물 보관함(웹) | openapi 추가 | 〃 |
+| S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | [계획] |
+
+직접 할 일: VM 생성(2 vCPU·4GB·30GB, Ubuntu 24.04), 도메인, Tailscale 로그인(VM·GPU PC), `deploy/.env`. 실측은 VM 과 GPU PC 가 준비된 뒤에 한다.
 
 ## 5단계 — 측정·보고 (2026-11-23 ~ 12-06)
 
