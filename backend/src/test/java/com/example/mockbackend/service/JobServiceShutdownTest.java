@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 
@@ -58,7 +59,7 @@ class JobServiceShutdownTest {
 
     @BeforeEach
     void executorIsShuttingDown() {
-        doThrow(new TaskRejectedException("executor shut down")).when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).when(jobWorker).dispatch(anyString(), anyInt());
     }
 
     @Test

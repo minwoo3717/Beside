@@ -182,7 +182,7 @@ public class JobServiceImpl implements JobService {
         job.setStatus(JobStatus.PENDING);
         jobRepository.save(job);
         try {
-            jobWorker.dispatch(id);
+            jobWorker.dispatch(id, job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
             // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
             // attempt, so the job goes back to the FAILED attempt this request found.
@@ -318,7 +318,7 @@ public class JobServiceImpl implements JobService {
     private void dispatch(Job job) {
         try {
             // Invoke another Spring bean so @Async runs through its proxy.
-            jobWorker.dispatch(job.getId());
+            jobWorker.dispatch(job.getId(), job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
             discard(job);
             throw shuttingDown;

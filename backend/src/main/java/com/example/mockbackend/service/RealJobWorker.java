@@ -1,10 +1,8 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
-import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.exception.ErrorCode;
-import com.example.mockbackend.repository.JobRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,6 +33,10 @@ import java.util.concurrent.Semaphore;
  *       service fails the run at once.</li>
  *   <li>PROCESSING with progress null (the service reports none), then POST /infer (inference.transfer=path) or
  *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}.</li>
+ *   <li>Whenever the job is no longer PENDING in the dispatched attempt (canceled with POST /cancel, or canceled and
+ *       retried, which dispatches the new attempt separately) the worker stops without calling the service: checked on
+ *       every offline-wait poll and, under {@link JobTransitions}' lock, at the switch to PROCESSING. The slot is given
+ *       back either way, so the next job in line starts.</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
  *       asset endpoint serves. The run ends through JobFinisher (status, then the job_runs row and the events.jsonl
  *       line, carrying the /infer metrics, the passthrough flag, the model version and the GLB size).</li>
@@ -49,7 +51,10 @@ import java.util.concurrent.Semaphore;
 public class RealJobWorker implements JobWorker {
     private static final byte[] GLB_MAGIC = {'g', 'l', 'T', 'F'};
 
-    private final JobRepository jobRepository;
+    /** How waiting for the inference service ended. */
+    private enum Wait { READY, TIMED_OUT, NOT_PENDING }
+
+    private final JobTransitions jobTransitions;
     private final JobFinisher jobFinisher;
     private final InferenceClient inferenceClient;
     private final Path resultDir;
@@ -59,13 +64,13 @@ public class RealJobWorker implements JobWorker {
     private final long offlinePollMs;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
-    public RealJobWorker(JobRepository jobRepository, JobFinisher jobFinisher, InferenceClient inferenceClient,
+    public RealJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher, InferenceClient inferenceClient,
                          InferenceHealthMonitor healthMonitor,
                          @Value("${storage.result.dir:storage/results}") String resultDir,
                          @Value("${inference.max-concurrency:1}") int maxConcurrency,
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
                          @Value("${inference.offline-poll-ms:5000}") long offlinePollMs) {
-        this.jobRepository = jobRepository;
+        this.jobTransitions = jobTransitions;
         this.jobFinisher = jobFinisher;
         this.inferenceClient = inferenceClient;
         this.healthMonitor = healthMonitor;
@@ -82,19 +87,19 @@ public class RealJobWorker implements JobWorker {
 
     @Async
     @Override
-    public void dispatch(String jobId) {
+    public void dispatch(String jobId, int attempt) {
         Instant start = Instant.now();
         try {
             inferenceSlots.acquire();
             try {
-                run(jobId, start);
+                run(jobId, attempt, start);
             } finally {
                 inferenceSlots.release();
             }
         } catch (InterruptedException e) {
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
             try {
-                markInterrupted(jobId);
+                markInterrupted(jobId, attempt);
             } catch (RuntimeException databaseClosing) {
                 log.warn("jobId={} interrupted during shutdown; InterruptedJobRecovery fails it at the next startup", jobId);
             } finally {
@@ -103,26 +108,18 @@ public class RealJobWorker implements JobWorker {
         }
     }
 
-    private void run(String jobId, Instant start) throws InterruptedException {
-        Job job = jobRepository.findById(jobId).orElse(null);
+    private void run(String jobId, int attempt, Instant start) throws InterruptedException {
+        Wait wait = awaitInferenceService(jobId, attempt);
+        if (wait == Wait.TIMED_OUT) {
+            failUnavailable(jobId, attempt);
+            return;
+        }
+        // The inference service reports no progress (openapi: null when unknown).
+        Job job = wait == Wait.READY ? jobTransitions.start(jobId, attempt, null).orElse(null) : null;
         if (job == null) {
-            log.warn("jobId={} not found for real worker", jobId);
+            logNotStarted(jobId, attempt);
             return;
         }
-        if (!awaitInferenceService(jobId)) {
-            InferenceHealthMonitor.Status status = healthMonitor.current();
-            jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "The inference service was not ready within "
-                    + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type());
-            log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE after waiting {} ms for the inference service ({})",
-                    jobId, offlineWaitMs, status.detail());
-            return;
-        }
-        Instant processingStarted = Instant.now();
-        job.setProcessingStartedAt(processingStarted);
-        job.setProgress(null); // the inference service reports no progress (openapi: null when unknown)
-        job.setUpdatedAt(processingStarted);
-        job.setStatus(JobStatus.PROCESSING);
-        jobRepository.save(job);
         log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.requestUri());
 
         try {
@@ -150,28 +147,50 @@ public class RealJobWorker implements JobWorker {
         }
     }
 
+    /** The offline wait is over: FAILED INFERENCE_UNAVAILABLE, unless the job was canceled at the last moment. */
+    private void failUnavailable(String jobId, int attempt) {
+        InferenceHealthMonitor.Status status = healthMonitor.current();
+        String message = "The inference service was not ready within " + offlineWaitMs / 1000 + " s (last check: "
+                + status.state() + ")";
+        if (jobTransitions.failPending(jobId, attempt, ErrorCode.INFERENCE_UNAVAILABLE, message, type()).isPresent()) {
+            log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE after waiting {} ms for the inference service ({})",
+                    jobId, offlineWaitMs, status.detail());
+        } else {
+            logNotStarted(jobId, attempt);
+        }
+    }
+
+    private void logNotStarted(String jobId, int attempt) {
+        log.info("jobId={} attempt={} not started: no longer PENDING (canceled or retried), slot given back", jobId, attempt);
+    }
+
     /**
-     * True when the inference service reads UP, at once or within inference.offline-wait-ms; the job stays PENDING
-     * while this waits. Always true when the wait is off (0): the run then finds out from /infer itself.
+     * READY when the inference service reads UP, at once or within inference.offline-wait-ms; the job stays PENDING
+     * while this waits. TIMED_OUT after that long, NOT_PENDING as soon as the job is no longer PENDING in this attempt
+     * (canceled), checked before every reading. Always READY when the wait is off (0): the run then finds out from
+     * /infer itself, and {@link JobTransitions#start} still refuses a canceled job.
      */
-    private boolean awaitInferenceService(String jobId) throws InterruptedException {
+    private Wait awaitInferenceService(String jobId, int attempt) throws InterruptedException {
         if (offlineWaitMs == 0) {
-            return true;
+            return Wait.READY;
         }
         // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
         long deadline = System.nanoTime() + offlineWaitMs * 1_000_000;
         boolean logged = false;
         while (true) {
+            if (!jobTransitions.isPending(jobId, attempt)) {
+                return Wait.NOT_PENDING;
+            }
             InferenceHealthMonitor.Status status = healthMonitor.refresh();
             if (status.ready()) {
                 if (logged) {
                     log.info("jobId={} inference service is UP again, starting", jobId);
                 }
-                return true;
+                return Wait.READY;
             }
             long leftMs = (deadline - System.nanoTime()) / 1_000_000;
             if (leftMs <= 0) {
-                return false;
+                return Wait.TIMED_OUT;
             }
             if (!logged) {
                 log.info("jobId={} waits as PENDING: inference service {} ({}), up to {} s", jobId, status.state(),
@@ -230,12 +249,11 @@ public class RealJobWorker implements JobWorker {
                 && ByteBuffer.wrap(header, 4, 4).order(ByteOrder.LITTLE_ENDIAN).getInt() == 2;
     }
 
-    private void markInterrupted(String jobId) {
-        Job job = jobRepository.findById(jobId).orElse(null);
-        if (job == null) {
-            return;
+    /** Only this attempt, and only if it has not ended: a canceled job keeps its CANCELED. */
+    private void markInterrupted(String jobId, int attempt) {
+        if (jobTransitions.failUnfinished(jobId, attempt, ErrorCode.INTERNAL_ERROR,
+                "Real worker interrupted (server shutting down)", type()).isPresent()) {
+            log.warn("jobId={} stage=FAILED (real worker interrupted)", jobId);
         }
-        jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker interrupted (server shutting down)", type());
-        log.warn("jobId={} stage=FAILED (real worker interrupted)", jobId);
     }
 }
