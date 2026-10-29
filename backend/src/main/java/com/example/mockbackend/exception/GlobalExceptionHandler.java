@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -86,6 +87,19 @@ public class GlobalExceptionHandler {
                     "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue(), null);
         }
         return flat(HttpStatus.BAD_REQUEST, "Invalid request (HTTP 400)");
+    }
+
+    /**
+     * A JSON body that is missing or does not parse (PUT /api/v1/jobs/{id}/ratings/{rater}): 400 INVALID_REQUEST.
+     * Outside v1 nothing reads a JSON body; those requests keep the frozen answer of {@link #handleAny}.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<?> handleUnreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
+        if (!isV1(request)) {
+            return handleAny(ex, request);
+        }
+        log.warn("Unreadable request body: {}", ex.getMessage());
+        return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, "The request body is missing or is not valid JSON", null);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
