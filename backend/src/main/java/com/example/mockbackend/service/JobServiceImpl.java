@@ -54,6 +54,7 @@ public class JobServiceImpl implements JobService {
     private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
     private final JobTransitions jobTransitions;
+    private final QueueClock queueClock;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -178,7 +179,7 @@ public class JobServiceImpl implements JobService {
         job.setFinishedAt(null);
         job.setProgress(0.0);
         job.setAttempt(job.getAttempt() + 1);
-        job.setQueuedAt(now);
+        job.setQueuedAt(queueClock.next());
         job.setUpdatedAt(now);
         job.setStatus(JobStatus.PENDING);
         jobRepository.save(job);
@@ -300,7 +301,7 @@ public class JobServiceImpl implements JobService {
         job.setStatus(JobStatus.PENDING);
         job.setCreatedAt(now);
         job.setUpdatedAt(now);
-        job.setQueuedAt(now);
+        job.setQueuedAt(queueClock.next()); // never ties with the job submitted just before (queue order)
         job.setProgress(0.0);
         job.setAttempt(1);
 
