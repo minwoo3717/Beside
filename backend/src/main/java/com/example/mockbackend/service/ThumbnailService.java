@@ -24,6 +24,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Thumbnails of jobs for the web library: the first photo as a JPEG whose longer side is {@value #MAX_SIDE} px (smaller
@@ -37,6 +39,15 @@ public class ThumbnailService {
     public static final int MAX_SIDE = 256;
     /** Bigger pictures are not decoded at all (a few kB of PNG can claim a huge canvas). 64 MP covers phone cameras. */
     static final long MAX_PIXELS = 64L * 1024 * 1024;
+    /**
+     * WEBP (TwelveMonkeys) decodes the full canvas before subsampling, so its memory follows the pixel count: a ~100 kB
+     * lossless 64 MP file would cost ~200 MB per decode on the public upload path. 16 MP (~64 MB) is still more than
+     * phones save as WEBP; JPEG and PNG readers subsample row by row and keep MAX_PIXELS.
+     */
+    static final long MAX_WEBP_PIXELS = 16L * 1024 * 1024;
+    /** One decode at a time, server-wide: a burst of uploads cannot stack full-canvas rasters on the heap. */
+    private static final Semaphore DECODES = new Semaphore(1);
+    private static final long DECODE_WAIT_MS = 5_000;
     private static final float JPEG_QUALITY = 0.85f;
 
     private final Path dir;
@@ -58,6 +69,15 @@ public class ThumbnailService {
     public boolean create(String jobId, Path photo) {
         long start = System.nanoTime();
         try {
+            if (!DECODES.tryAcquire(DECODE_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                log.warn("jobId={} no thumbnail: another thumbnail was still decoding after {} ms", jobId, DECODE_WAIT_MS);
+                return false;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        try {
             BufferedImage source = decode(photo);
             if (source == null) {
                 log.info("jobId={} no thumbnail: the first photo is not an image this server can read", jobId);
@@ -71,6 +91,8 @@ public class ThumbnailService {
         } catch (Exception | OutOfMemoryError e) {
             log.warn("jobId={} no thumbnail: {}", jobId, e.toString());
             return false;
+        } finally {
+            DECODES.release();
         }
     }
 
@@ -112,7 +134,8 @@ public class ThumbnailService {
                 reader.setInput(in, true, true);
                 int width = reader.getWidth(0);
                 int height = reader.getHeight(0);
-                if (width <= 0 || height <= 0 || (long) width * height > MAX_PIXELS) {
+                long limit = "webp".equalsIgnoreCase(reader.getFormatName()) ? MAX_WEBP_PIXELS : MAX_PIXELS;
+                if (width <= 0 || height <= 0 || (long) width * height > limit) {
                     throw new IOException("unsupported picture size " + width + "x" + height);
                 }
                 ImageReadParam param = reader.getDefaultReadParam();

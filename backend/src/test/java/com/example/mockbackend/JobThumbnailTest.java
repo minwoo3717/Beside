@@ -150,6 +150,39 @@ class JobThumbnailTest {
                 .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"));
     }
 
+    @Test
+    void aHugeWebpCanvasIsNotDecoded() throws Exception {
+        // A few bytes of lossless WEBP can claim 8192x8192; the WEBP reader would allocate the whole canvas (~200 MB)
+        // before subsampling, so such a picture gets no thumbnail and the upload returns at once.
+        long started = System.nanoTime();
+        String jobId = upload("bomb.webp", "image/webp", losslessWebpHeader(8192, 8192));
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(5_000);
+        mvc.perform(get("/api/v1/jobs/{id}/thumbnail", jobId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("ASSET_NOT_FOUND"));
+    }
+
+    @Test
+    void theWebpReaderNamesItsFormatSoTheLowerPixelLimitApplies() throws Exception {
+        try (javax.imageio.stream.ImageInputStream in = javax.imageio.ImageIO.createImageInputStream(
+                new java.io.ByteArrayInputStream(losslessWebpHeader(10, 10)))) {
+            java.util.Iterator<javax.imageio.ImageReader> readers = javax.imageio.ImageIO.getImageReaders(in);
+            assertThat(readers.hasNext()).isTrue();
+            assertThat(readers.next().getFormatName()).isEqualToIgnoringCase("webp");
+        }
+    }
+
+    /** RIFF/WEBP with a VP8L header of the given size and no real image data. */
+    private static byte[] losslessWebpHeader(int width, int height) {
+        int bits = (width - 1) | ((height - 1) << 14);
+        byte[] vp8l = {0x2f, (byte) bits, (byte) (bits >>> 8), (byte) (bits >>> 16), (byte) (bits >>> 24), 0, 0, 0, 0, 0};
+        java.nio.ByteBuffer out = java.nio.ByteBuffer.allocate(20 + vp8l.length).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        out.put("RIFF".getBytes(StandardCharsets.US_ASCII)).putInt(12 + vp8l.length)
+                .put("WEBP".getBytes(StandardCharsets.US_ASCII))
+                .put("VP8L".getBytes(StandardCharsets.US_ASCII)).putInt(vp8l.length).put(vp8l);
+        return out.array();
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private BufferedImage thumbnail(String url) throws Exception {
