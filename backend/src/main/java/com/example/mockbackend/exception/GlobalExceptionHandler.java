@@ -90,7 +90,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * A JSON body that is missing or does not parse (PUT /api/v1/jobs/{id}/ratings/{rater}): 400 INVALID_REQUEST.
+     * A JSON body that is missing or does not parse (ratings, pets and job-pet requests): 400 INVALID_REQUEST.
      * Outside v1 nothing reads a JSON body; those requests keep the frozen answer of {@link #handleAny}.
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
