@@ -14,6 +14,7 @@
 | `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
 | `ASSET_NOT_FOUND` | 404 | /asset | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음) | 요청한 모델 파일이 없어요. | base 로 |
 | `NOT_FOUND` | 404 | 그 외 경로 | 알 수 없는 v1 경로·리소스 | 요청한 정보를 찾을 수 없어요. | 무의미 |
+| `SHARE_NOT_FOUND` | 404 | /shares/{token}, /shares/{token}/asset | 없는 토큰(형식이 다른 토큰 포함)·만료·취소된 공유 링크, 또는 공유한 작업이 지워짐. 이유를 구분하지 않으며 `jobId` 를 채우지 않는다 | 공유 링크가 없거나 만료됐어요. | 무의미 |
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
 | `JOB_NOT_FAILED` | 409 | /retry | FAILED 가 아닌 작업에 재시도 요청 | 실패한 작업만 다시 시도할 수 있어요. | 무의미 |
 | `INTERNAL_ERROR` | 500 | 모든 엔드포인트 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
@@ -35,3 +36,4 @@
 - v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 표를 따르지 않는다(동결).
 - 상태 코드는 400 / 404 / 409 / 413 / 500 다섯 가지만 계약에 둔다. 프레임워크 수준 응답(405, 415 등)은 v1 봉투로 감싸되 `INVALID_REQUEST` 로 분류한다.
 - 문구는 제안이다. UX 검토 후 바뀔 수 있으나 코드 이름은 유지한다.
+- 공유 링크 만들기(`POST /jobs/{id}/shares`)는 새 코드 없이 기존 `INVALID_REQUEST`(ttlDays 범위)·`JOB_NOT_FOUND`·`ASSET_NOT_FOUND`·`JOB_NOT_COMPLETED` 를 쓴다. 공개 쪽(`/shares/{token}`)은 `SHARE_NOT_FOUND` 하나만 쓰고 `jobId` 를 비운다(공유 페이지에 작업 id 를 드러내지 않는다).

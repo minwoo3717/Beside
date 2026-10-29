@@ -26,6 +26,10 @@ tags:
     description: 3D 생성 작업
   - name: health
     description: 서버 상태
+  - name: share
+    description: |
+      공유 링크와 공개 웹 3D/AR 뷰어. 링크는 `/s/{token}`(웹 페이지, API 가 아님)이고, 페이지는 아래 공개 API 만 부른다.
+      토큰은 128비트 난수(base64url 22자)이며 작업 id 는 공유 쪽 응답·오류 어디에도 넣지 않는다.
 
 paths:
   /api/v1/jobs:
@@ -199,6 +203,114 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
 
+  /api/v1/jobs/{jobId}/shares:
+    post:
+      tags: [share]
+      operationId: createShare
+      summary: 완료된 작업의 공유 링크를 만든다
+      description: |
+        status=COMPLETED 이고 base GLB 가 있는 작업만 공유할 수 있다. 부를 때마다 새 토큰을 만든다(이전 링크는 그대로).
+        `url` 은 앱 설치 없이 여는 웹 뷰어 페이지 `/s/{token}` 이고, 서버 루트 기준 상대 경로라 클라이언트가 baseUrl 과 결합한다.
+        유효 기간은 `ttlDays`(1~30일, 생략 시 서버 설정 `share.ttl-days`, 기본 7)이다. 범위 밖이면 400(INVALID_REQUEST),
+        없는 작업은 404(JOB_NOT_FOUND), 완료되지 않은 작업은 409(JOB_NOT_COMPLETED), 완료됐지만 파일이 없으면 404(ASSET_NOT_FOUND).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/TtlDays'
+      responses:
+        '201':
+          description: 공유 링크 생성
+          headers:
+            Location:
+              description: 공유 정보 조회 경로 `/api/v1/shares/{token}`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareCreatedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/shares/{token}:
+    get:
+      tags: [share]
+      operationId: getShare
+      summary: 공유 링크 정보 (공개 뷰어용)
+      description: |
+        뷰어 페이지가 처음 부른다. 만료 시각과 GLB 주소를 돌려준다. 작업 id 는 넣지 않는다.
+        없는 토큰·만료된 링크·취소된 링크·지워진 작업은 모두 같은 404(SHARE_NOT_FOUND)다(이유를 구분하지 않는다).
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+      responses:
+        '200':
+          description: 공유 정보
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShareInfo'
+        '404':
+          $ref: '#/components/responses/ShareNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [share]
+      operationId: revokeShare
+      summary: 공유 링크를 취소한다
+      description: 취소 후에는 정보·에셋 모두 404(SHARE_NOT_FOUND). 이미 취소됐거나 만료된 링크도 404.
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+      responses:
+        '204':
+          description: 취소됨
+        '404':
+          $ref: '#/components/responses/ShareNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/shares/{token}/asset:
+    get:
+      tags: [share]
+      operationId: downloadShareAsset
+      summary: 공유된 GLB (공개 뷰어·AR 용)
+      description: |
+        공유된 작업의 base GLB. 브라우저 뷰어와 Android Scene Viewer 가 인증 없이 직접 받는다.
+        `Cache-Control: public, max-age=N` 으로 N 은 3600 과 만료까지 남은 초 중 작은 값이다(취소해도 이미 받은 사본은 그 시간 동안 남을 수 있다).
+        파일명에 작업 id 를 넣지 않는다.
+      parameters:
+        - $ref: '#/components/parameters/ShareToken'
+      responses:
+        '200':
+          description: GLB 바이너리
+          headers:
+            Cache-Control:
+              description: public, max-age=N (N ≤ 3600, 만료까지 남은 초 이하)
+              schema:
+                type: string
+            Content-Disposition:
+              description: inline; filename="beside-pet.glb"
+              schema:
+                type: string
+            Content-Length:
+              description: 파일 크기(바이트). ShareInfo.asset.bytes 와 같다.
+              schema:
+                type: integer
+                format: int64
+          content:
+            model/gltf-binary:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/ShareNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     JobId:
@@ -244,6 +356,23 @@ components:
       description: 이전 응답의 nextCursor. 불투명 문자열.
       schema:
         type: string
+    ShareToken:
+      name: token
+      in: path
+      required: true
+      description: 공유 토큰. 128비트 난수의 base64url(패딩 없음) 22자. 형식이 다르면 404(SHARE_NOT_FOUND).
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{22}$'
+    TtlDays:
+      name: ttlDays
+      in: query
+      required: false
+      description: 공유 링크 유효 기간(일) 1~30. 생략하면 서버 설정 share.ttl-days(기본 7).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 30
 
   responses:
     BadRequest:
@@ -272,6 +401,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: 서버 오류 (INTERNAL_ERROR)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ShareNotFound:
+      description: 공유 링크 없음 (SHARE_NOT_FOUND) — 없는 토큰·만료·취소·지워진 작업을 구분하지 않는다. error.jobId 는 비운다.
       content:
         application/json:
           schema:
@@ -442,3 +577,52 @@ components:
           type: string
           description: 작업을 처리하는 워커 종류 (mock | real)
           example: mock
+    ShareCreatedResponse:
+      type: object
+      description: 새 공유 링크. 같은 토큰의 정보 조회 경로는 Location 헤더.
+      required: [token, url, expiresAt]
+      properties:
+        token:
+          type: string
+          description: 128비트 난수의 base64url(패딩 없음) 22자
+          example: q3Zr8yT0bWm1xK4vL9pN2A
+        url:
+          type: string
+          description: 웹 뷰어 페이지. 서버 루트 기준 상대 경로 `/s/{token}`. 클라이언트가 baseUrl 과 결합해 링크·QR 로 쓴다.
+          example: /s/q3Zr8yT0bWm1xK4vL9pN2A
+        expiresAt:
+          type: string
+          format: date-time
+          description: 만료 시각 (ISO 8601, UTC). 이 시각부터 404(SHARE_NOT_FOUND).
+    ShareInfo:
+      type: object
+      description: 공유 링크 정보(공개). 작업 id·서버 경로는 넣지 않는다.
+      required: [createdAt, expiresAt, asset]
+      properties:
+        createdAt:
+          type: string
+          format: date-time
+          description: 링크 생성 시각 (ISO 8601, UTC)
+        expiresAt:
+          type: string
+          format: date-time
+          description: 만료 시각 (ISO 8601, UTC)
+        asset:
+          $ref: '#/components/schemas/ShareAsset'
+    ShareAsset:
+      type: object
+      description: 공유된 GLB. 파일 계약은 docs/asset/GLB_SPEC.md(리깅 GLB 면 Idle/Walk/Sit/TailWag/HeadTilt 클립 포함).
+      required: [url, bytes, contentType]
+      properties:
+        url:
+          type: string
+          description: 서버 루트 기준 상대 경로 `/api/v1/shares/{token}/asset`
+          example: /api/v1/shares/q3Zr8yT0bWm1xK4vL9pN2A/asset
+        bytes:
+          type: integer
+          format: int64
+          description: 파일 크기(바이트). Mock 샘플이 0바이트이면 0 이 올 수 있다.
+        contentType:
+          type: string
+          description: 항상 model/gltf-binary
+          example: model/gltf-binary

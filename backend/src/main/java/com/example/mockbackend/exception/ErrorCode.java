@@ -16,6 +16,8 @@ public enum ErrorCode {
     JOB_NOT_FOUND(HttpStatus.NOT_FOUND),
     ASSET_NOT_FOUND(HttpStatus.NOT_FOUND),
     NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** Public share endpoints: unknown, malformed, expired or revoked token, or the shared job is gone. Never carries a jobId. */
+    SHARE_NOT_FOUND(HttpStatus.NOT_FOUND),
     JOB_NOT_COMPLETED(HttpStatus.CONFLICT),
     JOB_NOT_FAILED(HttpStatus.CONFLICT),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR),
