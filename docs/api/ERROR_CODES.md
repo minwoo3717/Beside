@@ -9,7 +9,7 @@
 | `INVALID_REQUEST` | 400 | 모든 엔드포인트 | 파라미터·본문 형식 오류(잘못된 `variant`, `limit`/`cursor`, 0바이트 파일, 깨진 multipart 등) | 요청이 올바르지 않아요. 앱을 최신 버전으로 업데이트해 주세요. | 무의미 |
 | `NO_PHOTOS` | 400 | POST /jobs | `photos` 파트가 없거나 비어 있음 | 사진을 1장 이상 선택해 주세요. | 사진 선택 후 |
 | `TOO_MANY_PHOTOS` | 400 | POST /jobs | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. | 장수 줄인 후 |
-| `UNSUPPORTED_IMAGE_TYPE` | 400 | POST /jobs | image/jpeg · png · webp 외 Content-Type | JPG, PNG, WEBP 사진만 사용할 수 있어요. | 다른 사진으로 |
+| `UNSUPPORTED_IMAGE_TYPE` | 400 | POST /jobs | image/jpeg · png · webp 외 Content-Type. prod 프로파일에서는 파일 내용이 JPEG·PNG·WEBP 시그니처로 시작하지 않을 때도 | JPG, PNG, WEBP 사진만 사용할 수 있어요. | 다른 사진으로 |
 | `PAYLOAD_TOO_LARGE` | 413 | POST /jobs | 장당 5 MB 또는 요청 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
 | `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry, /cancel, /pet, /thumbnail, DELETE /jobs/{id} | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
 | `ASSET_NOT_FOUND` | 404 | /asset, /thumbnail | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음). /thumbnail: 첫 사진을 읽지 못해 썸네일이 없음 | 요청한 모델 파일이 없어요. | base 로 |
@@ -28,7 +28,7 @@
 |---|---|---|---|---|
 | `INFERENCE_FAILED` | 워커 | 3D 생성 실패(모델 오류, 입력 사진 품질). real: 추론 서비스가 이 코드나 코드 없는 4xx·500 으로 답함. Mock 은 파일명에 `fail` 이 있으면 이 코드로 실패한다 | 3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요. | 예 |
 | `INFERENCE_TIMEOUT` | real 워커 | 추론 서비스 응답이 `inference.timeout-ms` 를 넘김 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
-| `INFERENCE_UNAVAILABLE` | real 워커 | 추론 서비스에 연결할 수 없음(꺼짐·연결 끊김), 또는 모델이 없거나 준비되지 않음(501~504) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
+| `INFERENCE_UNAVAILABLE` | real 워커 | 추론 서비스에 연결할 수 없음(꺼짐·연결 끊김), 또는 모델이 없거나 준비되지 않음(501~504). prod 프로파일은 서비스가 준비될 때까지 최대 `inference.offline-wait-ms`(30분) PENDING 으로 기다린 뒤에 이 코드로 끝낸다 | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | 추론 서비스·워커 | OBJ/PNG → GLB 변환 실패 또는 GLB_SPEC 검증 실패. real 워커가 받은 GLB 가 없거나 glTF 2.0 바이너리가 아닐 때도 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
 | `INTERNAL_ERROR` | 서버 | 서버 재시작·워커 중단으로 작업이 끊김(재시작 때 PENDING/PROCESSING 이던 작업), 또는 real 워커의 예기치 못한 오류 (HTTP 오류 코드와 같은 이름) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 | `CANCELED` | 사용자(POST /cancel) | PENDING 이던 작업을 사용자가 취소함. 워커는 시작하지 않고 추론 서비스를 부르지 않는다. 실행 기록(`job_runs`·`events.jsonl`)에는 `FAILED:CANCELED` 로 남으므로 실패율 통계에서는 뺀다 | 취소한 작업이에요. 다시 시도하면 처음부터 만들어요. | 예(처음부터) |
