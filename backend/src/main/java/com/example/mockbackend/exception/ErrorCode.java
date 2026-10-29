@@ -20,13 +20,16 @@ public enum ErrorCode {
     SHARE_NOT_FOUND(HttpStatus.NOT_FOUND),
     JOB_NOT_COMPLETED(HttpStatus.CONFLICT),
     JOB_NOT_FAILED(HttpStatus.CONFLICT),
+    JOB_NOT_PENDING(HttpStatus.CONFLICT),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR),
 
     // --- Job failure codes (JobResponse.error) ---
     INFERENCE_FAILED(null),
     INFERENCE_TIMEOUT(null),
     INFERENCE_UNAVAILABLE(null),
-    CONVERSION_FAILED(null);
+    CONVERSION_FAILED(null),
+    /** The client canceled the job while it was PENDING (POST /cancel); retry starts it again. */
+    CANCELED(null);
 
     private final HttpStatus httpStatus;
 

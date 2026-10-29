@@ -155,6 +155,23 @@ public class JobV1Controller {
         return accepted(jobService.retry(jobId));
     }
 
+    @Operation(operationId = "cancelJob", summary = "대기 중(PENDING)인 작업을 취소한다",
+            description = "PENDING 인 작업만. 성공하면 status=FAILED, error.code=CANCELED 인 작업을 돌려주고 워커는 그 작업을 시작하지 않는다. "
+                    + "retry 로 처음부터 다시 실행할 수 있다. PROCESSING 은 GPU 연산을 멈출 수 없어 409(JOB_NOT_PENDING).")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "취소됨 (status=FAILED, error.code=CANCELED)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = JobResponse.class))),
+            @ApiResponse(responseCode = "404", description = "없는 작업 (JOB_NOT_FOUND)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "PENDING 이 아님 (JOB_NOT_PENDING)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
+    @PostMapping(value = "/jobs/{jobId}/cancel", produces = JSON)
+    public JobResponse cancelJob(@PathVariable("jobId") String jobId) {
+        return mapper.toResponse(jobService.cancel(jobId));
+    }
+
     @Operation(operationId = "health", summary = "서버 상태와 활성 프로파일", tags = {"health"})
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "정상",

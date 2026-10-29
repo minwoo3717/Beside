@@ -24,6 +24,12 @@ public interface JobService {
     /** FAILED → PENDING and dispatch again. @throws ApiException 409 JOB_NOT_FAILED otherwise */
     Job retry(String id);
 
+    /**
+     * PENDING → FAILED (CANCELED); the worker then never starts it. A started GPU run cannot be stopped, so PROCESSING
+     * is refused like every other state. @throws ApiException 404 JOB_NOT_FOUND, 409 JOB_NOT_PENDING
+     */
+    Job cancel(String id);
+
     /** Newest first. limit 1~100 (default 20), cursor = id of the last item of the previous page. */
     JobPage listJobs(Integer limit, String cursor);
 

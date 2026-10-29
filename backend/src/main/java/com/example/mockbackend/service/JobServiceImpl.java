@@ -53,6 +53,7 @@ public class JobServiceImpl implements JobService {
     private final JobRepository jobRepository;
     private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
+    private final JobTransitions jobTransitions;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -191,6 +192,21 @@ public class JobServiceImpl implements JobService {
         }
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
+    }
+
+    @Override
+    public Job cancel(String id) {
+        getJobOrThrow(id);
+        // Under the same lock as the worker's start: either this sees PENDING and the worker then finds FAILED, or the
+        // worker started first and this sees PROCESSING. The run is measured like any other (job_runs FAILED:CANCELED).
+        Job canceled = jobTransitions.failPending(id, null, ErrorCode.CANCELED,
+                "Canceled by the client while PENDING (POST /cancel)", jobWorker.type()).orElse(null);
+        if (canceled == null) {
+            throw ApiException.conflict(ErrorCode.JOB_NOT_PENDING, id, "Only PENDING jobs can be canceled (a started "
+                    + "GPU run cannot be stopped); current status is " + getJobOrThrow(id).getStatus());
+        }
+        log.info("Job canceled: {} attempt={}", id, canceled.getAttempt());
+        return canceled;
     }
 
     @Override
