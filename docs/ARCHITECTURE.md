@@ -2,7 +2,7 @@
 
 결정됨(재논의하지 않는다): **Unity Android 앱(ARCore, glTFast) ↔ Spring Boot 공개 API(Job 상태·저장·에셋 서빙) ↔ Python 추론 서비스(FastAPI, GPU, AnimalLift + GLB 변환, 내부 전용 `POST /infer`)**. Spring 은 profile 로 `mock | real` 워커를 교체하고 real 워커가 Python 을 호출한다. Unity 는 Spring API 계약 v1 만 본다.
 
-상태: Spring(v0·v1·Mock/real 워커·H2 저장소·실행별 측정 `job_runs`)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱은 팀원 완료 보고 후 **PR 대기**, AnimalLift 추론은 **[계획]** ([PLAN.md](PLAN.md)). 실제 E2E 배치는 팀원 GPU PC 한 대에 Spring 과 추론 서비스를 함께 두기로 했다(2026-10-05). 2026-10-30 결정으로 Spring 은 **클라우드 VM**(Docker Compose + Caddy)에 올리고 GPU PC 와는 Tailscale 로 잇는다: 배포 파일은 **[구현됨]**([deploy/](../deploy/README.md)), 실제 VM 배포와 `/infer` 업로드 모드는 **[계획]** (아래 '배포 가정').
+상태: Spring(v0·v1·Mock/real 워커·H2 저장소·실행별 측정 `job_runs`)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱은 팀원 완료 보고 후 **PR 대기**, AnimalLift 추론은 **[계획]** ([PLAN.md](PLAN.md)). 실제 E2E 배치는 팀원 GPU PC 한 대에 Spring 과 추론 서비스를 함께 두기로 했다(2026-10-05). 2026-10-30 결정으로 Spring 은 **클라우드 VM**(Docker Compose + Caddy)에 올리고 GPU PC 와는 Tailscale 로 잇는다: 배포 파일·prod 프로파일·`/infer` 업로드 모드·GPU 오프라인 대기는 **[구현됨]**([deploy/](../deploy/README.md), 같은 PC 패스스루로 확인), 실제 VM 배포는 **[계획]** (아래 '배포 가정').
 
 ## 구성 요소
 
@@ -31,7 +31,7 @@ flowchart LR
     S -->|"dispatch(jobId) @Async"| W
     W -->|"mock: sample-dog.glb"| FS
     W -->|"real: POST /infer (내부)"| P
-    P -->|"같은 PC: glbPath (공유 파일시스템) · VM: 업로드 모드로 GLB 다운로드 [계획 S2]"| FS
+    P -->|"같은 PC: glbPath (공유 파일시스템) · VM: 업로드 모드로 GLB 다운로드"| FS
 ```
 
 ## 데이터 흐름
@@ -92,7 +92,7 @@ stateDiagram-v2
 |---|---|---|
 | 워커 | `MockJobWorker`: 고정 지연 후 샘플 GLB. 파일명 `fail` 트리거 | `RealJobWorker`: 추론 슬롯 대기 → `POST {inference.base-url}/infer` → 결과 GLB 복사 **[구현됨]**. 실제 모델은 [계획](지금은 FastAPI 패스스루) |
 | 설정 파일 | `application-mock.properties` (`mock.worker.*`, `storage.result.sample`) | `application-real.properties` (`inference.base-url`, `inference.timeout-ms`, `inference.max-concurrency`, `storage.result.dir`) |
-| GPU | 불필요 | FastAPI 추론 서비스가 같은 GPU PC 에서 실행(`scripts/run_real.ps1`). VM 배치에서는 Tailscale 너머의 GPU PC([deploy/README.md](../deploy/README.md), 업로드 모드 [계획]) |
+| GPU | 불필요 | FastAPI 추론 서비스가 같은 GPU PC 에서 실행(`scripts/run_real.ps1`). VM 배치에서는 Tailscale 너머의 GPU PC([deploy/README.md](../deploy/README.md), 업로드 모드 [구현됨], VM 배치 [계획]) |
 | 용도 | Unity·브라우저 개발, 계약 테스트, 데모 백업 | Spring↔Python 연동 시험(패스스루), 실제 모델 E2E(10-20 주 선행), 4단계 실 연동 |
 | healthz | `{ "profile": "mock", "workerType": "mock" }` | `{ "profile": "real", "workerType": "real" }` |
 | DB 파일 | `storage/db/beside-mock.mv.db` (+ `/h2-console`) | `storage/db/beside-real.mv.db` (+ `/h2-console` — `job_runs` 측정표 내보내기, METRICS §1.1) |
@@ -121,7 +121,7 @@ backend/storage/
 
 | 배치 | 용도 | 상태 |
 |---|---|---|
-| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://<도메인>` | 배포 파일 **[구현됨]**(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`, CI `.github/workflows/backend-ci.yml`). VM·도메인·Tailscale 준비와 실제 배포 **[계획]**. prod 프로파일 **병합 대기**(S1). 업로드 모드 **[계획]**(S2 병합 후) |
+| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://<도메인>` | 배포 파일 **[구현됨]**(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`, CI `.github/workflows/backend-ci.yml`). VM·도메인·Tailscale 준비와 실제 배포 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
 | GPU PC 한 대에 Spring + 추론 서비스 | 실제 모델 개발·측정, VM 을 쓸 수 없을 때의 대안 | **[구현됨]** `scripts/run_real.ps1`, 경로 모드 |
 | 각자 PC, profile mock | Unity·브라우저 개발, 계약 테스트 | **[구현됨]** |
 
@@ -130,12 +130,12 @@ backend/storage/
   - Caddy 가 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `;` 가 든 경로를 404 로 막는다(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
   - Basic 인증: 웹 화면(`/`, Mock UI, 관리·보관함·작업 상세), `GET /api/v1/jobs`(목록, #9 안건), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*`.
   - 공개: 앱 API(업로드·상태·에셋·retry), `/api/v1/healthz`, 공유 링크. 작업은 id(UUID)를 아는 사람만 볼 수 있다는 가정이다.
-  - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU PC `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[계획]** S2 병합 후(REVIEW_CHECKLIST #6 (b)). 추론 서비스는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에만 바인드한다.
-  - 데이터: H2 파일·업로드·결과 GLB·`events.jsonl` 은 볼륨 `beside-storage`(컨테이너 `/app/storage`)에 있다. 백업은 backend 를 멈추고 볼륨을 tar 로 묶는 절차(문서), H2 온라인 백업은 **[계획]**.
-  - GPU PC 가 꺼져 있으면 작업이 바로 FAILED(`INFERENCE_UNAVAILABLE`)다(오프라인 대기는 **[계획]** S3). 재배포로 backend 가 다시 시작되면 진행 중 작업은 FAILED(`INTERNAL_ERROR`)가 된다.
+  - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU PC `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[구현됨]**(같은 PC 패스스루 e2e 로 확인, REVIEW_CHECKLIST #6 (b) 제안). 추론 서비스는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에만 바인드한다.
+  - 데이터: H2 파일·업로드·결과 GLB·`events.jsonl` 은 볼륨 `beside-storage`(컨테이너 `/app/storage`)에 있다. prod 는 매일 H2 온라인 백업(`BACKUP TO` → `storage/backup/`, 최신 7개) **[구현됨]**. 볼륨 전체는 backend 를 멈추고 tar 로 묶는다(문서).
+  - GPU PC 가 꺼져 있거나 모델이 준비 전이면 prod 는 작업을 PENDING 으로 두고 `/healthz` 를 5초마다 다시 읽다가 UP 이 되면 시작한다. 30분(`inference.offline-wait-ms`)을 넘기면 `INFERENCE_UNAVAILABLE` **[구현됨]**. 작업 종료와 GPU 상태 변화는 Discord 웹훅으로 알린다(`notify.webhook-url`, 선택) **[구현됨]**. 재배포로 backend 가 다시 시작되면 진행 중 작업은 FAILED(`INTERNAL_ERROR`)가 된다.
 - 개발: 폰과 PC 는 같은 Wi-Fi, `http://<PC IP>:8080`, 방화벽 8080 허용, 앱은 개발용 cleartext 허용. 절차는 [unity/README.md](../unity/README.md).
 - GPU PC 한 대 배치(결정 2026-10-05, 이제 개발·대안): Spring 과 추론 서비스를 **팀원 GPU PC 한 대**에 함께 띄운다(`scripts/run_real.ps1`, [backend/README.md](../backend/README.md) 'GPU PC 에 real 배치'). 추론 서비스는 127.0.0.1:8001 에만 묶고 Spring 의 8080 만 LAN 에 연다. 폰은 그 PC 의 IP 로 붙는다(Mock 과 같은 절차). H2 파일·업로드·결과 GLB 도 그 PC 에 있다. 리포는 ASCII·공백 없는 경로에 둔다(한글·공백 경로는 모델 쪽 이미지 로더가 못 읽을 수 있다).
-- Spring ↔ Python: 같은 호스트면 경로 모드 **[구현됨]**(`/infer` 가 업로드 경로를 읽고 GLB 경로를 돌려준다). 분리 배포(VM)는 업로드 모드 **[계획]**(S2, `InferenceClient` 만 바뀐다).
+- Spring ↔ Python: 같은 호스트면 경로 모드 **[구현됨]**(`/infer` 가 업로드 경로를 읽고 GLB 경로를 돌려준다). 분리 배포(VM)는 업로드 모드 **[구현됨]**(`inference.transfer=upload`, `InferenceClient`).
 - 보안: 계정·로그인 없음(팀 내부 테스트). VM 에서는 HTTPS 와 Basic 인증(위 경로)을 Caddy 가 맡는다 — 설정 파일 **[구현됨]**, 실제 배포 **[계획]**. 업로드 바이러스 검사·요청 수 제한은 범위 밖.
 - 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 `inference.max-concurrency`(기본 1 = GPU 1장)건만 `/infer` 를 부르고 나머지는 PENDING 으로 기다린다 **[구현됨]**.
 - DB: 서버 하나가 H2 파일 하나를 연다(AUTO_SERVER 없음). 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 다른 인스턴스는 `--storage.db.path` 로 다른 파일을 쓴다.

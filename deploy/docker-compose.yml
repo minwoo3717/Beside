@@ -16,12 +16,15 @@ services:
       SPRING_PROFILES_ACTIVE: real,prod
       # Spring 은 환경변수 이름을 점 → _, 대시 삭제, 대문자로 읽는다: inference.base-url ↔ INFERENCE_BASEURL.
       INFERENCE_BASEURL: ${INFERENCE_BASE_URL:?deploy/.env 에 INFERENCE_BASE_URL 을 넣는다 (GPU PC 의 Tailscale 주소)}
-      # [계획] S2 병합 후 동작: 사진을 /infer/upload 로 올리고 GLB 를 받아 온다. 병합 전 서버는 이 값을 무시한다.
+      # 사진을 /infer/upload 로 올리고 GLB 를 받아 온다(디스크를 공유하지 않으므로 경로 모드가 아니다).
       INFERENCE_TRANSFER: upload
-      # [계획] S2 병합 후 동작: X-Inference-Token 헤더. GPU PC 의 BESIDE_INFERENCE_TOKEN 과 같은 값.
+      # X-Inference-Token 헤더. GPU PC 의 BESIDE_INFERENCE_TOKEN 과 같은 값.
       INFERENCE_TOKEN: ${INFERENCE_TOKEN:?deploy/.env 에 INFERENCE_TOKEN 을 넣는다}
+      # (선택) Discord 웹훅: notify.webhook-url ↔ NOTIFY_WEBHOOKURL. 비면 알림 끔. 메시지의 관리 페이지 링크는 도메인 기준.
+      NOTIFY_WEBHOOKURL: ${NOTIFY_WEBHOOK_URL:-}
+      NOTIFY_PUBLICBASEURL: https://${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}
     volumes:
-      # H2 DB · uploads · results · events.jsonl · (prod) logs. 컨테이너를 지워도 남는다.
+      # H2 DB · uploads · results · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
     # 8080 은 compose 내부망에만 연다. 밖에서는 Caddy(80/443)로만 들어온다.
     expose:

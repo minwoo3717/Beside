@@ -18,9 +18,9 @@
 | `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** 파일이 있다. 이미지 빌드·Caddyfile 검증·경로 시험은 CI 에서 돈다(작성한 PC 에 Docker 가 없어 로컬에서는 돌려 보지 않았다) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
 | 실제 VM·도메인·Tailscale 준비, 폰 → VM → GPU PC 1건 | **[계획]** 아래 '직접 할 일' |
-| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 파일 로그) | **병합 대기**(S1). 병합 전 이미지로 띄우면 real 설정 그대로다 — 그래도 H2 콘솔·Swagger·v0 는 Caddy 가 404 로 막는다 |
-| `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[계획] (S2 병합 후)**. 그 전에는 VM 의 작업이 `INFERENCE_UNAVAILABLE` 로 끝난다(추론 서비스가 127.0.0.1 에만 열리고 경로 모드뿐) |
-| H2 온라인 백업(`BACKUP TO`), Discord 알림 | **[계획]** (S3, S6) |
+| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 도 H2 콘솔·Swagger·v0 를 404 로 막는다. 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
+| `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). 같은 PC 에서 패스스루 서비스와 Spring real 을 띄워 e2e 로 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌린 적은 없다 — **[계획]** |
 
 ## 경로 규칙 (Caddyfile)
 
@@ -95,7 +95,8 @@ nano deploy/.env
 | `BASIC_AUTH_USER` | 팀 공용 사용자 이름 |
 | `BASIC_AUTH_HASH` | `caddy hash-password` 출력. **작은따옴표로 감싼다**: `BASIC_AUTH_HASH='$2a$14$...'` |
 | `INFERENCE_BASE_URL` | `http://<GPU PC 의 Tailscale IP>:8001` |
-| `INFERENCE_TOKEN` | 긴 무작위 문자열. GPU PC 의 `BESIDE_INFERENCE_TOKEN` 과 같게 ([계획] S2 병합 후 쓰인다) |
+| `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU PC 의 `BESIDE_INFERENCE_TOKEN` 과 같게 |
+| `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
 
 **해시의 `$` 처리**: docker compose v2 는 `.env` 의 따옴표 없는 값과 큰따옴표 값에서 `$이름`·`${이름}` 을 변수로 바꾸고, **작은따옴표 값은 글자 그대로** 쓴다(Docker 문서 'Interpolation — .env file syntax'). bcrypt 해시(`$2a$14$...`)를 따옴표 없이 넣으면 `$14...` 같은 부분이 빈 값으로 바뀌어 로그인이 영영 안 된다. `$$` 는 compose **YAML 파일 안**에서 `$` 를 쓰는 방법이고 `.env` 에서는 쓰지 않는다. 들어간 값은 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec caddy printenv BASIC_AUTH_HASH` 로 확인한다(CI 도 견본 파일로 같은 확인을 한다).
 
@@ -122,7 +123,7 @@ for p in /h2-console /swagger-ui.html /v3/api-docs /api/jobs '/api/v1/jobs;x=1';
 done
 curl -s -o /dev/null -w "%{http_code}\n" $D/api/v1/jobs           # 401
 curl -s -o /dev/null -w "%{http_code}\n" -u 'team:팀 비밀번호' $D/api/v1/jobs   # 200
-TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름. S2 병합 + GPU PC 기동 전에는 INFERENCE_UNAVAILABLE 로 끝난다
+TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름. GPU PC 가 꺼져 있으면 작업은 PENDING 으로 기다린다(최대 30분)
 ```
 
 브라우저로 `https://<도메인>/` 을 열면 Basic 인증 창이 뜨고, 로그인하면 Mock 업로드 UI 가 보인다.
@@ -137,7 +138,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tai
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tail 100 caddy     # 접근 로그·인증서
 ```
 
-prod 프로파일이 병합되면(S1) 파일 로그도 볼륨의 `logs/` 에 남는다. 측정 로그는 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backend:/app/storage/events.jsonl ./events.jsonl` 로 꺼낸다(prod 는 H2 콘솔이 꺼져 `job_runs` CSV 내보내기는 관리 API(S5, [계획])로 옮긴다).
+측정 로그는 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backend:/app/storage/events.jsonl ./events.jsonl` 로 꺼낸다(prod 는 H2 콘솔이 꺼져 있다. `job_runs` CSV 내보내기 API 는 S5 — 계약 추가라 검토 브랜치에 있다. 그 전에는 H2 백업 zip 을 개발 PC 로 가져와 h2-console 로 연다).
 
 ### 업데이트
 
@@ -164,11 +165,11 @@ $C start backend
 복원: `$C stop backend` → `docker run --rm -v beside-storage:/data -v "$PWD/deploy/backups:/backup:ro" alpine:3.22 sh -c 'rm -rf /data/* && tar xzf /backup/<파일>.tgz -C /data'` → `$C start backend`.
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
-- **[계획]** 서버를 멈추지 않는 H2 온라인 백업(`BACKUP TO`, 하루 1회, S3 와 함께).
+- **[구현됨]** prod 는 서버를 멈추지 않고 매일 04:30 H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 7개를 남긴다(`storage.backup.*`). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
 
-## GPU PC 쪽 — [계획] (S2 병합 후)
+## GPU PC 쪽
 
-S2 가 병합되면 추론 서비스가 Tailscale 주소에 바인드하고 토큰을 검사한다. WSL 안에서:
+추론 서비스를 Tailscale 주소에 바인드하고 토큰을 검사하게 띄운다(업로드 모드 **[구현됨]**, VM 과의 실제 연결은 **[계획]**). WSL 안에서:
 
 ```bash
 export BESIDE_HOST="$(tailscale ip -4)"                 # uvicorn 바인드 주소 = 이 PC 의 Tailscale IP (0.0.0.0 이 아니다)
@@ -176,7 +177,7 @@ export BESIDE_INFERENCE_TOKEN='<deploy/.env 의 INFERENCE_TOKEN 과 같은 값>'
 bash /mnt/c/beside/scripts/start_inference_wsl.sh      # 'model loaded ... on cuda' 를 기다린다
 ```
 
-VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec backend curl -sS http://<GPU PC 100.x>:8001/healthz` 가 둘 다 응답하면 연결된 것이다. 지금(S2 병합 전)의 `start_inference_wsl.sh` 는 127.0.0.1 에만 바인드하고 경로 모드뿐이라 VM 에서는 부를 수 없다.
+VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec backend curl -sS http://<GPU PC 100.x>:8001/healthz` 가 둘 다 응답하면 연결된 것이다. GPU PC 를 끄면 VM 은 15초 안에 알아채고(웹훅이 있으면 알림), 새 작업은 다시 켜질 때까지 PENDING 으로 기다린다.
 
 ## 폰 앱
 
@@ -190,6 +191,6 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 맞는 비밀번호인데 계속 401 | `... exec caddy printenv BASIC_AUTH_HASH` 가 `$2a$14$` 로 시작하는 완전한 해시인지 | `.env` 에서 작은따옴표로 감싸고 `up -d`(환경변수가 바뀌면 caddy 가 새로 만들어진다) |
 | 업로드 413 | 응답 본문이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)면 Spring(장당 5MB·요청 20MB), 본문이 비었으면 Caddy(25MB) | 사진을 줄인다. 상한을 바꾸려면 Spring 설정과 Caddyfile 을 함께(계약 회의) |
 | 502 Bad Gateway | `... ps` 에서 backend 상태, `... logs backend` | 기동 중(첫 30~60초)이면 기다린다. 종료됐으면 로그의 원인(DB 잠김·메모리) |
-| 작업이 `INFERENCE_UNAVAILABLE` | GPU PC 가 켜져 있는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU PC 100.x>:8001/healthz` | S2 병합 전이면 정상(위 'GPU PC 쪽'). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| 작업이 `INFERENCE_UNAVAILABLE` | GPU PC 가 켜져 있는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU PC 100.x>:8001/healthz` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
