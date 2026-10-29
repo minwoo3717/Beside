@@ -613,7 +613,7 @@ paths:
       description: |
         COMPLETED 작업만 평가할 수 있다(아니면 409 JOB_NOT_COMPLETED). 같은 작업·같은 평가자(앞뒤 공백을 뺀 이름, 대소문자 구분)로
         다시 보내면 6항목과 comment 를 모두 새 값으로 바꾸고 updatedAt 을 갱신한다(createdAt 은 그대로).
-        6항목은 모두 필수이며 1~5 정수(3.0·"3" 같은 표기는 받지 않는다). comment 는 선택, 500자 이하이며 빈 문자열은 null 로 저장한다.
+        6항목은 모두 필수이며 1~5 정수(3.0·"3" 같은 표기는 받지 않는다). comment 는 선택, 앞뒤 공백을 뺀 뒤 500자 이하이며 빈 문자열은 null 로 저장한다.
         검사 순서: 평가자 이름·본문(400 INVALID_REQUEST, JSON 이 아닌 본문 포함) → 작업(404 JOB_NOT_FOUND) → 상태(409).
       parameters:
         - $ref: '#/components/parameters/JobId'
@@ -839,6 +839,28 @@ paths:
                 type: string
         '400':
           $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/jobs/{jobId}:
+    get:
+      tags: [admin]
+      operationId: adminJob
+      summary: 작업 하나의 요약 (작업 상세 페이지의 시도 횟수·modelVersion)
+      description: |
+        adminJobs 의 한 줄과 같은 값(AdminJobSummary)을 작업 하나에 대해 돌려준다. 작업 상세 페이지(/job/?id=)가 JobResponse 에 없는
+        시도 횟수와 마지막 실행의 modelVersion 을 보여 줄 때 쓴다. 없는 작업은 404(JOB_NOT_FOUND).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 작업 요약
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminJobSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1550,7 +1572,7 @@ components:
           type: string
           nullable: true
           maxLength: 500
-          description: 선택. 500자 이하. 빈 문자열은 null 로 저장한다.
+          description: 선택. 앞뒤 공백을 뺀 뒤 500자 이하. 빈 문자열은 null 로 저장한다.
     JobRating:
       type: object
       description: 저장된 평가 한 건(작업 × 평가자).
