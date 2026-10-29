@@ -38,8 +38,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -402,6 +404,20 @@ class AdminApiTest {
                     .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                     .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
                     .andExpect(jsonPath("$.error.message").isNotEmpty());
+        }
+    }
+
+    // ------------------------------------------------------------------ page
+
+    @Test
+    void dashboardPageIsServedAtAdminWithAndWithoutTrailingSlash() throws Exception {
+        mvc.perform(get("/admin")).andExpect(status().isOk()).andExpect(forwardedUrl("/admin/index.html"));
+        mvc.perform(get("/admin/")).andExpect(status().isOk()).andExpect(forwardedUrl("/admin/index.html"));
+        mvc.perform(get("/admin/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("/admin/admin.js")));
+        for (String asset : List.of("/admin/admin.js", "/admin/admin-format.js", "/admin/admin.css")) {
+            mvc.perform(get(asset)).andExpect(status().isOk());
         }
     }
 
