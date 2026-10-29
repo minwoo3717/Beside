@@ -37,6 +37,12 @@ tags:
     description: |
       작업 상세 웹 페이지(/job/?id={jobId})가 쓰는 입력 사진과 3D 품질 사람 평가(docs/METRICS.md §4 의 6항목, §4.1 저장).
       팀 내부용, 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/jobs/*/photos/*, /api/v1/jobs/*/ratings*).
+  - name: pets
+    description: |
+      반려동물 보관함 웹(/library)용. 펫별로 생성 기록을 모으고, 앱에서 펫 없이 만든 작업(미분류, petId=null)을 펫에 넣고,
+      끝난 작업을 지운다. 팀 내부용이라 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/pets*, PUT /api/v1/jobs/{jobId}/pet,
+      DELETE /api/v1/jobs/{jobId}, GET /api/v1/jobs/{jobId}/thumbnail).
+      경로의 리소스가 없으면 404(PET_NOT_FOUND·JOB_NOT_FOUND), 본문·파트가 가리키는 펫이나 작업이 없거나 규칙에 맞지 않으면 400(INVALID_REQUEST)이다.
 
 paths:
   /api/v1/jobs:
@@ -49,6 +55,8 @@ paths:
         Content-Type 은 image/jpeg · image/png · image/webp 만 허용한다(검사는 파트에 선언된 Content-Type 기준).
         접수 즉시 202 를 돌려주고 처리는 비동기로 진행된다. `Idempotency-Key` 헤더를 보내면 같은 키의 재요청에
         같은 jobId 를 돌려준다(서버 DB 에 저장되어 재시작 후에도 유지).
+        선택 텍스트 파트 `petId` 를 보내면 그 반려동물의 작업으로 만든다(보관함 웹, tag pets). 앱은 보내지 않는다.
+        접수할 때 첫 사진으로 썸네일을 만든다(JobResponse.thumbnailUrl). 사진을 읽지 못하면 썸네일 없이 접수한다.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -67,6 +75,13 @@ paths:
                   items:
                     type: string
                     format: binary
+                petId:
+                  type: string
+                  format: uuid
+                  description: |
+                    선택. 이 작업을 넣을 보관함의 반려동물(텍스트 파트 하나). 생략하거나 빈 값이면 펫 없이(미분류) 만든다.
+                    없는 펫이거나 UUID 가 아니면 400 INVALID_REQUEST 이고 작업을 만들지 않는다.
+                    Idempotency-Key 재요청이면 처음 만든 작업을 그대로 돌려주고 이 값은 보지 않는다.
       responses:
         '202':
           description: 작업 접수. Location 헤더와 본문의 jobId 로 상태를 폴링한다.
@@ -125,6 +140,27 @@ paths:
                 $ref: '#/components/schemas/JobResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [pets]
+      operationId: deleteJob
+      summary: 끝난 작업을 지운다 (보관함 웹)
+      description: |
+        status=COMPLETED·FAILED 인 작업만 지울 수 있다. 업로드 사진, 결과 GLB 폴더(storage.result.dir/{jobId}), 썸네일 파일을 지우고,
+        활성 공유 링크를 모두 취소하고(이후 SHARE_NOT_FOUND), 이 작업을 가리키는 Idempotency-Key 를 지운 뒤(같은 키로 다시 올리면
+        새 작업이 된다) 작업을 지운다. 실행 측정(job_runs 행, events.jsonl 줄)은 측정 기록이라 남긴다.
+        PENDING·PROCESSING 은 409(JOB_IN_PROGRESS) — 대기 중이면 cancel 한 뒤, 생성 중이면 끝난 뒤 지운다.
+        파일 하나를 지우지 못해도(잠김 등) 서버 로그만 남기고 작업은 지운다. 이후 이 jobId 의 모든 요청은 404(JOB_NOT_FOUND).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '204':
+          description: 지움
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -864,6 +900,182 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/pets:
+    post:
+      tags: [pets]
+      operationId: createPet
+      summary: 보관함에 반려동물을 추가한다
+      description: |
+        name 은 앞뒤 공백을 뺀 1~40자, species 는 DOG | CAT | OTHER(생략하면 DOG), note 는 500자 이하(생략·빈 값은 null).
+        규칙에 맞지 않거나 본문이 JSON 이 아니면 400 INVALID_REQUEST.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePetRequest'
+      responses:
+        '201':
+          description: 추가됨
+          headers:
+            Location:
+              description: 펫 조회 경로 `/api/v1/pets/{petId}`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [pets]
+      operationId: listPets
+      summary: 보관함의 반려동물 목록
+      description: 추가한 순서(createdAt 오름차순). 작업 수·대표 모델·마지막 작업 시각을 함께 준다. 페이지는 없다(팀 내부 규모).
+      responses:
+        '200':
+          description: 반려동물 목록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PetListResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/pets/{petId}:
+    get:
+      tags: [pets]
+      operationId: getPet
+      summary: 반려동물 한 마리와 생성 기록
+      description: PetResponse 의 필드에 이 펫의 작업(createdAt 최신순 JobResponse)과 작업별 modelVersion 을 더해 돌려준다.
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      responses:
+        '200':
+          description: 반려동물과 생성 기록
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PetDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    patch:
+      tags: [pets]
+      operationId: updatePet
+      summary: 이름·종·메모·대표 모델을 바꾼다
+      description: |
+        JSON merge patch 처럼 보낸 필드만 바꾼다. name·species 는 null 로 보낼 수 없고, note·coverJobId 는 null 로 지운다
+        (coverJobId=null 이면 대표는 자동: 이 펫의 가장 최근 COMPLETED 작업). coverJobId 는 이 펫에 들어 있는 COMPLETED 작업만
+        고를 수 있다(아니면 400 INVALID_REQUEST). 모르는 필드는 무시한다.
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePetRequest'
+      responses:
+        '200':
+          description: 바뀐 반려동물
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PetResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [pets]
+      operationId: deletePet
+      summary: 반려동물을 보관함에서 지운다
+      description: |
+        기본(withJobs=false)은 이 펫의 작업을 지우지 않고 미분류(petId=null)로 되돌린다.
+        withJobs=true 면 작업도 deleteJob 과 같은 규칙으로 지운다. 이때 PENDING·PROCESSING 작업이 하나라도 있으면
+        아무것도 지우지 않고 409(JOB_IN_PROGRESS, error.jobId = 그 작업)다. 잘못된 withJobs 값은 400 INVALID_REQUEST.
+      parameters:
+        - $ref: '#/components/parameters/PetId'
+        - $ref: '#/components/parameters/WithJobs'
+      responses:
+        '204':
+          description: 지움
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/pet:
+    put:
+      tags: [pets]
+      operationId: setJobPet
+      summary: 작업을 반려동물에 넣거나 미분류로 뺀다
+      description: |
+        본문 `{ "petId": "<uuid>" }` 이면 그 펫에 넣고 `{ "petId": null }` 이면 미분류로 뺀다. 상태와 관계없이(생성 중에도) 바꿀 수 있다.
+        petId 필드가 없거나 없는 펫이면 400 INVALID_REQUEST, 없는 작업은 404 JOB_NOT_FOUND. 펫에서 빼면 그 펫이 이 작업을
+        대표로 골라 두었던 것도 지운다(대표는 자동으로 돌아간다).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobPetRequest'
+      responses:
+        '200':
+          description: 바뀐 작업 상태
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/thumbnail:
+    get:
+      tags: [pets]
+      operationId: downloadThumbnail
+      summary: 작업의 썸네일 (첫 사진, JPEG)
+      description: |
+        작업을 접수할 때 첫 사진으로 만든 JPEG. 긴 변 256px(작은 사진은 키우지 않는다), EXIF 방향을 반영하고 투명 영역은 흰색이다.
+        JPEG·PNG 와 WEBP 를 읽는다. 사진을 읽지 못해 썸네일이 없으면 404 ASSET_NOT_FOUND, 없는 작업은 404 JOB_NOT_FOUND.
+        사진에서 나온 이미지라 배포에서는 Basic 인증 뒤다.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: JPEG 썸네일
+          headers:
+            Cache-Control:
+              description: private, max-age=86400 (작업의 썸네일은 바뀌지 않는다)
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     JobId:
@@ -954,6 +1166,22 @@ components:
       schema:
         type: boolean
         default: false
+    PetId:
+      name: petId
+      in: path
+      required: true
+      description: 반려동물 ID (UUID). 없는 값·형식이 다른 값은 404(PET_NOT_FOUND).
+      schema:
+        type: string
+        format: uuid
+    WithJobs:
+      name: withJobs
+      in: query
+      required: false
+      description: true 면 펫의 작업도 지운다(deleteJob 규칙). 기본 false — 작업은 미분류로 남긴다.
+      schema:
+        type: boolean
+        default: false
   responses:
     BadRequest:
       description: 잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)
@@ -962,13 +1190,13 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
-      description: 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND, NOT_FOUND)
+      description: 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND, NOT_FOUND, PET_NOT_FOUND)
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
-      description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED, JOB_NOT_PENDING)
+      description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED, JOB_NOT_PENDING, JOB_IN_PROGRESS)
       content:
         application/json:
           schema:
@@ -1052,6 +1280,17 @@ components:
           description: |
             PENDING·PROCESSING 일 때 남은 시간 추정치. 추정의 근거가 될 최근 완료 실행이 없으면(서버를 처음 띄운 직후 등)
             객체 자체가 null. 그 외 상태에서는 null.
+        petId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 이 작업이 들어 있는 보관함의 반려동물(tag pets). 펫에 넣지 않은 작업(앱에서 만든 작업 등)은 null = 미분류.
+        thumbnailUrl:
+          type: string
+          nullable: true
+          description: |
+            첫 사진으로 만든 썸네일(JPEG, 긴 변 256px)의 서버 루트 기준 상대 경로 `/api/v1/jobs/{jobId}/thumbnail`.
+            썸네일이 없으면(사진을 읽지 못함 등) null. 배포에서는 Basic 인증 뒤라 앱은 쓰지 않는다.
     Timings:
       type: object
       description: |
@@ -1899,3 +2138,131 @@ components:
         device:
           type: string
           nullable: true
+    PetResponse:
+      type: object
+      description: 보관함의 반려동물 한 마리(tag pets).
+      required: [id, name, species, createdAt, updatedAt, jobCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+        species:
+          type: string
+          description: 종. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+          enum: [DOG, CAT, OTHER]
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: 메모. 없으면 null.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          description: 이름·종·메모·대표를 마지막으로 바꾼 시각 (ISO 8601, UTC)
+        jobCount:
+          type: integer
+          format: int32
+          description: 이 펫에 들어 있는 작업 수(상태와 관계없이)
+        coverJobId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            대표 모델. updatePet 으로 고른 작업이 아직 이 펫의 COMPLETED 작업이면 그것, 아니면 이 펫의 가장 최근(createdAt)
+            COMPLETED 작업, 그것도 없으면 null.
+        coverThumbnailUrl:
+          type: string
+          nullable: true
+          description: 대표 작업의 썸네일 상대 경로 `/api/v1/jobs/{coverJobId}/thumbnail`. 대표가 없거나 그 작업에 썸네일이 없으면 null.
+        latestJobAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 이 펫의 가장 최근 작업의 createdAt. 작업이 없으면 null.
+    PetListResponse:
+      type: object
+      description: GET /api/v1/pets. 추가한 순서(createdAt 오름차순).
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PetResponse'
+    PetDetailResponse:
+      description: GET /api/v1/pets/{petId}. PetResponse 의 모든 필드와 생성 기록.
+      allOf:
+        - $ref: '#/components/schemas/PetResponse'
+        - type: object
+          required: [jobs, modelVersions]
+          properties:
+            jobs:
+              type: array
+              description: 이 펫의 작업, createdAt 최신순.
+              items:
+                $ref: '#/components/schemas/JobResponse'
+            modelVersions:
+              type: object
+              description: |
+                jobId → 그 작업의 마지막으로 끝난 실행(attempt 가 가장 큰 job_runs 행)의 modelVersion.
+                끝난 실행이 없거나 modelVersion 이 없는 작업은 키가 없다.
+              additionalProperties:
+                type: string
+    CreatePetRequest:
+      type: object
+      description: POST /api/v1/pets 본문.
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 앞뒤 공백을 뺀 뒤 1~40자
+        species:
+          type: string
+          enum: [DOG, CAT, OTHER]
+          default: DOG
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: 500자 이하. 생략하거나 빈 값이면 null.
+    UpdatePetRequest:
+      type: object
+      description: PATCH /api/v1/pets/{petId} 본문. 보낸 필드만 바꾼다(JSON merge patch 처럼).
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: 앞뒤 공백을 뺀 뒤 1~40자. null 불가.
+        species:
+          type: string
+          enum: [DOG, CAT, OTHER]
+          description: null 불가.
+        note:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: null 이나 빈 값이면 메모를 지운다.
+        coverJobId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 대표로 고를 이 펫의 COMPLETED 작업. null 이면 자동(가장 최근 COMPLETED 작업).
+    JobPetRequest:
+      type: object
+      description: PUT /api/v1/jobs/{jobId}/pet 본문. petId 필드는 꼭 보낸다(null 이면 미분류로).
+      required: [petId]
+      properties:
+        petId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 넣을 반려동물. null 이면 펫에서 빼서 미분류로.

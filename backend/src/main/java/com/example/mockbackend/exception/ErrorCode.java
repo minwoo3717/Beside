@@ -18,9 +18,13 @@ public enum ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND),
     /** Public share endpoints: unknown, malformed, expired or revoked token, or the shared job is gone. Never carries a jobId. */
     SHARE_NOT_FOUND(HttpStatus.NOT_FOUND),
+    /** Library (tag pets): unknown or malformed petId in the path. Never carries a jobId. */
+    PET_NOT_FOUND(HttpStatus.NOT_FOUND),
     JOB_NOT_COMPLETED(HttpStatus.CONFLICT),
     JOB_NOT_FAILED(HttpStatus.CONFLICT),
     JOB_NOT_PENDING(HttpStatus.CONFLICT),
+    /** Deleting a PENDING or PROCESSING job (directly or through a pet with withJobs=true): cancel or wait first. */
+    JOB_IN_PROGRESS(HttpStatus.CONFLICT),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR),
 
     // --- Job failure codes (JobResponse.error) ---

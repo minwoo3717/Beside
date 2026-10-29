@@ -11,13 +11,15 @@
 | `TOO_MANY_PHOTOS` | 400 | POST /jobs | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. | 장수 줄인 후 |
 | `UNSUPPORTED_IMAGE_TYPE` | 400 | POST /jobs | image/jpeg · png · webp 외 Content-Type | JPG, PNG, WEBP 사진만 사용할 수 있어요. | 다른 사진으로 |
 | `PAYLOAD_TOO_LARGE` | 413 | POST /jobs | 장당 5 MB 또는 요청 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
-| `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry, /cancel | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
-| `ASSET_NOT_FOUND` | 404 | /asset | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음) | 요청한 모델 파일이 없어요. | base 로 |
+| `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry, /cancel, /pet, /thumbnail, DELETE /jobs/{id} | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
+| `ASSET_NOT_FOUND` | 404 | /asset, /thumbnail | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음). /thumbnail: 첫 사진을 읽지 못해 썸네일이 없음 | 요청한 모델 파일이 없어요. | base 로 |
 | `NOT_FOUND` | 404 | 그 외 경로 | 알 수 없는 v1 경로·리소스 | 요청한 정보를 찾을 수 없어요. | 무의미 |
 | `SHARE_NOT_FOUND` | 404 | /shares/{token}, /shares/{token}/asset | 없는 토큰(형식이 다른 토큰 포함)·만료·취소된 공유 링크, 또는 공유한 작업이 지워짐. 이유를 구분하지 않으며 `jobId` 를 채우지 않는다 | 공유 링크가 없거나 만료됐어요. | 무의미 |
+| `PET_NOT_FOUND` | 404 | /pets/{petId} (보관함 웹) | 알 수 없는 petId(형식이 다른 값·이미 지운 펫 포함). `jobId` 를 채우지 않는다 | 반려동물을 찾을 수 없어요. 목록을 새로고침해 주세요. | 무의미 |
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
 | `JOB_NOT_FAILED` | 409 | /retry | FAILED 가 아닌 작업에 재시도 요청 | 실패한 작업만 다시 시도할 수 있어요. | 무의미 |
 | `JOB_NOT_PENDING` | 409 | /cancel | PENDING 이 아닌 작업에 취소 요청. PROCESSING 은 이미 시작한 GPU 연산을 멈출 수 없어서, COMPLETED·FAILED(이미 취소한 작업 포함)는 이미 끝나서 | 이미 생성이 시작돼 취소할 수 없어요. | 무의미(GET 으로 상태 다시 읽기) |
+| `JOB_IN_PROGRESS` | 409 | DELETE /jobs/{id}, DELETE /pets/{petId}?withJobs=true (보관함 웹) | PENDING·PROCESSING 작업을 지우려 함. 대기 중이면 취소한 뒤, 생성 중이면 끝난 뒤 지운다. 펫 삭제는 아무것도 지우지 않고 첫 진행 중 작업의 `jobId` 를 채운다 | 아직 만들고 있는 작업은 지울 수 없어요. 취소하거나 끝난 뒤 지워 주세요. | 취소·완료 후 |
 | `INTERNAL_ERROR` | 500 | 모든 엔드포인트 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 
 ## Job 실패 코드 (`JobResponse.error.code`, `status=FAILED` 일 때)
@@ -34,9 +36,10 @@
 ## 규칙
 
 - `message` 는 개발자용 설명이다. 앱은 표시하지 않으며, 서버 경로·내부 주소·추론 서비스의 원문 메시지를 담지 않는다(그런 내용은 서버 로그에만).
-- `jobId` 는 오류가 특정 작업에 관한 것일 때만 채운다(`JOB_NOT_FOUND`, `ASSET_NOT_FOUND`, `JOB_NOT_COMPLETED`, `JOB_NOT_FAILED`, `JOB_NOT_PENDING`).
+- `jobId` 는 오류가 특정 작업에 관한 것일 때만 채운다(`JOB_NOT_FOUND`, `ASSET_NOT_FOUND`, `JOB_NOT_COMPLETED`, `JOB_NOT_FAILED`, `JOB_NOT_PENDING`, `JOB_IN_PROGRESS`).
 - v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 표를 따르지 않는다(동결).
 - 상태 코드는 400 / 404 / 409 / 413 / 500 다섯 가지만 계약에 둔다. 프레임워크 수준 응답(405, 415 등)은 v1 봉투로 감싸되 `INVALID_REQUEST` 로 분류한다.
 - 문구는 제안이다. UX 검토 후 바뀔 수 있으나 코드 이름은 유지한다.
+- 보관함(tag `pets`)은 경로의 리소스가 없으면 404(`PET_NOT_FOUND`·`JOB_NOT_FOUND`), 본문·파트가 가리키는 펫이나 작업이 없거나 규칙에 맞지 않으면(없는 `petId` 로 업로드·작업 넣기, 다른 펫의 작업이나 COMPLETED 가 아닌 작업을 대표로 고르기, 이름 1~40자·메모 500자 위반, JSON 이 아닌 본문) 400 `INVALID_REQUEST` 다. 진행 중 작업 삭제는 `JOB_IN_PROGRESS`(`jobId` 를 채운다), 썸네일이 없으면 `ASSET_NOT_FOUND` 를 다시 쓴다.
 - 공유 링크 만들기(`POST /jobs/{id}/shares`)는 새 코드 없이 기존 `INVALID_REQUEST`(ttlDays 범위)·`JOB_NOT_FOUND`·`ASSET_NOT_FOUND`·`JOB_NOT_COMPLETED` 를 쓴다. 공개 쪽(`/shares/{token}`)은 `SHARE_NOT_FOUND` 하나만 쓰고 `jobId` 를 비운다(공유 페이지에 작업 id 를 드러내지 않는다).
 - 작업 상세 웹 페이지의 API(태그 quality: `GET /jobs/{id}/photos/{index}`, `GET /jobs/{id}/ratings`, `PUT /jobs/{id}/ratings/{rater}`)와 관리 API 의 평가·앱 측정(`/admin/ratings*`, `/admin/client-metrics`, `/admin/e2e`)도 새 코드 없이 쓴다: 평가자 이름·점수 범위·comment 길이·JSON 이 아닌 본문·`metrics.csv` 헤더 불일치는 `INVALID_REQUEST`, 없는 작업은 `JOB_NOT_FOUND`, 완료되지 않은 작업의 평가는 `JOB_NOT_COMPLETED`, 없는 사진 index 는 `NOT_FOUND`(`jobId` 비움). `metrics.csv` 의 잘못된 데이터 줄은 오류 응답이 아니라 200 결과의 `errors[]` 에 줄 번호와 함께 담는다. `client-metrics` 파트 `file` 이 없을 때도 `NO_PHOTOS` 가 아니라 `INVALID_REQUEST` 다.
