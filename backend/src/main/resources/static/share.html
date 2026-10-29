@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- The token in the address is the secret of the link: send no Referer anywhere and stay out of search engines. -->
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#f6f5f0">
+  <title>함께 보기 · Beside</title>
+  <link rel="icon" href="data:,">
+  <!-- Absolute paths: this page is served at /s/{token}. -->
+  <link rel="stylesheet" href="/share.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js" integrity="sha256-iSNznIwbSgLdnIz2baXCpEgjXLXknkOd17u6lEuk++E=" crossorigin="anonymous"></script>
+  <script src="/share.js" defer></script>
+</head>
+<body>
+  <header class="share-header">
+    <span class="brand"><span class="brand-mark" aria-hidden="true">b.</span> Beside</span>
+    <span id="expiry" class="expiry" hidden></span>
+  </header>
+
+  <main>
+    <section id="loading-view" class="state-view" aria-busy="true">
+      <span class="spinner" aria-hidden="true"></span>
+      <p role="status">모델을 불러오는 중이에요…</p>
+    </section>
+
+    <section id="viewer-view" class="viewer-view" aria-labelledby="viewer-title" hidden>
+      <h1 id="viewer-title" class="visually-hidden">공유받은 반려동물 3D 모델</h1>
+      <model-viewer id="viewer" ar ar-modes="webxr scene-viewer" camera-controls autoplay shadow-intensity="1"
+                    alt="공유받은 반려동물 3D 모델">
+        <button slot="ar-button" id="ar-button" class="ar-button" type="button">내 방에 놓아 보기</button>
+      </model-viewer>
+      <div id="animation-chips" class="chips" role="group" aria-label="동작 고르기" hidden></div>
+      <p class="note">드래그해서 돌려 보고, 두 손가락으로 크게 볼 수 있어요.</p>
+      <p id="ar-note" class="note" hidden>AR은 ARCore를 지원하는 안드로이드 폰의 Chrome에서 https 주소로 열었을 때 쓸 수 있어요.</p>
+      <p id="viewer-message" class="note error" role="alert" hidden></p>
+    </section>
+
+    <section id="missing-view" class="state-view" hidden>
+      <svg width="72" height="72" viewBox="0 0 84 84" fill="none" aria-hidden="true"><circle cx="42" cy="42" r="40" stroke="currentColor" stroke-dasharray="3 6"/><ellipse cx="29" cy="31" rx="5" ry="7" fill="currentColor"/><ellipse cx="43" cy="25" rx="5" ry="7" fill="currentColor"/><ellipse cx="56" cy="33" rx="5" ry="7" fill="currentColor"/><path d="M27 51c0-7 8-14 15-14s15 7 15 14c0 10-10 7-15 5-5 2-15 5-15-5Z" fill="currentColor"/></svg>
+      <h1>링크가 없거나 만료됐어요</h1>
+      <p>공유해 준 사람에게 새 링크를 부탁해 주세요.</p>
+    </section>
+
+    <section id="error-view" class="state-view" hidden>
+      <h1>모델을 불러오지 못했어요</h1>
+      <p id="error-detail">잠시 후 다시 시도해 주세요.</p>
+      <button id="retry-button" class="retry-button" type="button">다시 시도</button>
+    </section>
+  </main>
+</body>
+</html>
