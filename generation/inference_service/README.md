@@ -2,7 +2,7 @@
 
 Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는 호출하지 않는다. 담당은 3D Generation 트랙, `/infer` 계약 변경은 Backend 와 합의한다.
 
-상태: **[구현됨]** 스키마·`/healthz`·501 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). **[계획]** AnimalLift 모델 로드·추론, `tools/convert_asset.py` 호출 (`app.py` 의 TODO). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다.
+상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다 — 실측 기록(exp-01: 1건 시간·VRAM)은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다.
 
 ## GPU 서버 실행
 
@@ -13,7 +13,7 @@ cd generation/inference_service
 pip install -r requirements.txt
 
 # 2. 실행
-uvicorn app:app --host 0.0.0.0 --port 8001            # /infer 는 501 (모델 미구현)
+uvicorn app:app --host 127.0.0.1 --port 8001          # 모델 미설정이면 /infer 는 501, 모델 로딩 중·로드 실패면 503
 BESIDE_SAMPLE_GLB=/data/sample.glb uvicorn app:app --host 0.0.0.0 --port 8001   # 패스스루: 샘플 GLB 경로를 돌려준다
 
 # 3. 확인
@@ -82,7 +82,8 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 |---|---|---|---|
 | 400 | `INFERENCE_FAILED` | 이미지 없음·읽기 실패·입력 품질 불량 | `INFERENCE_FAILED` |
 | 500 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB_SPEC 위반 | `CONVERSION_FAILED` |
-| 501 | `INFERENCE_UNAVAILABLE` | 모델 미구현/미로드 | `INFERENCE_UNAVAILABLE` |
+| 501 | `INFERENCE_UNAVAILABLE` | 모델 미설정(`BESIDE_ANIMALLIFT_DIR`·`BESIDE_MODEL_DIR`·`BESIDE_SAMPLE_GLB` 모두 없음) | `INFERENCE_UNAVAILABLE` |
+| 503 | `INFERENCE_UNAVAILABLE` | 모델 로딩 중 또는 로드 실패(서비스 로그 확인) | `INFERENCE_UNAVAILABLE` |
 | (연결 실패·타임아웃) | — | 서비스 다운, `inference.timeout-ms` 초과 | `INFERENCE_UNAVAILABLE` / `INFERENCE_TIMEOUT` |
 | 501~504 | 없음·모르는 코드 | 프록시·서비스 준비 안 됨 | `INFERENCE_UNAVAILABLE` |
 | 그 밖의 4xx·5xx | 없음·모르는 코드 | 처리하지 않은 예외(FastAPI 기본 500), 요청 검증 실패 422 | `INFERENCE_FAILED` |

@@ -6,11 +6,11 @@
 generation/
 ├─ CLAUDE.md
 ├─ README.md
-├─ inference_service/      # FastAPI 내부 서비스 스텁: POST /infer, GET /healthz  (담당: 3D Generation, 계약은 Backend 와 합의)
+├─ inference_service/      # FastAPI 내부 서비스: POST /infer·/infer/upload, GET /healthz, AnimalLift 실행 (계약은 Backend 와 합의)
 │  ├─ app.py
 │  ├─ requirements.txt
 │  └─ README.md            # GPU 서버 실행법, /infer 계약
-├─ tools/                  # convert_asset.py 자리 (OBJ+PNG → GLB + metrics.json). 별도 세션 결과물 투입 예정
+├─ tools/                  # convert_asset.py (OBJ+PNG → GLB + metrics.json), rig_transfer.py (템플릿 리그·애니메이션 이식)
 │  └─ README.md
 └─ experiments/            # 실험 기록. TEMPLATE.md 순서를 따른다
    ├─ README.md
@@ -28,9 +28,10 @@ Spring 의 real 워커가 `POST /infer` 로 이 파이프라인을 호출하고,
 
 ## 상태
 
-- **[구현됨]** `inference_service/app.py` 스텁: 입·출력 스키마, `GET /healthz`, 모델이 없을 때 501, `BESIDE_SAMPLE_GLB` 패스스루 모드.
-- **[계획]** (순서 변경 2026-10-06, [docs/PLAN.md](../docs/PLAN.md) 3단계) AnimalLift 베이스라인 재현(exp-01, 출력 형식·시간·VRAM 기록) → `convert_asset.py` 투입 → `/infer` 에 베이스라인 모델 연결(`modelVersion` 채움, 10-13 주) → GPU PC 에서 폰까지 실제 E2E(10-20 주) → 품질·속도 개선 실험(exp-03·04, 개선안마다 E2E 로 확인).
-- **직접 할 일**: 별도 세션에서 만든 `convert_asset.py` 와 glTFast 로드 검증 결과를 `tools/` 와 `experiments/` 에 투입한다. 이 리포에는 아직 없다. `inference_service/requirements.txt`("별도 conda/venv")와 `inference_service/README.md`("같은 env")의 환경 표현을 통일한다 — 모델이 별도 env 면 `app.py` 가 subprocess 로 부른다.
+- **[구현됨]** `inference_service/app.py`: 입·출력 스키마, `GET /healthz`, 모델 미설정 501·로딩 중 503, `BESIDE_SAMPLE_GLB` 패스스루, 업로드 모드(2026-10-30).
+- **머지됨(#1, 2026-10-14)** AnimalLift 실행(`animallift_runner.py`), `tools/convert_asset.py`, 자동 리깅(`tools/rig_transfer.py`, 템플릿은 리포 밖). 이 코드로 실제 사진을 돌린 측정 기록은 아직 없다.
+- **[계획]** ([docs/PLAN.md](../docs/PLAN.md) 3단계) exp-01(1건 시간·VRAM·출력 형식 기록) → 우리 사진으로 실제 E2E(exp-02, `job_runs` CSV) → 품질·속도 개선 실험(exp-03·04). 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣는 지금 전처리(`animallift_runner.py` 의 Resize) 대신 정사각 패딩·배경 제거, 여러 장 중 가장 좋은 사진 고르기, 털 맵을 GLB 에 넣어 앱의 털 표현 켜기.
+- **직접 할 일**: glTFast 로드 검증 결과와 실험 기록을 `experiments/` 에 넣는다. 모델은 추론 서비스와 같은 conda env 에서 같은 프로세스로 돈다([inference_service/ANIMALLIFT_SETUP.md](inference_service/ANIMALLIFT_SETUP.md)).
 
 ## 실험 기록 규칙
 
