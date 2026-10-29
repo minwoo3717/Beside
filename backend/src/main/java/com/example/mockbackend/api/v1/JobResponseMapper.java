@@ -2,6 +2,8 @@ package com.example.mockbackend.api.v1;
 
 import com.example.mockbackend.api.v1.dto.AssetInfo;
 import com.example.mockbackend.api.v1.dto.JobError;
+import com.example.mockbackend.api.v1.dto.JobEstimate;
+import com.example.mockbackend.api.v1.dto.JobQueue;
 import com.example.mockbackend.api.v1.dto.JobResponse;
 import com.example.mockbackend.api.v1.dto.Timings;
 import com.example.mockbackend.api.v1.dto.UploadedFile;
@@ -10,6 +12,8 @@ import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.JobTimings;
 import com.example.mockbackend.exception.ErrorCode;
+import com.example.mockbackend.service.QueueEstimator;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -17,17 +21,22 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Job (internal) → JobResponse (contract v1). Never copies server paths.
+ * Job (internal) → JobResponse (contract v1). Never copies server paths. queue and estimate come from QueueEstimator,
+ * for the list too: they cost nothing for finished jobs and two small queries per PENDING job.
  */
 @Component
+@RequiredArgsConstructor
 public class JobResponseMapper {
     public static final String GLB_CONTENT_TYPE = "model/gltf-binary";
+
+    private final QueueEstimator queueEstimator;
 
     public JobResponse toResponse(Job job) {
         return toResponse(job, Instant.now());
     }
 
     JobResponse toResponse(Job job, Instant now) {
+        QueueEstimator.Outlook outlook = queueEstimator.outlook(job);
         return new JobResponse(
                 job.getId(),
                 job.getStatus(),
@@ -37,7 +46,17 @@ public class JobResponseMapper {
                 timings(job, now),
                 asset(job),
                 error(job),
-                job.getUploads().stream().map(u -> new UploadedFile(u.name(), u.bytes())).toList());
+                job.getUploads().stream().map(u -> new UploadedFile(u.name(), u.bytes())).toList(),
+                queue(outlook.queue()),
+                estimate(outlook.estimate()));
+    }
+
+    static JobQueue queue(QueueEstimator.Position position) {
+        return position == null ? null : new JobQueue(position.ahead(), position.reason());
+    }
+
+    static JobEstimate estimate(QueueEstimator.Estimate estimate) {
+        return estimate == null ? null : new JobEstimate(estimate.remainingMs(), estimate.basedOnRuns());
     }
 
     /** Same numbers as events.jsonl: see JobTimings for the semantics. */

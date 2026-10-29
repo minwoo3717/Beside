@@ -10,7 +10,8 @@ import java.util.List;
 @Schema(description = "작업 상태. 서버 내부 경로는 포함하지 않는다.")
 public record JobResponse(
         @Schema(format = "uuid") String id,
-        @Schema(description = "PENDING → PROCESSING → COMPLETED | FAILED. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.")
+        @Schema(description = "PENDING → PROCESSING → COMPLETED | FAILED, FAILED → (retry) → PENDING, PENDING → (cancel) → FAILED(CANCELED). "
+                + "클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.")
         JobStatus status,
         @Schema(nullable = true, minimum = "0", maximum = "1", description = "진행률 0~1. 서버가 모르면 null.")
         Double progress,
@@ -22,5 +23,10 @@ public record JobResponse(
         @Schema(nullable = true, description = "FAILED 일 때 실패 원인, 그 외 null.")
         JobError error,
         @Schema(description = "업로드된 사진의 원본 파일명과 크기.")
-        List<UploadedFile> uploadedFiles) {
+        List<UploadedFile> uploadedFiles,
+        @Schema(nullable = true, description = "PENDING 일 때 대기열 위치, 그 외 null.")
+        JobQueue queue,
+        @Schema(nullable = true, description = "PENDING·PROCESSING 일 때 남은 시간 추정치(최근 완료 실행의 processingMs 중앙값 기준). "
+                + "근거 실행이 없으면 null, 그 외 상태 null.")
+        JobEstimate estimate) {
 }
