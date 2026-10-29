@@ -2,7 +2,7 @@
 
 세 트랙이 **같은 이름**으로 측정값을 남긴다. 이름은 여기서만 정의하고, 보고서·발표·실험 기록은 이 이름을 그대로 쓴다. 단위는 시간 ms(정수), 크기 bytes 또는 MB(정수), 비율 0~1. 측정 시점이 다른 값(예: 서버가 잰 `processingMs` 와 앱이 잰 `waitMs`)은 이름이 다르므로 섞지 않는다.
 
-상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐).
+상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐). 앱 `metrics.csv` 를 서버로 가져와 서버 측정과 합치는 API(§3.1)와 품질 평가 저장(§4.1)은 **[구현됨]**(2026-10-30, 테스트로 확인) — 실제 폰에서 뽑은 파일·실제 평가로는 아직 돌려 보지 않았다.
 
 ## 1. 서버 `events.jsonl` (Backend, [구현됨] PLAN 0단계)
 
@@ -97,6 +97,23 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | `memMB` | 배치 후 `Profiler.GetTotalAllocatedMemoryLong()` 을 MB 로 | AR 배치 중 |
 | `device` | `SystemInfo.deviceModel` | — |
 
+### 3.1 서버로 가져오기와 e2e 결합표 (Backend, [구현됨] 2026-10-30, `ClientMetricsApiTest`)
+
+앱은 바꾸지 않는다. 팀원이 `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` 로 받은 파일을 관리 페이지 `/admin` 의 "앱 metrics.csv 올리기" 로 올린다(API `POST /api/v1/admin/client-metrics`, multipart 파트 `file`).
+
+- 첫 줄이 위 헤더와 **정확히** 같아야 한다. 아니면 아무것도 저장하지 않고 400. 데이터 줄은 줄마다 검사해 잘못된 줄만 결과의 `errors[{line, reason}]` 에 담고(줄 번호는 헤더 = 1) 나머지는 저장한다: 칸 10개, `uploadMs, waitMs, downloadMs, loadMs, e2eMs, memMB` 는 0 이상 정수, `avgFps, minFps` 는 0 이상 소수(`.`), `device` 는 빈 칸 허용.
+- `(jobId, device, e2eMs)` 가 이미 저장된 행(또는 같은 파일의 앞 줄)과 같으면 중복으로 건너뛴다(`skipped`). 같은 파일을 여러 번 올려도 한 번만 들어간다. 폰마다 파일이 따로이므로 폰 여러 대의 파일을 차례로 올리면 된다.
+- 저장 위치: H2 테이블 `client_metrics`(컬럼 `job_id, upload_ms, wait_ms, download_ms, load_ms, e2e_ms, avg_fps, min_fps, mem_mb, device` + `id, imported_at`). jobId 가 이 서버에 없는 작업이어도 저장한다.
+- 내보내기: `GET /api/v1/admin/client-metrics?format=csv` → `client_metrics.csv`, 열은 위 헤더 그대로(다시 올려도 전부 중복으로 건너뛴다).
+
+**e2e 결합표** — `GET /api/v1/admin/e2e?format=csv` → `e2e.csv`. 앱 측정 한 행마다 그 jobId 의 마지막 COMPLETED 실행(`job_runs`, §1.1)의 서버·추론 열을 붙인 표다. 열 이름은 이 문서의 이름 그대로이고 **겹치는 `uploadMs` 만 서버 것을 `serverUploadMs`** 로 쓴다(서버 `uploadMs` 는 §1 의 요청 도착 → 사진 저장, 앱 `uploadMs` 는 §3 의 POST 시작 → 202 수신으로 다른 값이다). 열 순서:
+
+```csv
+jobId,modelVersion,workerType,passthrough,attempt,finishedAt,uploadBytes,serverUploadMs,queuedMs,processingMs,totalMs,inferMs,gpuPeakMB,modelParams,outputVertices,outputTriangles,convertMs,glbBytes,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
+```
+
+COMPLETED 실행이 없으면(다른 서버·프로파일의 작업, 실패한 작업) 서버·추론 열은 빈 칸이다. 기본으로 패스스루 실행의 행을 뺀다(`includePassthrough=true` 로 포함). CSV 형식(RFC 4180, null 빈 칸, CRLF)은 §1.1 과 같다.
+
 ## 4. 3D 품질 체크리스트 (사람 평가, 1~5점)
 
 평가자 2명 이상이 독립 채점하고 평균을 쓴다. 기준 사진(입력)과 렌더(정면·측면·위) 를 나란히 놓고 채점한다. 1 = 전혀 다름, 3 = 종을 알아볼 수 있음, 5 = 그 개체로 알아볼 수 있음.
@@ -116,3 +133,18 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 |---|---|---|---|---|---|---|---|---|---|
 | baseline | | | | | | | | | |
 | 개선안 A | | | | | | | | | |
+
+### 4.1 평가 저장과 내보내기 (Backend, [구현됨] 2026-10-30, `RatingApiTest`)
+
+평가자는 작업 상세 웹 페이지 `/job/?id={jobId}` 에서 입력 사진과 3D 모델을 나란히 보고 6항목을 채점한다(평가자 이름은 브라우저 localStorage 에 기억). 저장은 API `PUT /api/v1/jobs/{jobId}/ratings/{rater}`(본문 = 위 6개 이름, 각 1~5 정수 + 선택 `comment` ≤ 500자), COMPLETED 작업만 받는다. **같은 작업·같은 평가자는 덮어쓴다** — 평가자 한 명당 작업마다 한 행이므로 "평가자 2명 이상"은 서로 다른 이름 2개 이상이다.
+
+- 저장 위치: H2 테이블 `job_ratings`(컬럼 `job_id, rater, face_shape, ears, body_proportion, fur_color, pattern, texture_artifacts, comment, created_at, updated_at` + `id`, `(job_id, rater)` 유일).
+- 작업별 평균: `GET /api/v1/jobs/{jobId}/ratings` → `items`(평가자 이름순) + `average`(6항목 평균과 `raters`). 평가가 없으면 `average = null`.
+- 측정표: `GET /api/v1/admin/ratings?format=csv` → `job_ratings.csv`. 평가 한 건 = 한 행, 그 작업의 마지막 실행(§1.1 `job_runs`)의 `modelVersion`·`workerType`·`passthrough` 를 붙인다. 열 순서:
+
+```csv
+jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureArtifacts,comment,updatedAt,workerType,passthrough
+```
+
+- 보고서 표(베이스라인 vs 개선안): `GET /api/v1/admin/ratings/summary` → modelVersion 별(`(none)` = 값 없음, §1.1 stats 와 같은 이름) 6항목 평균, `ratings`(평가 행 수), `raters`(서로 다른 평가자 수), `jobs`(평가된 작업 수). 평균은 **평가 행 전체의 산술 평균**이다(작업별 평균의 평균이 아님). 관리 페이지 `/admin` 의 "평가 요약" 표가 이 값을 보여 준다.
+- 제외 규칙: 기본으로 패스스루 실행(§1 `passthrough = TRUE`)의 평가는 측정표·요약에서 뺀다(`includePassthrough=true` 로 포함). `from`/`to` 는 평가의 `updatedAt` 기준(ISO 8601 instant, `to` 는 제외).

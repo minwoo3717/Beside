@@ -33,6 +33,10 @@ tags:
       토큰은 128비트 난수(base64url 22자)이며 작업 id 는 공유 쪽 응답·오류 어디에도 넣지 않는다.
   - name: admin
     description: 운영 대시보드(/admin)와 측정 내보내기. 팀 내부용, 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/admin/*).
+  - name: quality
+    description: |
+      작업 상세 웹 페이지(/job/?id={jobId})가 쓰는 입력 사진과 3D 품질 사람 평가(docs/METRICS.md §4 의 6항목, §4.1 저장).
+      팀 내부용, 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/jobs/*/photos/*, /api/v1/jobs/*/ratings*).
 
 paths:
   /api/v1/jobs:
@@ -517,6 +521,327 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/jobs/{jobId}/photos/{index}:
+    get:
+      tags: [quality]
+      operationId: downloadJobPhoto
+      summary: 작업에 올린 사진 원본 (작업 상세 웹 페이지용)
+      description: |
+        작업 상세 페이지가 입력 사진과 3D 모델을 나란히 보여 줄 때 쓴다. 앱은 쓰지 않는다.
+        `index` 는 JobResponse.uploadedFiles 의 순서(0부터)다. 작업 상태와 관계없이(PENDING·FAILED 포함) 올린 사진을 돌려준다.
+        Content-Type 은 저장된 파일명의 확장자로 정한다: `.jpg`·`.jpeg` → image/jpeg, `.png` → image/png, `.webp` → image/webp,
+        그 밖 → application/octet-stream(브라우저가 페이지로 열지 않도록 `X-Content-Type-Options: nosniff`).
+        서버 저장 경로·저장 파일명은 응답 헤더와 오류 어디에도 넣지 않는다.
+        없는 작업은 404(JOB_NOT_FOUND), 범위 밖 index(음수 포함)나 디스크에서 사라진 파일은 404(NOT_FOUND), 정수가 아닌 index 는 400(INVALID_REQUEST).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - name: index
+          in: path
+          required: true
+          description: 사진 순서 0부터 (uploadedFiles 의 index)
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: 사진 바이트 (올린 그대로)
+          headers:
+            Cache-Control:
+              description: private, max-age=3600 (올린 사진은 바뀌지 않는다)
+              schema:
+                type: string
+            Content-Length:
+              description: 파일 크기(바이트). uploadedFiles[index].bytes 와 같다.
+              schema:
+                type: integer
+                format: int64
+            X-Content-Type-Options:
+              description: nosniff
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/ratings:
+    get:
+      tags: [quality]
+      operationId: listJobRatings
+      summary: 작업의 품질 평가 목록과 항목별 평균
+      description: |
+        docs/METRICS.md §4 의 사람 평가 6항목(각 1~5). `items` 는 평가자 이름 오름차순, `average` 는 6항목 각각의 산술 평균(소수)과
+        평가자 수다. 평가가 없으면 `items` 는 빈 배열, `average` 는 null. 없는 작업은 404(JOB_NOT_FOUND).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 평가 목록과 평균
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRatingList'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/jobs/{jobId}/ratings/{rater}:
+    put:
+      tags: [quality]
+      operationId: putJobRating
+      summary: 평가자 한 명의 품질 평가를 저장한다 (같은 평가자는 덮어쓰기)
+      description: |
+        COMPLETED 작업만 평가할 수 있다(아니면 409 JOB_NOT_COMPLETED). 같은 작업·같은 평가자(앞뒤 공백을 뺀 이름, 대소문자 구분)로
+        다시 보내면 6항목과 comment 를 모두 새 값으로 바꾸고 updatedAt 을 갱신한다(createdAt 은 그대로).
+        6항목은 모두 필수이며 1~5 정수(3.0·"3" 같은 표기는 받지 않는다). comment 는 선택, 500자 이하이며 빈 문자열은 null 로 저장한다.
+        검사 순서: 평가자 이름·본문(400 INVALID_REQUEST, JSON 이 아닌 본문 포함) → 작업(404 JOB_NOT_FOUND) → 상태(409).
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/Rater'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRatingRequest'
+      responses:
+        '200':
+          description: 저장된 평가
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRating'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/ratings:
+    get:
+      tags: [admin]
+      operationId: adminRatings
+      summary: 품질 평가 측정표 — JSON 또는 CSV
+      description: |
+        평가 한 건이 한 행이다. 그 작업의 마지막 실행(job_runs 에서 attempt 가 가장 큰 행)의 modelVersion·workerType·passthrough 를
+        붙인다(실행 행이 없으면 null). 열 이름과 순서(CSV 헤더 = JSON 이름, docs/METRICS.md §4.1):
+        jobId, modelVersion, rater, faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts, comment, updatedAt,
+        workerType, passthrough.
+
+        CSV 형식은 adminRuns 와 같다(RFC 4180, null 은 빈 칸, 줄 끝 CRLF, `Content-Type: text/csv; charset=UTF-8`),
+        파일명은 `Content-Disposition: attachment; filename="job_ratings.csv"`. updatedAt 오름차순(같으면 jobId·rater 순).
+        기본으로 패스스루 실행(passthrough=true)의 평가를 뺀다 — 모델이 돌지 않은 결과의 품질은 측정이 아니다.
+        잘못된 format·from·to·includePassthrough 는 400 INVALID_REQUEST.
+      parameters:
+        - $ref: '#/components/parameters/ExportFormat'
+        - name: from
+          in: query
+          required: false
+          description: updatedAt 하한(포함). ISO 8601 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: updatedAt 상한(제외). ISO 8601 instant. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/IncludePassthrough'
+      responses:
+        '200':
+          description: 평가 행. format 에 따라 JSON 배열 또는 CSV.
+          headers:
+            Content-Disposition:
+              description: format=csv 일 때만 `attachment; filename="job_ratings.csv"`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminRating'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/ratings/summary:
+    get:
+      tags: [admin]
+      operationId: adminRatingSummary
+      summary: modelVersion 별 품질 평가 평균 (보고서의 베이스라인 vs 개선안 표)
+      description: |
+        adminRatings 와 같은 행(from·to·includePassthrough 로 거른 평가)을 modelVersion(null 은 `(none)`, adminStats 와 같은 이름)으로 묶는다.
+        6항목 평균은 그 묶음의 **평가 행 전체의 산술 평균**이다(작업별 평균의 평균이 아님). ratings = 평가 행 수, raters = 서로 다른
+        평가자 수, jobs = 서로 다른 작업 수. 묶음 순서는 modelVersion 오름차순.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: updatedAt 하한(포함). ISO 8601 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: updatedAt 상한(제외). ISO 8601 instant. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/IncludePassthrough'
+      responses:
+        '200':
+          description: modelVersion 별 평균
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRatingSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/client-metrics:
+    get:
+      tags: [admin]
+      operationId: adminClientMetrics
+      summary: 가져온 앱 측정(metrics.csv 행) — JSON 또는 CSV
+      description: |
+        importClientMetrics 로 가져온 행을 가져온 순서대로 돌려준다. 열 이름과 순서는 docs/METRICS.md §3 의 앱 `metrics.csv` 헤더 그대로다:
+        jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device. 그래서 CSV(`client_metrics.csv`)는
+        다시 가져올 수 있다(모든 행이 중복으로 건너뛰어진다). CSV 형식은 adminRuns 와 같다.
+      parameters:
+        - $ref: '#/components/parameters/ExportFormat'
+      responses:
+        '200':
+          description: 앱 측정 행. format 에 따라 JSON 배열 또는 CSV.
+          headers:
+            Content-Disposition:
+              description: format=csv 일 때만 `attachment; filename="client_metrics.csv"`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminClientMetric'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    post:
+      tags: [admin]
+      operationId: importClientMetrics
+      summary: 앱이 폰에 쓴 metrics.csv 를 올려 서버에 저장한다
+      description: |
+        팀원이 `adb pull` 로 받은 `metrics.csv`(docs/METRICS.md §3)를 관리 페이지에서 올린다. 앱 변경은 필요 없다.
+        multipart 파트 `file` 하나. UTF-8(BOM 허용), RFC 4180(따옴표로 감싼 칸, 줄 끝 LF 또는 CRLF).
+        첫 줄은 METRICS §3 헤더와 **정확히** 같아야 한다(`jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device`).
+        아니면, 또는 파트가 없거나 비어 있으면 아무것도 저장하지 않고 400 INVALID_REQUEST.
+
+        데이터 줄 검사(실패한 줄만 errors 에 넣고 나머지는 저장): 칸 10개, jobId 1~64자, uploadMs·waitMs·downloadMs·loadMs·e2eMs·memMB 는
+        0 이상 정수, avgFps·minFps 는 0 이상 소수(`.` 소수점), device 는 빈 칸 허용(256자 이하). 빈 줄은 무시한다.
+        (jobId, device, e2eMs) 가 이미 저장된 행이나 같은 파일의 앞 줄과 같으면 중복으로 보고 건너뛴다(skipped).
+        jobId 가 이 서버에 없는 작업이어도 저장한다(e2e 결합에서 서버 열이 비게 된다).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 앱의 metrics.csv (≤ 5 MB)
+      responses:
+        '200':
+          description: 가져오기 결과
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminClientMetricImport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/e2e:
+    get:
+      tags: [admin]
+      operationId: adminE2e
+      summary: 서버·추론·앱 측정을 jobId 로 합친 표 — JSON 또는 CSV
+      description: |
+        앱 측정 한 행(adminClientMetrics)마다 한 행이다. 그 jobId 의 마지막 COMPLETED 실행(job_runs, attempt 가 가장 큰 COMPLETED 행)의
+        서버·추론 열을 붙인다. 실행이 없으면(다른 서버의 작업, 실패한 작업) 서버·추론 열은 null 이다.
+        열 이름은 docs/METRICS.md 의 이름 그대로이고, 서버와 앱에 같은 이름이 있는 `uploadMs` 만 서버 것을 `serverUploadMs` 로 쓴다
+        (METRICS §3.1). 순서(CSV 헤더 = JSON 이름):
+        jobId, modelVersion, workerType, passthrough, attempt, finishedAt, uploadBytes, serverUploadMs, queuedMs, processingMs, totalMs,
+        inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes,
+        uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device.
+        CSV 는 `e2e.csv`, 형식은 adminRuns 와 같다. 가져온 순서대로. 기본으로 패스스루 실행의 행을 뺀다.
+      parameters:
+        - $ref: '#/components/parameters/ExportFormat'
+        - $ref: '#/components/parameters/IncludePassthrough'
+      responses:
+        '200':
+          description: 결합 행. format 에 따라 JSON 배열 또는 CSV.
+          headers:
+            Content-Disposition:
+              description: format=csv 일 때만 `attachment; filename="e2e.csv"`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminE2eRow'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     JobId:
@@ -579,7 +904,34 @@ components:
         type: integer
         minimum: 1
         maximum: 30
-
+    Rater:
+      name: rater
+      in: path
+      required: true
+      description: |
+        평가자 이름. 앞뒤 공백을 뺀 뒤 1~40자(유니코드 문자 수). `/` `\` `;`·제어 문자는 쓸 수 없고 점(.)만으로 된 이름도 안 된다
+        (아니면 400 INVALID_REQUEST). 대소문자를 구분한다. 웹 페이지는 encodeURIComponent 로 넣는다.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 40
+    ExportFormat:
+      name: format
+      in: query
+      required: false
+      description: 응답 형식. 대소문자 무시. 그 밖의 값은 400.
+      schema:
+        type: string
+        enum: [json, csv]
+        default: json
+    IncludePassthrough:
+      name: includePassthrough
+      in: query
+      required: false
+      description: true 면 패스스루 실행(passthrough=true)의 행도 넣는다. 기본 false(METRICS §1 제외 규칙).
+      schema:
+        type: boolean
+        default: false
   responses:
     BadRequest:
       description: 잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)
@@ -1157,3 +1509,371 @@ components:
           format: int32
           minimum: 1
           description: 추정의 근거가 된 최근 완료 실행 수(최대 20). 적을수록 덜 정확하다.
+    JobRatingRequest:
+      type: object
+      description: |
+        PUT /api/v1/jobs/{jobId}/ratings/{rater} 본문. 6항목 이름·정의는 docs/METRICS.md §4(1 = 전혀 다름, 3 = 종을 알아볼 수 있음,
+        5 = 그 개체로 알아볼 수 있음, textureArtifacts 는 5 = 결함 없음). 모르는 필드는 무시한다.
+      required: [faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts]
+      properties:
+        faceShape:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 얼굴 형태
+        ears:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 귀 모양/위치
+        bodyProportion:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 체형 비율
+        furColor:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 털 색상
+        pattern:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 무늬 재현
+        textureArtifacts:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 텍스처 번짐/seam (5 = 결함 없음)
+        comment:
+          type: string
+          nullable: true
+          maxLength: 500
+          description: 선택. 500자 이하. 빈 문자열은 null 로 저장한다.
+    JobRating:
+      type: object
+      description: 저장된 평가 한 건(작업 × 평가자).
+      required: [jobId, rater, faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts, createdAt, updatedAt]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        rater:
+          type: string
+          description: 앞뒤 공백을 뺀 평가자 이름
+        faceShape:
+          type: integer
+        ears:
+          type: integer
+        bodyProportion:
+          type: integer
+        furColor:
+          type: integer
+        pattern:
+          type: integer
+        textureArtifacts:
+          type: integer
+        comment:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          description: 이 평가자가 처음 저장한 시각 (ISO 8601, UTC)
+        updatedAt:
+          type: string
+          format: date-time
+          description: 마지막으로 저장(덮어쓰기)한 시각 (ISO 8601, UTC)
+    JobRatingList:
+      type: object
+      description: GET /api/v1/jobs/{jobId}/ratings.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: 평가자 이름 오름차순
+          items:
+            $ref: '#/components/schemas/JobRating'
+        average:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobRatingAverage'
+          description: 평가가 없으면 null.
+    JobRatingAverage:
+      type: object
+      description: 한 작업의 항목별 산술 평균(소수, 반올림하지 않음)과 평가자 수.
+      required: [raters, faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts]
+      properties:
+        raters:
+          type: integer
+          description: 평가자 수 (= items 길이)
+        faceShape:
+          type: number
+          format: double
+        ears:
+          type: number
+          format: double
+        bodyProportion:
+          type: number
+          format: double
+        furColor:
+          type: number
+          format: double
+        pattern:
+          type: number
+          format: double
+        textureArtifacts:
+          type: number
+          format: double
+    AdminRating:
+      type: object
+      description: 품질 평가 측정표 한 행. 이름과 순서는 adminRatings 설명(CSV 헤더와 같다).
+      required: [jobId, rater, faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts, updatedAt]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        modelVersion:
+          type: string
+          nullable: true
+          description: 그 작업의 마지막 실행의 modelVersion. 실행 행이 없거나 값이 없으면 null.
+        rater:
+          type: string
+        faceShape:
+          type: integer
+        ears:
+          type: integer
+        bodyProportion:
+          type: integer
+        furColor:
+          type: integer
+        pattern:
+          type: integer
+        textureArtifacts:
+          type: integer
+        comment:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+        workerType:
+          type: string
+          nullable: true
+          description: 그 작업의 마지막 실행의 workerType (mock | real). 실행 행이 없으면 null.
+        passthrough:
+          type: boolean
+          nullable: true
+          description: 그 작업의 마지막 실행의 passthrough. 실행 행이 없거나 값이 없으면 null.
+    AdminRatingSummary:
+      type: object
+      description: GET /api/v1/admin/ratings/summary. 계산 방법은 adminRatingSummary 설명.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRatingSummaryGroup'
+    AdminRatingSummaryGroup:
+      type: object
+      description: modelVersion 한 묶음의 평가 평균.
+      required: [modelVersion, jobs, ratings, raters, faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts]
+      properties:
+        modelVersion:
+          type: string
+          description: 마지막 실행의 modelVersion. null(또는 빈 값)·실행 없음은 `(none)`.
+          example: animallift-baseline@3f2a1c9
+        jobs:
+          type: integer
+          format: int64
+          description: 평가된 서로 다른 작업 수
+        ratings:
+          type: integer
+          format: int64
+          description: 평가 행 수
+        raters:
+          type: integer
+          format: int64
+          description: 서로 다른 평가자 수
+        faceShape:
+          type: number
+          format: double
+        ears:
+          type: number
+          format: double
+        bodyProportion:
+          type: number
+          format: double
+        furColor:
+          type: number
+          format: double
+        pattern:
+          type: number
+          format: double
+        textureArtifacts:
+          type: number
+          format: double
+    AdminClientMetric:
+      type: object
+      description: 앱 metrics.csv 한 행. 이름·순서·정의는 docs/METRICS.md §3 (CSV 헤더와 같다).
+      required: [jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB]
+      properties:
+        jobId:
+          type: string
+        uploadMs:
+          type: integer
+          format: int64
+        waitMs:
+          type: integer
+          format: int64
+        downloadMs:
+          type: integer
+          format: int64
+        loadMs:
+          type: integer
+          format: int64
+        e2eMs:
+          type: integer
+          format: int64
+        avgFps:
+          type: number
+          format: double
+        minFps:
+          type: number
+          format: double
+        memMB:
+          type: integer
+          format: int64
+        device:
+          type: string
+          nullable: true
+          description: SystemInfo.deviceModel. 빈 칸이면 null.
+    AdminClientMetricImport:
+      type: object
+      description: POST /api/v1/admin/client-metrics 결과.
+      required: [imported, skipped, errors]
+      properties:
+        imported:
+          type: integer
+          description: 새로 저장한 행 수
+        skipped:
+          type: integer
+          description: (jobId, device, e2eMs) 가 이미 있어 건너뛴 행 수
+        errors:
+          type: array
+          description: 저장하지 못한 줄. 줄 번호 오름차순.
+          items:
+            $ref: '#/components/schemas/AdminImportError'
+    AdminImportError:
+      type: object
+      required: [line, reason]
+      properties:
+        line:
+          type: integer
+          description: 파일의 줄 번호(헤더 = 1). 따옴표 안 줄바꿈으로 여러 줄인 행은 시작 줄.
+        reason:
+          type: string
+          description: "개발자용 설명(영문), 예 `avgFps is not a number: 'abc'`"
+    AdminE2eRow:
+      type: object
+      description: |
+        앱 측정 한 행 + 그 작업의 마지막 COMPLETED 실행. 이름·순서는 adminE2e 설명(CSV 헤더와 같다). 앱 열은 METRICS §3,
+        서버·추론 열은 METRICS §1·§2 이름이고 서버 uploadMs 만 serverUploadMs 다. 실행이 없으면 서버·추론 열은 null.
+      required: [jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB]
+      properties:
+        jobId:
+          type: string
+        modelVersion:
+          type: string
+          nullable: true
+        workerType:
+          type: string
+          nullable: true
+        passthrough:
+          type: boolean
+          nullable: true
+        attempt:
+          type: integer
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        uploadBytes:
+          type: integer
+          format: int64
+          nullable: true
+        serverUploadMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: 서버 uploadMs(METRICS §1 — 요청 도착 → 사진 저장). 앱 uploadMs 와 다른 값이다.
+        queuedMs:
+          type: integer
+          format: int64
+          nullable: true
+        processingMs:
+          type: integer
+          format: int64
+          nullable: true
+        totalMs:
+          type: integer
+          format: int64
+          nullable: true
+        inferMs:
+          type: integer
+          format: int64
+          nullable: true
+        gpuPeakMB:
+          type: integer
+          format: int64
+          nullable: true
+        modelParams:
+          type: integer
+          format: int64
+          nullable: true
+        outputVertices:
+          type: integer
+          format: int64
+          nullable: true
+        outputTriangles:
+          type: integer
+          format: int64
+          nullable: true
+        convertMs:
+          type: integer
+          format: int64
+          nullable: true
+        glbBytes:
+          type: integer
+          format: int64
+          nullable: true
+        uploadMs:
+          type: integer
+          format: int64
+          description: 앱 uploadMs(METRICS §3 — POST 시작 → 202 수신)
+        waitMs:
+          type: integer
+          format: int64
+        downloadMs:
+          type: integer
+          format: int64
+        loadMs:
+          type: integer
+          format: int64
+        e2eMs:
+          type: integer
+          format: int64
+        avgFps:
+          type: number
+          format: double
+        minFps:
+          type: number
+          format: double
+        memMB:
+          type: integer
+          format: int64
+        device:
+          type: string
+          nullable: true

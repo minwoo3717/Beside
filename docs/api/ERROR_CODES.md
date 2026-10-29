@@ -39,3 +39,4 @@
 - 상태 코드는 400 / 404 / 409 / 413 / 500 다섯 가지만 계약에 둔다. 프레임워크 수준 응답(405, 415 등)은 v1 봉투로 감싸되 `INVALID_REQUEST` 로 분류한다.
 - 문구는 제안이다. UX 검토 후 바뀔 수 있으나 코드 이름은 유지한다.
 - 공유 링크 만들기(`POST /jobs/{id}/shares`)는 새 코드 없이 기존 `INVALID_REQUEST`(ttlDays 범위)·`JOB_NOT_FOUND`·`ASSET_NOT_FOUND`·`JOB_NOT_COMPLETED` 를 쓴다. 공개 쪽(`/shares/{token}`)은 `SHARE_NOT_FOUND` 하나만 쓰고 `jobId` 를 비운다(공유 페이지에 작업 id 를 드러내지 않는다).
+- 작업 상세 웹 페이지의 API(태그 quality: `GET /jobs/{id}/photos/{index}`, `GET /jobs/{id}/ratings`, `PUT /jobs/{id}/ratings/{rater}`)와 관리 API 의 평가·앱 측정(`/admin/ratings*`, `/admin/client-metrics`, `/admin/e2e`)도 새 코드 없이 쓴다: 평가자 이름·점수 범위·comment 길이·JSON 이 아닌 본문·`metrics.csv` 헤더 불일치는 `INVALID_REQUEST`, 없는 작업은 `JOB_NOT_FOUND`, 완료되지 않은 작업의 평가는 `JOB_NOT_COMPLETED`, 없는 사진 index 는 `NOT_FOUND`(`jobId` 비움). `metrics.csv` 의 잘못된 데이터 줄은 오류 응답이 아니라 200 결과의 `errors[]` 에 줄 번호와 함께 담는다. `client-metrics` 파트 `file` 이 없을 때도 `NO_PHOTOS` 가 아니라 `INVALID_REQUEST` 다.
