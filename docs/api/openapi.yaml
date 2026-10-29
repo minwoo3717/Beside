@@ -30,6 +30,8 @@ tags:
     description: |
       공유 링크와 공개 웹 3D/AR 뷰어. 링크는 `/s/{token}`(웹 페이지, API 가 아님)이고, 페이지는 아래 공개 API 만 부른다.
       토큰은 128비트 난수(base64url 22자)이며 작업 id 는 공유 쪽 응답·오류 어디에도 넣지 않는다.
+  - name: admin
+    description: 운영 대시보드(/admin)와 측정 내보내기. 팀 내부용, 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/admin/*).
 
 paths:
   /api/v1/jobs:
@@ -308,6 +310,181 @@ paths:
                 format: binary
         '404':
           $ref: '#/components/responses/ShareNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/overview:
+    get:
+      tags: [admin]
+      operationId: adminOverview
+      summary: 운영 현황 — 상태별 작업 수, 대기열, 디스크, GPU
+      description: |
+        관리 대시보드(/admin)가 5초마다 부른다. Spring 에는 인증 코드가 없고 배포에서는 Caddy Basic 인증이 막는다.
+        `inference` 는 아직 항상 null 이다(GPU 상태 감시가 연결되면 채워진다 — AdminOverview 설명 참고).
+      responses:
+        '200':
+          description: 현황
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOverview'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/runs:
+    get:
+      tags: [admin]
+      operationId: adminRuns
+      summary: 실행별 측정표(job_runs) 내보내기 — JSON 또는 CSV
+      description: |
+        docs/METRICS.md §1.1 의 측정표. 열 이름과 순서는 METRICS §1.1 그대로다:
+        jobId, attempt, finishedAt, workerType, status, errorCode, uploadBytes, uploadMs, queuedMs, processingMs, totalMs,
+        inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion.
+
+        - `format=json`(기본): 위 이름·순서의 AdminRun 객체 배열.
+        - `format=csv`: 헤더 행 + 실행마다 한 행. RFC 4180 — 쉼표·큰따옴표·줄바꿈이 든 값은 큰따옴표로 감싸고 안의 큰따옴표는
+          두 번 쓴다. null 은 빈 칸, finishedAt 은 ISO 8601 UTC, passthrough 는 true | false, 줄 끝은 CRLF.
+          `Content-Type: text/csv; charset=UTF-8`, `Content-Disposition: attachment; filename="job_runs.csv"`.
+
+        finishedAt 오름차순(같으면 jobId·attempt 순). 기본으로 패스스루(`passthrough=true`) 행을 뺀다. FAILED 행은 들어 있다
+        (측정표에서는 status 열로 거른다). 서버 경로는 없다. 잘못된 format·from·to·includePassthrough 는 400 INVALID_REQUEST.
+      parameters:
+        - name: format
+          in: query
+          required: false
+          description: 응답 형식. 대소문자 무시.
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+        - name: from
+          in: query
+          required: false
+          description: finishedAt 하한(포함). ISO 8601 instant, 예 `2026-11-06T00:00:00Z`. 생략하면 처음부터.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: finishedAt 상한(제외). ISO 8601 instant. 생략하면 끝까지. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+        - name: modelVersion
+          in: query
+          required: false
+          description: 이 modelVersion 의 행만. `(none)` 이면 modelVersion 이 null 인 행만(stats 의 묶음 이름과 같다).
+          schema:
+            type: string
+        - name: includePassthrough
+          in: query
+          required: false
+          description: true 면 패스스루 행도 넣는다. 기본 false — 모델이 돌지 않은 실행은 측정이 아니다(METRICS §1).
+          schema:
+            type: boolean
+            default: false
+        - name: workerType
+          in: query
+          required: false
+          description: 이 워커 종류의 행만 (mock | real). 생략하면 전부.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 실행 행. format 에 따라 JSON 배열 또는 CSV.
+          headers:
+            Content-Disposition:
+              description: format=csv 일 때만 `attachment; filename="job_runs.csv"`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminRun'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/stats:
+    get:
+      tags: [admin]
+      operationId: adminStats
+      summary: modelVersion × workerType 별 성공률과 시간 백분위
+      description: |
+        adminRuns 와 같은 행(from·to·includePassthrough 로 거른 job_runs)을 modelVersion(null 은 `(none)`) × workerType 으로 묶는다.
+        runs·completed·failed 는 모든 행을 센다. successRate = completed / runs.
+        백분위와 평균은 그 묶음의 **COMPLETED 행 중 값이 있는 행만** 쓴다 — 실패 실행은 시간 분포를 흐리므로 METRICS §1.1 의
+        제외 규칙대로 뺀다. 백분위는 nearest-rank 방식이다: 값을 오름차순으로 놓고 ceil(p/100 × n) 번째 값(1부터 센다).
+        보간하지 않으므로 항상 실제 측정값 중 하나다. 예 n=20 이면 p50 = 10번째, p95 = 19번째. n=0 이면 p50·p95·평균은 null.
+        묶음 순서는 modelVersion, workerType 오름차순.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: finishedAt 하한(포함). ISO 8601 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: finishedAt 상한(제외). ISO 8601 instant. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+        - name: includePassthrough
+          in: query
+          required: false
+          description: true 면 패스스루 행도 센다. 기본 false.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 묶음별 통계
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/jobs:
+    get:
+      tags: [admin]
+      operationId: adminJobs
+      summary: 최근 작업 요약 (대시보드 표)
+      description: |
+        createdAt 최신순. 기존 `GET /api/v1/jobs` 와 달리 사진 목록 대신 실패 코드·시도 횟수·마지막 실행의 modelVersion 을 준다.
+        잘못된 limit 은 400 INVALID_REQUEST.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: 1~100, 기본 20.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: 최근 작업
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminJobList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -626,3 +803,267 @@ components:
           type: string
           description: 항상 model/gltf-binary
           example: model/gltf-binary
+    AdminOverview:
+      type: object
+      description: GET /api/v1/admin/overview. 운영 현황. 서버 경로는 포함하지 않는다.
+      required: [generatedAt, profile, workerType, statusCounts, queue, disk]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+          description: 서버가 이 응답을 만든 시각 (ISO 8601, UTC)
+        profile:
+          type: string
+          description: 활성 Spring profile (HealthResponse.profile 과 같다)
+          example: real,prod
+        workerType:
+          type: string
+          description: 워커 종류 (mock | real)
+          example: real
+        statusCounts:
+          type: object
+          description: |
+            jobs 테이블의 상태별 작업 수. JobStatus 의 모든 값(PENDING, PROCESSING, COMPLETED, FAILED)이 0 이어도 키로 있다.
+            클라이언트는 모르는 키를 무시한다.
+          additionalProperties:
+            type: integer
+            format: int64
+          example: { PENDING: 2, PROCESSING: 1, COMPLETED: 40, FAILED: 3 }
+        queue:
+          $ref: '#/components/schemas/AdminQueue'
+        disk:
+          $ref: '#/components/schemas/AdminDisk'
+        inference:
+          type: object
+          nullable: true
+          description: |
+            추론 서비스(GPU) 상태. **지금은 항상 null** 이다. GPU 상태 감시(PLAN S3, HealthResponse 의 inference)를 병합할 때
+            같은 객체로 채운다(서버의 InferenceStatusSource 빈). null 이면 대시보드는 "GPU 상태: 정보 없음" 을 보여준다.
+    AdminQueue:
+      type: object
+      description: 대기열. pending·processing 은 statusCounts 의 PENDING·PROCESSING 과 같다.
+      required: [pending, processing]
+      properties:
+        pending:
+          type: integer
+          format: int64
+          description: PENDING(대기) 작업 수
+        processing:
+          type: integer
+          format: int64
+          description: PROCESSING(생성 중) 작업 수
+        oldestPendingMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: 가장 오래 기다린 PENDING 작업의 지금까지 queuedMs. PENDING 이 없으면 null.
+        oldestProcessingMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: 가장 오래 생성 중인 PROCESSING 작업의 지금까지 processingMs. PROCESSING 이 없으면 null.
+    AdminDisk:
+      type: object
+      description: 저장소(storage 폴더)가 있는 파일시스템. 폴더 위치(storage.root.dir, 기본 storage)는 응답에 넣지 않는다.
+      required: [usableBytes, totalBytes]
+      properties:
+        usableBytes:
+          type: integer
+          format: int64
+          description: 이 프로세스가 쓸 수 있는 남은 바이트
+        totalBytes:
+          type: integer
+          format: int64
+          description: 파일시스템 전체 바이트
+        storageBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: storage 폴더 아래 파일 크기 합(DB·업로드·결과·로그). 최대 60초 캐시. 읽지 못하면 null.
+    AdminRun:
+      type: object
+      description: |
+        job_runs 한 행 = 한 실행(attempt). 이름과 순서는 docs/METRICS.md §1.1(CSV 헤더와 같다). 정의는 METRICS §1·§2.
+      required: [jobId, attempt, finishedAt, workerType, status]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        attempt:
+          type: integer
+          description: 1 = 첫 실행, retry 마다 +1
+        finishedAt:
+          type: string
+          format: date-time
+        workerType:
+          type: string
+          description: mock | real
+        status:
+          type: string
+          description: COMPLETED | FAILED. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+        errorCode:
+          type: string
+          nullable: true
+          description: FAILED 일 때 Job 실패 코드(ERROR_CODES.md), 그 외 null
+        uploadBytes:
+          type: integer
+          format: int64
+          nullable: true
+        uploadMs:
+          type: integer
+          format: int64
+          nullable: true
+        queuedMs:
+          type: integer
+          format: int64
+          nullable: true
+        processingMs:
+          type: integer
+          format: int64
+          nullable: true
+        totalMs:
+          type: integer
+          format: int64
+          nullable: true
+        inferMs:
+          type: integer
+          format: int64
+          nullable: true
+        gpuPeakMB:
+          type: integer
+          format: int64
+          nullable: true
+        modelParams:
+          type: integer
+          format: int64
+          nullable: true
+        outputVertices:
+          type: integer
+          format: int64
+          nullable: true
+        outputTriangles:
+          type: integer
+          format: int64
+          nullable: true
+        convertMs:
+          type: integer
+          format: int64
+          nullable: true
+        glbBytes:
+          type: integer
+          format: int64
+          nullable: true
+        passthrough:
+          type: boolean
+          nullable: true
+          description: true 면 추론 서비스가 모델 대신 샘플을 돌려준 실행 — 측정에서 뺀다
+        modelVersion:
+          type: string
+          nullable: true
+    AdminStats:
+      type: object
+      description: GET /api/v1/admin/stats. 계산 방법은 adminStats 설명.
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminStatsGroup'
+    AdminStatsGroup:
+      type: object
+      description: modelVersion × workerType 한 묶음.
+      required: [modelVersion, workerType, runs, completed, failed, successRate, queuedMs, processingMs, totalMs, inferMs]
+      properties:
+        modelVersion:
+          type: string
+          description: job_runs.modelVersion. null(또는 빈 값)은 `(none)`.
+          example: animallift-baseline@3f2a1c9
+        workerType:
+          type: string
+          description: mock | real
+        runs:
+          type: integer
+          format: int64
+          description: 행 수 (COMPLETED + FAILED)
+        completed:
+          type: integer
+          format: int64
+        failed:
+          type: integer
+          format: int64
+        successRate:
+          type: number
+          format: double
+          description: completed / runs (0~1)
+        queuedMs:
+          $ref: '#/components/schemas/AdminPercentiles'
+        processingMs:
+          $ref: '#/components/schemas/AdminPercentiles'
+        totalMs:
+          $ref: '#/components/schemas/AdminPercentiles'
+        inferMs:
+          $ref: '#/components/schemas/AdminPercentiles'
+        avgGlbBytes:
+          type: number
+          format: double
+          nullable: true
+          description: COMPLETED 행의 glbBytes 평균. 값이 있는 행이 없으면 null.
+        avgGpuPeakMB:
+          type: number
+          format: double
+          nullable: true
+          description: COMPLETED 행의 gpuPeakMB 평균. 값이 있는 행이 없으면 null.
+    AdminPercentiles:
+      type: object
+      description: 한 측정 항목(ms)의 nearest-rank 백분위. COMPLETED 행 중 값이 있는 행만 쓴다.
+      required: [n]
+      properties:
+        n:
+          type: integer
+          format: int64
+          description: 계산에 쓴 행 수
+        p50:
+          type: integer
+          format: int64
+          nullable: true
+        p95:
+          type: integer
+          format: int64
+          nullable: true
+    AdminJobList:
+      type: object
+      description: GET /api/v1/admin/jobs. createdAt 최신순.
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminJobSummary'
+    AdminJobSummary:
+      type: object
+      description: 대시보드 표의 한 줄. 서버 경로·사진 이름은 포함하지 않는다.
+      required: [id, status, createdAt, attempt, timings]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          description: JobResponse.status 와 같은 값. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED]
+        createdAt:
+          type: string
+          format: date-time
+        attempt:
+          type: integer
+          description: 1 = 첫 실행, retry 마다 +1
+        timings:
+          $ref: '#/components/schemas/Timings'
+        errorCode:
+          type: string
+          nullable: true
+          description: FAILED 일 때 Job 실패 코드, 그 외 null
+        modelVersion:
+          type: string
+          nullable: true
+          description: 이 작업의 마지막으로 끝난 실행(attempt 가 가장 큰 job_runs 행)의 modelVersion. 끝난 실행이 없거나 값이 없으면 null.

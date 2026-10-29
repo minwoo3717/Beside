@@ -39,7 +39,16 @@
 
 같은 내용이 H2 파일 DB 의 테이블 `job_runs` 에도 실행마다 한 행씩 남는다(PK `{jobId}:{attempt}`, 삽입 전용). 컬럼은 위 줄의 필드를 snake_case 로 쓴 것(`job_id, attempt, finished_at, upload_bytes, upload_ms, queued_ms, processing_ms, total_ms, worker_type, infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms, glb_bytes, passthrough, model_version`)에 `status`(COMPLETED|FAILED)와 `error_code` 를 더한 것이다. `result` 는 `status`+`error_code` 로 대신한다. 서버 경로는 없다. 프로파일마다 DB 파일이 다르므로(`beside-mock.mv.db`, `beside-real.mv.db`) 측정표는 real 파일에서 뽑는다.
 
-5단계 측정표는 이 테이블에서 SQL 로 뽑는다. 서버가 켜진 상태에서 `http://localhost:8080/h2-console`(real 프로파일도 켜져 있음, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행하면 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
+**측정표 내보내기** — 5단계 측정표는 관리 API 로 뽑는다 **[구현됨]**(2026-10-30, `AdminApiTest`). `GET /api/v1/admin/runs?format=csv` 가 헤더 행이 있는 CSV(`job_runs.csv`)를 돌려준다. 열 이름과 순서는 아래 SQL 의 별칭과 같다: `jobId, attempt, finishedAt, workerType, status, errorCode, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion`. 기본으로 패스스루 행을 빼고(`includePassthrough=true` 로 포함), `workerType`, `modelVersion`(`(none)` = 값 없음), `from`/`to`(finishedAt, ISO 8601 instant, `to` 는 제외)로 거른다. FAILED 행은 들어 있으므로 시간 통계는 `status = COMPLETED` 행으로 낸다. `GET /api/v1/admin/stats` 가 그렇게 계산한 modelVersion × workerType 별 성공률과 p50/p95(nearest-rank)를 준다. `format=json` 은 같은 이름의 객체 배열이다. 브라우저에서는 관리 페이지 `/admin` 의 "측정표 CSV 받기" 버튼을 쓴다. 배포 서버에서는 `/admin*`·`/api/v1/admin/*` 가 Caddy Basic 인증 뒤에 있다.
+
+```powershell
+curl.exe -o job_runs.csv "http://localhost:8080/api/v1/admin/runs?format=csv&workerType=real"                  # 개발·GPU PC
+curl.exe -u <사용자> -o job_runs.csv "https://<도메인>/api/v1/admin/runs?format=csv&workerType=real&from=2026-11-06T00:00:00Z"   # 배포 VM
+```
+
+CSV 값 형식: null 은 빈 칸, `finishedAt` 은 ISO 8601 UTC(`2026-11-06T09:47:46.553329Z`), `passthrough` 는 `true|false`, 쉼표·따옴표가 든 값만 큰따옴표로 감싼다(RFC 4180, 줄 끝 CRLF).
+
+개발 PC 대안 — h2-console. 배포 서버의 `prod` 프로파일(PLAN S1)은 콘솔을 끄므로 거기서는 위 API 를 쓴다. 개발 PC 에서 서버가 켜진 상태라면 `http://localhost:8080/h2-console`(mock·real 프로파일, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행해도 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 이때는 H2 가 모든 값을 따옴표로 감싸고 시각을 H2 형식으로 쓴다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
