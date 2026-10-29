@@ -16,6 +16,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -91,8 +92,17 @@ class WebhookNotifierTest {
 
         await().atMost(Duration.ofSeconds(10)).until(() -> received.size() >= 2);
         List<String> contents = received.stream().map(WebhookNotifierTest::content).toList();
-        assertThat(contents).anySatisfy(text -> assertThat(text)
-                .contains("3D 모델 완성").contains(done.substring(0, 8)).contains("https://beside.example/admin/"));
+        // The link follows the pages this build serves: job page, else dashboard, else none.
+        String link = new ClassPathResource("static/job/index.html").exists() ? "https://beside.example/job/?id=" + done
+                : new ClassPathResource("static/admin/index.html").exists() ? "https://beside.example/admin/" : null;
+        assertThat(contents).anySatisfy(text -> {
+            assertThat(text).contains("3D 모델 완성").contains(done.substring(0, 8));
+            if (link == null) {
+                assertThat(text).doesNotContain("https://beside.example");
+            } else {
+                assertThat(text).endsWith(link);
+            }
+        });
         assertThat(contents).anySatisfy(text -> assertThat(text)
                 .contains("3D 생성 실패").contains(failed.substring(0, 8)).contains("INFERENCE_FAILED"));
     }

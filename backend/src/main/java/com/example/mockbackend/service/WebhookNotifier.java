@@ -6,8 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PreDestroy;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -17,12 +18,16 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Team chat notifications (Discord incoming webhook: POST {"content": "..."}) when a run ends and when the GPU
- * inference service comes up or goes away. Off while notify.webhook-url is empty (the default). Runs on the async
- * executor after JobFinisher has saved and measured the run, so a slow or failing webhook only costs a log line:
- * the job's outcome never depends on it. Messages carry a short job id and no server paths or addresses.
+ * inference service comes up or goes away. Off while notify.webhook-url is empty (the default). The listeners only
+ * hand the message to this class's own single sender thread after JobFinisher has saved and measured the run, so a
+ * slow or failing webhook only costs a log line and never waits behind (or holds up) the shared @Async pool, whose
+ * threads real-job dispatches may be blocking on the inference slot. Messages carry a short job id and no server
+ * paths or addresses; with notify.public-base-url they link to the job page or the dashboard when this build has one.
  */
 @Component
 public class WebhookNotifier {
@@ -32,8 +37,15 @@ public class WebhookNotifier {
 
     private final URI webhook;
     private final String publicBaseUrl;
+    private final boolean hasJobPage = new ClassPathResource("static/job/index.html").exists();
+    private final boolean hasAdminPage = new ClassPathResource("static/admin/index.html").exists();
     private final ObjectMapper objectMapper;
     private final HttpClient http;
+    private final ExecutorService sender = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "webhook-notifier");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Logger log = LoggerFactory.getLogger(WebhookNotifier.class);
 
     public WebhookNotifier(@Value("${notify.webhook-url:}") String webhookUrl,
@@ -49,24 +61,40 @@ public class WebhookNotifier {
         return webhook != null;
     }
 
-    @Async
     @EventListener
     public void onJobFinished(JobFinishedEvent event) {
         if (enabled()) {
-            send(jobMessage(event, publicBaseUrl));
+            String message = jobMessage(event, linkFor(event.jobId()));
+            sender.execute(() -> send(message));
         }
     }
 
-    @Async
     @EventListener
     public void onInferenceStateChanged(InferenceHealthMonitor.StateChanged event) {
         String message = stateMessage(event);
         if (enabled() && message != null) {
-            send(message);
+            sender.execute(() -> send(message));
         }
     }
 
-    public static String jobMessage(JobFinishedEvent event, String publicBaseUrl) {
+    @PreDestroy
+    void stop() {
+        sender.shutdown();
+    }
+
+    /** The page a message links to: the job page or the dashboard when this build serves one, else none. */
+    String linkFor(String jobId) {
+        if (publicBaseUrl.isEmpty()) {
+            return "";
+        }
+        if (hasJobPage) {
+            return publicBaseUrl + "/job/?id=" + jobId;
+        }
+        return hasAdminPage ? publicBaseUrl + "/admin/" : "";
+    }
+
+    /** {@code link} is appended on its own line when not empty. */
+    public static String jobMessage(JobFinishedEvent event, String link) {
         StringBuilder text = new StringBuilder();
         if (event.status() == JobStatus.COMPLETED) {
             text.append("✅ 3D 모델 완성 · 작업 `").append(shortId(event.jobId())).append('`');
@@ -88,8 +116,8 @@ public class WebhookNotifier {
         if (event.workerType() != null && !"real".equals(event.workerType())) {
             text.append(" · ").append(event.workerType());
         }
-        if (!publicBaseUrl.isEmpty()) {
-            text.append('\n').append(publicBaseUrl).append("/admin/");
+        if (link != null && !link.isEmpty()) {
+            text.append('\n').append(link);
         }
         return text.toString();
     }

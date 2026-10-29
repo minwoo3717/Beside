@@ -56,6 +56,11 @@ public class DatabaseBackup {
     public Path backupNow() throws IOException {
         Files.createDirectories(dir);
         Path target = dir.resolve("beside-" + STAMP.format(Instant.now()) + ".zip").toAbsolutePath();
+        while (Files.exists(target)) {
+            // Same millisecond as the previous backup: wait for the next one, so names stay unique and in time order.
+            Thread.onSpinWait();
+            target = dir.resolve("beside-" + STAMP.format(Instant.now()) + ".zip").toAbsolutePath();
+        }
         jdbc.execute("BACKUP TO '" + target.toString().replace("'", "''") + "'");
         log.info("H2 backup written: {} ({} bytes)", target.getFileName(), Files.size(target));
         prune();
