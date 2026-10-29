@@ -17,6 +17,8 @@
 - 저장소는 H2 파일 DB(`storage/db/beside-{mock|real}.mv.db`, Spring Data JPA)다. 스키마는 `ddl-auto=update`라서 테이블·컬럼 추가만 자동이고 이름 변경·삭제는 반영되지 않는다. 엔티티에 필드를 추가할 때는 박싱 타입(nullable)으로 한다. enum 컬럼은 `@Enumerated` 대신 변환기(`JobStatusColumnConverter`)를 쓴다: Hibernate 가 붙이는 CHECK 제약을 update 가 고치지 못한다.
 - DB 파일 하나는 서버 하나만 연다(AUTO_SERVER 없음). 다른 인스턴스를 띄울 때는 `--storage.db.path=...` 로 다른 파일을 쓴다.
 - 서버가 시작될 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다(`InterruptedJobRecovery`). 워커 스레드는 재시작을 넘지 못하기 때문이다.
+- 작업 삭제(`DELETE /api/v1/jobs/{id}`, 펫과 함께 삭제)는 `JobDeletionService` 한 곳이다. 끝난 작업(COMPLETED/FAILED)만 지우고, 사진·`storage.result.dir/{jobId}`·썸네일·공유 링크(취소)·Idempotency-Key 를 정리하지만 **`job_runs`·`events.jsonl` 은 측정이라 남긴다**. 작업에 딸린 테이블을 새로 만들면 여기서 함께 정리한다.
+- `Job.petId`(보관함)는 `@Column(updatable = false)` 다. 워커가 몇 분 전에 읽은 Job 사본을 저장해도 사용자가 그동안 옮긴 펫을 되돌리지 않도록, 바꿀 때는 `JobRepository.updatePetId/unassignPet`(JPQL update)만 쓴다.
 - 테스트는 `src/test/resources/config/application.properties` 덕분에 컨텍스트마다 인메모리 H2 를 쓴다. `spring.datasource.url` 을 프로파일 파일(application-mock.properties)에 두지 않는다: 프로파일 파일이 이 오버라이드를 이긴다.
 
 ## 실행
@@ -45,6 +47,7 @@ node --test src/test/js/mock-mvp.test.cjs                        # 브라우저 
 node --test src/test/js/admin-format.test.cjs                    # 관리 페이지 포맷 함수(ms·바이트·퍼센트·GPU 카드 문구)
 node --test src/test/js/admin-measurement.test.cjs               # 관리 페이지 보고서 패널(평가 요약·metrics.csv 결과 문구·CSV 주소)
 node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs   # 작업 상세 페이지 규칙(평가자 이름·점수 본문)과 QR 인코더(다시 읽어 확인)
+node --test src/test/js/library-core.test.cjs                    # 보관함 페이지 순수 함수(경로·라벨·대기 문구·사진 검사)
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL

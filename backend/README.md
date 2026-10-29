@@ -54,6 +54,14 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | `POST /api/v1/admin/client-metrics` (multipart `file` = 앱 `metrics.csv`) | 200 `{ imported, skipped, errors[{line, reason}] }` | 헤더가 METRICS §3 과 다르면 400. (jobId, device, e2eMs) 중복은 건너뜀 |
 | `GET /api/v1/admin/client-metrics?format=json\|csv` | 200 `AdminClientMetric[]` 또는 `text/csv`(`client_metrics.csv`) | 열 = 앱 metrics.csv 헤더 |
 | `GET /api/v1/admin/e2e?format=json\|csv&includePassthrough=` | 200 `AdminE2eRow[]` 또는 `text/csv`(`e2e.csv`) | 앱 측정 + 그 작업의 마지막 COMPLETED 실행(서버 uploadMs 는 `serverUploadMs`, METRICS §3.1) |
+| `POST /api/v1/pets` `{ name, species?, note? }` | 201 + `Location` + `PetResponse` | 보관함(tag pets, 웹 전용). name 1~40자·species `DOG\|CAT\|OTHER`(기본 DOG)·note ≤500자, 어기면 400 `INVALID_REQUEST` |
+| `GET /api/v1/pets` | 200 `{ items: PetResponse[] }` (추가한 순서, `jobCount`·`coverJobId`·`coverThumbnailUrl`·`latestJobAt`) | |
+| `GET /api/v1/pets/{petId}` | 200 `PetDetailResponse` (+ `jobs` 최신순 JobResponse, `modelVersions`) | 404 `PET_NOT_FOUND` |
+| `PATCH /api/v1/pets/{petId}` `{ name?, species?, note?, coverJobId? }` | 200 `PetResponse` (보낸 필드만, null 은 note·coverJobId 지우기) | coverJobId 는 이 펫의 COMPLETED 작업만, 아니면 400 |
+| `DELETE /api/v1/pets/{petId}?withJobs=` | 204 (기본: 작업은 미분류로, `withJobs=true`: 작업도 삭제) | 409 `JOB_IN_PROGRESS`(진행 중 작업이 있으면 아무것도 지우지 않음) |
+| `PUT /api/v1/jobs/{id}/pet` `{ petId \| null }` | 200 `JobResponse` | 없는 펫·petId 필드 없음 400, 없는 작업 404 |
+| `DELETE /api/v1/jobs/{id}` | 204 (사진·결과 폴더·썸네일 삭제, 공유 링크 취소, Idempotency-Key 삭제, `job_runs` 는 남김) | PENDING·PROCESSING 409 `JOB_IN_PROGRESS` |
+| `GET /api/v1/jobs/{id}/thumbnail` | 200 `image/jpeg` (첫 사진, 긴 변 256px, `Cache-Control: private, max-age=86400`) | 썸네일 없음 404 `ASSET_NOT_FOUND` |
 
 오류는 `{ "error": { "code", "message", "jobId?" } }` 봉투, 코드와 앱 표시 문구는 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md). `JobResponse` 는 서버 경로를 노출하지 않는다(`asset.url` 은 `/api/v1/jobs/{id}/asset?variant=base` 상대 경로).
 
@@ -222,6 +230,12 @@ src/main/
 │  ├─ config/JobPageConfig.java          # /job, /job/ → static/job/index.html
 │  ├─ service/InferenceStatusSource.java # overview.inference 를 채우는 인터페이스 (real: InferenceHealthMonitor, mock: 없음 → null)
 │  ├─ config/AdminPageConfig.java        # /admin, /admin/ → static/admin/index.html
+│  ├─ api/v1/PetV1Controller.java        # 보관함 API(tag pets): 펫 CRUD, 작업 넣기(PUT /jobs/{id}/pet), 작업 삭제, 썸네일
+│  ├─ api/v1/PetResponseMapper.java      # 펫 + 작업 → PetResponse(대표 규칙)·PetDetailResponse(작업별 modelVersion)
+│  ├─ service/PetService.java            # 펫 검사(이름·종·메모), 작업 이동, 대표 지정 규칙, 펫 삭제 두 방식
+│  ├─ service/JobDeletionService.java    # 끝난 작업 삭제: 공유 링크 취소·Idempotency-Key·파일 삭제, job_runs 는 남김
+│  ├─ service/ThumbnailService.java      # 첫 사진 → storage.thumb.dir/{jobId}.jpg (256px, EXIF 방향, WEBP 는 TwelveMonkeys)
+│  ├─ config/LibraryPageConfig.java      # /library, /library/ → static/library/index.html
 │  ├─ controller/JobController.java      # v0 /api/jobs (동결) + LegacyJobResponse
 │  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, cancel, 목록, 에셋 경로
 │  ├─ service/JobTransitions.java        # PENDING 을 떠나는 전이(워커 시작·cancel·대기 포기)를 한 잠금 안에서, 같은 attempt 일 때만
@@ -244,11 +258,12 @@ src/main/
    ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
    ├─ application-real.properties        # inference.base-url·transfer·token·timeout-ms·max-concurrency, storage.result.dir·tmp.dir, DB 파일 beside-real, h2-console
-   └─ static/                            # 브라우저 Mock UI (v1), admin/ = 운영 대시보드, job/ = 작업 상세 (순수 함수 파일은 node:test 로 확인)
+   └─ static/                            # 브라우저 Mock UI (v1), admin/ = 운영 대시보드, job/ = 작업 상세,
+                                         # library/ = 반려동물 보관함 (순수 함수 파일은 node:test 로 확인)
 ```
 
 - Controller 가 요청을 받고 Service 가 파일과 Job 을 저장한다. 별도 Spring Bean 인 워커의 `@Async` 메서드가 백그라운드 작업을 수행한다.
-- 저장소는 H2 파일 DB 다. 테이블은 `jobs`(작업), `idempotency_keys`, `job_runs`(실행별 측정), `share_links`(공유 링크), `job_ratings`(품질 평가), `client_metrics`(앱 측정). 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다. 스키마는 `ddl-auto=update` 가 기동 때 맞춘다(테이블·컬럼 추가만). `job_runs` 가 생기기 전에 끝난 실행은 행이 없다.
+- 저장소는 H2 파일 DB 다. 테이블은 `jobs`(작업, 보관함의 `pet_id` 포함), `idempotency_keys`, `job_runs`(실행별 측정), `share_links`(공유 링크), `job_ratings`(품질 평가), `client_metrics`(앱 측정), `pets`(보관함). 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다. 스키마는 `ddl-auto=update` 가 기동 때 맞춘다(테이블·컬럼 추가만). `job_runs` 가 생기기 전에 끝난 실행은 행이 없다.
 - 서버를 재시작해도 작업과 Idempotency-Key 는 남는다. 다만 처리 중이던 워커 스레드는 사라지므로, 시작할 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 되고 앱이 retry 로 다시 실행한다.
 - DB 파일 하나는 서버 하나만 연다. 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 개발 DB 를 비우려면 서버를 끄고 `storage/db/` 를 지운다.
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
@@ -259,6 +274,15 @@ src/main/
 서비스 흐름을 눈으로 확인하는 개발용 화면이다(제품의 웹 버전이 아니다). 2026-10-04 부터 v1 을 쓴다: `POST /api/v1/jobs` → `Location` 이 `/api/v1/jobs/{uuid}` 인지 확인 → 1초 간격 폴링(최대 60초, 요청당 15초 제한) → 완료 시 대표 사진으로 Mock 결과 표시. 오류와 실패는 `error.code` 로 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md) 문구를 보여 주고, 서버의 개발자용 `message` 는 보여 주지 않는다.
 
 테스트 순서: 홈에서 **사진 선택** → JPG/PNG/WEBP (장당 5MB, 최대 10장, 합계 18MB) → **3D 모델 생성** → `WAITING → PROCESSING → COMPLETED` (API 의 `PENDING` 을 `WAITING` 으로 표시) → Mock 결과 확인 → **다른 사진으로 다시 만들기**. 파일명에 `fail` 이 들어간 사진을 고르면 실패 문구까지 확인할 수 있다.
+
+## 반려동물 보관함 (`/library`, 웹 전용)
+
+팀 내부 테스트용 화면이다. 앱은 바꾸지 않았고(마지막 작업 1개만 기억), 웹에서 반려동물별로 생성 기록을 모은다. 배포에서는 Caddy Basic 인증 뒤이고 Spring 에는 인증 코드가 없다. 관리 대시보드(`/admin`) 머리에 링크가 있다.
+
+- **첫 화면**: 펫 목록(대표 썸네일·이름·종·모델 수) + **펫 추가**. 아래 **미분류 작업**은 `GET /api/v1/jobs` 에서 `petId` 가 없는 작업(앱에서 만든 작업)이다 — 펫을 골라 **넣기**(`PUT /jobs/{id}/pet`). 최근 500건까지만 살펴본다.
+- **펫 화면**(`/library/#/pets/{petId}`): 이름·종·메모 편집, 3D 보기(model-viewer 3.5.0, 동작 칩은 공유 뷰어와 같은 라벨), 생성 기록(썸네일·날짜·상태·modelVersion). 기록마다 3D 보기·대표로·상세(`/job/?id=` — 품질 평가·공유 링크·QR 은 작업 상세 페이지)·미분류로·삭제(끝난 작업만, 확인 대화). 펫 삭제는 기본으로 작업을 미분류로 돌리고, 확인 대화에서 고르면 작업도 지운다.
+- **새 모델 만들기**: 사진 1~10장(JPG·PNG·WEBP, 장당 5MB, 합계 18MB — Mock UI 와 같은 사전 검사) → `POST /api/v1/jobs` 에 `petId` 파트 → 2초 폴링(최대 20분)으로 "앞에 N명 · 약 M분"(`queue.ahead`·`estimate.remainingMs`), 대기 중이면 **취소**(`POST /cancel`). 끝나면 브라우저 알림(허용했을 때)을 보내고 기록을 새로 읽는다.
+- 썸네일은 작업을 접수할 때 첫 사진으로 만든다(`storage.thumb.dir`, 기본 `storage/thumbs/{jobId}.jpg`). 읽지 못하는 사진이면 썸네일 없이 접수한다. 작업 삭제는 사진·`storage.result.dir/{jobId}`·썸네일을 지우지만 Mock 의 공용 샘플 GLB 와 `job_runs`(측정)는 남긴다.
 
 ## v0 `/api/jobs` (동결)
 
@@ -299,6 +323,10 @@ Remove-Item Env:BESIDE_MVP_URL
 | `RealJobQueueTest` | profile real, GPU 슬롯 1개: 처리 중 1건 + 대기 2건의 `queue.ahead` 1·2, 완료 실행이 없으면 `estimate=null`, 생긴 뒤 `remainingMs`·`basedOnRuns`, PROCESSING 취소 409, 대기 중 취소하면 순번이 줄고 `/infer` 가 그 작업으로 불리지 않음 (가짜 추론 서버) |
 | `QueueEstimatorTest` | JPA 슬라이스: 최근 20건 중앙값(짝수는 가운데 둘의 평균), 실패·패스스루·다른 워커 제외, 근거 없음 → null, 같은 queuedAt 은 id 순, 처리 중 작업의 경과는 중앙값까지만 뺌, PROCESSING 은 0 이상, 60초 캐시와 완료 시 무효화 |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
+| `PetApiTest` | 보관함: 펫 CRUD·검사(이름 공백·41자, 모르는 종, 메모 501자, JSON 아님 → 400), PATCH 는 보낸 필드만, `petId` 파트 업로드(없는 펫 400, 작업 안 만듦), 작업 이동·미분류, 워커가 옛 사본을 저장해도 `petId` 유지, 대표 규칙(고른 COMPLETED → 아니면 최신 COMPLETED), 작업별 modelVersion, 펫 삭제 두 방식(진행 중이면 409 로 아무것도 안 지움), `/library` 페이지 |
+| `JobDeleteTest` | 작업 삭제: 사진·결과 폴더·썸네일 삭제, Mock 공용 샘플 GLB 는 남김, 공유 링크 취소, Idempotency-Key 삭제(같은 키로 새 작업), `job_runs` 유지, PENDING 409 `JOB_IN_PROGRESS` → 취소 후 삭제, FAILED 삭제 |
+| `JobThumbnailTest` | 썸네일: JPEG·PNG(투명 → 흰 배경)·WEBP 에서 긴 변 256px JPEG, 작은 사진은 그대로, EXIF 방향 6·8, 읽지 못하는 사진은 작업은 만들고 썸네일만 없음(404 `ASSET_NOT_FOUND`) |
+| `library-core.test.cjs` | 보관함 페이지 순수 함수: 경로(`#/pets/{id}`), 종·상태 라벨(모르는 값), 오류 코드 문구, "앞에 N명 · 약 M분", 사진 선택 규칙, 펫 폼 검사, 미분류 거르기, 3D 첫 모델, 애니메이션 칩이 share.js 와 같은지 |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).

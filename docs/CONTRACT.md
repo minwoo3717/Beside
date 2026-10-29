@@ -29,6 +29,8 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile: "mock"\|"real", workerType: "mock"\|"real" }` | — |
 | `POST /api/v1/jobs/{jobId}/cancel` | 본문 없음. PENDING 일 때만 | **200** `JobResponse`(status=FAILED, `error.code=CANCELED`). 워커는 시작하지 않는다 | 409 `JOB_NOT_PENDING`(PROCESSING 은 GPU 연산을 멈출 수 없음, 이미 끝난·취소한 작업 포함), 404, 500 |
 
+웹 보관함(tag `pets`, 앱은 쓰지 않음, 배포에서는 Basic 인증 뒤) — [구현됨] 2026-10-30, 검토 브랜치: `POST/GET /api/v1/pets`, `GET/PATCH/DELETE /api/v1/pets/{petId}`(`?withJobs`), `PUT /api/v1/jobs/{jobId}/pet`, `DELETE /api/v1/jobs/{jobId}`(끝난 작업만, `job_runs` 는 남김), `GET /api/v1/jobs/{jobId}/thumbnail`. `POST /api/v1/jobs` 에 선택 텍스트 파트 `petId`(없는 펫이면 400 `INVALID_REQUEST`, 앱 요청은 그대로). 형태는 [openapi.yaml](api/openapi.yaml).
+
 ### JobResponse
 
 ```json
@@ -43,7 +45,9 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
   "error": { "code": "INFERENCE_FAILED", "message": "developer text" },
   "uploadedFiles": [ { "name": "dog1.jpg", "bytes": 705356 } ],
   "queue": { "ahead": 2, "reason": null },
-  "estimate": { "remainingMs": 240000, "basedOnRuns": 12 }
+  "estimate": { "remainingMs": 240000, "basedOnRuns": 12 },
+  "petId": null,
+  "thumbnailUrl": "/api/v1/jobs/{jobId}/thumbnail"
 }
 ```
 
@@ -59,6 +63,8 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `uploadedFiles` | 원본 파일명(경로 제거)과 크기. 서버 경로 없음 |
 | `queue` | PENDING 일 때만. `ahead` = 이 작업보다 먼저 처리될 작업 수(생성 중인 작업 포함, 0 = 다음 차례), `reason` = `INFERENCE_OFFLINE`(GPU 추론 서비스가 UP 이 아님, real) 또는 `null`, 모르는 값은 무시. 그 외 상태 `null` |
 | `estimate` | PENDING·PROCESSING 일 때만, **추정치**. `remainingMs` = 최근 완료 실행(같은 워커, 패스스루 제외, 20건)의 processingMs 중앙값 기준 남은 시간(GPU 1장 기준), `basedOnRuns` = 근거 실행 수. 근거 실행이 없으면 객체가 `null` |
+| `petId` | 웹 보관함에서 넣은 반려동물. 앱에서 만든 작업은 `null`(미분류). 앱은 무시해도 된다 |
+| `thumbnailUrl` | 첫 사진으로 만든 JPEG 썸네일(긴 변 256px)의 상대 경로, 없으면 `null`. 배포에서는 Basic 인증 뒤라 앱은 쓰지 않는다 |
 
 ### 오류 응답 봉투 (모든 v1 오류)
 
@@ -91,6 +97,8 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
 | `JOB_NOT_PENDING` | 409 | PENDING 아닌 작업에 cancel(PROCESSING 은 GPU 연산을 멈출 수 없음) | 이미 생성이 시작돼 취소할 수 없어요. |
+| `PET_NOT_FOUND` | 404 | 웹 보관함: 알 수 없는 petId | 반려동물을 찾을 수 없어요. 목록을 새로고침해 주세요. |
+| `JOB_IN_PROGRESS` | 409 | 웹 보관함: PENDING·PROCESSING 작업 삭제(펫과 함께 삭제 포함) | 아직 만들고 있는 작업은 지울 수 없어요. 취소하거나 끝난 뒤 지워 주세요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
