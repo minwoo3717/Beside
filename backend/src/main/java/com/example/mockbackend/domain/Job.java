@@ -70,4 +70,12 @@ public class Job {
      * Null for jobs created outside an HTTP request. events.jsonl uploadMs (docs/METRICS.md §1).
      */
     private Long uploadMs;
+    /**
+     * The library pet this job belongs to (Pet.id), null = unassigned (jobs made by the app). Set when the job is created
+     * (POST /api/v1/jobs part petId) and afterwards only through JobRepository.updatePetId/unassignPet. Not updatable
+     * through entity saves on purpose: workers save the copy they loaded minutes earlier (JobFinisher), and that copy
+     * must not undo a move the user made in the meantime.
+     */
+    @Column(length = 36, updatable = false)
+    private String petId;
 }
