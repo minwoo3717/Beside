@@ -11,7 +11,7 @@
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | AR 코드 **머지됨**(#1: 평면 배치·가운데 놓기·1마리 제한·애니메이션 칩 5종·셸 털). FPS 등 [실험 결과] 없음 |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | `/infer` 에 AnimalLift·변환기·자동 리깅 연결 코드 **머지됨**(#1 — 첫 사진 1장만 사용, 리깅은 템플릿이 있을 때만). exp-01~04 기록 없음 = 측정값 0건 |
 | 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증), 실제 모델 E2E **[계획]**(10-20 주 선행) |
-| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음 | **[계획]** (2026-10-30 착수) |
+| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음 | 배포 기반 **[구현됨]**(S1~S4·S10, 2026-10-30), 기능 4묶음은 검토 브랜치 `review/api-v1.1`(계약 회의 전), VM 실제 배포 **[계획]** |
 | 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
 
 ```mermaid
@@ -146,16 +146,16 @@ DoD:
 
 | 조각 | 내용 | 계약 영향 | 상태 |
 |---|---|---|---|
-| S1 | prod 프로파일(H2 콘솔·Swagger off), 업로드 매직 바이트 검사, 결과 폴더 설정화 | 없음 | [계획] |
-| S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | [계획] |
-| S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | [계획] |
-| S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | [계획] |
-| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | [계획] — 계약 회의 전에는 검토 브랜치에만 |
+| S1 | prod 프로파일(H2 콘솔·Swagger off), 업로드 매직 바이트 검사, 결과 폴더 설정화 | 없음 | **[구현됨]** `ProdProfileTest`, 로컬 real,prod 실행 확인 |
+| S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e 로 확인. VM ↔ GPU PC 연결은 [계획] |
+| S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | **[구현됨]** 테스트 + 로컬에서 GPU 끔 → PENDING → 켬 → COMPLETED 확인 |
+| S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | 파일 **[구현됨]**. 이 PC 에 Docker 가 없어 이미지 빌드·Caddy 경로 시험은 CI 첫 실행에서 처음 돈다. VM 배포는 **직접 할 일** |
+| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합) |
 | S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
 | S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |
 | S9 | 반려동물 보관함(웹) | openapi 추가 | 〃 |
-| S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | [계획] |
+| S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | 문서 동기화 **[구현됨]**, 실측 10건+ **[계획]**(VM·GPU PC 준비 뒤) |
 
 직접 할 일: VM 생성(2 vCPU·4GB·30GB, Ubuntu 24.04), 도메인, Tailscale 로그인(VM·GPU PC), `deploy/.env`. 실측은 VM 과 GPU PC 가 준비된 뒤에 한다.
 
