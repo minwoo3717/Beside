@@ -6,6 +6,7 @@ backend/storage/uploads/
 backend/storage/db/
 backend/storage/events.jsonl
 backend/storage/results/*/
+backend/storage/tmp/
 
 # Local editor files
 .vscode/

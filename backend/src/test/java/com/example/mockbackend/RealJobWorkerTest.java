@@ -397,7 +397,8 @@ class RealJobWorkerTest {
         return body.toString();
     }
 
-    private static byte[] minimalGlb() {
+    /** Also used by RealJobWorkerUploadTest. */
+    static byte[] minimalGlb() {
         byte[] json = "{\"asset\":{\"version\":\"2.0\"}}".getBytes(StandardCharsets.US_ASCII);
         int chunkLength = (json.length + 3) & ~3; // chunks are 4-byte aligned; JSON is padded with spaces
         ByteBuffer glb = ByteBuffer.allocate(12 + 8 + chunkLength).order(ByteOrder.LITTLE_ENDIAN);
