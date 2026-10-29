@@ -2,11 +2,25 @@ package com.example.mockbackend.repository;
 
 import com.example.mockbackend.domain.JobRun;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
-/** Per-run measurements (docs/METRICS.md §1.1). Production only inserts (JobFinisher); the query is for tests and inspection. */
+/**
+ * Per-run measurements (docs/METRICS.md §1.1). Production inserts only through JobFinisher; reads are the admin export
+ * and dashboard (AdminService), tests and inspection.
+ */
 public interface JobRunRepository extends JpaRepository<JobRun, String> {
 
     List<JobRun> findByJobIdOrderByAttemptAsc(String jobId);
+
+    /** Rows with {@code from <= finishedAt < to}, oldest first (the measurement table order of METRICS §1.1). */
+    @Query("select r from JobRun r where r.finishedAt >= :from and r.finishedAt < :to order by r.finishedAt asc, r.jobId asc, r.attempt asc")
+    List<JobRun> findFinishedBetween(@Param("from") Instant from, @Param("to") Instant to);
+
+    /** Every run of the given jobs (the dashboard's recent-jobs table takes the last one per job). */
+    List<JobRun> findByJobIdIn(Collection<String> jobIds);
 }

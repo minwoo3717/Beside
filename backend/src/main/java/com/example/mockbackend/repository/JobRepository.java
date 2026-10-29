@@ -28,6 +28,9 @@ public interface JobRepository extends JpaRepository<Job, String> {
             + " order by j.createdAt desc, j.id desc")
     List<Job> findNewestFirstAfter(@Param("createdAt") Instant createdAt, @Param("id") String id, Pageable page);
 
-    /** Jobs in any of the given states (startup recovery of jobs interrupted by a restart). */
+    /** Jobs in any of the given states (startup recovery of jobs interrupted by a restart, the admin queue card). */
     List<Job> findByStatusIn(Collection<JobStatus> statuses);
+
+    /** Number of jobs in one state (admin overview). */
+    long countByStatus(JobStatus status);
 }
