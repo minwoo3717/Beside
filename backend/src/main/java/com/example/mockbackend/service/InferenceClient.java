@@ -35,6 +35,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Stream;
 
 /**
@@ -336,15 +340,29 @@ public class InferenceClient {
         }
         HttpRequest request = withToken(HttpRequest.newBuilder(artifact)).timeout(timeout).GET().build();
         HttpResponse<Path> response;
+        // The request timeout of the JDK 17 client stops once the headers arrive, so a GPU PC that vanishes mid-body
+        // (no FIN over the tailnet) would block here for good while holding the only inference slot. The deadline
+        // below covers the whole exchange, body included.
+        CompletableFuture<HttpResponse<Path>> pending = http.sendAsync(request, info -> info.statusCode() == 200
+                ? HttpResponse.BodySubscribers.ofFile(target, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING)
+                : HttpResponse.BodySubscribers.<Path>replacing(null));
         try {
-            response = http.send(request, info -> info.statusCode() == 200
-                    ? HttpResponse.BodySubscribers.ofFile(target, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-                    StandardOpenOption.TRUNCATE_EXISTING)
-                    : HttpResponse.BodySubscribers.<Path>replacing(null));
-        } catch (IOException e) {
+            response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            pending.cancel(true);
             deleteQuietly(target);
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                    "Could not download the GLB from the inference service (" + e.getClass().getSimpleName() + ")", call + ": " + e);
+                    "The GLB download did not finish within inference.timeout-ms=" + timeout.toMillis(), call + ": body timed out");
+        } catch (ExecutionException e) {
+            deleteQuietly(target);
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                    "Could not download the GLB from the inference service (" + cause.getClass().getSimpleName() + ")", call + ": " + cause);
+        } catch (InterruptedException e) {
+            pending.cancel(true);
+            deleteQuietly(target);
+            throw e;
         }
         if (response.statusCode() != 200) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,

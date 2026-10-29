@@ -63,6 +63,8 @@ class InferenceClientTest {
     private volatile int artifactStatus = 200;
     private volatile byte[] artifactBytes = "glTF-bytes-from-the-gpu-pc".getBytes(StandardCharsets.UTF_8);
     private volatile boolean artifactDrop;
+    /** Headers and a few bytes of a long body, then silence (a GPU PC that vanished from the tailnet mid-transfer). */
+    private volatile boolean artifactStall;
     private volatile int deleteStatus = 204;
 
     @BeforeEach
@@ -95,6 +97,16 @@ class InferenceClientTest {
                     exchange.sendResponseHeaders(deleteStatus, -1);
                 } else if (artifactDrop) {
                     return; // close without an answer
+                } else if (artifactStall) {
+                    exchange.sendResponseHeaders(200, 100_000);
+                    exchange.getResponseBody().write("glTF-partial".getBytes(StandardCharsets.US_ASCII));
+                    exchange.getResponseBody().flush();
+                    try {
+                        Thread.sleep(60_000); // never finishes; @AfterEach interrupts it
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return;
                 } else if (artifactStatus != 200) {
                     respond(exchange, artifactStatus, "{\"detail\":\"artifact not found\"}".getBytes(StandardCharsets.UTF_8));
                 } else {
@@ -385,6 +397,22 @@ class InferenceClientTest {
         assertThat(failure.logDetail()).contains("/artifacts/job-u4/base.glb").doesNotContain("s3cret");
         assertThat(dir.resolve("tmp").resolve("job-u4").resolve("base.glb"))
                 .as("an error body is never saved as the GLB").doesNotExist();
+    }
+
+    @Test
+    void glbBodyThatStallsAfterTheHeadersIsConversionFailedWithinTheTimeout() throws IOException {
+        answerUploadOk("job-u6");
+        artifactStall = true;
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = new InferenceClient(baseUrl(), 1_500, "upload", "s3cret", dir.resolve("tmp").toString(), JSON);
+
+        long started = System.nanoTime();
+        InferenceFailure failure = catchThrowableOfType(() -> client.infer("job-u6", List.of(photo)), InferenceFailure.class);
+        long tookMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(failure.code()).isEqualTo(ErrorCode.CONVERSION_FAILED);
+        assertThat(failure.getMessage()).contains("did not finish").doesNotContain("127.0.0.1");
+        assertThat(tookMs).as("the whole download is bounded, not only the wait for headers").isLessThan(10_000);
     }
 
     @ParameterizedTest(name = "{0} mode: HTTP {1} -> INFERENCE_UNAVAILABLE")
