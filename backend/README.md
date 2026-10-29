@@ -2,8 +2,8 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인).
-- **[계획]** 실제 AnimalLift 모델과의 연동(PLAN 3·4단계), hair variant 결과, Spring↔Python 분리 배포 여부(REVIEW_CHECKLIST #6).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인).
+- **[계획]** 실제 AnimalLift 모델과의 연동(PLAN 3·4단계), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -66,10 +66,11 @@ curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
 | 상황 | `error.code` |
 |---|---|
 | 오류 본문 `detail.code` 가 Job 실패 코드 | 그 코드 |
-| 그 밖의 HTTP 501~504 / 4xx·500 | `INFERENCE_UNAVAILABLE` / `INFERENCE_FAILED` |
+| 그 밖의 HTTP 401·403(토큰 누락·불일치) / 501~504 / 그 밖 4xx·500 | `INFERENCE_UNAVAILABLE` / `INFERENCE_UNAVAILABLE` / `INFERENCE_FAILED` |
 | 연결 거부·끊김·5초 안에 연결 못 함 | `INFERENCE_UNAVAILABLE` |
 | `inference.timeout-ms`(기본 600000) 안에 답 없음 | `INFERENCE_TIMEOUT` |
 | 200 인데 `glbPath` 없음·파일 없음·GLB 아님 | `CONVERSION_FAILED` |
+| 업로드 모드: 200 인데 `glbUrl` 없음, GLB 다운로드가 200 아님·연결 실패·시간 초과 | `CONVERSION_FAILED` |
 | 서버 종료로 끊김, 예기치 못한 오류 | `INTERNAL_ERROR` |
 
 `error.message` 에는 서버 경로·내부 주소·추론 서비스의 원문 메시지를 넣지 않는다. 자세한 원인은 서버 로그의 `stage=FAILED` 줄에 있다.
@@ -93,6 +94,38 @@ cd backend
 ```
 
 패스스루로 끝난 실행도 `events.jsonl` 과 `job_runs` 에 `workerType=real`, `COMPLETED` 로 남는다. 모델이 돌지 않았으므로 측정이 아니다(서버 로그에 jobId 마다 WARN). `passthrough=true` 로 기록되므로 측정표에서는 이 값으로 거른다.
+
+### 업로드 모드 (Spring 과 추론 서비스가 디스크를 공유하지 않을 때)
+
+결정(2026-10-30, REVIEW_CHECKLIST #6 (b)): Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망). 경로 모드(위)는 그대로 두고 `inference.transfer=upload` 로 고른다 **[구현됨]**. 계약은 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드', [docs/CONTRACT.md](../docs/CONTRACT.md) §6.1.
+
+1. `POST {inference.base-url}/infer/upload` — multipart `request`(JSON `{jobId, options.hair=false}`) + `photos`(저장한 사진 파일, 업로드 원래 파일명, 확장자로 Content-Type).
+2. 응답은 경로 모드와 같은 필드 + `glbUrl`(서비스 기준 상대 경로). Spring 은 `inference.base-url` 뒤에 붙여 GET 하고 `storage/tmp/{jobId}/base.glb` 에 받는다. 절대 URL 은 받지 않는다(그 호스트로 토큰이 가지 않도록).
+3. 경로 모드와 같은 GLB 헤더 확인 → `storage/results/{jobId}/base.glb` 복사 → COMPLETED.
+4. 성공·실패 모두 실행이 끝나면 임시 파일을 지우고 `DELETE /artifacts/{jobId}` 로 GPU PC 의 작업 폴더(업로드 사진·결과)를 지운다. 실패해도 서버 로그에 WARN 만 남고 작업 결과는 그대로다.
+
+| 설정 (`application-real.properties`) | 기본 | 설명 |
+|---|---|---|
+| `inference.transfer` | `path` | `path` 또는 `upload`. 다른 값이면 기동 실패 |
+| `inference.token` | 빈 값 | 비어 있지 않으면 두 모드 모두 `X-Inference-Token` 헤더로 보낸다. 서비스의 `BESIDE_INFERENCE_TOKEN` 과 같아야 한다(다르면 401 → `INFERENCE_UNAVAILABLE`). 파일에 적지 말고 환경변수 `INFERENCE_TOKEN` 으로 준다 |
+| `storage.tmp.dir` | `storage/tmp` | 업로드 모드에서 내려받은 GLB 가 복사 전까지 머무는 곳 |
+
+이 PC 에서 패스스루로 시험. 2026-10-30 에 같은 설정을 `java -jar`(bootJar)·포트 18001/18081·토큰은 환경변수 `INFERENCE_TOKEN` 으로 돌려 `e2e_mock.ps1` COMPLETED, GPU 쪽 작업 폴더와 Spring `storage/tmp` 가 비는 것까지 확인했다:
+
+```powershell
+# 터미널 1 — 추론 서비스: 패스스루 + 토큰
+cd generation\inference_service
+$env:BESIDE_SAMPLE_GLB = 'C:\path\to\valid.glb'; $env:BESIDE_INFERENCE_TOKEN = 'dev-secret'
+.\.venv\Scripts\python -m uvicorn app:app --host 127.0.0.1 --port 8001
+
+# 터미널 2 — Spring real, 업로드 모드
+cd backend
+$env:INFERENCE_TOKEN = 'dev-secret'
+.\gradlew.bat bootRun --args="--spring.profiles.active=real --inference.transfer=upload"
+
+# 터미널 3 — 리포 루트
+.\scripts\e2e_mock.ps1        # PROCESSING → COMPLETED → GLB 다운로드. 추론 서비스 로그에 POST /infer/upload → GET /artifacts/… → DELETE
+```
 
 ### GPU PC 에 real 배치 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
 
@@ -141,7 +174,8 @@ src/main/
 │  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
 │  ├─ service/RealJobWorker.java         # real: 추론 슬롯 대기 → PROCESSING → /infer → GLB 헤더 확인·복사 → JobFinisher
-│  ├─ service/InferenceClient.java       # /infer 전송과 응답 → Job 실패 코드 매핑, metrics·passthrough·modelVersion → RunDetails (전송 방식이 바뀌면 여기만)
+│  ├─ service/InferenceClient.java       # 추론 서비스 전송(path: /infer, upload: /infer/upload + glbUrl 다운로드 + cleanup)과 응답 → Job 실패 코드 매핑,
+│  │                                     # metrics·passthrough·modelVersion → RunDetails, X-Inference-Token (전송 방식은 여기만)
 │  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository·JobRunRepository 도 같은 폴더
 │  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
 │  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → job_runs 행 + events.jsonl 줄 (같은 JobRun)
@@ -155,7 +189,7 @@ src/main/
 └─ resources/
    ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
-   ├─ application-real.properties        # inference.base-url·timeout-ms·max-concurrency, storage.result.dir, DB 파일 beside-real, h2-console
+   ├─ application-real.properties        # inference.base-url·transfer·token·timeout-ms·max-concurrency, storage.result.dir·tmp.dir, DB 파일 beside-real, h2-console
    └─ static/                            # 브라우저 Mock UI (v1)
 ```
 
@@ -199,8 +233,9 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry. `job_runs`: 삽입 전용, 모든 컬럼 보존, 같은 attempt 두 번 종료해도 첫 행 유지·예외 없음, attempt 1·2 두 행 |
-| `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값 (가짜 추론 서버) |
+| `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값. 업로드 모드: multipart 파트·파일명(한글·따옴표)·바이트·토큰 헤더, 응답 12종 같은 매핑, `glbUrl` 없음·절대 URL·다운로드 404/500/503/끊김 → `CONVERSION_FAILED`, 401·403 → `INFERENCE_UNAVAILABLE`(두 모드), cleanup 의 삭제·DELETE·실패 무시 (가짜 추론 서버) |
 | `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, 실패 4종 코드, retry, `/infer` 한 번에 1건, `job_runs` 행과 events 줄이 같은 수치(inferMs·glbBytes·passthrough·modelVersion), 패스스루 실행 표시 (가짜 추론 서버) |
+| `RealJobWorkerUploadTest` | profile real + `inference.transfer=upload` + 토큰: 업로드 → COMPLETED → asset 서빙, 보낸 파트, 호출 순서 POST → GET → DELETE, 임시 폴더 정리, `job_runs` 행. GLB 404 면 `CONVERSION_FAILED` 이어도 DELETE·정리 (가짜 추론 서버) |
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 

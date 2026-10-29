@@ -166,7 +166,7 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 
 `GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드.
 
-### 6.1 업로드 모드 — [계획] (2026-10-30 결정, REVIEW_CHECKLIST #6 (b))
+### 6.1 업로드 모드 — [구현됨: Spring·FastAPI, 같은 PC 패스스루로 연동 확인] / [계획: VM ↔ GPU PC 실제 배치] (2026-10-30 결정, REVIEW_CHECKLIST #6 (b))
 
 Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망)라 디스크를 공유하지 않는다. 위 `/infer`(경로 모드)는 그대로 두고 사진을 올리고 GLB 를 내려받는 엔드포인트를 **추가**한다. Spring `inference.transfer=path|upload`(기본 `path`)로 고른다. 자세한 표는 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드'.
 
