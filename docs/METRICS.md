@@ -61,7 +61,7 @@ CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
   ORDER BY finished_at');
 ```
 
-제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
+제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 사용자가 대기 중에 취소한 실행(`error_code = CANCELED`)은 실패율에도 넣지 않는다(관리 API stats 의 `canceled`). 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
 
 ## 2. 추론 서비스 (3D Generation, 수치 채우기는 [계획] PLAN 3·4단계)
 

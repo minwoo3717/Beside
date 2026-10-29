@@ -420,7 +420,8 @@ paths:
       summary: modelVersion × workerType 별 성공률과 시간 백분위
       description: |
         adminRuns 와 같은 행(from·to·includePassthrough 로 거른 job_runs)을 modelVersion(null 은 `(none)`) × workerType 으로 묶는다.
-        runs·completed·failed 는 모든 행을 센다. successRate = completed / runs.
+        runs·completed·failed 는 사용자가 취소한 실행(FAILED + error.code CANCELED)을 뺀 행을 센다 — 취소는 canceled 에 따로.
+        successRate = completed / runs (runs 가 0 이면 0).
         백분위와 평균은 그 묶음의 **COMPLETED 행 중 값이 있는 행만** 쓴다 — 실패 실행은 시간 분포를 흐리므로 METRICS §1.1 의
         제외 규칙대로 뺀다. 백분위는 nearest-rank 방식이다: 값을 오름차순으로 놓고 ceil(p/100 × n) 번째 값(1부터 센다).
         보간하지 않으므로 항상 실제 측정값 중 하나다. 예 n=20 이면 p50 = 10번째, p95 = 19번째. n=0 이면 p50·p95·평균은 null.
@@ -1014,7 +1015,7 @@ components:
     AdminStatsGroup:
       type: object
       description: modelVersion × workerType 한 묶음.
-      required: [modelVersion, workerType, runs, completed, failed, successRate, queuedMs, processingMs, totalMs, inferMs]
+      required: [modelVersion, workerType, runs, completed, failed, canceled, successRate, queuedMs, processingMs, totalMs, inferMs]
       properties:
         modelVersion:
           type: string
@@ -1026,13 +1027,18 @@ components:
         runs:
           type: integer
           format: int64
-          description: 행 수 (COMPLETED + FAILED)
+          description: 행 수 (COMPLETED + FAILED, 취소 제외)
         completed:
           type: integer
           format: int64
         failed:
           type: integer
           format: int64
+          description: FAILED 행 수 (취소 제외)
+        canceled:
+          type: integer
+          format: int64
+          description: 사용자가 취소한 실행 수 (FAILED + error.code CANCELED). runs·failed·successRate 에 넣지 않는다
         successRate:
           type: number
           format: double

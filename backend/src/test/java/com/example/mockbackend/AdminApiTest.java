@@ -228,6 +228,8 @@ class AdminApiTest {
         run(id(5), 1, "real", null, T0.plusSeconds(5), 400, 3000L, details(50L, 10000L, null, false, model));
         // Counted as a run but kept out of the time distribution (METRICS §1.1 exclusion rule).
         run(id(6), 1, "real", "INFERENCE_TIMEOUT", T0.plusSeconds(6), 9, 600_000L, details(null, null, null, null, model));
+        // Canceled by the user: counted apart, not as a failure of the model.
+        run(id(8), 1, "real", "CANCELED", T0.plusSeconds(8), 7, null, details(null, null, null, null, model));
         // Passthrough: out unless includePassthrough=true.
         run(id(7), 1, "real", null, T0.plusSeconds(7), 1, 1L, details(1L, 1L, 1L, true, model));
         // 20 mock runs without a model version: queuedMs 10..200, processingMs 100..2000.
@@ -245,6 +247,7 @@ class AdminApiTest {
         assertThat(none.path("runs").asLong()).isEqualTo(20);
         assertThat(none.path("completed").asLong()).isEqualTo(20);
         assertThat(none.path("failed").asLong()).isZero();
+        assertThat(none.path("canceled").asLong()).isZero();
         assertThat(none.path("successRate").asDouble()).isEqualTo(1.0);
         // n=20: p50 = 10th value, p95 = 19th value (a linear interpolation would give 105 and 190.5).
         assertPercentiles(none.path("queuedMs"), 20, 100L, 190L);
@@ -260,6 +263,7 @@ class AdminApiTest {
         assertThat(real.path("runs").asLong()).isEqualTo(6);
         assertThat(real.path("completed").asLong()).isEqualTo(5);
         assertThat(real.path("failed").asLong()).isEqualTo(1);
+        assertThat(real.path("canceled").asLong()).isEqualTo(1);
         assertThat(real.path("successRate").asDouble()).isCloseTo(5.0 / 6.0, within(1e-9));
         // n=5: p50 = 3rd, p95 = 5th of the sorted COMPLETED values; the FAILED 600 000 ms run is not among them.
         assertPercentiles(real.path("queuedMs"), 5, 300L, 500L);

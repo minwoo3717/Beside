@@ -274,11 +274,18 @@ public class AdminService {
         return new AdminStats(groups.entrySet().stream().map(entry -> group(entry.getKey(), entry.getValue())).toList());
     }
 
-    private static AdminStatsGroup group(GroupKey key, List<JobRun> rows) {
+    private static boolean canceled(JobRun run) {
+        return run.getStatus() == JobStatus.FAILED && ErrorCode.CANCELED.name().equals(run.getErrorCode());
+    }
+
+    private static AdminStatsGroup group(GroupKey key, List<JobRun> all) {
+        // A canceled run is the user's choice, not the model failing: it stays out of runs, failed and successRate.
+        long canceled = all.stream().filter(AdminService::canceled).count();
+        List<JobRun> rows = all.stream().filter(run -> !canceled(run)).toList();
         List<JobRun> completed = rows.stream().filter(run -> run.getStatus() == JobStatus.COMPLETED).toList();
         long failed = rows.stream().filter(run -> run.getStatus() == JobStatus.FAILED).count();
-        return new AdminStatsGroup(key.modelVersion(), key.workerType(), rows.size(), completed.size(), failed,
-                (double) completed.size() / rows.size(),
+        return new AdminStatsGroup(key.modelVersion(), key.workerType(), rows.size(), completed.size(), failed, canceled,
+                rows.isEmpty() ? 0.0 : (double) completed.size() / rows.size(),
                 percentiles(completed, JobRun::getQueuedMs),
                 percentiles(completed, JobRun::getProcessingMs),
                 percentiles(completed, JobRun::getTotalMs),

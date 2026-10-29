@@ -98,6 +98,8 @@ public class WebhookNotifier {
         StringBuilder text = new StringBuilder();
         if (event.status() == JobStatus.COMPLETED) {
             text.append("✅ 3D 모델 완성 · 작업 `").append(shortId(event.jobId())).append('`');
+        } else if ("CANCELED".equals(event.errorCode())) {
+            text.append("⏹️ 대기 중 취소 · 작업 `").append(shortId(event.jobId())).append('`');
         } else {
             text.append("⚠️ 3D 생성 실패 · 작업 `").append(shortId(event.jobId())).append("` · ")
                     .append(event.errorCode() == null ? "INTERNAL_ERROR" : event.errorCode());

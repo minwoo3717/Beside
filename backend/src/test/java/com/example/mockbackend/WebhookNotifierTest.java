@@ -123,6 +123,8 @@ class WebhookNotifierTest {
         assertThat(text).isEqualTo("✅ 3D 모델 완성 · 작업 `01234567` · 2분 5초 · 2번째 시도 · animallift@abc:latest+rig");
         assertThat(WebhookNotifier.jobMessage(new JobFinishedEvent("j", 1, JobStatus.COMPLETED, null, 900L, "real", null, true), ""))
                 .contains("패스스루");
+        assertThat(WebhookNotifier.jobMessage(new JobFinishedEvent("abcdef1234", 1, JobStatus.FAILED, "CANCELED", 30_000L, "real", null, false), ""))
+                .startsWith("⏹️ 대기 중 취소 · 작업 `abcdef12`").doesNotContain("실패");
 
         Instant now = Instant.now();
         Status unknown = new Status(State.UNKNOWN, null, null, now, "not checked yet");
