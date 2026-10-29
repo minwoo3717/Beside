@@ -39,4 +39,17 @@ public final class ApiV1Paths {
     public static String sharePage(String token) {
         return SHARE_PAGE + token;
     }
+
+    // ------------------------------------------------------------------ library (tag pets)
+
+    public static final String PETS = BASE + "/pets";
+
+    public static String pet(String petId) {
+        return PETS + "/" + petId;
+    }
+
+    /** Relative URL exposed as JobResponse.thumbnailUrl and PetResponse.coverThumbnailUrl. */
+    public static String thumbnail(String jobId) {
+        return job(jobId) + "/thumbnail";
+    }
 }
