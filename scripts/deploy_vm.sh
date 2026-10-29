@@ -17,6 +17,7 @@ if [[ -z "$TARGET" ]]; then
 fi
 
 # The remote part gets the repo path as $1 (quoted with %q so spaces survive; a leading ~ is expanded there).
+# bash reads this script from stdin, so commands inside get </dev/null and cannot swallow the rest of it.
 ssh "$TARGET" "bash -s -- $(printf '%q' "$REPO")" <<'REMOTE'
 set -euo pipefail
 cd "${1/#\~/$HOME}"
@@ -25,15 +26,15 @@ COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file deploy/.env)
 
 OLD="$(git rev-parse HEAD)"
 echo "[1/3] git pull --ff-only   (was $(git rev-parse --short HEAD))"
-git pull --ff-only
-git log --oneline -1
+git pull --ff-only </dev/null
+git --no-pager log --oneline -1
 
 echo "[2/3] docker compose up -d --build"
-"${COMPOSE[@]}" up -d --build
+"${COMPOSE[@]}" up -d --build </dev/null
 # Caddyfile is a single-file bind mount: git replaces the file, the running container keeps the old one until restart.
 if ! git diff --quiet "$OLD" HEAD -- deploy/Caddyfile; then
   echo "      deploy/Caddyfile changed -> restart caddy"
-  "${COMPOSE[@]}" restart caddy
+  "${COMPOSE[@]}" restart caddy </dev/null
 fi
 
 # Through Caddy on this VM (TLS + proxy + backend), without depending on hairpin routing to the public IP.
@@ -42,13 +43,13 @@ echo "[3/3] https://$DOMAIN/api/v1/healthz"
 for _ in $(seq 1 60); do
   if out="$(curl -fsS --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/v1/healthz" 2>/dev/null)"; then
     echo "$out"
-    "${COMPOSE[@]}" ps
+    "${COMPOSE[@]}" ps </dev/null
     exit 0
   fi
   sleep 2
 done
 echo "no healthz answer within 120 s. Logs: docker compose -f deploy/docker-compose.yml logs --tail 100 backend caddy" >&2
-"${COMPOSE[@]}" ps
+"${COMPOSE[@]}" ps </dev/null
 exit 1
 REMOTE
 
