@@ -20,6 +20,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,10 +53,17 @@ public class JobServiceImpl implements JobService {
     @Value("${storage.upload.dir:storage/uploads}")
     private String uploadDir;
 
+    @Value("${storage.result.dir:storage/results}")
+    private String resultDir;
+
+    /** prod: v1 photos must start with a JPEG, PNG or WEBP signature (off elsewhere; tests upload placeholder bytes). */
+    @Value("${upload.verify-magic:false}")
+    private boolean verifyMagic;
+
     @PostConstruct
     public void init() throws IOException {
         Files.createDirectories(Path.of(uploadDir));
-        Files.createDirectories(Path.of("storage/results"));
+        Files.createDirectories(Path.of(resultDir));
     }
 
     // ------------------------------------------------------------------ v0 (frozen)
@@ -99,6 +107,11 @@ public class JobServiceImpl implements JobService {
             if (type == null || !ALLOWED_IMAGE_TYPES.contains(type.toLowerCase(Locale.ROOT))) {
                 throw ApiException.badRequest(ErrorCode.UNSUPPORTED_IMAGE_TYPE, "Unsupported Content-Type '" + type
                         + "' for " + safeName(file) + "; allowed: image/jpeg, image/png, image/webp");
+            }
+            // Fail here rather than after minutes in the GPU queue (the model cannot read a non-image).
+            if (verifyMagic && !hasImageSignature(file)) {
+                throw ApiException.badRequest(ErrorCode.UNSUPPORTED_IMAGE_TYPE,
+                        "The content of " + safeName(file) + " is not a JPEG, PNG or WEBP image");
             }
         }
         boolean keyed = idempotencyKey != null && !idempotencyKey.isBlank();
@@ -250,6 +263,31 @@ public class JobServiceImpl implements JobService {
         jobWorker.dispatch(jobId);
         log.info("Job created: {} status={} worker={}", jobId, job.getStatus(), jobWorker.type());
         return job;
+    }
+
+    /** JPEG (FF D8 FF), PNG (89 'PNG' 0D 0A 1A 0A) or WEBP ('RIFF' size 'WEBP'), whatever the declared type says. */
+    static boolean hasImageSignature(MultipartFile file) {
+        byte[] head;
+        try (InputStream in = file.getInputStream()) {
+            head = in.readNBytes(12);
+        } catch (IOException e) {
+            return false;
+        }
+        return startsWith(head, 0, 0xFF, 0xD8, 0xFF)
+                || startsWith(head, 0, 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A)
+                || (startsWith(head, 0, 'R', 'I', 'F', 'F') && startsWith(head, 8, 'W', 'E', 'B', 'P'));
+    }
+
+    private static boolean startsWith(byte[] bytes, int offset, int... expected) {
+        if (bytes.length < offset + expected.length) {
+            return false;
+        }
+        for (int i = 0; i < expected.length; i++) {
+            if ((bytes[offset + i] & 0xFF) != expected[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Original filename without any directory part; "upload" when the client sent none. */
