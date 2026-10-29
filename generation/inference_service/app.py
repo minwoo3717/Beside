@@ -76,7 +76,8 @@ def _to_remote(path: str) -> str:
     return path
 WORK_DIR = pathlib.Path(os.environ.get("BESIDE_WORK_DIR", "work")).resolve()
 # Shared secret for /infer, /infer/upload and /artifacts/* (header X-Inference-Token). Unset or empty: no check.
-INFERENCE_TOKEN = os.environ.get("BESIDE_INFERENCE_TOKEN") or None
+# Surrounding whitespace is dropped, as Spring does with inference.token, so a stray newline in an env file still matches.
+INFERENCE_TOKEN = (os.environ.get("BESIDE_INFERENCE_TOKEN") or "").strip() or None
 JOB_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")   # upload mode: jobId names a folder under WORK_DIR
 ARTIFACTS = frozenset({"base.glb"})             # files GET /artifacts/{jobId}/{name} may serve
 MAX_PHOTOS = 10
@@ -100,8 +101,12 @@ def _needs_token(path: str) -> bool:
 
 @app.middleware("http")
 async def _check_token(request: Request, call_next):
-    """X-Inference-Token, checked before the body is read (an unauthenticated upload is never stored)."""
-    if INFERENCE_TOKEN and _needs_token(request.url.path):
+    """X-Inference-Token, checked before the body is read (an unauthenticated upload is never stored).
+
+    The path is the one the router matches (scope["path"]), not request.url.path: that one is rebuilt from the Host
+    header, so a Host such as "a?" or "a/b" would hide /artifacts/... from this check on older Starlette versions.
+    """
+    if INFERENCE_TOKEN and _needs_token(request.scope.get("path", "")):
         given = request.headers.get("x-inference-token", "")
         if not hmac.compare_digest(given.encode("utf-8"), INFERENCE_TOKEN.encode("utf-8")):
             return JSONResponse(
