@@ -2,6 +2,7 @@ package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
 import org.slf4j.Logger;
@@ -28,10 +29,13 @@ import java.util.concurrent.Semaphore;
  * <ol>
  *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU). The job stays PENDING meanwhile, so
  *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
- *   <li>PROCESSING with progress null (the service reports none), then POST /infer through {@link InferenceClient}.</li>
+ *   <li>PROCESSING with progress null (the service reports none), then POST /infer (inference.transfer=path) or
+ *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}.</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
  *       asset endpoint serves. The run ends through JobFinisher (status, then the job_runs row and the events.jsonl
  *       line, carrying the /infer metrics, the passthrough flag, the model version and the GLB size).</li>
+ *   <li>Upload mode, success or failure: InferenceClient.cleanup deletes the temporary GLB and sends
+ *       DELETE /artifacts/{jobId}; a failed cleanup is only logged.</li>
  * </ol>
  * Failures end the run FAILED with their job failure code (InferenceClient documents the mapping). An interrupted
  * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end.
@@ -98,10 +102,10 @@ public class RealJobWorker implements JobWorker {
         job.setUpdatedAt(processingStarted);
         job.setStatus(JobStatus.PROCESSING);
         jobRepository.save(job);
-        log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.inferUri());
+        log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.requestUri());
 
         try {
-            InferenceClient.Result result = inferenceClient.infer(jobId, imagePaths(job));
+            InferenceClient.Result result = inferenceClient.infer(jobId, imagePaths(job), filenames(job));
             StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
             jobFinisher.complete(job, stored.path().toString(), start, type(), result.details(stored.bytes()));
             if (result.passthrough()) {
@@ -118,11 +122,20 @@ public class RealJobWorker implements JobWorker {
             log.error("jobId={} real worker error", jobId, unexpected);
             // The exception text may name server paths; it stays in the log.
             jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type());
+        } finally {
+            // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
+            // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.
+            inferenceClient.cleanup(jobId);
         }
     }
 
     private static List<Path> imagePaths(Job job) {
         return job.getUploads().stream().map(upload -> Path.of(upload.path())).toList();
+    }
+
+    /** The photos' original names, sent with the files in upload mode. */
+    private static List<String> filenames(Job job) {
+        return job.getUploads().stream().map(StoredUpload::name).toList();
     }
 
     /** The stored base GLB and its size (job_runs.glbBytes, the same number as asset.bytes). */
