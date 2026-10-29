@@ -33,4 +33,16 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /** Number of jobs in one state (admin overview). */
     long countByStatus(JobStatus status);
+
+    /**
+     * Jobs in {@code status} that were queued before the given point: an earlier queuedAt, or the same instant and a
+     * smaller id (QueueEstimator: the PENDING jobs ahead of one).
+     */
+    @Query("select count(j) from Job j where j.status = :status"
+            + " and (j.queuedAt < :queuedAt or (j.queuedAt = :queuedAt and j.id < :id))")
+    long countQueuedBefore(@Param("status") JobStatus status, @Param("queuedAt") Instant queuedAt, @Param("id") String id);
+
+    /** When each job in {@code status} started processing (QueueEstimator: how far the running jobs are). */
+    @Query("select j.processingStartedAt from Job j where j.status = :status")
+    List<Instant> findProcessingStartedAt(@Param("status") JobStatus status);
 }
