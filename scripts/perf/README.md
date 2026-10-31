@@ -25,7 +25,8 @@
 | | `real_upload` | 같은 흐름, `inference.transfer=upload` | 위와 같음 |
 | | `real_upload_prod` | 같은 흐름, 프로파일 `real,prod` (사진 시그니처 검사, 작업마다 healthz 확인) | 위와 같음 |
 
-- 서버마다 `events.jsonl` 을 서버가 멈춘 뒤 읽어 작업 ID 별로 시나리오에 붙인다(`server` 항목: 결과별 개수, METRICS §1 의 `uploadMs`·`queuedMs`·`processingMs`·`totalMs` 원시값). real 의 `server*` 표본과 `queueGapMs` 도 여기서 나온다: `start = finishedAt − processingMs`, 시작 순으로 `gap = 다음 start − 이전 finishedAt`.
+- 서버마다 `events.jsonl` 을 서버가 멈춘 뒤 읽어 작업 ID 별로 시나리오에 붙인다(`server` 항목: 모든 줄의 결과별 개수, 그리고 COMPLETED 실행만의 METRICS §1 `uploadMs`·`queuedMs`·`processingMs`·`totalMs` 원시값). FAILED 줄은 세기만 하고 표본에서 뺀다 — 재시작으로 끊긴 `FAILED:INTERNAL_ERROR` 는 서버가 꺼져 있던 시간을 담는다(METRICS §1). 재시도가 끝내 COMPLETED 면 마지막 attempt 를 쓴다(`measured`·`excluded` 에 쓴 줄과 뺀 줄 수).
+- real 의 `server*` 표본과 `queueGapMs` 도 여기서 나온다: `start = finishedAt − processingMs`, `queuedAt = finishedAt − totalMs`, 시작 순으로 `gap = 다음 start − 이전 finishedAt`. 다음 작업이 이전 작업이 끝날 때 **이미 기다리고 있던** 쌍(`queuedAt ≤ 이전 finishedAt`)만 쓴다. 아니면 그 간격은 서버의 슬롯 넘김이 아니라 클라이언트가 다음 요청을 보낸 시각이다. 뺀 쌍 수는 `bench.queueGapExcluded`.
 - 워밍업 요청은 기록하지 않는다. `poll_load` 는 스레드마다 연결용 워밍업 5회, `scale` 은 측정 묶음마다 워밍업 5회(업로드 제외)를 더 둔다.
 - 버전에 기능이 없으면(`capabilities`) 해당 real 시나리오는 `{"status": "skipped", "reason": "capability", "missing": [...]}`, 스텁 파이썬이 없거나 fastapi/uvicorn/python-multipart 를 못 읽으면 `skipped`(이유 `stub unavailable: ...`).
 

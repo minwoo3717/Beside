@@ -150,40 +150,71 @@ SERVER_FIELDS = ("uploadMs", "queuedMs", "processingMs", "totalMs")
 REAL_FIELDS = ("inferMs", "convertMs", "glbBytes")
 
 
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def completed_runs(events, job_ids) -> list:
+    """The measured run of each of these jobs: its COMPLETED line (the highest attempt if a retry completed), in file
+    order. FAILED:* lines are left out as METRICS §1 asks for measurement tables: a FAILED:INTERNAL_ERROR left by a
+    restart carries the time the server was down in queuedMs / processingMs / totalMs."""
+    wanted = set(job_ids)
+    best = {}
+    for e in events:
+        if e.get("jobId") not in wanted or e.get("result") != "COMPLETED":
+            continue
+        current = best.get(e["jobId"])
+        attempt = e.get("attempt") if _number(e.get("attempt")) else 0
+        if current is None or attempt >= (current.get("attempt") if _number(current.get("attempt")) else 0):
+            best[e["jobId"]] = e
+    return list(best.values())
+
+
 def aggregate_events(events, job_ids) -> dict:
-    """What the server wrote for these jobs: line count, results, raw METRICS §1 values per field."""
+    """What the server wrote for these jobs: line count and count per result over every line; the raw METRICS §1
+    values per field only from the measured runs (completed_runs), so failed or interrupted runs never enter the
+    server-side samples. "measured" / "excluded" say how many lines were used / left out."""
     wanted = set(job_ids)
     lines = [e for e in events if e.get("jobId") in wanted]
     results = {}
     for e in lines:
         results[str(e.get("result"))] = results.get(str(e.get("result")), 0) + 1
+    runs = completed_runs(lines, wanted)
     samples = {}
     for field in SERVER_FIELDS + REAL_FIELDS:
-        values = [e[field] for e in lines if isinstance(e.get(field), (int, float)) and not isinstance(e.get(field), bool)]
+        values = [e[field] for e in runs if _number(e.get(field))]
         if values:
             samples[field] = values
-    passthrough = sum(1 for e in lines if e.get("passthrough") is True)
+    passthrough = sum(1 for e in runs if e.get("passthrough") is True)
     seen = {e.get("jobId") for e in lines}
     return {"n": len(lines), "jobs": len(wanted), "missing": len(wanted - seen), "results": results,
-            "passthrough": passthrough, "samples": samples}
+            "measured": len(runs), "excluded": len(lines) - len(runs), "passthrough": passthrough,
+            "samples": samples}
 
 
-def queue_gaps(events, job_ids) -> list:
-    """Idle time between consecutive runs of these jobs on the inference slot, from events.jsonl.
+def queue_gaps(events, job_ids):
+    """Idle time of the inference slot between consecutive runs of these jobs, from events.jsonl.
 
-    start_i = finishedAt_i - processingMs_i; sorted by start, gap_i = start_{i+1} - finishedAt_i.
+    For each measured run: start = finishedAt - processingMs, queuedAt = finishedAt - totalMs (totalMs counts from
+    acceptance). Sorted by start, gap = start_next - finishedAt_prev, kept only when the next job was already waiting
+    when the previous one finished (queuedAt_next <= finishedAt_prev): otherwise the "gap" is how long the client
+    took to send the next job, not the server handing over the slot. The server truncates to whole ms, which makes
+    queuedAt an upper bound, so a kept pair was certainly waiting. Returns (gaps in ms, number of pairs left out).
     """
-    wanted = set(job_ids)
     runs = []
-    for e in events:
-        if e.get("jobId") not in wanted or e.get("result") != "COMPLETED":
-            continue
-        if not isinstance(e.get("processingMs"), (int, float)) or not e.get("finishedAt"):
+    for e in completed_runs(events, job_ids):
+        if not (_number(e.get("processingMs")) and _number(e.get("totalMs")) and e.get("finishedAt")):
             continue
         finish = parse_instant_ms(e["finishedAt"])
-        runs.append((finish - float(e["processingMs"]), finish))
+        runs.append((finish - float(e["processingMs"]), finish, finish - float(e["totalMs"])))
     runs.sort()
-    return [runs[i + 1][0] - runs[i][1] for i in range(len(runs) - 1)]
+    gaps, excluded = [], 0
+    for (_start, finish, _queued), (next_start, _next_finish, next_queued) in zip(runs, runs[1:]):
+        if next_queued <= finish:
+            gaps.append(next_start - finish)
+        else:
+            excluded += 1
+    return gaps, excluded
 
 
 # ----------------------------------------------------------------------------------------------- servers
@@ -386,7 +417,11 @@ def small_upload(ctx):
 
 
 def _run_threads(count: int, target, timeout_s: float = 900.0):
-    """Run target(i, barrier) on `count` threads released together; returns (per-thread results, errors, wall ms)."""
+    """Run target(i, barrier) on `count` threads released together; returns (per-thread results, errors, wall ms).
+
+    timeout_s bounds the whole group (one shared deadline), not each join: with a stalled server, 16 stuck threads
+    must not hold the suite for 16 x timeout_s before "did not finish in time" is raised.
+    """
     barrier = threading.Barrier(count + 1)
     results = [None] * count
     errors = [None] * count
@@ -409,8 +444,9 @@ def _run_threads(count: int, target, timeout_s: float = 900.0):
     except threading.BrokenBarrierError:
         pass
     t0 = time.perf_counter_ns()
+    deadline = time.monotonic() + timeout_s
     for thread in threads:
-        thread.join(timeout_s)
+        thread.join(max(0.0, deadline - time.monotonic()))
     t1 = time.perf_counter_ns()
     if any(thread.is_alive() for thread in threads):
         raise RuntimeError("worker threads did not finish in time")
@@ -1109,11 +1145,16 @@ def _scenario_real(ctx, name: str, stub: Stub, storage: Path) -> dict:
     result["jobGroups"] = {"flowMs": flow_jobs, "queueGapMs": batch}
     result["jobs"] = flow_jobs + batch
     events, bad = parse_events(storage / "events.jsonl")
-    flow_events = [e for e in events if e.get("jobId") in set(flow_jobs) and e.get("result") == "COMPLETED"]
-    result["samples"]["serverQueuedMs"] = _r2([e["queuedMs"] for e in flow_events if isinstance(e.get("queuedMs"), (int, float))])
-    result["samples"]["serverProcessingMs"] = _r2([e["processingMs"] for e in flow_events if isinstance(e.get("processingMs"), (int, float))])
-    result["samples"]["serverTotalMs"] = _r2([e["totalMs"] for e in flow_events if isinstance(e.get("totalMs"), (int, float))])
-    result["samples"]["queueGapMs"] = _r2(queue_gaps(events, batch))
+    flow_events = completed_runs(events, flow_jobs)
+    for sample, field in (("serverQueuedMs", "queuedMs"), ("serverProcessingMs", "processingMs"),
+                          ("serverTotalMs", "totalMs")):
+        result["samples"][sample] = _r2([e[field] for e in flow_events if _number(e.get(field))])
+    gaps, gaps_excluded = queue_gaps(events, batch)
+    result["samples"]["queueGapMs"] = _r2(gaps)
+    result["values"]["bench.queueGapExcluded"] = gaps_excluded
+    if batch and not gaps:
+        result["notes"].append("queueGapMs: no batch job was waiting when the one before it finished "
+                               f"({gaps_excluded} pairs left out)")
     result["server"] = {group: aggregate_events(events, ids) for group, ids in result["jobGroups"].items()}
     ctx.servers[f"C-{name}"]["events"] = {"lines": len(events), "badLines": bad}
     passthrough = result["server"]["flowMs"]["passthrough"]

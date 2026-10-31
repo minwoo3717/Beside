@@ -76,20 +76,46 @@ class EventsTest(unittest.TestCase):
         self.assertEqual(out["jobs"], 3)
         self.assertEqual(out["missing"], 1)
         self.assertEqual(out["results"], {"COMPLETED": 1, "FAILED:INFERENCE_FAILED": 1})
-        self.assertEqual(out["samples"]["processingMs"], [40])  # null values are left out
-        self.assertEqual(out["samples"]["queuedMs"], [5, 5])
-        self.assertEqual(out["passthrough"], 2)
+        self.assertEqual((out["measured"], out["excluded"]), (1, 1))
+        self.assertEqual(out["samples"]["processingMs"], [40])
+        self.assertEqual(out["samples"]["queuedMs"], [5])  # the FAILED run is counted, not measured
+        self.assertEqual(out["passthrough"], 1)
 
-    def test_queue_gaps_from_finish_and_processing_time(self):
-        # runs: a 1000-1040, b 1050-1090, c 1100-1150 (ms after the second): gaps 10 and 10
-        events = [_event("c", "2026-10-31T00:00:01.150Z", 50), _event("a", "2026-10-31T00:00:01.040Z", 40),
-                  _event("b", "2026-10-31T00:00:01.090Z", 40),
+    def test_failed_and_superseded_runs_stay_out_of_the_samples(self):
+        # METRICS §1: a run cut short by a restart is FAILED:INTERNAL_ERROR with the down time in its timings
+        events = [_event("a", "2026-10-31T00:10:00.000Z", 600000, result="FAILED:INTERNAL_ERROR", totalMs=600001,
+                         passthrough=None),
+                  _event("a", "2026-10-31T00:10:00.050Z", 40, attempt=2, totalMs=45),
+                  _event("b", "2026-10-31T00:10:00.100Z", 41)]
+        out = scenarios.aggregate_events(events, ["a", "b"])
+        self.assertEqual(out["results"], {"FAILED:INTERNAL_ERROR": 1, "COMPLETED": 2})
+        self.assertEqual(out["samples"]["totalMs"], [45, 46])
+        self.assertEqual(out["samples"]["processingMs"], [40, 41])
+        self.assertEqual((out["n"], out["measured"], out["excluded"]), (3, 2, 1))
+        self.assertEqual([e["attempt"] for e in scenarios.completed_runs(events, ["a"])], [2])
+
+    def test_queue_gaps_between_jobs_that_were_waiting(self):
+        # all queued at 0.990 s; runs a 1.000-1.040, b 1.050-1.090, c 1.100-1.150: gaps 10 and 10 ms
+        events = [_event("c", "2026-10-31T00:00:01.150Z", 50, totalMs=160),
+                  _event("a", "2026-10-31T00:00:01.040Z", 40, totalMs=50),
+                  _event("b", "2026-10-31T00:00:01.090Z", 40, totalMs=100),
                   _event("x", "2026-10-31T00:00:01.500Z", 40),  # not in the batch
                   _event("d", "2026-10-31T00:00:01.700Z", 10, result="FAILED:CONVERSION_FAILED")]
-        gaps = scenarios.queue_gaps(events, ["a", "b", "c", "d"])
+        gaps, excluded = scenarios.queue_gaps(events, ["a", "b", "c", "d"])
+        self.assertEqual(excluded, 0)
         self.assertEqual(len(gaps), 2)
         for gap in gaps:
             self.assertAlmostEqual(gap, 10.0, places=3)
+
+    def test_a_job_that_arrived_after_the_slot_was_free_gives_no_gap(self):
+        # e was accepted at 1.120 s, 30 ms after b finished: that pause is the client's, not the slot hand-over
+        events = [_event("a", "2026-10-31T00:00:01.040Z", 40, totalMs=50),
+                  _event("b", "2026-10-31T00:00:01.090Z", 40, totalMs=100),
+                  _event("e", "2026-10-31T00:00:01.150Z", 25, totalMs=30)]
+        gaps, excluded = scenarios.queue_gaps(events, ["a", "b", "e"])
+        self.assertEqual(excluded, 1)
+        self.assertEqual(len(gaps), 1)
+        self.assertAlmostEqual(gaps[0], 10.0, places=3)
 
 
 class SchemaTest(unittest.TestCase):
