@@ -20,5 +20,7 @@
 | 14 | GLB_SPEC 과 실제 출력 차이 | #1 머지 뒤 실제 GLB 는 스킨(36 joints)·애니메이션 5종(Idle/Walk/Sit/TailWag/HeadTilt)이 있고, `hair` variant 는 만들지 않으며, 털 맵은 별도 PNG 다(앱은 GLB 안 `extras.beside` 를 기대). GLB_SPEC 은 "애니메이션/스킨 없음, 단일 노드" | GLB_SPEC 갱신 / 털 맵을 GLB 에 넣을지 | Generation, Unity | |
 | 15 | 백엔드 벤치마크 이름 | 로컬 벤치마크(`scripts/perf`, [docs/perf/README.md](../perf/README.md))의 값은 `bench.` 접두사로 그 문서에만 정의했다(METRICS 미등록). `queuedMs` 등 METRICS 이름은 METRICS 뜻 그대로 쓴다 | (a) 벤치 전용으로 유지 (b) METRICS 에 '백엔드 벤치마크' 절로 등록 | Backend | |
 | 16 | 계약 문서의 상태 표기 | METRICS(추론 수치·앱 `metrics.csv`), CONTRACT §5·§6, GLB_SPEC(변환기 '리포에 없음')이 [계획]으로 적혀 있지만 #1 로 코드가 들어와 있다([CHECKLIST.md](../CHECKLIST.md) 6절) | 표기를 [구현됨]·[실험 결과 없음]으로 갱신 / 측정 정의 차이(`convertMs` 에 리깅 포함 등)도 함께 결정 | 전원 | |
+| 17 | 업로드 사진 내용 검사 | openapi.yaml createJob 과 ERROR_CODES `UNSUPPORTED_IMAGE_TYPE` 은 파트의 선언 Content-Type 만 본다고 적혀 있지만, prod 는 `upload.verify-magic=true` 로 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 검사한다. 같은 요청이 mock 에서는 202, VM 에서는 400 (전체 코드 리뷰 2026-10-31) | (a) 계약 문서에 'prod 는 내용도 검사' 를 적는다 (b) 모든 프로파일에서 검사한다 | Backend·Unity | |
+| 18 | `modelVersion` 의 `+rig` | 추론 서비스는 `/healthz` 에는 리깅 템플릿이 설정되면 `+rig` 를 붙이고, `/infer` 에는 그 작업의 리깅이 성공했을 때만 붙인다. v1.1(검토 브랜치)은 실패한 실행에 `/healthz` 값을 남기므로 리깅이 계속 실패하면 성공(+rig 없음)과 실패(+rig)가 다른 모델로 집계된다 (전체 코드 리뷰 2026-10-31) | (a) `+rig` = 템플릿 설정(두 엔드포인트 같게), 작업별 리깅 성공은 별도 필드 (b) `+rig` 를 빼고 리깅 여부를 METRICS 필드로 | 3D·Backend | |
 
 회의 후 할 일: 결정 반영 → `openapi.yaml` 수정 → `JobV1ContractTest` 통과 → `CHANGELOG.md` → `git tag api-v1.0` → Unity DTO·FastAPI 스키마 동기화.
