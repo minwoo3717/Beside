@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -171,24 +172,19 @@ public class JobServiceImpl implements JobService {
         if (size < 1 || size > MAX_LIMIT) {
             throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "limit must be between 1 and " + MAX_LIMIT);
         }
-        List<Job> all = jobRepository.findAllNewestFirst();
-        int start = 0;
+        // One row more than the page tells whether another page follows. The cursor stays the last item's id.
+        PageRequest window = PageRequest.of(0, size + 1);
+        List<Job> rows;
         if (cursor != null && !cursor.isBlank()) {
-            int index = -1;
-            for (int i = 0; i < all.size(); i++) {
-                if (all.get(i).getId().equals(cursor)) {
-                    index = i;
-                    break;
-                }
-            }
-            if (index < 0) {
-                throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown cursor");
-            }
-            start = index + 1;
+            Job after = jobRepository.findById(cursor)
+                    .orElseThrow(() -> ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown cursor"));
+            rows = jobRepository.findNewestFirstAfter(after.getCreatedAt(), after.getId(), window);
+        } else {
+            rows = jobRepository.findNewestFirst(window);
         }
-        int end = Math.min(all.size(), start + size);
-        List<Job> items = List.copyOf(all.subList(start, end));
-        String nextCursor = end < all.size() && !items.isEmpty() ? items.get(items.size() - 1).getId() : null;
+        boolean more = rows.size() > size;
+        List<Job> items = List.copyOf(more ? rows.subList(0, size) : rows);
+        String nextCursor = more ? items.get(items.size() - 1).getId() : null;
         return new JobPage(items, nextCursor);
     }
 
