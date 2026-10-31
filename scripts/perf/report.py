@@ -548,7 +548,7 @@ th, td { border-bottom: 1px solid #e1e0d9; padding: 1mm 1.4mm; text-align: left;
 thead th { border-bottom: 1px solid #c3c2b7; color: #52514e; font-weight: 600; white-space: nowrap; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
-tbody th { font-weight: 600; }
+tbody th { font-weight: 600; word-break: keep-all; }
 table.metrics th:first-child { width: 30%; }
 .keep { break-inside: avoid; }
 tbody th .unit { font-weight: 400; color: #898781; font-size: 7.5pt; }
@@ -674,7 +674,7 @@ def measured_n(groups, labels, target) -> str:
         return f"N={target}"
     low, high = min(values), max(values)
     shown = f"{low:.0f}" if low == high else f"{low:.0f}–{high:.0f}"
-    return f"N={shown}" if low == high == target else f"N={shown} (목표 {target})"
+    return f"N={shown}" if low == high == target else f"N={shown} (목표 {target})"  # no break inside "(목표 50)"
 
 
 def scale_section(labels, groups, colors, meta, baseline) -> str:

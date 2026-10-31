@@ -137,7 +137,7 @@ class ReportTest(unittest.TestCase):
 
     def test_scale_rows_name_the_n_they_were_measured_at(self):
         # earlier scenarios had made 390 jobs before scale started: the "200" rows were measured at 390
-        self.assertIn("목록 첫 페이지 (limit 20) · N=390 (목표 200)", self.html)
+        self.assertIn("목록 첫 페이지 (limit 20) · N=390 (목표 200)", self.html)
         self.assertIn("단건 조회 · N=1000<", self.html)
         self.assertNotIn("· N=200<", self.html)
         self.assertIn("목록 첫 페이지 (N=2000)", self.html)  # cover row: the largest N was reached as planned

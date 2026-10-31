@@ -62,8 +62,8 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 ## 출력
 
 - 결과 폴더(기본 `docs/perf/data/<YYYY-MM-DD_HHMM>`, `--quick` 이면 `scripts/perf/out/quick/<...>`):
-  - `<label>-r<rep>.json` — 스위트 하나: 버전(ref, 해석한 SHA), jar(SHA-256, 출처), 설정(JVM 옵션, 고정 CPU, 횟수), 픽스처 해시, 서버별 기동·종료 방식, 시나리오별 `{status, reason?, samples, values, jobs, jobGroups, notes, server}`. 원시 표본은 0.01 ms 단위.
-  - `run.json` — 환경(OS, CPU, 논리 CPU, RAM, java -version, Python, JVM 옵션, 고정 CPU, 전원), 버전과 SHA, 반복별 순서, 시작·끝, 도구 커밋(`git rev-parse HEAD`, scripts/perf 미커밋 변경 여부), 명령줄.
+  - `<label>-r<rep>.json` — 스위트 하나: 버전(ref, 해석한 SHA), jar(SHA-256, 출처), 설정(JVM 옵션, 고정 CPU, 횟수), 픽스처 해시, 서버별 기동·종료 방식, 시나리오별 `{status, reason?, samples, values, jobs, jobGroups, notes, server}`. 원시 표본은 0.01 ms 단위. `server` 는 작업 묶음마다 `{n, jobs, missing, results, measured, excluded, passthrough, samples}`(`results` 는 모든 줄의 결과별 개수, `samples` 는 COMPLETED 실행 `measured` 개의 값, `excluded` 는 뺀 줄 수).
+  - `run.json` — 환경(OS, CPU, 논리 CPU, RAM, java -version, Python, JVM 옵션, 고정 CPU `pinnedCpus` 와 그 물리 코어 수 `pinnedCores`, `serverCpus`, 전원), 작업 폴더 `workDir`, 버전과 SHA, 반복별 순서, 시작·끝, 도구 커밋(`git rev-parse HEAD`, scripts/perf 미커밋 변경 여부), 명령줄. 쓰기가 OneDrive 잠금 등으로 실패하면 측정을 멈추지 않고 끝에 다시 쓰며, 그래도 안 되면 작업 폴더의 실행 폴더(`runDir`)에 남긴다.
 - 작업 폴더(`--work-dir`): `jars/<sha>.jar`(한 번 쓰면 바꾸지 않는 캐시, 이 도구가 만든 것은 `<sha>.jar.json` 기록이 붙음), `fixtures/`(내용 해시로 검증하는 픽스처), `runs/<stamp>-p<pid>/<label>-r<rep>/logs/`(서버·스텁 로그)와 `events.jsonl`. 업로드·DB 등 큰 저장소는 서버마다 끝나면 지운다.
 - 보고서: `--out` 의 PDF 와 `--html-out`(기본 `scripts/perf/out/report.html`, gitignore). `scripts/perf/out/` 의 결과·PDF·HTML 은 커밋하지 않는다.
 
