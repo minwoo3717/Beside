@@ -31,7 +31,8 @@ def make_suite(label, rep, factor, capabilities):
     for name, center in (("upload_small", 10), ("upload_large", 180), ("upload_12mp", 30)):
         sc[name]["samples"]["postMs"] = ms(center)
         sc[name]["server"] = {"postMs": {"n": 3, "samples": {"uploadMs": [3, 4, 5]}}}
-    sc["upload_large"]["values"]["bench.uploadMBps"] = 100 / factor
+    sc["upload_large"]["values"].update({"bench.uploadMBps": 100 / factor, "bench.serverCpuMs": 4000 * factor,
+                                         "bench.settleAfterMs": 1000.0})
     sc["upload_12mp"]["samples"]["postConcurrentMs"] = ms(80)
     sc["e2e_mock"]["samples"].update({"flowMs": ms(40), "completeMs": ms(30), "assetMs": ms(8)})
     sc["e2e_mock"]["values"]["bench.pollsPerJob"] = 1.6
@@ -135,6 +136,58 @@ class ReportTest(unittest.TestCase):
         self.assertIn("p50 / p95", html)
         for label in ("v0", "v1", "v2"):
             self.assertIn(f"{label}-r1.json", html)
+
+    def test_idle_wait_rows_and_method_sentences(self):
+        html = self.html
+        # key metric: the server CPU behind the large uploads (work moved out of a request stays in this number);
+        # its value is rendered with a change rate but never a verdict (tick-granular, SMT-shared)
+        start = html.index("큰 사진 업로드의 서버 CPU 점유")
+        row = html[start:html.index("</tr>", start)]
+        self.assertIn("4,000", row)                                 # v1: 4000 ms x factor 1.0
+        self.assertIn("+30.0%", row)                                # v0: factor 1.3
+        self.assertNotIn("badge", row)
+        self.assertIn("서버 CPU 점유 시간 (시나리오 + 뒤따른 백그라운드 일)", html)
+        self.assertIn("끝난 뒤 서버가 쉴 때까지 더 기다린 시간 (확인 창 제외)", html)
+        self.assertIn("서버가 쉴 때까지 기다리지 않았다", html)        # the fixture suites carry no settings.settle
+        self.assertIn("프로세스 우선순위: 기록 없음", html)          # this run.json predates the priority record
+        self.assertIn("'보통 이상'(Windows ABOVE_NORMAL)", report.priority_text(
+            {"env": {"priority": {"servers": "above_normal", "loadGenerator": "above_normal"}}}))
+        self.assertIn("부하 생성기는 올리지 못했다", report.priority_text(
+            {"env": {"priority": {"servers": "above_normal", "loadGenerator": "normal"}}}))
+        self.assertIn("바꾸지 않았다", report.priority_text({"env": {"priority": {"servers": "normal"}}}))
+
+    def test_settle_sentence_comes_from_the_suites(self):
+        waited, older = make_suite("v1", 1, 1.0, ["mock"]), make_suite("v0", 1, 1.0, ["mock"])
+        waited["settings"]["settle"] = dict(scenarios.SETTLE)
+        text = report.settle_text([waited])
+        self.assertIn("한 코어의 5 % 이하", text)
+        self.assertIn("1초 창(최대 120초)", text)
+        self.assertIn("0.5초 창(최대 30초)", text)
+        self.assertNotIn("참고용", text)
+        self.assertIn("대기 없는 이전 결과 포함", report.settle_text([waited, older]))
+        self.assertIn("기다리지 않았다", report.settle_text([older]))
+
+    def test_suites_measured_with_and_without_idle_waits_are_not_pooled(self):
+        with tempfile.TemporaryDirectory() as root:
+            old = make_suite("v1", 1, 1.0, ["mock"])
+            new = make_suite("v1", 2, 1.0, ["mock"])
+            new["settings"].update(settle=dict(scenarios.SETTLE), priority="above_normal")
+            first = write_data(Path(root) / "old", [old])
+            second = write_data(Path(root) / "new", [new])
+            with self.assertRaises(ValueError) as caught:
+                report.build_html(report.load_data([first, second]), Path(root) / "none.json", None, "cmd")
+            message = str(caught.exception)
+            self.assertIn("full, no idle waits, priority None [old/v1-r1.json]", message)
+            self.assertIn("full, idle waits, priority above_normal [new/v1-r2.json]", message)
+
+    def test_fresh_file_open_sentence(self):
+        slow = {"env": {"freshFileOpen": {"bytes": 4_542_211, "firstMs": 200.4, "secondMs": 1.2}}}
+        quick = {"env": {"freshFileOpen": {"bytes": 4_542_211, "firstMs": 2.0, "secondMs": 1.1}}}
+        self.assertIn("4.5 MB 사진 사본을 쓰자마자 열어 읽는 데 200 ms", report.fresh_open_text(slow))
+        self.assertIn("실시간 백신 검사로 보인다", report.fresh_open_text(slow))
+        self.assertIn("차이 없음", report.fresh_open_text(quick))
+        self.assertEqual(report.fresh_open_text({"env": {}}), "")
+        self.assertNotIn("갓 쓴 파일", self.html)  # the fixture's run.json has no such record
 
     def test_pairs_table_compares_each_pair_on_its_own_reference(self):
         start = self.html.index("<h2>쌍 비교</h2>")

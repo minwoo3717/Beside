@@ -81,6 +81,11 @@ VALUE_META = {
     "bench.jarBytes": ("jar 크기", "bytes", None),
     "bench.restartStartupMs": ("재기동 (Popen→healthz 200)", "ms", True),
     "bench.restartSpringStartedMs": ("재기동 Spring 'Started' 로그 시간", "ms", True),
+    # CPU time: Windows charges whole scheduler ticks (~15.6 ms) and the two pinned logical CPUs share one core, so
+    # its spread between repetitions is wide: shown with its change, never with a verdict.
+    "bench.serverCpuMs": ("서버 CPU 점유 시간 (시나리오 + 뒤따른 백그라운드 일)", "ms", None),
+    "bench.settleAfterMs": ("끝난 뒤 서버가 쉴 때까지 더 기다린 시간 (확인 창 제외)", "ms", None),
+    "bench.settleTotalMs": ("측정 전마다 서버가 쉴 때까지 더 기다린 합계 (확인 창 제외)", "ms", None),
 }
 # Values that count events rather than measure them: summed over the repetitions (a failure in one repetition must
 # not vanish in a median), shown in red when not zero, never given a change rate or a verdict.
@@ -89,19 +94,23 @@ SERVER_LABELS = {"uploadMs": "서버 uploadMs", "totalMs": "서버 totalMs", "qu
                  "processingMs": "서버 processingMs"}
 REAL_ROWS = [("sample", "flowMs"), ("sample", "completeMs"), ("sample", "assetMs"), ("sample", "postMs"),
              ("sample", "serverQueuedMs"), ("sample", "serverProcessingMs"), ("sample", "serverTotalMs"),
-             ("sample", "queueGapMs"), ("value", "bench.startupMs")]
+             ("sample", "queueGapMs"), ("value", "bench.startupMs"), ("value", "bench.serverCpuMs"),
+             ("value", "bench.settleTotalMs")]
+SETTLE_ROWS = [("value", "bench.serverCpuMs"), ("value", "bench.settleAfterMs")]
 ROWS = {
     "startup": [("value", "bench.startupMs"), ("value", "bench.springStartedMs"), ("value", "bench.idleRssMB")],
-    "healthz": [("sample", "healthzMs")],
-    "upload_small": [("sample", "postMs"), ("server", "postMs", "uploadMs")],
-    "upload_large": [("sample", "postMs"), ("value", "bench.uploadMBps"), ("server", "postMs", "uploadMs")],
+    "healthz": [("sample", "healthzMs")] + SETTLE_ROWS,
+    "upload_small": [("sample", "postMs"), ("server", "postMs", "uploadMs")] + SETTLE_ROWS,
+    "upload_large": [("sample", "postMs"), ("value", "bench.uploadMBps"), ("server", "postMs", "uploadMs")]
+    + SETTLE_ROWS + [("value", "bench.settleTotalMs")],
     "upload_12mp": [("sample", "postMs"), ("sample", "postConcurrentMs"), ("server", "postMs", "uploadMs"),
-                    ("server", "postConcurrentMs", "uploadMs")],
+                    ("server", "postConcurrentMs", "uploadMs")] + SETTLE_ROWS + [("value", "bench.settleTotalMs")],
     "e2e_mock": [("sample", "flowMs"), ("sample", "completeMs"), ("sample", "assetMs"), ("value", "bench.pollsPerJob"),
-                 ("server", "flowMs", "totalMs")],
+                 ("server", "flowMs", "totalMs")] + SETTLE_ROWS,
     "concurrent_e2e": [("sample", "flowMs"), ("sample", "postMs"), ("sample", "pollMs"), ("sample", "assetMs"),
-                       ("value", "bench.jobsPerSec"), ("value", "bench.errors"), ("server", "flowMs", "totalMs")],
-    "poll_load": [("sample", "pollMs"), ("value", "bench.pollReqPerSec"), ("value", "bench.errors")],
+                       ("value", "bench.jobsPerSec"), ("value", "bench.errors"), ("server", "flowMs", "totalMs")]
+    + SETTLE_ROWS,
+    "poll_load": [("sample", "pollMs"), ("value", "bench.pollReqPerSec"), ("value", "bench.errors")] + SETTLE_ROWS,
     "resources": [("value", "bench.peakRssMB"), ("value", "bench.jarBytes")],
     "pending_poll": [("value", "bench.restartStartupMs"), ("sample", "pendingPollMs")],
     "real_path": REAL_ROWS, "real_upload": REAL_ROWS, "real_upload_prod": REAL_ROWS,
@@ -117,6 +126,7 @@ KEY_ROWS = [
     ("upload_large", ("sample", "postMs"), "큰 사진 4장 업로드"),
     ("upload_12mp", ("sample", "postMs"), "12 MP 사진 업로드"),
     ("upload_12mp", ("sample", "postConcurrentMs"), "12 MP 동시 업로드"),
+    ("upload_large", ("value", "bench.serverCpuMs"), "큰 사진 업로드의 서버 CPU 점유"),
     ("e2e_mock", ("sample", "flowMs"), "E2E 흐름 (mock)"),
     ("concurrent_e2e", ("sample", "flowMs"), "동시 E2E 흐름"),
     ("concurrent_e2e", ("value", "bench.jobsPerSec"), "동시 E2E 처리량"),
@@ -839,15 +849,29 @@ def scenario_notes(labels, groups, key, per_version: int = 4) -> list:
 
 
 def condition_of(suite) -> tuple:
-    """What a suite was measured with: (--quick, the counts as canonical JSON)."""
-    return bool(suite.get("quick")), json.dumps((suite.get("settings") or {}).get("counts") or {}, sort_keys=True)
+    """What a suite was measured with: (--quick, the counts, the idle waits, the priority), the last three as
+    canonical JSON. Suites measured without idle waits (older tool) differ from those measured with them."""
+    settings = suite.get("settings") or {}
+    return (bool(suite.get("quick")), json.dumps(settings.get("counts") or {}, sort_keys=True),
+            json.dumps(settings.get("settle"), sort_keys=True), json.dumps(settings.get("priority")))
 
 
 def differing_counts(conditions) -> list:
     """The count names whose values differ between these conditions (condition_of tuples)."""
-    docs = [json.loads(counts) for _quick, counts in conditions]
+    docs = [json.loads(condition[1]) for condition in conditions]
     names = sorted(set().union(*docs)) if docs else []
     return [name for name in names if len({json.dumps(d.get(name), sort_keys=True) for d in docs}) > 1]
+
+
+def _method_name(condition, conditions) -> str:
+    """'full' / '--quick', plus the idle-wait and priority method when those differ between the conditions."""
+    quick, _counts, settle, priority = condition
+    name = "--quick" if quick else "full"
+    if len({c[2] for c in conditions}) > 1:
+        name += ", no idle waits" if settle == "null" else ", idle waits"
+    if len({c[3] for c in conditions}) > 1:
+        name += f", priority {json.loads(priority)}"
+    return name
 
 
 def _suite_name(suite) -> str:
@@ -863,8 +887,8 @@ def check_pooling(groups) -> None:
         for suite in suites:
             by_condition.setdefault(condition_of(suite), []).append(_suite_name(suite))
         if len(by_condition) > 1:
-            parts = [f"{'--quick' if quick else 'full'} [{', '.join(files)}]"
-                     for (quick, _counts), files in by_condition.items()]
+            parts = [f"{_method_name(condition, by_condition)} [{', '.join(files)}]"
+                     for condition, files in by_condition.items()]
             differ = differing_counts(list(by_condition))
             problems.append(f"{label}: " + " vs ".join(parts)
                             + (f"; counts differ in {', '.join(differ[:8])}" + (" ..." if len(differ) > 8 else "")
@@ -887,13 +911,16 @@ def conditions_list(data) -> str:
     differ = differing_counts(list(conditions))
     items = []
     for folder, by_condition in per_folder.items():
-        for (quick, counts_json), versions in by_condition.items():
+        for condition, versions in by_condition.items():
+            quick, counts_json, settle, _priority = condition
             counts = json.loads(counts_json)
             shown = ", ".join(f"{name}={json.dumps(counts.get(name))}" for name in differ[:10])
             shown += f" 외 {len(differ) - 10}개" if len(differ) > 10 else ""
+            if len({c[2] for c in conditions}) > 1:
+                shown = ("대기 없음(이전 도구)" if settle == "null" else "유휴 대기") + (f", {shown}" if shown else "")
             items.append(f"<li><code>{esc(folder)}</code> ({esc(', '.join(sorted(versions)))}): "
                          f"{'--quick' if quick else '보고용 횟수'} — {esc(shown)}</li>")
-    return ("<h2>데이터별 조건</h2><p class=\"small\">--data 폴더마다 측정 횟수가 달라 버전 사이 비교는 참고용이다. "
+    return ("<h2>데이터별 조건</h2><p class=\"small\">--data 폴더마다 측정 횟수나 방법이 달라 버전 사이 비교는 참고용이다. "
             "서로 다른 항목만 적는다. 위 시나리오 표의 횟수는 기준 버전 데이터의 것이다.</p><ul class=\"small\">"
             + "".join(items) + "</ul>")
 
@@ -962,6 +989,56 @@ def shared_pc_text(doc) -> str:
         pinned = "서버 CPU 를 고정하지 않아 서버와 부하 생성기가 같은 CPU 를 다투고"
     return (f"서버와 클라이언트가 같은 PC 에서 돈다. {pinned}, 디스크·메모리 대역은 공유한다. 백신 실시간 검사 등 "
             "OS 활동도 포함된다.")
+
+
+def fresh_open_text(doc) -> str:
+    """What run.json's env.freshFileOpen says about opening a just-written file ('' when not recorded)."""
+    fresh = (doc.get("env") or {}).get("freshFileOpen") or {}
+    first, second = fresh.get("firstMs"), fresh.get("secondMs")
+    if first is None or second is None:
+        return ""
+    size = f"{(fresh.get('bytes') or 0) / 1e6:.1f} MB"
+    if first >= 20 and first >= 10 * max(second, 0.1):
+        return (f"갓 쓴 파일의 첫 열기가 느리다: {size} 사진 사본을 쓰자마자 열어 읽는 데 {first:.0f} ms, 다시 읽으면 "
+                f"{second:.1f} ms 였다(실시간 백신 검사로 보인다). 업로드 직후 사진을 여는 서버 코드(요청 안에서 만드는 "
+                "썸네일, 추론 서비스로의 업로드 전송)는 이 대기를 포함하고, 그런 검사가 없는 Linux VM 에서는 이만큼 빠진다.")
+    return f"갓 쓴 파일의 첫 열기: {size} 사진 사본 {first:.1f} ms, 다시 읽기 {second:.1f} ms(검사 대기로 보이는 차이 없음)."
+
+
+def settle_text(suites) -> str:
+    """How the suites waited for an idle server, from their settings.settle (one sentence; older data had none)."""
+    kinds = {json.dumps((s.get("settings") or {}).get("settle"), sort_keys=True) for s in suites}
+    settles = [json.loads(k) for k in kinds if k != "null"]
+    if not settles:
+        return ("서버가 쉴 때까지 기다리지 않았다: 시나리오가 끝나자마자 다음 시나리오를 시작했다(이 결과를 만든 도구 버전). "
+                "응답 뒤에 남은 일(백그라운드 썸네일 큐, GC, JIT)이 다음 측정에 섞일 수 있다.")
+    st = settles[0]
+    text = (f"서버가 쉴 때까지 기다린다: 서버 프로세스가 한 창 동안 CPU 를 한 코어의 {st.get('busyPct', 5):g} % 이하로 쓰면 쉬는 "
+            f"것으로 본다. 서버 A 의 시나리오가 끝날 때마다 {st.get('windowS', 1):g}초 창(최대 {st.get('maxS', 120):g}초), "
+            f"큰 사진·12 MP 업로드와 real 흐름은 하나마다 시작 전에 {st.get('perRequestWindowS', 0.5):g}초 창(최대 "
+            f"{st.get('perRequestMaxS', 30):g}초), 12 MP 동시 업로드·scale 의 측정 전과 PENDING 작업을 만든 뒤에도 기다린다. "
+            "응답 뒤에 남은 일(백그라운드 썸네일 큐, GC, JIT)이 다음 측정에 섞이지 않게 하려는 것이다(실사용에서 업로드는 "
+            "몇 분 간격). 쉬는 것을 확인한 창 하나를 뺀 대기는 <code>bench.settleAfterMs</code>·<code>bench.settleTotalMs</code>, "
+            "시나리오 시작부터 대기 끝까지 서버가 쓴 CPU 시간은 <code>bench.serverCpuMs</code> 다. CPU 시간은 Windows 에서 "
+            "스케줄러 틱(약 15.6 ms) 단위이고 고정한 두 논리 CPU 가 한 물리 코어를 나눠 쓰므로 반복 사이 흔들림이 커서 "
+            "변화율만 보이고 판정하지 않는다.")
+    if len(kinds) > 1:
+        text += " 데이터마다 대기 방식이 달라(대기 없는 이전 결과 포함) 버전 사이 비교는 참고용이다."
+    return text
+
+
+def priority_text(doc) -> str:
+    priority = (doc.get("env") or {}).get("priority") or {}
+    if priority.get("servers") == "above_normal" and priority.get("loadGenerator") != "above_normal":
+        return ("프로세스 우선순위: 서버·추론 스텁은 '보통 이상'(Windows ABOVE_NORMAL)으로 띄웠지만 부하 생성기는 올리지 "
+                f"못했다({esc(str(priority.get('loadGenerator')))}). 다른 프로그램과 CPU 를 다툰 클라이언트 지연이 섞일 수 있다.")
+    if priority.get("servers") == "above_normal":
+        return ("프로세스 우선순위: 서버·추론 스텁·부하 생성기를 '보통 이상'(Windows ABOVE_NORMAL)으로 띄웠다. 같은 PC 의 "
+                "다른 프로그램이 서버를 고정한 CPU 를 차지해 서버가 몇 초씩 멈추는 일을 줄이려는 것이다(클라우드 VM 에는 "
+                "다른 프로그램이 없다).")
+    if priority:
+        return "프로세스 우선순위: 바꾸지 않았다(이 OS 에서는 권한이 필요하다)."
+    return "프로세스 우선순위: 기록 없음(이 결과를 만든 도구 버전은 우선순위를 바꾸지 않았다)."
 
 
 def clock_text(doc) -> str:
@@ -1105,7 +1182,9 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "시간은 요청 쓰기 직전부터 응답 본문을 다 읽을 때까지(<code>perf_counter_ns</code>), 연결 수립은 제외 — "
                "E2E 흐름(<code>flowMs</code>·<code>completeMs</code>)도 흐름 안에서 다시 연결한 시간(Tomcat 은 100번째 응답에 "
                "연결을 닫는다)을 뺀다. POST 마다 새 <code>Idempotency-Key</code>.</li>")
-    out.append("<li>반복마다 버전 순서를 돌린다(1회차 v0,v1,v2 → 2회차 v1,v2,v0 → …). 워밍업 요청은 기록하지 않는다.</li></ul>")
+    out.append("<li>반복마다 버전 순서를 돌린다(1회차 v0,v1,v2 → 2회차 v1,v2,v0 → …). 워밍업 요청은 기록하지 않는다.</li>")
+    out.append(f"<li>{settle_text(data['suites'])}</li>")
+    out.append(f"<li>{per_run_text(runs, priority_text) or priority_text({})}</li></ul>")
     out.append("<h2>시나리오</h2><table><thead><tr><th>이름</th><th>무엇을</th><th>횟수</th></tr></thead><tbody>")
     for key, title, what in SCENARIOS:
         out.append(f"<tr><th>{esc(title)}<div class=\"unit\"><code>{esc(key)}</code></div></th><td>{esc(what)}</td>"
@@ -1135,7 +1214,8 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "<li>real 시나리오는 모델 없는 스텁이라 Spring 쪽 오버헤드(전송·저장·대기열)만 보인다.</li>"
                "<li>부하 생성기는 Python(GIL, http.client)이라 동시 시나리오에는 클라이언트 자신의 지연이 섞일 수 있다.</li>"
                f"<li>{per_run_text(runs, shared_pc_text) or shared_pc_text({})}</li>"
-               + (f"<li>{esc(background_text(load))}</li>" if load else "") +
+               + (f"<li>{esc(background_text(load))}</li>" if load else "")
+               + (f"<li>{fresh}</li>" if (fresh := per_run_text(runs, fresh_open_text)) else "") +
                f"<li>{per_run_text(runs, clock_text) or clock_text({})}</li></ul>")
     out.append("</section>")
 
