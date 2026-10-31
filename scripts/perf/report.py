@@ -550,6 +550,7 @@ thead { display: table-header-group; }
 tr { break-inside: avoid; }
 tbody th { font-weight: 600; word-break: keep-all; }
 table.metrics th:first-child { width: 30%; }
+table.pairs thead th { white-space: normal; word-break: keep-all; }
 .keep { break-inside: avoid; }
 tbody th .unit { font-weight: 400; color: #898781; font-size: 7.5pt; }
 td .v { white-space: nowrap; }
@@ -614,6 +615,60 @@ def metrics_table(rows, labels, groups, colors, baseline, first_header="지표")
         entries = {l: entry(groups.get(l, []), scenario, row) for l in labels}
         base = entries.get(baseline) if baseline in entries else None
         cells = "".join(cell(entries[l], row, base, l == baseline, lower) for l in labels)
+        out.append(f"<tr>{head}{cells}</tr>")
+    out.append("</tbody></table>")
+    return "".join(out)
+
+
+def version_pairs(versions_file, labels):
+    """([(from, to, title)], [dropped "from → to"]) from the versions file's optional "pairs" list of
+    {"from", "to", "title"?}: each pair is compared on its own (from = the reference). Pairs naming a version that was
+    not measured are dropped, and listed so the report can say so."""
+    if not versions_file or not Path(versions_file).is_file():
+        return [], []
+    doc = json.loads(Path(versions_file).read_text(encoding="utf-8"))
+    pairs, dropped = [], []
+    for pair in doc.get("pairs") or []:
+        a, b = pair.get("from"), pair.get("to")
+        if a in labels and b in labels and a != b:
+            pairs.append((a, b, pair.get("title") or f"{a} → {b}"))
+        else:
+            dropped.append(f"{a} → {b}")
+    return pairs, dropped
+
+
+def pair_cell(ea: dict, eb: dict, row, lower) -> str:
+    """One cell of the pairs table: from → to (p50, or the median of the repetitions for values), then the change of
+    `to` against `from` with the same rule and badge as the main tables; – when a side has no data or the row is a
+    count."""
+    _label, unit, _lower = row_meta(row)
+    if unit == "개" or is_counter(row) or not ea.get("reps") or not eb.get("reps"):
+        return '<td class="na">–</td>'
+    cmp = stats.compare(ea["reps"], eb["reps"], lower_is_better=(lower is not False))
+    if not cmp:
+        return '<td class="na">–</td>'
+    parts = [f'<div class="v">{fmt_value(cmp["baseline"], unit)} → {fmt_value(cmp["candidate"], unit)}</div>']
+    if cmp["verdict"] == "n/a":
+        parts.append('<div class="d">비교 불가 <span class="why">(기준 0)</span></div>')
+    else:
+        verdict = badge(cmp["verdict"]) if lower is not None else ""
+        parts.append(f'<div class="d">{fmt_delta(cmp["deltaPct"])} {verdict}</div>')
+    if "error" in (ea["state"], eb["state"]):
+        parts.append('<div class="why err">오류 포함</div>')
+    return "<td>" + "".join(parts) + "</td>"
+
+
+def pairs_table(rows, pairs, groups) -> str:
+    """rows: [(scenario, row, label)] as in metrics_table; columns = the version pairs [(from, to, title)]."""
+    heads = "".join(f'<th>{esc(title)}<div class="unit">{esc(a)} → {esc(b)}</div></th>' for a, b, title in pairs)
+    out = [f'<table class="metrics pairs"><thead><tr><th>지표</th>{heads}</tr></thead><tbody>']
+    for scenario, row, label in rows:
+        _name, unit, lower = row_meta(row)
+        unit_text = unit_label(unit) if unit != "bytes" else ""
+        head = (f'<th>{esc(label)}<div class="unit"><code>{esc(row_name(row))}</code>'
+                f'{esc(" · " + unit_text if unit_text else "")}</div></th>')
+        cells = "".join(pair_cell(entry(groups.get(a, []), scenario, row), entry(groups.get(b, []), scenario, row),
+                                  row, lower) for a, b, _title in pairs)
         out.append(f"<tr>{head}{cells}</tr>")
     out.append("</tbody></table>")
     return "".join(out)
@@ -997,6 +1052,14 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "판정은 |Δ| ≥ 10% 이고 반복별 p50 범위가 기준과 겹치지 않을 때만 개선/악화, 나머지는 차이 없음(잡음). "
                "처리량은 클수록 개선. 기준이 0 이면 비교 불가.</p>")
     out.append(metrics_table(key_rows, labels, groups, colors, baseline))
+    pairs, dropped_pairs = version_pairs(versions_file, labels)
+    if pairs:
+        out.append("<h2>쌍 비교</h2>")
+        out.append('<p class="small muted">versions 파일의 <code>pairs</code>: 열마다 앞 버전을 기준으로 뒤 버전을 비교한다. '
+                   "칸: 앞 → 뒤의 p50(값 지표는 반복별 값의 중앙값), 아래 줄은 변화율과 판정(위 표와 같은 규칙)."
+                   + (f" 측정하지 않은 버전이 든 쌍은 뺐다: {esc(', '.join(dropped_pairs))}." if dropped_pairs else "")
+                   + "</p>")
+        out.append(pairs_table(key_rows, pairs, groups))
     out.append("</section>")
 
     # 2. method

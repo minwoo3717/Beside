@@ -96,10 +96,11 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 
 ## 새 버전 추가
 
-1. `docs/perf/versions.json`(지금은 견본 `scripts/perf/versions.example.json`)의 `versions` 에 라벨을 더한다: `ref`(커밋·브랜치·태그), `title`, `description`, `capabilities`(`mock`, `real_path`, `real_upload`, `prod` 중 그 버전에 있는 것).
+1. `docs/perf/versions.json`(견본 `scripts/perf/versions.example.json`)의 `versions` 에 라벨을 더한다: `ref`(커밋·브랜치·태그), `title`, `description`, `capabilities`(`mock`, `real_path`, `real_upload`, `prod` 중 그 버전에 있는 것).
 2. `order` 에 라벨을 넣는다. 보고서의 색은 이 순서의 자리로 정해진다(앞 8개까지 고정 팔레트, 그 뒤는 회색) — 기존 라벨의 자리를 바꾸지 않는다.
 3. 비교 기준을 바꾸려면 `baseline` 을 고친다.
-4. `run.py --versions ...,<새 라벨>` 로 측정하고 `report.py --data <새 결과 폴더> [--data <이전 결과 폴더>]` 로 보고서를 만든다. 브랜치 ref 는 측정 때 SHA 로 해석해 결과에 남는다.
+4. 기준과 별개로 두 버전을 맞대려면(개선 전 → 후, 이번 → 다음 버전) `pairs` 에 `{"from": "v2", "to": "v3", "title": "..."}` 를 더한다. 표지의 '쌍 비교' 표에 열 하나로 나오고, 판정 규칙은 같다(앞 버전이 기준). 측정하지 않은 버전이 든 쌍은 표에서 빠지고 그 사실이 표 위에 적힌다.
+5. `run.py --versions ...,<새 라벨>` 로 측정하고 `report.py --data <새 결과 폴더> [--data <이전 결과 폴더>]` 로 보고서를 만든다. 브랜치 ref 는 측정 때 SHA 로 해석해 결과에 남는다. 커밋한 보고서를 다시 만들 수 있도록 `docs/perf/versions.json` 의 ref 는 잰 커밋의 SHA 로 고정한다(브랜치는 움직인다).
 
 서술(개선 사례, 다음 버전 절차)은 `docs/perf/notes/*.md` 에 쓴다. 파일 이름 순으로 3장(시나리오별 결과) 뒤에 들어간다. 지원 문법: `#`~`###` 제목, 문단, `- `·`1. ` 목록, `**굵게**`, `` `코드` ``, 파이프 표(`|:--|--:|` 정렬), 링크는 글자만, ```` ``` ```` 코드 블록.
 

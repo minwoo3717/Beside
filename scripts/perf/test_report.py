@@ -82,9 +82,10 @@ class ReportTest(unittest.TestCase):
                                                    "jvmArgs": ["-Xmx1536m"], "pinnedCpus": [10, 11]},
                                            "counts": scenarios.effective_counts(False)})
         versions = root / "versions.json"
-        versions.write_text(json.dumps({"baseline": "v1", "order": ["v0", "v1", "v1p", "v2"], "versions": {
-            label: {"ref": label, "title": f"title {label}", "description": f"<b>{label}</b> & co"}
-            for label in plan}}), encoding="utf-8")
+        versions.write_text(json.dumps({"baseline": "v1", "order": ["v0", "v1", "v1p", "v2"], "pairs": [
+            {"from": "v1", "to": "v2", "title": "다음 버전"}, {"from": "v0", "to": "v2"}, {"from": "v1", "to": "v1p"}],
+            "versions": {label: {"ref": label, "title": f"title {label}", "description": f"<b>{label}</b> & co"}
+                         for label in plan}}), encoding="utf-8")
         notes = root / "notes"
         notes.mkdir()
         (notes / "20-next.md").write_text("# 다음 버전 절차\n\n1. 측정\n2. 비교\n", encoding="utf-8")
@@ -134,6 +135,18 @@ class ReportTest(unittest.TestCase):
         self.assertIn("p50 / p95", html)
         for label in ("v0", "v1", "v2"):
             self.assertIn(f"{label}-r1.json", html)
+
+    def test_pairs_table_compares_each_pair_on_its_own_reference(self):
+        start = self.html.index("<h2>쌍 비교</h2>")
+        table = self.html[start:self.html.index("</table>", start)]
+        self.assertIn('다음 버전<div class="unit">v1 → v2</div>', table)
+        self.assertIn('v0 → v2<div class="unit">v0 → v2</div>', table)  # no title: the pair names itself
+        self.assertIn("측정하지 않은 버전이 든 쌍은 뺐다: v1 → v1p", table)
+        self.assertNotIn("v1p<div", table)
+        self.assertIn('class="badge better"', table)  # both pairs end at the 30 % faster v2
+        self.assertNotIn('class="badge worse"', table)
+        self.assertIn('class="badge same"', table)    # identical RSS
+        self.assertLess(start, self.html.index("<h1>측정 방법</h1>"))  # on the cover, after the key metrics
 
     def test_scale_rows_name_the_n_they_were_measured_at(self):
         # earlier scenarios had made 390 jobs before scale started: the "200" rows were measured at 390
