@@ -22,7 +22,7 @@
 
 막는 범위가 큰 것부터.
 
-1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 14개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. (BE 주관, 전원)
+1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 18개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. (BE 주관, 전원)
 2. [ ] **GPU PC 세팅 + exp-01** — 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [ ] **`deploy/vm-4b` → main PR 열기** — CI(`.github/workflows/backend-ci.yml`)는 main push·main 대상 PR 에서만 돈다. Docker 이미지 빌드와 Caddy 경로 시험이 이때 처음 실행된다. (BE)
 4. [ ] **VM·도메인·Tailscale 준비** — [deploy/README.md](../deploy/README.md) 순서대로. 폰 → VM → GPU PC 1건이 4b 의 첫 증빙이다. (BE, 직접 할 일)
@@ -58,7 +58,7 @@
 | 4b | S4 Docker·Caddy·CI | 파일만 | 이미지 빌드·Caddy 시험 미실행(위 3번) | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
 | 4b | 실측 10건 이상 | [ ] | VM·GPU PC 준비 뒤 | BE+GEN |
-| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론·앱 측정 모두 0건. 백엔드 단독 성능은 [perf/README.md](perf/README.md) | 전원 |
+| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론·앱 측정 모두 0건(VM·GPU·기기). 백엔드 단독 성능(개발 PC 루프백)만 [실험 결과] [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
 | 5 | 리허설 1회, 보고서 초안 리뷰 | [ ] | 날짜 미정 | 전원 |
 | 5 | "Animation·Rigging 은 향후 과제로만" | 충돌 | 리깅·애니메이션 5종이 #1 로 이미 머지됨 → 보고서에서 어떻게 쓸지 결정 | 전원 · 팀 결정 |
 | 5 | 데모 영상 | [ ] | — | 전원 |
@@ -72,6 +72,7 @@
 - [ ] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인([deploy/README.md](../deploy/README.md)).
 - [ ] 남은 낮은 위험(10-30 검토): retry 를 동시에 두 번 누르는 경합, GPU 오프라인 대기가 N건이면 N×30분, V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
+- [ ] 전체 코드 리뷰(2026-10-31)의 [계획] 항목: real 로 쓸 때 Mock UI 의 60초·15초 제한, 측정 중 한 번 본 'COMPLETED 직후 에셋 409'(재현부터) — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md).
 
 ### Unity (UN)
 - [ ] 재시도 버그(위 2-6).
@@ -82,6 +83,7 @@
 - [ ] DoD 증빙: 1·2·4단계 영상, logcat, `metrics.csv`, FPS, 기기 2종.
 - [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 쓴다 → 안건 #14 결정 후 한쪽에 맞춤(GEN 과 함께).
 - [ ] (v1.1 을 받으면) 진행 화면에 `queue`/`estimate`, 취소 버튼이 `POST /cancel` 호출(지금은 앱 안 코루틴만 멈춤), `CANCELED` 문구.
+- [ ] 코드 리뷰 보고 7건: 에셋 다운로드 실패 때 화면이 멈춤, 바뀐 템플릿·GltfImport 를 해제하지 않아 memMB 가 계속 오름, 재개·retry 실행도 `metrics.csv` 에 줄을 더함(METRICS §3 '작업당 한 줄') 등 — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고'.
 
 ### 3D Generation (GEN)
 - [ ] GPU PC: AnimalLift·체크포인트 설치, ASCII 경로, WSL 이면 그 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`([deploy/README.md](../deploy/README.md)).
@@ -89,6 +91,7 @@
 - [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교, 털 맵을 GLB 안에 넣기.
 - [ ] gltf-validator·glTFast 로드 결과 기록, 변환기 테스트.
 - [ ] `/infer/upload` 리뷰(업로드 모드, DELETE 범위).
+- [ ] 끊긴 `/infer` 가 MODEL_LOCK 을 쥔 채 다음 작업의 시간 제한을 깎는 문제: busy 신호 또는 끊긴 요청 건너뛰기 중 설계 결정(GEN·BE, 코드 리뷰 보고서).
 - [ ] 재현성: 리깅 템플릿과 그 생성 스크립트가 리포 밖에 있음 → 위치와 절차를 문서로.
 - [ ] 라이선스: AnimalLift 리포에 라이선스 파일이 없고, AnimalLift 출력(`unity/Assets/Models/n02085782_186 (1)_mesh.obj` 등)이 커밋돼 있다 → 팀 결정.
 
@@ -98,7 +101,7 @@
 - [ ] 첫 배포 후 GPU PC 를 끈 채 작업 1건 → PENDING 대기 + Discord 알림 → 켜면 진행되는지 확인.
 
 ### 계약·문서 (회의 안건)
-- [ ] 안건 #1~#14 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다.
+- [ ] 안건 #1~#18 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다. #17(prod 의 사진 내용 검사)·#18(`modelVersion` 의 `+rig`)은 코드 리뷰에서 나왔다.
 - [ ] 계약 파일의 상태 표기가 실제 코드보다 늦음(아래 6절) — 계약 파일이라 회의에서 함께 고친다.
 - [ ] 측정 정의 확정: `convertMs` 에 리깅 시간이 더해짐(`app.py`), 앱 `e2eMs` 가 첫 AR 배치까지(사용자 탭 포함), 앱 `downloadMs` 가 캐시 적중 때 0.
 - [ ] 백엔드 벤치마크 이름(`bench.*`)을 METRICS 에 올릴지(안건 #15).
@@ -111,8 +114,11 @@
 ## 5. 백엔드 성능 측정
 
 - 방법·버전 비교·다음 버전 측정 절차: [perf/README.md](perf/README.md). 보고서 PDF: [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf).
+- **[실험 결과]** 개발 PC 루프백에서 버전 5개 × 3회(2026-10-31, `perf/data/2026-10-31_1434`): 이전 → 현재 회귀 없음, 현재의 개선(P1 키셋 목록)으로 목록 첫 페이지 −72 %, 다음 버전(v1.1)의 업로드 비용은 P4(썸네일을 202 뒤로)로 v1 수준. 사례와 남은 비용: [perf/notes/10-improvements.md](perf/notes/10-improvements.md).
+- [ ] 다음 버전에 남은 비용 확인 [계획]: 폴링 처리량 −25 %, PENDING 조회 +79 %, 목록 중간 페이지 +14~58 % 등 — JFR 로 GET 한 번의 시간 분해, 썸네일 없는 사진으로 분리 측정. (BE)
 - [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — VM 준비 뒤. (BE)
 - [ ] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. (BE+GEN)
+- [ ] v1.1 을 병합하거나 다음 버전이 생기면 `versions.json` 에 한 줄 더해 같은 명령으로 재측정([perf/notes/20-next-version.md](perf/notes/20-next-version.md)). (BE)
 
 ## 6. 문서 불일치
 
@@ -130,5 +136,6 @@
 ## 7. 정리할 것
 
 - [ ] 에이전트 브랜치 `worktree-agent-*` 7개, 검토 워크트리 `.claude/worktrees/review-v1.1` — v1.1 결정 뒤 삭제.
+- 백업 브랜치 `backup/review-api-v1.1-6a3959f`·`-ecc5fb5`·`-d12498c` 는 지우지 않는다: 앞의 둘은 성능 보고서의 v2·v2p 를 다시 재는 데, 마지막은 코드 리뷰 보고서가 적은 SHA 에 필요하다.
 - [ ] 커밋 안 된 리포 루트 파일: `OVERNIGHT_REVIEW_2026-10-31.md`, `claudecode_bootstrap_prompt.md`.
 - [ ] 로컬 `main` 은 `origin/main` 보다 25커밋 앞서 있다(같은 커밋이 `origin/deploy/vm-4b` 에 있음). PR 을 squash 로 합치면 로컬 main 을 `origin/main` 에 맞춘다.
