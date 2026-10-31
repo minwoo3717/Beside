@@ -20,6 +20,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -27,6 +28,8 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -47,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Queued when the job is accepted (JobServiceImpl.createLater) and made on one background thread, so the upload answer
  * never waits for a decode (a 12 MP photo takes hundreds of ms) and a burst of uploads queues instead of dropping
  * thumbnails; until it exists JobResponse.thumbnailUrl is null ("없으면 null" in openapi.yaml). Photos never change
- * afterwards, retry keeps it.
+ * afterwards, retry keeps it. Whether a job has one is answered from memory (exists()), not from the disk.
  * Reads what ImageIO reads plus WEBP (TwelveMonkeys imageio-webp registers itself as an ImageIO plugin).
  * A thumbnail is a convenience: anything that goes wrong is logged and the job is made without one.
  */
@@ -68,9 +71,17 @@ public class ThumbnailService {
     private static final Semaphore DECODES = new Semaphore(1);
     private static final long DECODE_WAIT_MS = 5_000;
     private static final float JPEG_QUALITY = 0.85f;
+    private static final String SUFFIX = ".jpg";
 
     private final Path dir;
     private final long decodeLimitMs;
+    /**
+     * Job ids whose thumbnail file exists, so exists() (JobResponse.thumbnailUrl: every response, every list item) needs
+     * no file check, which costs about 0.1 ms on Windows with real-time antivirus (docs/perf/notes). Filled from the
+     * folder at start and kept by create and delete; find(), which serves the file, corrects it when a file went
+     * missing behind the server's back. One server per storage folder, as for the DB file.
+     */
+    private final Set<String> known = ConcurrentHashMap.newKeySet();
     /**
      * One thread: decodes run one at a time anyway (DECODES). The queue keeps a burst of uploads' thumbnails up to
      * queueLimit; past that a new upload gets none (thumbnailUrl stays null) instead of growing the heap.
@@ -100,6 +111,12 @@ public class ThumbnailService {
     @PostConstruct
     void init() throws IOException {
         Files.createDirectories(dir);
+        try (DirectoryStream<Path> files = Files.newDirectoryStream(dir, "*" + SUFFIX)) {
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                known.add(name.substring(0, name.length() - SUFFIX.length()));
+            }
+        }
         // Plugins on the class path (imageio-webp) register when ImageIO is first used; scan again explicitly so that
         // the order of first use (and the class loader of that thread) does not matter.
         ImageIO.scanForPlugins();
@@ -170,6 +187,7 @@ public class ThumbnailService {
             }
             BufferedImage thumb = orient(scale(source), ExifOrientation.read(photo));
             write(thumb, file(jobId));
+            known.add(jobId); // after the move: a thumbnailUrl is never handed out before its file exists
             log.info("jobId={} thumbnail {}x{} in {} ms", jobId, thumb.getWidth(), thumb.getHeight(),
                     (System.nanoTime() - start) / 1_000_000);
             return true;
@@ -181,18 +199,25 @@ public class ThumbnailService {
         }
     }
 
-    /** The thumbnail file of a job, if it has one. */
+    /** The thumbnail file of a job, if it has one (checked on disk: it is about to be served). */
     public Optional<Path> find(String jobId) {
         Path file = file(jobId);
-        return Files.isRegularFile(file) ? Optional.of(file) : Optional.empty();
+        if (Files.isRegularFile(file)) {
+            known.add(jobId);
+            return Optional.of(file);
+        }
+        known.remove(jobId);
+        return Optional.empty();
     }
 
+    /** Whether the job has a thumbnail, from memory (see {@link #known}). */
     public boolean exists(String jobId) {
-        return find(jobId).isPresent();
+        return known.contains(jobId);
     }
 
     /** Deletes the thumbnail of a job (deleting the job). Never throws. */
     public void delete(String jobId) {
+        known.remove(jobId);
         try {
             Files.deleteIfExists(file(jobId));
         } catch (IOException | RuntimeException e) {
@@ -201,7 +226,7 @@ public class ThumbnailService {
     }
 
     private Path file(String jobId) {
-        return dir.resolve(jobId + ".jpg");
+        return dir.resolve(jobId + SUFFIX);
     }
 
     /**

@@ -189,8 +189,9 @@ public class JobServiceImpl implements JobService {
             jobTransitions.undoRetry(found, job.getAttempt());
             throw shuttingDown;
         }
-        if (!thumbnails.exists(id)) {
+        if (thumbnails.find(id).isEmpty()) {
             // Lost at a shutdown before it was made (the queue does not survive one): make it with the new attempt.
+            // Checked on disk, not with exists(): a retry is rare, and a file that went missing is noticed here too.
             thumbnails.createLater(id, Path.of(job.getUploads().get(0).path()));
         }
         log.info("Job retried: {} attempt={}", id, job.getAttempt());

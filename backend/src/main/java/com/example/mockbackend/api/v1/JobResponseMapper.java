@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * Job (internal) → JobResponse (contract v1). Never copies server paths. queue and estimate come from QueueEstimator,
  * for the list too: they cost nothing for finished jobs and two small queries per PENDING job. thumbnailUrl is set while
- * the thumbnail file exists (one file check per job).
+ * the thumbnail file exists, which ThumbnailService answers from memory.
  */
 @Component
 @RequiredArgsConstructor
