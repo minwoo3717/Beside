@@ -38,6 +38,7 @@ Beside/
 │  ├─ CONTRACT.md                 # 계약 통합본 (사람이 읽는 한 파일: API·오류 코드·GLB·측정·/infer·변경 규칙)
 │  ├─ ARCHITECTURE.md             # 시스템 그림(mermaid), 데이터 흐름, 프로파일
 │  ├─ PLAN.md                     # 단계별 계획·주차·담당·완료 기준(DoD)
+│  ├─ CHECKLIST.md                # 점검표: 단계별 DoD 에서 빠진 것·트랙별 할 일·문서 불일치
 │  ├─ METRICS.md                  # 세 트랙이 같은 이름으로 쓰는 측정 항목
 │  ├─ api/openapi.yaml            # API v1 계약 — 단일 진실 공급원
 │  ├─ api/ERROR_CODES.md          # error.code 목록과 앱 표시 문구
@@ -45,9 +46,10 @@ Beside/
 │  ├─ api/REVIEW_CHECKLIST.md     # 계약 회의 검토 안건
 │  └─ asset/GLB_SPEC.md           # GLB 에셋 계약
 ├─ backend/                       # Spring Boot 3.2 / Java 17 — v0(/api/jobs, 동결) + v1(/api/v1) + Mock/Real 워커
-├─ unity/                         # Unity 트랙. Assets/Beside/ 를 Unity 프로젝트의 Assets/Beside 로 가져간다
-├─ generation/                    # 3D 트랙: inference_service/(FastAPI), tools/(convert_asset.py 자리), experiments/(실험 기록)
-└─ scripts/                       # e2e_mock.ps1 / e2e_mock.sh — curl 로 업로드→폴링→다운로드 전체 흐름
+├─ unity/                         # Unity 6 Android AR 앱 프로젝트 (앱 코드는 Assets/Beside/)
+├─ generation/                    # 3D 트랙: inference_service/(FastAPI + AnimalLift), tools/(convert_asset.py·rig_transfer.py), experiments/(실험 기록)
+├─ deploy/                        # VM 배포: docker-compose.yml, Caddyfile, .env.example, 절차 README
+└─ scripts/                       # e2e_mock.ps1 / e2e_mock.sh(curl 전체 흐름), run_real.*, start_inference_wsl.sh, deploy_vm.sh
 ```
 
 ## 계약 변경 규칙 (API v1)
