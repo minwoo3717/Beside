@@ -544,10 +544,8 @@ def main(argv=None) -> int:
     cpus = procs.pick_cpus(args.server_cpus)
     jvm_args = procs.jvm_args(args.server_cpus if cpus else 0)
     _env, removed_env = procs.clean_env()
-    stub_reason = scenarios.stub_check(args.stub_python)
     app_dir = REPO / "generation" / "inference_service"
-    if not stub_reason and not (app_dir / "app.py").is_file():
-        stub_reason = f"no inference stub at {app_dir}"
+    stub_reason = scenarios.stub_check(args.stub_python, app_dir)  # same environment and folder as the stub
     log(f"java {java['path']}; server CPUs {cpus or 'not pinned'}; stub: {stub_reason or 'available'}")
 
     fx = fixtures.ensure_standard(work)

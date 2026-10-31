@@ -340,10 +340,16 @@ def get_status(client, job_id: str):
 
 
 def run_flow(client, body: bytes, content_type: str, interval_s: float, asset_bytes, timeout_s: float) -> dict:
-    """POST -> poll every interval_s until COMPLETED/FAILED -> GET asset; times from the start of the POST."""
+    """POST -> poll every interval_s until COMPLETED/FAILED -> GET asset; times from the start of the POST.
+
+    completeMs and flowMs leave out what the client spent opening connections (or on attempts that died) inside the
+    flow, as every single request time does: Tomcat closes a keep-alive connection after 100 answers, and the
+    reconnect lands in whichever flow comes next. untimedMs is what was left out.
+    """
     flow = {"ok": False, "jobId": None, "postMs": None, "pollMs": [], "assetMs": None, "completeMs": None,
-            "flowMs": None, "polls": 0, "error": None}
+            "flowMs": None, "polls": 0, "error": None, "untimedMs": 0.0}
     t0 = time.perf_counter_ns()
+    untimed0 = client.untimed_ns
     answer, job_id = post_photos(client, body, content_type)
     flow["postMs"] = answer.ms
     if not job_id:
@@ -360,6 +366,7 @@ def run_flow(client, body: bytes, content_type: str, interval_s: float, asset_by
             return flow
         if status == "COMPLETED":
             t_complete = time.perf_counter_ns()
+            untimed_complete = client.untimed_ns
             break
         if status == "FAILED":
             flow["error"] = "job FAILED: " + json.dumps((answer.json() or {}).get("error"))[:200]
@@ -368,7 +375,7 @@ def run_flow(client, body: bytes, content_type: str, interval_s: float, asset_by
             flow["error"] = f"no COMPLETED within {timeout_s:.0f} s (last status {status})"
             return flow
         time.sleep(interval_s)
-    flow["completeMs"] = _ms(t0, t_complete)
+    flow["completeMs"] = _ms(t0, t_complete) - (untimed_complete - untimed0) / 1e6
     asset = client.get(f"{API}/jobs/{job_id}/asset")
     t_end = time.perf_counter_ns()
     flow["assetMs"] = asset.ms
@@ -378,7 +385,8 @@ def run_flow(client, body: bytes, content_type: str, interval_s: float, asset_by
     if asset_bytes is not None and len(asset.body) != asset_bytes:
         flow["error"] = f"asset has {len(asset.body)} bytes, expected {asset_bytes}"
         return flow
-    flow["flowMs"] = _ms(t0, t_end)
+    flow["untimedMs"] = (client.untimed_ns - untimed0) / 1e6
+    flow["flowMs"] = _ms(t0, t_end) - flow["untimedMs"]
     flow["ok"] = True
     return flow
 
@@ -421,20 +429,32 @@ def _run_threads(count: int, target, timeout_s: float = 900.0):
 
     timeout_s bounds the whole group (one shared deadline), not each join: with a stalled server, 16 stuck threads
     must not hold the suite for 16 x timeout_s before "did not finish in time" is raised.
+
+    target gets a start line whose wait(timeout) is the shared barrier. A thread that fails before its start line
+    breaks the barrier, so the others do not wait for it in vain; one that fails after it must not: threads that are
+    still leaving the released barrier would then see BrokenBarrierError and fail as well.
     """
     barrier = threading.Barrier(count + 1)
     results = [None] * count
     errors = [None] * count
+    passed = [False] * count
+
+    class StartLine:
+        def __init__(self, index):
+            self.index = index
+
+        def wait(self, timeout=None):
+            arrival = barrier.wait(timeout)
+            passed[self.index] = True
+            return arrival
 
     def body(i):
         try:
-            results[i] = target(i, barrier)
+            results[i] = target(i, StartLine(i))
         except BaseException as error:  # noqa: BLE001  reported to the caller
             errors[i] = f"{type(error).__name__}: {error}"
-            try:
+            if not passed[i]:
                 barrier.abort()
-            except threading.BrokenBarrierError:
-                pass
 
     threads = [threading.Thread(target=body, args=(i,), daemon=True) for i in range(count)]
     for thread in threads:
@@ -1032,15 +1052,25 @@ def run_mock(ctx, selected) -> dict:
 # ----------------------------------------------------------------------------------------------- real scenarios
 
 
-def stub_check(stub_python) -> str:
-    """None when stub_python can import fastapi, uvicorn and python-multipart; otherwise the reason it cannot."""
+def stub_env(extra: dict = None) -> dict:
+    """The stub's environment: procs.clean_env (no PYTHONPATH / PYTHONHOME / BESIDE_* of the caller) plus `extra`.
+    PYTHONDONTWRITEBYTECODE: the stub runs from the repo tree; leave no __pycache__ there."""
+    return procs.clean_env({"PYTHONDONTWRITEBYTECODE": "1", **(extra or {})})[0]
+
+
+def stub_check(stub_python, app_dir=None) -> str:
+    """None when stub_python can import fastapi, uvicorn and python-multipart where the stub will run: the same
+    environment (stub_env) and working folder (app_dir) as start_stub, so a package reachable only through the
+    caller's PYTHONPATH does not pass the check and then fail every real scenario. Otherwise the reason."""
     if not stub_python:
         return "no --stub-python"
     if not Path(stub_python).is_file():
         return f"--stub-python not found: {stub_python}"
+    if app_dir is not None and not (Path(app_dir) / "app.py").is_file():
+        return f"no inference stub at {app_dir}"
     try:
         done = subprocess.run([str(stub_python), "-c", "import fastapi, uvicorn, multipart"], capture_output=True,
-                              timeout=120)
+                              timeout=120, env=stub_env(), cwd=str(app_dir) if app_dir is not None else None)
     except (OSError, subprocess.SubprocessError) as error:
         return f"--stub-python failed: {error}"
     if done.returncode != 0:
@@ -1063,9 +1093,7 @@ class Stub:
 def start_stub(ctx, stub_python: str, app_dir: Path) -> Stub:
     work = ctx.run_dir / "stub-work"
     work.mkdir(parents=True, exist_ok=True)
-    # PYTHONDONTWRITEBYTECODE: the stub runs from the repo tree; leave no __pycache__ there
-    env, _removed = procs.clean_env({"BESIDE_SAMPLE_GLB": str(Path(ctx.fixtures["glb_sample"]["path"])),
-                                     "BESIDE_WORK_DIR": str(work), "PYTHONDONTWRITEBYTECODE": "1"})
+    env = stub_env({"BESIDE_SAMPLE_GLB": str(Path(ctx.fixtures["glb_sample"]["path"])), "BESIDE_WORK_DIR": str(work)})
     port = procs.free_port(avoid=ctx.used_ports)
     ctx.used_ports.add(port)
     cmd = [stub_python, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(port)]

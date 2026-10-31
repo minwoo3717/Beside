@@ -7,6 +7,10 @@ the connection (Tomcat closes a keep-alive connection after 100 requests by defa
 to be dead (reset, aborted, closed without an answer) the client reconnects and sends the request once more; only the
 successful attempt is timed and `reconnects` counts the retries. POST retries are safe here because every POST
 carries its own Idempotency-Key (the server answers a repeated key with the same job).
+
+`untimed_ns` adds up the time request() spends outside the timed attempt: connection setup and attempts that died.
+A caller that times a sequence of requests (an E2E flow: POST, polls, asset) subtracts its growth over the sequence,
+so the flow leaves connection setup out just like each request does.
 """
 from __future__ import annotations
 
@@ -52,6 +56,7 @@ class HttpClient:
         self.conn = None
         self.connects = 0
         self.reconnects = 0
+        self.untimed_ns = 0  # connection setup and failed attempts inside request(), not part of any timed region
 
     def _open(self):
         self.conn = http.client.HTTPConnection(self.host, self.port, timeout=self.timeout)
@@ -71,7 +76,9 @@ class HttpClient:
         last_error = None
         for _attempt in range(2):
             if self.conn is None or self.conn.sock is None:
+                opening = time.perf_counter_ns()
                 self._open()  # not timed
+                self.untimed_ns += time.perf_counter_ns() - opening
             start = time.perf_counter_ns()
             try:
                 self.conn.request(method, path, body=body, headers=headers)
@@ -80,6 +87,7 @@ class HttpClient:
                 end = time.perf_counter_ns()
             except RETRYABLE as error:
                 self.close()
+                self.untimed_ns += time.perf_counter_ns() - start  # the attempt that died is not timed either
                 self.reconnects += 1
                 last_error = error
                 continue

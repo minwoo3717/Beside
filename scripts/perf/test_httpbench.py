@@ -117,7 +117,13 @@ class ClientTest(unittest.TestCase):
     def test_reopens_after_connection_close(self):
         with httpbench.HttpClient("127.0.0.1", self.port, timeout=10) as client:
             self.assertEqual(client.get("/close").body, b"bye")
+            after_first = client.untimed_ns
+            self.assertGreater(after_first, 0)  # the first connect
             self.assertEqual(client.get("/ping").body, b"pong")
+            after_reconnect = client.untimed_ns
+            self.assertGreater(after_reconnect, after_first)  # the new connection is untimed too
+            client.get("/ping")
+            self.assertEqual(client.untimed_ns, after_reconnect)  # keep-alive: nothing outside the timed region
         self.assertEqual(client.connects, 2)
         self.assertEqual(client.reconnects, 0)  # an announced close is not a failure
 
