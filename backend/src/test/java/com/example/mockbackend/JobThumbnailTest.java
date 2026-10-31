@@ -1,5 +1,6 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.service.ThumbnailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -30,8 +32,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Thumbnails (GET /api/v1/jobs/{id}/thumbnail, JobResponse.thumbnailUrl): made from the first photo when the job is
- * accepted, as a JPEG whose longer side is 256 px. Real images are drawn by TestImages (left half red, right half blue)
+ * Thumbnails (GET /api/v1/jobs/{id}/thumbnail, JobResponse.thumbnailUrl): queued when the job is accepted and made
+ * from the first photo on a background thread, as a JPEG whose longer side is 256 px. Tests wait for that queue
+ * (ThumbnailService.drain) before they look. Real images are drawn by TestImages (left half red, right half blue)
  * so the test can check size, orientation and the white background behind transparency. A photo the server cannot read
  * still makes a job — only without a thumbnail.
  */
@@ -60,6 +63,20 @@ class JobThumbnailTest {
 
     @Autowired
     ObjectMapper objectMapper;
+
+    @Autowired
+    ThumbnailService thumbnails;
+
+    @Test
+    void theUploadAnswerDoesNotWaitForTheThumbnail() throws Exception {
+        // A 12 MP photo takes far longer to decode than the answer takes to leave: the 202 comes first and the
+        // thumbnail follows on the background thread.
+        String jobId = upload("big.jpg", "image/jpeg", TestImages.jpeg(4000, 3000));
+        assertThat(storage.resolve("thumbs").resolve(jobId + ".jpg")).as("not made inside the request").doesNotExist();
+        JsonNode job = readJob(jobId);
+        assertThat(job.path("thumbnailUrl").asText()).isEqualTo("/api/v1/jobs/" + jobId + "/thumbnail");
+        assertThat(thumbnail(job.path("thumbnailUrl").asText()).getWidth()).isEqualTo(256);
+    }
 
     @Test
     void jpegUploadGetsA256PixelJpegThumbnailOfTheFirstPhoto() throws Exception {
@@ -133,7 +150,7 @@ class JobThumbnailTest {
     void unreadablePhotosStillMakeAJobWithoutThumbnail() throws Exception {
         // Placeholder bytes like the older tests upload: the job is accepted, only the thumbnail is missing.
         String jobId = upload("zeros.jpg", "image/jpeg", new byte[16]);
-        JsonNode job = readJob(jobId);
+        JsonNode job = readJob(jobId); // after the thumbnail attempt: null is the final answer, not "not yet"
         assertThat(job.has("thumbnailUrl")).isTrue();
         assertThat(job.path("thumbnailUrl").isNull()).isTrue();
         assertThat(job.has("petId")).isTrue();
@@ -156,6 +173,7 @@ class JobThumbnailTest {
         // before subsampling, so such a picture gets no thumbnail and the upload returns at once.
         long started = System.nanoTime();
         String jobId = upload("bomb.webp", "image/webp", losslessWebpHeader(8192, 8192));
+        assertThat(thumbnails.drain(Duration.ofSeconds(10))).isTrue();
         assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(5_000);
         mvc.perform(get("/api/v1/jobs/{id}/thumbnail", jobId))
                 .andExpect(status().isNotFound())
@@ -202,7 +220,9 @@ class JobThumbnailTest {
                 .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
     }
 
+    /** The job after its queued thumbnail (if any) has been made. */
     private JsonNode readJob(String jobId) throws Exception {
+        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("thumbnail queue drained").isTrue();
         return json(mvc.perform(get("/api/v1/jobs/{id}", jobId)).andExpect(status().isOk()).andReturn());
     }
 

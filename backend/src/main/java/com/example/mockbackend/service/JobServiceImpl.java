@@ -161,8 +161,8 @@ public class JobServiceImpl implements JobService {
             }
             throw shuttingDown;
         }
-        // After the upload was measured (uploadMs) and the job dispatched; failures only mean "no thumbnail".
-        thumbnails.create(job.getId(), Path.of(job.getUploads().get(0).path()));
+        // Queued, not made here: the 202 does not wait for the decode. Failures only mean "no thumbnail".
+        thumbnails.createLater(job.getId(), Path.of(job.getUploads().get(0).path()));
         return job;
     }
 

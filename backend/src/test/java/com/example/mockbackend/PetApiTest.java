@@ -6,6 +6,7 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
+import com.example.mockbackend.service.ThumbnailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -88,6 +89,9 @@ class PetApiTest {
 
     @Autowired
     JobRunRepository jobRuns;
+
+    @Autowired
+    ThumbnailService thumbnails;
 
     // ------------------------------------------------------------------ CRUD
 
@@ -262,6 +266,7 @@ class PetApiTest {
         String failed = upload("fail-dog.jpg", petId);
         awaitStatus(failed, "FAILED");
         String othersJob = completed(upload("other.jpg", other));
+        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("queued thumbnails made").isTrue();
 
         JsonNode auto = pet(petId);
         assertThat(auto.path("jobCount").asInt()).isEqualTo(3);
@@ -368,6 +373,7 @@ class PetApiTest {
             assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).as("runs stay").isNotEmpty();
         }
         assertThat(photo).doesNotExist();
+        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("a late thumbnail removes itself").isTrue();
         assertThat(storage.resolve("thumbs").resolve(done + ".jpg")).doesNotExist();
     }
 

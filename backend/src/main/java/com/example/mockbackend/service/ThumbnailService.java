@@ -1,6 +1,7 @@
 package com.example.mockbackend.service;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,15 +23,25 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.Iterator;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Thumbnails of jobs for the web library: the first photo as a JPEG whose longer side is {@value #MAX_SIDE} px (smaller
  * photos keep their size), turned by its EXIF orientation, transparency on white, at {storage.thumb.dir}/{jobId}.jpg.
- * Made once when the job is accepted (JobServiceImpl); photos never change afterwards, retry keeps it.
+ * Queued when the job is accepted (JobServiceImpl.createLater) and made on one background thread, so the upload answer
+ * never waits for a decode (a 12 MP photo takes hundreds of ms) and a burst of uploads queues instead of dropping
+ * thumbnails; until it exists JobResponse.thumbnailUrl is null ("없으면 null" in openapi.yaml). Photos never change
+ * afterwards, retry keeps it.
  * Reads what ImageIO reads plus WEBP (TwelveMonkeys imageio-webp registers itself as an ImageIO plugin).
  * A thumbnail is a convenience: anything that goes wrong is logged and the job is made without one.
  */
@@ -51,6 +62,12 @@ public class ThumbnailService {
     private static final float JPEG_QUALITY = 0.85f;
 
     private final Path dir;
+    /** One thread: decodes run one at a time anyway (DECODES), and the queue keeps every upload's thumbnail. */
+    private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
+        Thread thread = new Thread(task, "thumbnails");
+        thread.setDaemon(true);
+        return thread;
+    });
     private final Logger log = LoggerFactory.getLogger(ThumbnailService.class);
 
     public ThumbnailService(@Value("${storage.thumb.dir:storage/thumbs}") String dir) {
@@ -65,7 +82,44 @@ public class ThumbnailService {
         ImageIO.scanForPlugins();
     }
 
-    /** Makes the thumbnail of {@code jobId} from {@code photo}. Never throws; false when it could not. */
+    @PreDestroy
+    void stop() {
+        worker.shutdownNow();
+    }
+
+    /**
+     * Queues the thumbnail of {@code jobId} and returns at once. Never throws. When the job was deleted while its
+     * thumbnail was being made (the photo is gone afterwards), the late thumbnail is removed again.
+     */
+    public void createLater(String jobId, Path photo) {
+        try {
+            worker.execute(() -> {
+                if (create(jobId, photo) && !Files.exists(photo)) {
+                    delete(jobId);
+                }
+            });
+        } catch (RejectedExecutionException shuttingDown) {
+            log.info("jobId={} no thumbnail: the server is shutting down", jobId);
+        }
+    }
+
+    /** Waits until every thumbnail queued before this call is done (tests). False when the time ran out. */
+    public boolean drain(Duration timeout) throws InterruptedException {
+        Future<?> marker;
+        try {
+            marker = worker.submit(() -> { });
+        } catch (RejectedExecutionException shuttingDown) {
+            return false;
+        }
+        try {
+            marker.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            return true;
+        } catch (ExecutionException | TimeoutException e) {
+            return false;
+        }
+    }
+
+    /** Makes the thumbnail of {@code jobId} from {@code photo} now. Never throws; false when it could not. */
     public boolean create(String jobId, Path photo) {
         long start = System.nanoTime();
         try {

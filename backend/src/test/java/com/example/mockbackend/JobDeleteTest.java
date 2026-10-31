@@ -7,6 +7,7 @@ import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
 import com.example.mockbackend.repository.ShareLinkRepository;
+import com.example.mockbackend.service.ThumbnailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -90,6 +91,9 @@ class JobDeleteTest {
     @Autowired
     IdempotencyKeyRepository idempotencyKeys;
 
+    @Autowired
+    ThumbnailService thumbnails;
+
     @Test
     void deletingAFinishedJobRemovesFilesLinksAndKeyButKeepsItsRuns() throws Exception {
         String key = "delete-key-" + UUID.randomUUID();
@@ -103,6 +107,7 @@ class JobDeleteTest {
         List<Path> photos = jobs.findById(jobId).orElseThrow().getUploads().stream().map(u -> Path.of(u.path())).toList();
         assertThat(photos).hasSize(2).allSatisfy(photo -> assertThat(Files.isRegularFile(photo)).isTrue());
         Path thumb = storage.resolve("thumbs").resolve(jobId + ".jpg");
+        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("queued thumbnail made").isTrue();
         assertThat(Files.isRegularFile(thumb)).isTrue();
         // What the real worker leaves: {storage.result.dir}/{jobId}/base.glb.
         Path resultFolder = Files.createDirectories(storage.resolve("results").resolve(jobId));
