@@ -1,0 +1,427 @@
+{
+ "schema": "beside-perf-run/1",
+ "status": "ok",
+ "startedAt": "2026-10-31T14:34:05+09:00",
+ "finishedAt": "2026-10-31T15:30:28+09:00",
+ "quick": false,
+ "reps": 3,
+ "labels": [
+  "v0",
+  "v1",
+  "v1p",
+  "v2",
+  "v2p"
+ ],
+ "order": [
+  [
+   "v0",
+   "v1",
+   "v1p",
+   "v2",
+   "v2p"
+  ],
+  [
+   "v1",
+   "v1p",
+   "v2",
+   "v2p",
+   "v0"
+  ],
+  [
+   "v1p",
+   "v2",
+   "v2p",
+   "v0",
+   "v1"
+  ]
+ ],
+ "baseline": "v1",
+ "versionOrder": [
+  "v0",
+  "v1",
+  "v1p",
+  "v2",
+  "v2p"
+ ],
+ "versionsFile": "C:\\Users\\minwo\\OneDrive\\바탕 화면\\capstone\\Beside\\docs\\perf\\versions.json",
+ "versions": {
+  "v0": {
+   "ref": "e0e1c2b34b1b94669d824fd0fd4afeea9fb800f1",
+   "sha": "e0e1c2b34b1b94669d824fd0fd4afeea9fb800f1",
+   "title": "이전 (10-14, #1 머지)",
+   "description": "origin/main. Unity 앱·AnimalLift 연동 직후. 업로드 전송·prod 프로파일 없음.",
+   "capabilities": [
+    "mock",
+    "real_path"
+   ]
+  },
+  "v1": {
+   "ref": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503",
+   "sha": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503",
+   "title": "현재 (4b 배포 기반)",
+   "description": "main = deploy/vm-4b. prod 프로파일, /infer 업로드 전송, GPU 감시·오프라인 대기, Discord 알림, H2 백업.",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v1p": {
+   "ref": "033f3f3719745e3d4776c5ea6e4e2e7db536f027",
+   "sha": "033f3f3719745e3d4776c5ea6e4e2e7db536f027",
+   "title": "현재 + 개선",
+   "description": "perf/backend-report. v1 + P1(작업 목록 키셋 페이지, jobs(created_at, id) 인덱스).",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2": {
+   "ref": "6a3959f60380947ad2f430be24f5d50661a57c95",
+   "sha": "6a3959f60380947ad2f430be24f5d50661a57c95",
+   "title": "다음 버전 후보 (v1.1)",
+   "description": "review/api-v1.1 의 rebase 전(백업 ref backup/review-api-v1.1-6a3959f). v1 + 관리 화면·대기 순번·취소·공유·평가·보관함·썸네일. 계약 회의 전.",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2p": {
+   "ref": "ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2",
+   "sha": "ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2",
+   "title": "다음 버전 + 개선",
+   "description": "v2 를 v1p 위로 rebase + P4(썸네일을 202 뒤 백그라운드로) + P5(jobs·job_runs 인덱스, 대기 순번 범위 쿼리).",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  }
+ },
+ "selected": [
+  "startup",
+  "healthz",
+  "upload_small",
+  "upload_large",
+  "upload_12mp",
+  "e2e_mock",
+  "concurrent_e2e",
+  "poll_load",
+  "scale",
+  "resources",
+  "pending_poll",
+  "real_path",
+  "real_upload",
+  "real_upload_prod"
+ ],
+ "tool": {
+  "commit": "ed37f406b0b50726f704844e6027831f46d2538c",
+  "dirty": false
+ },
+ "command": "python scripts/perf/run.py --versions v0,v1,v1p,v2,v2p --reps 3 --versions-file docs/perf/versions.json --stub-python C:/Users/minwo/AppData/Local/Temp/claude/C--Users-minwo-OneDrive-------capstone-Beside/7b66930a-7eb1-4f94-991f-a3a35ae2caf2/scratchpad/venv/Scripts/python.exe",
+ "argv": [
+  "--versions",
+  "v0,v1,v1p,v2,v2p",
+  "--reps",
+  "3",
+  "--versions-file",
+  "docs/perf/versions.json",
+  "--stub-python",
+  "C:/Users/minwo/AppData/Local/Temp/claude/C--Users-minwo-OneDrive-------capstone-Beside/7b66930a-7eb1-4f94-991f-a3a35ae2caf2/scratchpad/venv/Scripts/python.exe"
+ ],
+ "workDir": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf",
+ "runDir": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\runs\\2026-10-31_1434-p34116",
+ "fixtures": {
+  "png_small": {
+   "bytes": 12420,
+   "sha256": "e64c6412269f8c23238cf300ce614bf91bb7274ce17968edd50c6af5b1ae53c9",
+   "generator": "png_noise",
+   "args": {
+    "width": 64,
+    "height": 64,
+    "seed": 11
+   }
+  },
+  "png_large": {
+   "bytes": 4542211,
+   "sha256": "ffc4e5ae0581af0bdc337a5d5423734b4018fd5eb62333e174da03bb409a2928",
+   "generator": "png_noise",
+   "args": {
+    "width": 1230,
+    "height": 1230,
+    "seed": 12
+   }
+  },
+  "png_12mp": {
+   "bytes": 1085700,
+   "sha256": "d320abfbfe6076c473871f5509303761b80e0724fb00e48ef1278541ca27fbfa",
+   "generator": "png_gradient",
+   "args": {
+    "width": 4000,
+    "height": 3000,
+    "seed": 13
+   }
+  },
+  "glb_sample": {
+   "bytes": 1500000,
+   "sha256": "03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9",
+   "generator": "glb_synthetic",
+   "args": {
+    "total_bytes": 1500000,
+    "seed": 14
+   }
+  }
+ },
+ "counts": {
+  "healthz.warmup": 100,
+  "healthz.n": 500,
+  "upload_small.warmup": 10,
+  "upload_small.n": 100,
+  "upload_large.warmup": 2,
+  "upload_large.n": 20,
+  "upload_12mp.warmup": 2,
+  "upload_12mp.n": 20,
+  "upload_12mp.concurrentPerThread": 5,
+  "e2e_mock.warmup": 5,
+  "e2e_mock.n": 50,
+  "concurrent_e2e.perThread": 10,
+  "poll_load.warmupPerThread": 5,
+  "poll_load.perThread": 250,
+  "scale.warmup": 5,
+  "scale.listFirst": 100,
+  "scale.listDeep": 50,
+  "scale.get": 200,
+  "scale.post": 30,
+  "pending_poll.jobs": 5,
+  "pending_poll.warmup": 20,
+  "pending_poll.n": 200,
+  "real.warmup": 3,
+  "real.n": 20,
+  "real.batch": 5,
+  "upload_large.files": 4,
+  "upload_12mp.threads": 4,
+  "concurrent_e2e.threads": 16,
+  "poll_load.processes": 4,
+  "poll_load.threads": 4,
+  "scale.seedThreads": 8,
+  "e2e_mock.pollMs": 10,
+  "concurrent_e2e.pollMs": 50,
+  "real.pollMs": 20,
+  "scale.targets": [
+   200,
+   1000,
+   2000
+  ],
+  "scale.settleMs": 1000,
+  "pending_poll.pendingMs": 600000,
+  "startup.idleWaitMs": 3000
+ },
+ "stub": {
+  "python": "C:/Users/minwo/AppData/Local/Temp/claude/C--Users-minwo-OneDrive-------capstone-Beside/7b66930a-7eb1-4f94-991f-a3a35ae2caf2/scratchpad/venv/Scripts/python.exe",
+  "available": true,
+  "reason": null
+ },
+ "env": {
+  "os": "Windows-11-10.0.26300-SP0",
+  "system": "Windows",
+  "release": "11",
+  "machine": "AMD64",
+  "cpuModel": "AMD Ryzen 5 5600X 6-Core Processor",
+  "logicalCpus": 12,
+  "ramGB": 31.9,
+  "python": "3.14.0",
+  "pythonImplementation": "CPython",
+  "java": "openjdk version \"17.0.20.1\" 2026-08-18 LTS\r\nOpenJDK Runtime Environment (Red_Hat-17.0.20.1+1-1) (build 17.0.20.1+1-LTS)\r\nOpenJDK 64-Bit Server VM (Red_Hat-17.0.20.1+1-1) (build 17.0.20.1+1-LTS, mixed mode, sharing)",
+  "javaPath": "C:\\Program Files\\RedHat\\java-17-openjdk-17.0.20.1.1-1\\bin\\java.exe",
+  "jvmArgs": [
+   "-Xms256m",
+   "-Xmx1536m",
+   "-XX:ActiveProcessorCount=2",
+   "-XX:+UseG1GC"
+  ],
+  "serverCpus": 2,
+  "pinnedCpus": [
+   10,
+   11
+  ],
+  "pinnedCores": 1,
+  "loadGeneratorPinned": false,
+  "power": {
+   "source": "ac",
+   "battery": "none",
+   "plan": "고성능 (8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c)"
+  },
+  "envRemovedForServers": [],
+  "priority": {
+   "loadGenerator": "above_normal",
+   "servers": "above_normal"
+  },
+  "freshFileOpen": {
+   "file": "png_large-02e64f761c89df05.png",
+   "bytes": 4542211,
+   "firstMs": 215.72,
+   "secondMs": 1.28,
+   "tries": 3
+  }
+ },
+ "suites": [
+  {
+   "file": "v0-r1.json",
+   "label": "v0",
+   "rep": 1,
+   "position": 1,
+   "status": "ok",
+   "durationS": 138.505
+  },
+  {
+   "file": "v1-r1.json",
+   "label": "v1",
+   "rep": 1,
+   "position": 2,
+   "status": "ok",
+   "durationS": 211.912
+  },
+  {
+   "file": "v1p-r1.json",
+   "label": "v1p",
+   "rep": 1,
+   "position": 3,
+   "status": "ok",
+   "durationS": 208.605
+  },
+  {
+   "file": "v2-r1.json",
+   "label": "v2",
+   "rep": 1,
+   "position": 4,
+   "status": "ok",
+   "durationS": 242.879
+  },
+  {
+   "file": "v2p-r1.json",
+   "label": "v2p",
+   "rep": 1,
+   "position": 5,
+   "status": "ok",
+   "durationS": 250.948
+  },
+  {
+   "file": "v1-r2.json",
+   "label": "v1",
+   "rep": 2,
+   "position": 1,
+   "status": "ok",
+   "durationS": 211.576
+  },
+  {
+   "file": "v1p-r2.json",
+   "label": "v1p",
+   "rep": 2,
+   "position": 2,
+   "status": "ok",
+   "durationS": 394.721
+  },
+  {
+   "file": "v2-r2.json",
+   "label": "v2",
+   "rep": 2,
+   "position": 3,
+   "status": "ok",
+   "durationS": 241.837
+  },
+  {
+   "file": "v2p-r2.json",
+   "label": "v2p",
+   "rep": 2,
+   "position": 4,
+   "status": "ok",
+   "durationS": 251.619
+  },
+  {
+   "file": "v0-r2.json",
+   "label": "v0",
+   "rep": 2,
+   "position": 5,
+   "status": "ok",
+   "durationS": 139.81
+  },
+  {
+   "file": "v1p-r3.json",
+   "label": "v1p",
+   "rep": 3,
+   "position": 1,
+   "status": "ok",
+   "durationS": 214.322
+  },
+  {
+   "file": "v2-r3.json",
+   "label": "v2",
+   "rep": 3,
+   "position": 2,
+   "status": "ok",
+   "durationS": 234.349
+  },
+  {
+   "file": "v2p-r3.json",
+   "label": "v2p",
+   "rep": 3,
+   "position": 3,
+   "status": "ok",
+   "durationS": 253.295
+  },
+  {
+   "file": "v0-r3.json",
+   "label": "v0",
+   "rep": 3,
+   "position": 4,
+   "status": "ok",
+   "durationS": 136.368
+  },
+  {
+   "file": "v1-r3.json",
+   "label": "v1",
+   "rep": 3,
+   "position": 5,
+   "status": "ok",
+   "durationS": 207.824
+  }
+ ],
+ "jars": {
+  "e0e1c2b34b1b94669d824fd0fd4afeea9fb800f1": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\e0e1c2b34b1b94669d824fd0fd4afeea9fb800f1.jar",
+   "bytes": 55513418,
+   "sha256": "bfcb54b80c298c262c663de2e053c972395f3a9a8d98c20854b5180502de32ce",
+   "origin": "cache"
+  },
+  "af4a747b1c36f2380d1ff69a523b5a9dbaca7503": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\af4a747b1c36f2380d1ff69a523b5a9dbaca7503.jar",
+   "bytes": 55542636,
+   "sha256": "05e16e8bfbf05008e353e67b17fb5e31be29a76b929606cbc8b28aa7a7c0eb35",
+   "origin": "cache (no build record: not built by this tool)"
+  },
+  "033f3f3719745e3d4776c5ea6e4e2e7db536f027": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\033f3f3719745e3d4776c5ea6e4e2e7db536f027.jar",
+   "bytes": 55542935,
+   "sha256": "ea7b5e4916b6205ce95f03d8c5dd5625b45376fd60f5e4d88ce70ace5c0c0591",
+   "origin": "cache"
+  },
+  "6a3959f60380947ad2f430be24f5d50661a57c95": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\6a3959f60380947ad2f430be24f5d50661a57c95.jar",
+   "bytes": 56364808,
+   "sha256": "f81624a65f7789a2fd15e201a01c5e87763688f1dd83ae28e7cd370489de723f",
+   "origin": "cache"
+  },
+  "ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2.jar",
+   "bytes": 56366206,
+   "sha256": "e46e0450a198a41eda9b4c3df933dd8e7be523df98349c13a9ec26a07d4bc483",
+   "origin": "cache"
+  }
+ }
+}
