@@ -8,7 +8,9 @@
   loopback connect takes about a second, which would quantise the start-up time).
 - memory(): working set / RSS and its peak (Windows psapi GetProcessMemoryInfo, Linux /proc/<pid>/status).
 - stop(): graceful first (Windows: Ctrl+C delivered to the child's own console by a helper; POSIX: SIGTERM), then the
-  whole tree is killed (taskkill /PID n /T /F, killpg SIGKILL). Only processes started here are ever touched.
+  whole tree is killed (taskkill /PID n /T /F, killpg SIGKILL). Only processes started here are ever touched, and a
+  process stays registered for cleanup until it has exited.
+- run_logged(): a build or tool run to completion with the same guarantees (a timeout kills the whole tree).
 """
 from __future__ import annotations
 
@@ -393,28 +395,38 @@ def kill_tree(proc: Proc):
         proc.popen.wait(timeout=15)
 
 
+def _ask_to_stop(proc: Proc) -> bool:
+    """Windows: Ctrl+C to the child's own console; POSIX: SIGTERM to its session. False when it could not be asked."""
+    if IS_WINDOWS:
+        return _ctrl_c(proc.pid)
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        proc.popen.terminate()
+    return True
+
+
 def stop(proc: Proc, timeout_s: float = 30.0) -> str:
-    """Graceful stop, then kill the tree. Returns how it ended: exited | graceful | killed."""
+    """Graceful stop, then kill the tree. Returns how it ended: exited | graceful | killed.
+
+    The process stays registered (live_pids, stop_all at exit) until it has really exited: an interrupted stop (a
+    second Ctrl+C during the graceful wait of up to timeout_s) kills the tree before the interrupt goes on, and when
+    even the kill fails the process is left to stop_all() instead of being forgotten.
+    """
     method = "exited"
     try:
         if proc.popen.poll() is None:
-            if IS_WINDOWS:
-                asked = _ctrl_c(proc.pid)
-            else:
-                try:
-                    os.killpg(proc.pid, signal.SIGTERM)
-                    asked = True
-                except (ProcessLookupError, PermissionError):
-                    proc.popen.terminate()
-                    asked = True
             method = "graceful"
             try:
-                if not asked:
+                if not _ask_to_stop(proc):
                     raise subprocess.TimeoutExpired(proc.cmd, 0)
                 proc.popen.wait(timeout=timeout_s)
             except subprocess.TimeoutExpired:
                 method = "killed"
                 kill_tree(proc)
+            except BaseException:  # KeyboardInterrupt while asking or waiting: do not leave the tree running
+                kill_tree(proc)
+                raise
         if not IS_WINDOWS:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)  # children left in the session, if any
@@ -425,9 +437,29 @@ def stop(proc: Proc, timeout_s: float = 30.0) -> str:
             proc.log_handle.close()
         except OSError:
             pass
-        _LIVE.pop(proc.pid, None)
+        if proc.popen.poll() is not None:
+            _LIVE.pop(proc.pid, None)
     proc.stop_method = method
     return method
+
+
+def run_logged(name: str, cmd: list, cwd, log_path, env: dict, timeout_s: float) -> int:
+    """Run `cmd` to the end with its output in log_path, like subprocess.run(timeout=...) but started by start().
+
+    subprocess.run kills only the top process on a timeout: for gradlew.bat that is cmd.exe, and the Gradle JVM it
+    started keeps running (holding the build folder open). Here the child is in the kill-on-close job (Windows) or
+    its own session (POSIX), and a timeout or an interrupt kills the whole tree. Returns the exit code; raises
+    subprocess.TimeoutExpired after the tree is killed.
+    """
+    proc = start(name, cmd, cwd=cwd, log_path=log_path, env=env)
+    try:
+        return proc.popen.wait(timeout=timeout_s)
+    except BaseException:
+        kill_tree(proc)
+        raise
+    finally:
+        if proc.popen.poll() is not None:
+            stop(proc)  # closes the log and unregisters; POSIX: kills whatever is left in the session
 
 
 def stop_all():

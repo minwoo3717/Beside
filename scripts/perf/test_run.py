@@ -1,10 +1,12 @@
 """run.py and the result plumbing of scenarios.py: rotation, events.jsonl, counts, schema round trip, jar cache."""
 import json
+import os
 import tempfile
 import unittest
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 import run
 import scenarios
@@ -129,6 +131,57 @@ class SchemaTest(unittest.TestCase):
         errored = run.suite_record("v1", 1, 1, {}, False, "", "", 0, {}, {}, {}, {},
                                    {"healthz": {**scenarios.new_result(), "status": "error", "reason": "boom"}}, [])
         self.assertEqual(errored["status"], "error")
+
+
+class WriteJsonTest(unittest.TestCase):
+    def test_a_briefly_locked_target_is_retried(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "run.json"
+            real_replace, calls = os.replace, []
+
+            def locked_twice(src, dst):
+                calls.append(dst)
+                if len(calls) < 3:
+                    raise PermissionError(13, "Access is denied (OneDrive has run.json open)")
+                return real_replace(src, dst)
+
+            with mock.patch.object(run.os, "replace", side_effect=locked_twice):
+                run.write_json(path, {"a": 1}, retry_s=0)
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {"a": 1})
+            self.assertEqual(len(calls), 3)
+            self.assertFalse(list(Path(folder).glob("*.tmp")))
+
+    def test_a_lasting_lock_does_not_stop_the_run(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out, fallback = Path(folder) / "out", Path(folder) / "work"
+            pending = {}
+            with mock.patch.object(run.os, "replace", side_effect=PermissionError(13, "denied")), \
+                    mock.patch.object(run, "WRITE_RETRY_S", 0), mock.patch.object(run, "log"):
+                self.assertFalse(run.save_json(out / "v1-r1.json", {"suite": 1}, pending))
+            self.assertEqual(list(pending), [out / "v1-r1.json"])
+            self.assertFalse(list(out.glob("*.tmp")))
+            pending[out / "run.json"] = {"status": "ok"}
+            with mock.patch.object(run, "log"):
+                self.assertEqual(run.flush_pending(pending, fallback), [])  # the lock is gone at the end
+            self.assertEqual(pending, {})
+            self.assertEqual(json.loads((out / "v1-r1.json").read_text(encoding="utf-8")), {"suite": 1})
+            self.assertTrue((out / "run.json").is_file())
+
+    def test_what_never_gets_written_goes_to_the_fallback_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out, fallback = Path(folder) / "out", Path(folder) / "work"
+            real_replace = os.replace
+
+            def locked_in_out(src, dst):
+                if Path(dst).parent == out:
+                    raise PermissionError(13, "denied")
+                return real_replace(src, dst)
+
+            with mock.patch.object(run.os, "replace", side_effect=locked_in_out), \
+                    mock.patch.object(run, "WRITE_RETRY_S", 0), mock.patch.object(run, "log"):
+                failed = run.flush_pending({out / "v1-r1.json": {"suite": 1}}, fallback)
+            self.assertEqual(failed, [out / "v1-r1.json"])
+            self.assertEqual(json.loads((fallback / "v1-r1.json").read_text(encoding="utf-8")), {"suite": 1})
 
 
 class JarCacheTest(unittest.TestCase):

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import itertools
 import json
 import os
 import platform
@@ -119,6 +120,7 @@ def resolve(doc: dict, labels) -> dict:
 
 BOOT_CLASS = "BOOT-INF/classes/com/example/mockbackend/MockBackendApplication.class"
 LOCK_WAIT_S = 45 * 60
+BUILD_TIMEOUT_S = 30 * 60
 
 
 def jar_problem(path: Path):
@@ -184,7 +186,9 @@ def _build_one(sha: str, jar: Path, work: Path) -> dict:
     """Build the boot jar of `sha` in a temporary detached worktree (removed afterwards) and store it as `jar`.
 
     Gradle runs with --no-daemon: `gradlew --stop` would stop every daemon of that Gradle version of this user,
-    including daemons of the user's own builds, so no daemon is left behind instead.
+    including daemons of the user's own builds, so no daemon is left behind instead. The build is started through
+    procs.run_logged: a hung build is killed with its whole process tree (not only gradlew.bat's cmd.exe), so no
+    Gradle JVM outlives the tool or keeps the temporary worktree locked.
     """
     src = work / "src" / f"{sha[:12]}-p{os.getpid()}"
     if src.exists():
@@ -200,13 +204,19 @@ def _build_one(sha: str, jar: Path, work: Path) -> dict:
             "bootJar", "-x", "test", "--no-daemon", "--console=plain"]
         build_log = work / "logs" / f"build-{sha[:12]}-p{os.getpid()}.log"
         build_log.parent.mkdir(parents=True, exist_ok=True)
+        if build_log.exists():
+            build_log.unlink()
         log(f"jar {sha[:9]}: building with --no-daemon (log {build_log})")
         started = time.monotonic()
-        with open(build_log, "wb") as out:
-            done = subprocess.run(cmd, cwd=str(backend), stdout=out, stderr=subprocess.STDOUT, timeout=1800)
-        if done.returncode != 0:
+        try:
+            code = procs.run_logged("gradle", cmd, cwd=backend, log_path=build_log, env=dict(os.environ),
+                                    timeout_s=BUILD_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"build of {sha[:9]} did not finish within {BUILD_TIMEOUT_S // 60} min; its process "
+                               f"tree was killed (log {build_log})") from None
+        if code != 0:
             tail = "\n".join(build_log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:])
-            raise RuntimeError(f"build of {sha[:9]} failed (exit {done.returncode}):\n{tail}")
+            raise RuntimeError(f"build of {sha[:9]} failed (exit {code}):\n{tail}")
         built = [p for p in (backend / "build" / "libs").glob("*.jar")
                  if JAR_NAME.match(p.name) and not p.name.endswith("-plain.jar")]
         if len(built) != 1:
@@ -365,11 +375,63 @@ def tool_commit() -> dict:
 # ----------------------------------------------------------------------------------------------- results
 
 
-def write_json(path: Path, data):
+WRITE_ATTEMPTS = 8
+WRITE_RETRY_S = 0.25  # pause before retry n is n x this (about 7 s over all attempts)
+_TMP_IDS = itertools.count(1)
+
+
+def write_json(path: Path, data, attempts: int = None, retry_s: float = None):
+    """Write JSON atomically: a fresh temporary file, then os.replace onto `path`.
+
+    On Windows os.replace fails with PermissionError while another process has the target open: OneDrive uploading
+    the previous run.json (the default output folder is in the synced repo), a virus scanner, an editor. That is
+    retried a few times with growing pauses; the last failure is raised and the temporary file removed.
+    """
+    attempts = WRITE_ATTEMPTS if attempts is None else attempts
+    retry_s = WRITE_RETRY_S if retry_s is None else retry_s
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
+    tmp = path.with_name(f"{path.name}.p{os.getpid()}-{next(_TMP_IDS)}.tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(1, attempts + 1):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt >= attempts:
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+                raise
+            time.sleep(retry_s * attempt)
+
+
+def save_json(path: Path, data, pending: dict) -> bool:
+    """write_json for progress files during a run: a failure that outlasts the retries is logged and remembered in
+    `pending` (path -> data) to be written again at the end, so a sync lock never stops the measurement."""
+    try:
+        write_json(path, data)
+    except OSError as error:
+        pending[path] = data
+        log(f"could not write {path} ({type(error).__name__}: {error}); measuring goes on, retried at the end")
+        return False
+    pending.pop(path, None)
+    return True
+
+
+def flush_pending(pending: dict, fallback_dir: Path) -> list:
+    """Write every pending file once more; what still fails is copied to fallback_dir (outside the synced folder).
+    Returns the paths that could not be written where they belong."""
+    for path, data in list(pending.items()):
+        save_json(path, data, pending)
+    failed = list(pending)
+    for path in failed:
+        try:
+            write_json(fallback_dir / path.name, pending[path])
+            log(f"{path.name} written to {fallback_dir} instead")
+        except OSError as error:
+            log(f"{path.name} could not be written anywhere: {error}")
+    return failed
 
 
 def validate_suite(doc: dict) -> list:
@@ -508,10 +570,11 @@ def main(argv=None) -> int:
     write_json(out / "run.json", run_doc)
 
     exit_code = 0
+    pending = {}  # result files whose write failed during the run (e.g. a OneDrive lock): written again at the end
     try:
         jars = build_jars(resolved, work)
         run_doc["jars"] = jars
-        write_json(out / "run.json", run_doc)
+        save_json(out / "run.json", run_doc, pending)
         total = len(orders) * len(labels)
         done = 0
         durations = []
@@ -528,11 +591,11 @@ def main(argv=None) -> int:
                 if procs.live_pids():
                     raise RuntimeError(f"processes left after a suite: {procs.live_pids()}")
                 durations.append(record["durationS"])
-                write_json(out / f"{label}-r{rep_index}.json", record)
+                save_json(out / f"{label}-r{rep_index}.json", record, pending)
                 run_doc["suites"].append({"file": f"{label}-r{rep_index}.json", "label": label, "rep": rep_index,
                                           "position": position, "status": record["status"],
                                           "durationS": record["durationS"]})
-                write_json(out / "run.json", run_doc)
+                save_json(out / "run.json", run_doc, pending)
                 summary = ", ".join(f"{name} {res['status']}" for name, res in record["scenarios"].items()
                                     if res["status"] != "ok")
                 log(f"[{done}/{total}] {label} rep {rep_index}: {record['status']} in {record['durationS']:.0f} s"
@@ -555,7 +618,10 @@ def main(argv=None) -> int:
     finally:
         procs.stop_all()
         run_doc["finishedAt"] = now_iso()
-        write_json(out / "run.json", run_doc)
+        pending[out / "run.json"] = run_doc  # the final write, together with every write that failed on the way
+        unwritten = flush_pending(pending, Path(run_doc["runDir"]))
+        if unwritten and not exit_code:
+            exit_code = 1
     log(f"done: {run_doc['status']} -> {out}")
     return exit_code
 
