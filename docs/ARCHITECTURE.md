@@ -121,13 +121,13 @@ backend/storage/
 
 | 배치 | 용도 | 상태 |
 |---|---|---|
-| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://<도메인>` | 배포 파일 **[구현됨]**(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`, CI `.github/workflows/backend-ci.yml`). VM·도메인·Tailscale 준비와 실제 배포 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
+| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://<도메인>` | 배포 파일 **[구현됨]**(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`, CI `.github/workflows/backend-ci.yml`) — 이미지 빌드·Caddy 시험을 도는 CI 는 아직 한 번도 실행되지 않았다(main 대상 PR 전) **[계획]**. VM·도메인·Tailscale 준비와 실제 배포 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
 | GPU PC 한 대에 Spring + 추론 서비스 | 실제 모델 개발·측정, VM 을 쓸 수 없을 때의 대안 | **[구현됨]** `scripts/run_real.ps1`, 경로 모드 |
 | 각자 PC, profile mock | Unity·브라우저 개발, 계약 테스트 | **[구현됨]** |
 
 - VM([deploy/README.md](../deploy/README.md)):
   - 밖에서는 Caddy 의 80/443 만 열린다. 자동 HTTPS(Let's Encrypt), 요청 본문 25MB. Spring 8080 은 compose 내부망에만 연다.
-  - Caddy 가 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `;` 가 든 경로를 404 로 막는다(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
+  - Caddy 설정이 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `;` 가 든 경로를 404 로 막는다(실행 확인은 CI 첫 실행 **[계획]**)(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
   - Basic 인증: 웹 화면(`/`, Mock UI, 관리·보관함·작업 상세), `GET /api/v1/jobs`(목록, #9 안건), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*`.
   - 공개: 앱 API(업로드·상태·에셋·retry), `/api/v1/healthz`, 공유 링크. 작업은 id(UUID)를 아는 사람만 볼 수 있다는 가정이다.
   - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU PC `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[구현됨]**(같은 PC 패스스루 e2e 로 확인, REVIEW_CHECKLIST #6 (b) 제안). 추론 서비스는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에만 바인드한다.

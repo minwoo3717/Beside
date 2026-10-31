@@ -15,10 +15,10 @@
 
 | 항목 | 상태 |
 |---|---|
-| `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** 파일이 있다. 이미지 빌드·Caddyfile 검증·경로 시험은 CI 에서 돈다(작성한 PC 에 Docker 가 없어 로컬에서는 돌려 보지 않았다) |
+| `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | 파일 **[구현됨]** · 실행 **[계획]**: 이미지 빌드·Caddyfile 검증·경로 시험은 CI(main 대상 push·PR)에서 돌도록 작성했지만 아직 한 번도 돌지 않았다(첫 실행은 deploy/vm-4b → main PR. 작성한 PC 에 Docker 가 없어 로컬에서도 돌려 보지 않았다) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
 | 실제 VM·도메인·Tailscale 준비, 폰 → VM → GPU PC 1건 | **[계획]** 아래 '직접 할 일' |
-| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 도 H2 콘솔·Swagger·v0 를 404 로 막는다. 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
+| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 설정도 H2 콘솔·Swagger·v0 를 404 로 막는다(설정 **[구현됨]**, 실제 동작 확인은 CI 첫 실행·VM 배포 **[계획]**). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). 같은 PC 에서 패스스루 서비스와 Spring real 을 띄워 e2e 로 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌린 적은 없다 — **[계획]** |
 
@@ -142,10 +142,10 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tai
 
 ### 업데이트
 
-개발 PC 에서 `scripts/deploy_vm.sh <user@VM IP> [VM 의 리포 경로, 기본 ~/Beside]` — ssh 로 `git pull --ff-only` → `up -d --build` → (Caddyfile 이 바뀌었으면 caddy 재시작) → VM 안에서 `https://<도메인>/api/v1/healthz` 확인. VM 에서 직접 하려면 같은 명령을 차례로 친다.
+개발 PC 에서 `scripts/deploy_vm.sh <user@VM IP> [VM 의 리포 경로, 기본 ~/Beside]` — ssh 로 `git pull --ff-only` → `up -d --build` → (실행 중인 caddy 가 읽는 Caddyfile 이 체크아웃과 다르면 caddy 재시작) → VM 안에서 `https://<도메인>/api/v1/healthz` 확인. VM 에서 직접 하려면 같은 명령을 차례로 친다.
 
 - backend 가 다시 시작되면 그때 PENDING/PROCESSING 이던 작업은 FAILED(`INTERNAL_ERROR`)가 된다(앱은 retry). 아무도 생성 중이 아닐 때 배포한다.
-- `deploy/Caddyfile` 은 파일 하나를 마운트하므로 `git pull` 로 바뀌어도 **caddy 를 재시작해야** 반영된다(`... restart caddy`). `deploy_vm.sh` 는 이것을 알아서 한다.
+- `deploy/Caddyfile` 은 파일 하나를 마운트하므로 `git pull` 로 바뀌어도 **caddy 를 재시작해야** 반영된다(`... restart caddy`). `deploy_vm.sh` 는 이것을 알아서 한다: 이번 pull 의 변경이 아니라 실행 중인 컨테이너의 `/etc/caddy/Caddyfile` 과 비교하므로, 앞선 실행이 pull 뒤 빌드에서 실패했거나 VM 에서 손으로 pull 한 경우에도 재시작한다.
 - 오래된 이미지 정리: `docker image prune -f`. 디스크 확인: `docker system df`, `df -h`.
 
 ### 백업
@@ -174,7 +174,7 @@ $C start backend
 ```bash
 export BESIDE_HOST="$(tailscale ip -4)"                 # uvicorn 바인드 주소 = 이 PC 의 Tailscale IP (0.0.0.0 이 아니다)
 export BESIDE_INFERENCE_TOKEN='<deploy/.env 의 INFERENCE_TOKEN 과 같은 값>'
-bash /mnt/c/beside/scripts/start_inference_wsl.sh      # 'model loaded ... on cuda' 를 기다린다
+bash /mnt/c/beside/Beside/scripts/start_inference_wsl.sh   # 리포가 C:\beside\Beside 일 때(ANIMALLIFT_SETUP 의 배치). 'model loaded ... on cuda' 를 기다린다
 ```
 
 VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec backend curl -sS http://<GPU PC 100.x>:8001/healthz` 가 둘 다 응답하면 연결된 것이다. GPU PC 를 끄면 VM 은 15초 안에 알아채고(웹훅이 있으면 알림), 새 작업은 다시 켜질 때까지 PENDING 으로 기다린다.
