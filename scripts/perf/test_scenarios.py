@@ -122,6 +122,135 @@ class FlowTest(unittest.TestCase):
         self.assertLessEqual(flow["completeMs"], flow["flowMs"])
 
 
+class SettleTest(unittest.TestCase):
+    """The idle wait after a mock scenario: its time and the server CPU of the scenario including that tail."""
+
+    def _server(self):
+        return mock.Mock(proc=mock.Mock(pid=4242))
+
+    def test_wait_and_cpu_are_recorded_on_the_scenario(self):
+        ctx, result = mock.Mock(), scenarios.new_result()
+        ctx.settle.return_value = (1500.0, True)
+        with mock.patch.object(scenarios.procs, "cpu_time_ms", return_value=900.0):
+            scenarios._settle_after(ctx, self._server(), result, cpu_before=650.0)
+        self.assertEqual(result["values"]["bench.settleAfterMs"], 1500.0)
+        self.assertEqual(result["values"]["bench.serverCpuMs"], 250.0)
+        self.assertEqual(result["notes"], [])
+
+    def test_a_server_that_never_settles_is_noted(self):
+        ctx, result = mock.Mock(), scenarios.new_result()
+        ctx.settle.return_value = (120000.0, False)
+        with mock.patch.object(scenarios.procs, "cpu_time_ms", return_value=None):
+            scenarios._settle_after(ctx, self._server(), result, cpu_before=None)
+        self.assertEqual(result["values"]["bench.settleAfterMs"], 120000.0)
+        self.assertNotIn("bench.serverCpuMs", result["values"])
+        self.assertIn("still busy 120 s", result["notes"][0])
+
+    def test_no_process_cpu_time_means_no_values(self):
+        ctx, result = mock.Mock(), scenarios.new_result()
+        ctx.settle.return_value = (0.0, None)
+        with mock.patch.object(scenarios.procs, "cpu_time_ms", return_value=None):
+            scenarios._settle_after(ctx, self._server(), result, cpu_before=None)
+        self.assertEqual(result["values"], {})
+        self.assertIn("no process CPU time", result["notes"][0])
+
+    def test_every_measured_mock_scenario_is_followed_by_a_wait(self):
+        measured = [name for name, _fn in scenarios.MOCK_STEPS if name != "resources"]
+        self.assertEqual(list(scenarios.SETTLED_STEPS), measured)
+
+    def test_the_wait_reported_leaves_out_the_window_that_confirms_idleness(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ctx = scenarios.SuiteContext("v1", 1, "x.jar", "java", [], None, {}, {}, folder, print)
+            server = self._server()
+            with mock.patch.object(scenarios.procs, "wait_idle", return_value=(1700.0, True)) as wait:
+                self.assertEqual(ctx.settle(server), (700.0, True))
+            self.assertEqual(wait.call_args.kwargs, {"max_s": scenarios.SETTLE["maxS"],
+                                                     "window_s": scenarios.SETTLE["windowS"],
+                                                     "busy_pct": scenarios.SETTLE["busyPct"]})
+            with mock.patch.object(scenarios.procs, "wait_idle", return_value=(500.0, True)) as wait:
+                self.assertEqual(ctx.settle_request(server), (0.0, True))  # idle at once: nothing extra
+            self.assertEqual(wait.call_args.kwargs["window_s"], scenarios.SETTLE["perRequestWindowS"])
+            with mock.patch.object(scenarios.procs, "wait_idle", return_value=(0.0, None)):
+                self.assertEqual(ctx.settle(server), (0.0, None))
+
+
+class WaitPlacementTest(unittest.TestCase):
+    """Idle waits and CPU readings sit between timed regions, never inside one."""
+
+    def test_mock_loop_reads_cpu_before_a_scenario_and_waits_after_it(self):
+        events = []
+        with tempfile.TemporaryDirectory() as folder:
+            ctx = mock.Mock(run_dir=Path(folder), fixtures={"glb_sample": {"path": "x.glb"}}, keep_storage=True,
+                            servers={"A-mock": {}}, counts=scenarios.effective_counts(True))
+            server = mock.Mock()
+            server.proc.alive.return_value = True
+            ctx.start_server.return_value = server
+            ctx.settle.side_effect = lambda *a, **k: (events.append("wait"), (0.0, True))[1]
+
+            def step(name):
+                return lambda _ctx, _server, _result: events.append(name)
+
+            steps = [(name, step(name)) for name, _fn in scenarios.MOCK_STEPS]
+            with mock.patch.object(scenarios, "MOCK_STEPS", steps), \
+                    mock.patch.object(scenarios.procs, "cpu_time_ms",
+                                      side_effect=lambda _pid: (events.append("cpu"), 1.0)[1]):
+                results = scenarios.run_mock(ctx, ["healthz", "upload_large", "resources"])
+        for name in ("healthz", "upload_large"):
+            at = events.index(name)
+            self.assertEqual(events[at - 1:at + 3], ["cpu", name, "wait", "cpu"], events)
+        at = events.index("resources")
+        self.assertEqual(events[at - 1:at + 1], ["cpu", "resources"])
+        self.assertEqual(events[at + 1:], [])  # nothing measured after resources: no wait
+        self.assertEqual(results["healthz"]["values"]["bench.serverCpuMs"], 0.0)
+        self.assertEqual(results["upload_small"]["status"], "skipped")
+
+    def test_each_upload_starts_after_its_wait(self):
+        events = []
+        ctx, result = mock.Mock(), scenarios.new_result()
+        ctx.settle_request.side_effect = lambda _server: (events.append("wait"), (100.0, True))[1]
+        server = mock.MagicMock()
+        answer = httpbench.Response(202, b'{"jobId": "j"}', 5.0)
+        with mock.patch.object(scenarios, "post_photos",
+                               side_effect=lambda *a: (events.append("post"), (answer, "j"))[1]):
+            samples, errors = scenarios._sequential_posts(ctx, server, result, b"body", "type", 2, 3, "postMs",
+                                                          "postMs", settle_each=True)
+        self.assertEqual(events, ["wait", "post"] * 5)
+        self.assertEqual((samples, errors), ([5.0, 5.0, 5.0], 0))
+        self.assertEqual(result["values"]["bench.settleTotalMs"], 300.0)  # the three measured uploads only
+        events.clear()
+        with mock.patch.object(scenarios, "post_photos",
+                               side_effect=lambda *a: (events.append("post"), (answer, "j"))[1]):
+            scenarios._sequential_posts(ctx, server, scenarios.new_result(), b"body", "type", 1, 2, "postMs",
+                                        "postMs")
+        self.assertEqual(events, ["post"] * 3)  # upload_small: back to back, no waits
+
+    def test_real_flows_and_the_batch_start_after_a_wait(self):
+        events = []
+        with tempfile.TemporaryDirectory() as folder:
+            ctx = mock.Mock(servers={"C-real_path": {}},
+                            counts={"real.warmup": 1, "real.n": 2, "real.batch": 2, "real.pollMs": 20},
+                            fixtures={"png_large": {"path": "big.png", "data": b"png"}, "glb_sample": {"bytes": 3}})
+            server = mock.MagicMock(startup_ms=1.0)
+            ctx.start_server.return_value = server
+            ctx.settle.side_effect = lambda *a, **k: (events.append("wait"), (0.0, True))[1]
+            ctx.settle_request.side_effect = lambda *a, **k: (events.append("wait"), (0.0, True))[1]
+            flow = {"ok": True, "jobId": "j", "flowMs": 1.0, "completeMs": 1.0, "assetMs": 1.0, "postMs": 1.0,
+                    "error": None}
+            stub = mock.Mock(base_url="http://127.0.0.1:1")
+            with mock.patch.object(scenarios, "run_flow", side_effect=lambda *a: (events.append("flow"), flow)[1]), \
+                    mock.patch.object(scenarios, "_run_threads",
+                                      side_effect=lambda n, _fn: (events.append("batch"), ([None] * n, [None] * n, 1.0))[1]), \
+                    mock.patch.object(scenarios, "wait_terminal", return_value={}), \
+                    mock.patch.object(scenarios, "parse_events", return_value=([], 0)), \
+                    mock.patch.object(scenarios.procs, "cpu_time_ms", return_value=1.0):
+                result = scenarios._scenario_real(ctx, "real_path", stub, Path(folder))
+        timed = [i for i, e in enumerate(events) if e in ("flow", "batch")]
+        self.assertEqual(len(timed), 1 + 2 + 1)
+        for i in timed:
+            self.assertEqual(events[i - 1], "wait", events)
+        self.assertEqual(result["values"]["bench.settleTotalMs"], 0.0)
+
+
 class StubCheckTest(unittest.TestCase):
     def test_runs_in_the_stub_environment_and_folder(self):
         calls = []

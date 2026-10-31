@@ -233,5 +233,18 @@ class JarCacheTest(unittest.TestCase):
             self.assertFalse((Path(folder) / "x.lock").exists())
 
 
+class FreshFileOpenTest(unittest.TestCase):
+    def test_first_and_second_open_are_timed_and_the_copies_removed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "photo.png"
+            source.write_bytes(b"\x89PNG" + bytes(range(256)) * 400)
+            fresh = run.fresh_file_open(source, Path(folder) / "work", tries=3)
+            self.assertEqual((fresh["file"], fresh["bytes"], fresh["tries"]), ("photo.png", source.stat().st_size, 3))
+            self.assertGreaterEqual(fresh["firstMs"], 0.0)
+            self.assertGreaterEqual(fresh["secondMs"], 0.0)
+            self.assertFalse((Path(folder) / "work" / "fresh-open").exists())
+            self.assertIsNone(run.fresh_file_open(Path(folder) / "missing.png", Path(folder) / "work"))
+
+
 if __name__ == "__main__":
     unittest.main()

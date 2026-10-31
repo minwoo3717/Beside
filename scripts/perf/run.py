@@ -21,6 +21,7 @@ import platform
 import re
 import shlex
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -367,6 +368,33 @@ def collect_env(java: dict, jvm_args, cpus, server_cpus: int, removed_env) -> di
     }
 
 
+def fresh_file_open(source: Path, work: Path, tries: int = 3):
+    """First and second open+read of a just-written copy of `source` (median ms of `tries`), or None. An on-access
+    antivirus scan shows as a slow first open: on the PC this tool was written on, 4.5 MB of noise PNG took ~200 ms the
+    first time and ~1 ms the second. Server code that opens a fresh upload (a thumbnail made inside the request, the
+    upload transfer to the inference service) waits for that scan; a Linux VM without such a scanner does not."""
+    folder = work / "fresh-open"
+    firsts, seconds = [], []
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        data = source.read_bytes()
+        for attempt in range(tries):
+            target = folder / f"fresh-{os.getpid()}-{attempt}{source.suffix}"
+            target.write_bytes(data)
+            for times in (firsts, seconds):
+                started = time.perf_counter()
+                with open(target, "rb") as handle:
+                    handle.read()
+                times.append((time.perf_counter() - started) * 1000.0)
+            target.unlink()
+    except OSError:
+        return None
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    return {"file": source.name, "bytes": len(data), "firstMs": round(statistics.median(firsts), 2),
+            "secondMs": round(statistics.median(seconds), 2), "tries": tries}
+
+
 def tool_commit() -> dict:
     commit = git("rev-parse", "HEAD", check=False)
     dirty = bool(git("status", "--porcelain", "--", "scripts/perf", check=False))
@@ -541,6 +569,7 @@ def main(argv=None) -> int:
     log(f"results -> {out}")
     log(f"work dir -> {work}")
 
+    priority = procs.raise_own_priority()
     java = procs.resolve_java(args.java)
     cpus = procs.pick_cpus(args.server_cpus)
     jvm_args = procs.jvm_args(args.server_cpus if cpus else 0)
@@ -566,6 +595,10 @@ def main(argv=None) -> int:
         "stub": {"python": args.stub_python, "available": stub_reason is None, "reason": stub_reason},
         "env": collect_env(java, jvm_args, cpus, args.server_cpus, removed_env), "suites": [], "jars": {},
     }
+    # Windows: servers, stub and load generator above normal priority (procs.ABOVE_NORMAL_PRIORITY_CLASS)
+    run_doc["env"]["priority"] = {"loadGenerator": priority,
+                                  "servers": "above_normal" if procs.IS_WINDOWS else "normal"}
+    run_doc["env"]["freshFileOpen"] = fresh_file_open(Path(fx["png_large"]["path"]), work)
     write_json(out / "run.json", run_doc)
 
     exit_code = 0
@@ -656,7 +689,9 @@ def run_one(label, rep, position, version, jar, java, jvm_args, cpus, args, fx, 
             errors.append(f"processes still running after the suite were killed: {leftovers}")
         procs.stop_all()
     settings = {"jvmArgs": list(jvm_args), "serverCpus": args.server_cpus, "pinnedCpus": cpus, "counts": counts,
-                "selected": list(selected), "runDir": str(run_dir), "backgroundCpuPct": background}
+                "selected": list(selected), "runDir": str(run_dir), "backgroundCpuPct": background,
+                "settle": dict(scenarios.SETTLE),
+                "priority": "above_normal" if procs.IS_WINDOWS else "normal"}
     jar_info = {"sha": version["sha"], "bytes": jar["bytes"], "sha256": jar["sha256"], "file": Path(jar["path"]).name,
                 "origin": jar["origin"]}
     return suite_record(label, rep, position, version, args.quick, started_at, now_iso(), time.monotonic() - started,

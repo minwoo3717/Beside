@@ -66,6 +66,11 @@ SHAPE = {
     "pending_poll.pendingMs": 600000, "startup.idleWaitMs": 3000,
 }
 QUICK_TARGETS = [50, 100, 200]
+# Idle waits (procs.wait_idle): the server counts as idle after one window in which it used at most busyPct % of one
+# CPU. windowS after each mock scenario and before scale's timed requests; perRequestWindowS before each upload of
+# upload_large / upload_12mp and each real flow. Recorded in every suite's settings (results measured with other
+# waits are not pooled with these).
+SETTLE = {"busyPct": 5.0, "windowS": 1.0, "maxS": 120.0, "perRequestWindowS": 0.5, "perRequestMaxS": 30.0}
 FLOW_TIMEOUT_S = {"mock": 60.0, "real": 180.0}
 
 
@@ -288,7 +293,8 @@ class SuiteContext:
                    f"--spring.profiles.active={profiles}", "--notify.webhook-url=", "--inference.token="]
                    + storage_props(storage) + list(extra))
             log_path = self.run_dir / "logs" / f"{name}{'-retry' if attempt else ''}.log"
-            proc = procs.start(name, cmd, cwd=storage, log_path=log_path, env=self.env, cpus=self.cpus)
+            proc = procs.start(name, cmd, cwd=storage, log_path=log_path, env=self.env, cpus=self.cpus,
+                               raise_priority=True)
             try:
                 startup_ms = procs.wait_http_ok(proc, port, HEALTHZ, timeout_s=120.0)
             except procs.ProcessError as error:
@@ -298,9 +304,23 @@ class SuiteContext:
                     continue
                 raise
             self.servers[name] = {"port": port, "profiles": profiles, "pid": proc.pid, "pinnedCpus": proc.pinned,
-                                  "inJob": proc.in_job, "startupMs": _r3(startup_ms), "log": str(log_path)}
+                                  "inJob": proc.in_job, "priority": proc.priority, "startupMs": _r3(startup_ms),
+                                  "log": str(log_path)}
             return Server(name, proc, port, storage, startup_ms)
         raise last_error
+
+    def settle(self, server: Server, max_s: float = None, window_s: float = None):
+        """Wait until the server is idle (procs.wait_idle): work it still does after its last answer (the background
+        thumbnail queue of v2p, GC, JIT) must not land in the next measurement. Returns (ms waited beyond the one
+        quiet window that confirms it, idle): an already idle server gives 0."""
+        window_s = SETTLE["windowS"] if window_s is None else window_s
+        max_s = SETTLE["maxS"] if max_s is None else max_s
+        waited, idle = procs.wait_idle(server.proc.pid, max_s=max_s, window_s=window_s, busy_pct=SETTLE["busyPct"])
+        return _r3(max(0.0, waited - window_s * 1000.0)), idle
+
+    def settle_request(self, server: Server):
+        """The short wait before one timed upload or flow (SETTLE perRequest*)."""
+        return self.settle(server, max_s=SETTLE["perRequestMaxS"], window_s=SETTLE["perRequestWindowS"])
 
     def stop_server(self, server: Server, timeout_s: float = 30.0, note: str = None):
         method = procs.stop(server.proc, timeout_s=timeout_s)
@@ -513,15 +533,30 @@ def scenario_healthz(ctx, server: Server, result: dict):
     _check_errors(result, errors, "healthz answers other than 200")
 
 
-def _sequential_posts(ctx, server, result, body, content_type, warmup, n, sample, group):
+def _sequential_posts(ctx, server, result, body, content_type, warmup, n, sample, group, settle_each=False):
+    """warmup + n POSTs one after another. settle_each: every POST starts on an idle server (outside its timer), so a
+    version that decodes after the 202 is not timed against the backlog of the uploads before; the extra waits of the
+    measured POSTs add up in bench.settleTotalMs."""
     errors = 0
     samples = []
+    waits, busy = [], 0
+
+    def settle():
+        nonlocal busy
+        if settle_each:
+            waited, idle = ctx.settle_request(server)
+            busy += idle is False
+            return waited
+        return 0.0
+
     with server.client() as client:
         for _ in range(warmup):
+            settle()
             answer, job_id = post_photos(client, body, content_type)
             if job_id:
                 ctx.track(job_id)
         for _ in range(n):
+            waits.append(settle())
             answer, job_id = post_photos(client, body, content_type)
             if job_id:
                 ctx.track(job_id)
@@ -530,7 +565,16 @@ def _sequential_posts(ctx, server, result, body, content_type, warmup, n, sample
             else:
                 errors += 1
     result["samples"][sample] = _r2(samples)
+    if settle_each:
+        _add_settle(result, sum(waits))
+        if busy:
+            result["notes"].append(f"{busy} uploads started on a server still busy after {SETTLE['perRequestMaxS']:.0f} s")
     return samples, errors
+
+
+def _add_settle(result, waited_ms):
+    values = result["values"]
+    values["bench.settleTotalMs"] = _r3((values.get("bench.settleTotalMs") or 0.0) + waited_ms)
 
 
 def scenario_upload_small(ctx, server: Server, result: dict):
@@ -548,7 +592,7 @@ def scenario_upload_large(ctx, server: Server, result: dict):
     body, content_type = httpbench.multipart(files)
     c = ctx.counts
     samples, errors = _sequential_posts(ctx, server, result, body, content_type, c["upload_large.warmup"],
-                                        c["upload_large.n"], "postMs", "postMs")
+                                        c["upload_large.n"], "postMs", "postMs", settle_each=True)
     result["values"]["bench.requestBytes"] = len(body)
     if samples:
         result["values"]["bench.uploadMBps"] = _r3(len(body) / 1e6 / (stats.median(samples) / 1000.0))
@@ -560,8 +604,12 @@ def scenario_upload_12mp(ctx, server: Server, result: dict):
     body, content_type = httpbench.multipart([("perf-12mp.png", data, "image/png")])
     c = ctx.counts
     _samples, errors = _sequential_posts(ctx, server, result, body, content_type, c["upload_12mp.warmup"],
-                                         c["upload_12mp.n"], "postMs", "postMs")
+                                         c["upload_12mp.n"], "postMs", "postMs", settle_each=True)
     result["values"]["bench.requestBytes"] = len(body)
+    waited, idle = ctx.settle(server)  # the burst below starts on an idle server too
+    _add_settle(result, waited)
+    if idle is False:
+        result["notes"].append("the server was still busy before the concurrent uploads")
 
     def worker(_i, barrier):
         out = []
@@ -674,6 +722,7 @@ def scenario_concurrent_e2e(ctx, server: Server, result: dict):
 
 def _poll_load_process(port, path, threads, per_thread, warmup, start_event, queue):
     """One load process of poll_load (module level so that multiprocessing's spawn can import it)."""
+    priority = procs.raise_own_priority()  # like the parent load generator (a spawned child starts at normal)
     ready = threading.Barrier(threads + 1)
     out = [None] * threads
 
@@ -712,7 +761,7 @@ def _poll_load_process(port, path, threads, per_thread, warmup, start_event, que
         ready.wait(timeout=120)
     except threading.BrokenBarrierError:
         pass
-    queue.put(("ready", os.getpid()))
+    queue.put(("ready", {"pid": os.getpid(), "priority": priority}))
     for worker in workers:
         worker.join()
     queue.put(("done", out))
@@ -739,10 +788,12 @@ def scenario_poll_load(ctx, server: Server, result: dict):
     for worker in workers:
         worker.start()
     try:
-        ready = 0
+        ready, priorities = 0, []
         while ready < count:
-            kind, _payload = queue.get(timeout=180)
-            ready += kind == "ready"
+            kind, payload = queue.get(timeout=180)
+            if kind == "ready":
+                ready += 1
+                priorities.append(payload.get("priority") if isinstance(payload, dict) else None)
         start_event.set()
         outs, finished = [], 0
         while finished < count:
@@ -769,6 +820,8 @@ def scenario_poll_load(ctx, server: Server, result: dict):
     result["jobGroups"]["pollMs"] = [job_id]
     if dead:
         result["notes"].append(f"{dead} load threads reported nothing (their GETs count as errors)")
+    if procs.IS_WINDOWS and any(priority != "above_normal" for priority in priorities):
+        result["notes"].append(f"load processes ran at priorities {priorities}, not all above normal")
     if not samples:
         result["status"] = "error"
         result["reason"] = "no GET succeeded"
@@ -861,7 +914,11 @@ def scenario_scale(ctx, server: Server, result: dict):
             final = wait_terminal(client, waits, timeout_s=300.0)
             if any(status != "COMPLETED" for status in final.values()):
                 result["notes"].append(f"N={target}: not every awaited job COMPLETED: {sorted(set(map(str, final.values())))}")
-            time.sleep(c["scale.settleMs"] / 1000.0)
+            _waited, idle = ctx.settle(server, window_s=c["scale.settleMs"] / 1000.0)
+            if idle is None:
+                time.sleep(c["scale.settleMs"] / 1000.0)  # no process CPU time here: the old fixed pause
+            elif idle is False:
+                result["notes"].append(f"N={target}: the server was still busy after seeding")
             actual = ctx.job_count()
             result["values"][f"bench.actualN@{target}"] = actual
             cursor, cursor_at = cursor_near_middle(client, actual)
@@ -941,6 +998,9 @@ def scenario_pending_poll(ctx, server: Server, result: dict):
                 errors += 1
         if not jobs:
             raise RuntimeError("could not create PENDING jobs")
+        _waited, idle = ctx.settle(server, max_s=60.0)
+        if idle is False:
+            result["notes"].append("the server was still busy before the timed GETs")
         target = jobs[-1]
         result["jobGroups"]["pendingPollMs"] = jobs
         for i in range(c["pending_poll.warmup"] + c["pending_poll.n"]):
@@ -964,6 +1024,25 @@ MOCK_STEPS = [
     ("concurrent_e2e", scenario_concurrent_e2e), ("poll_load", scenario_poll_load), ("scale", scenario_scale),
     ("resources", scenario_resources),
 ]
+
+
+# Mock scenarios after which the suite waits for an idle server; the wait (bench.settleAfterMs) and the server CPU
+# time of the scenario including that tail (bench.serverCpuMs) are recorded on the scenario.
+SETTLED_STEPS = ("startup", "healthz", "upload_small", "upload_large", "upload_12mp", "e2e_mock", "concurrent_e2e",
+                 "poll_load", "scale")
+
+
+def _settle_after(ctx, server, result, cpu_before):
+    waited, idle = ctx.settle(server)
+    cpu_after = procs.cpu_time_ms(server.proc.pid)
+    if idle is None:
+        result["notes"].append("no idle wait after the scenario: no process CPU time (this OS, or the server is gone)")
+        return
+    result["values"]["bench.settleAfterMs"] = waited
+    if cpu_before is not None and cpu_after is not None:
+        result["values"]["bench.serverCpuMs"] = _r3(cpu_after - cpu_before)
+    if not idle:
+        result["notes"].append(f"the server was still busy {waited / 1000:.0f} s after the scenario")
 
 
 def _run_step(ctx, name, fn, server, results, selected):
@@ -1023,7 +1102,10 @@ def run_mock(ctx, selected) -> dict:
             if not server.proc.alive():
                 results[name] = {**new_result(), "status": "error", "reason": "server A is not running"}
                 continue
+            cpu_before = procs.cpu_time_ms(server.proc.pid)
             _run_step(ctx, name, fn, server, results, selected)
+            if name in SETTLED_STEPS and results[name].get("status") != "skipped" and server.proc.alive():
+                _settle_after(ctx, server, results[name], cpu_before)
     finally:
         ctx.stop_server(server)
     events, bad = parse_events(storage / "events.jsonl")
@@ -1097,13 +1179,14 @@ def start_stub(ctx, stub_python: str, app_dir: Path) -> Stub:
     port = procs.free_port(avoid=ctx.used_ports)
     ctx.used_ports.add(port)
     cmd = [stub_python, "-m", "uvicorn", "app:app", "--host", "127.0.0.1", "--port", str(port)]
-    proc = procs.start("stub", cmd, cwd=app_dir, log_path=ctx.run_dir / "logs" / "stub.log", env=env, cpus=None)
+    proc = procs.start("stub", cmd, cwd=app_dir, log_path=ctx.run_dir / "logs" / "stub.log", env=env, cpus=None,
+                       raise_priority=True)
     try:
         startup_ms = procs.wait_http_ok(proc, port, "/healthz", timeout_s=90.0)
     except Exception:
         procs.stop(proc, timeout_s=10)
         raise
-    ctx.servers["stub"] = {"port": port, "pid": proc.pid, "startupMs": _r3(startup_ms),
+    ctx.servers["stub"] = {"port": port, "pid": proc.pid, "priority": proc.priority, "startupMs": _r3(startup_ms),
                            "log": str(ctx.run_dir / "logs" / "stub.log")}
     return Stub(proc, port, work)
 
@@ -1131,9 +1214,16 @@ def _scenario_real(ctx, name: str, stub: Stub, storage: Path) -> dict:
     flows, batch = [], []
     try:
         result["values"]["bench.startupMs"] = _r3(server.startup_ms)
+        settle_ms, busy = 0.0, 0
+        ctx.settle(server, max_s=60.0)  # start-up work (JIT, the first health check)
+        cpu_before = procs.cpu_time_ms(server.proc.pid)
         with server.client(timeout=300) as client:
             failures_in_row = 0
             for index in range(c["real.warmup"] + c["real.n"]):
+                waited, idle = ctx.settle_request(server)
+                if index >= c["real.warmup"]:
+                    settle_ms += waited
+                    busy += 1 if idle is False else 0
                 flow = run_flow(client, body, content_type, interval, glb, FLOW_TIMEOUT_S["real"])
                 if index >= c["real.warmup"]:
                     flows.append(flow)
@@ -1148,12 +1238,21 @@ def _scenario_real(ctx, name: str, stub: Stub, storage: Path) -> dict:
                 barrier.wait(timeout=120)
                 return post_photos(client, body, content_type)[1]
 
+        ctx.settle_request(server)
         ids, thread_errors, _wall = _run_threads(c["real.batch"], submit)
         batch = [job_id for job_id in ids if job_id]
         with server.client(timeout=300) as client:
             final = wait_terminal(client, batch, timeout_s=FLOW_TIMEOUT_S["real"] * 2, interval_s=interval)
         not_completed = sum(1 for s in final.values() if s != "COMPLETED")
         batch_errors = (c["real.batch"] - len(batch)) + not_completed
+        _waited, last_idle = ctx.settle(server, max_s=60.0)
+        cpu_after = procs.cpu_time_ms(server.proc.pid)
+        if cpu_before is not None and cpu_after is not None:
+            result["values"]["bench.serverCpuMs"] = _r3(cpu_after - cpu_before)
+        if last_idle is not None:
+            result["values"]["bench.settleTotalMs"] = _r3(settle_ms)
+        if busy:
+            result["notes"].append(f"{busy} flows started on a server still busy after {SETTLE['perRequestMaxS']:.0f} s")
     finally:
         ctx.stop_server(server)
     errors = 0
