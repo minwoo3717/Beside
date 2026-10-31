@@ -54,7 +54,7 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `jobId` | string | Spring 작업 ID. 출력 파일명·로그에 사용 |
+| `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
 | `options.hair` | bool | true 면 `hair.npz` 로 hair variant 도 생성 |
 

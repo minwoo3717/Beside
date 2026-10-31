@@ -29,6 +29,7 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 ```bash
 python -m py_compile generation/inference_service/app.py
+python -m unittest discover -s generation/inference_service -p "test_*.py"   # 모델 없이 도는 검사(fastapi·httpx, 사진 검사는 pillow)
 curl -s http://localhost:8001/healthz
 curl -s -X POST http://localhost:8001/infer -H "Content-Type: application/json" \
   -d '{"jobId":"test","imagePaths":["/data/dog1.jpg"],"options":{"hair":false}}'

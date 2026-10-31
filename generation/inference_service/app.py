@@ -78,7 +78,7 @@ WORK_DIR = pathlib.Path(os.environ.get("BESIDE_WORK_DIR", "work")).resolve()
 # Shared secret for /infer, /infer/upload and /artifacts/* (header X-Inference-Token). Unset or empty: no check.
 # Surrounding whitespace is dropped, as Spring does with inference.token, so a stray newline in an env file still matches.
 INFERENCE_TOKEN = (os.environ.get("BESIDE_INFERENCE_TOKEN") or "").strip() or None
-JOB_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")   # upload mode: jobId names a folder under WORK_DIR
+JOB_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")   # both modes: jobId names a folder under WORK_DIR
 ARTIFACTS = frozenset({"base.glb"})             # files GET /artifacts/{jobId}/{name} may serve
 MAX_PHOTOS = 10
 MODEL = None             # AnimalLiftRunner, loaded once in the background at startup
@@ -154,7 +154,9 @@ class InferOptions(BaseModel):
 
 
 class InferRequest(BaseModel):
-    jobId: str = Field(..., description="Spring job id; used for output file names and logs")
+    # Same pattern as upload mode: _run builds WORK_DIR / jobId, and '../x' or an absolute id would leave WORK_DIR.
+    jobId: str = Field(..., pattern=JOB_ID.pattern,
+                       description="Spring job id ([A-Za-z0-9-]{1,64}); names {WORK_DIR}/{jobId}, used in logs")
     imagePaths: List[str] = Field(..., min_length=1, max_length=10, description="Absolute paths readable by this service")
     options: InferOptions = Field(default_factory=InferOptions)
 
