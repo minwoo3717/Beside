@@ -91,6 +91,10 @@ class RealJobWorkerOfflineTest {
                 respond(exchange, 500, "{\"detail\":{\"code\":\"INFERENCE_FAILED\",\"message\":\"model error\"}}");
                 return;
             }
+            if (request.contains("token-dog")) { // the service refuses the token: the model never ran
+                respond(exchange, 401, "{\"detail\":{\"code\":\"INFERENCE_UNAVAILABLE\",\"message\":\"bad token\"}}");
+                return;
+            }
             respond(exchange, 200, JSON.createObjectNode().put("glbPath", glb.toString()).put("passthrough", false).toString());
         });
         inference.start();
@@ -187,6 +191,17 @@ class RealJobWorkerOfflineTest {
         var run = jobRuns.findByJobIdOrderByAttemptAsc(jobId).get(0);
         assertThat(run.getErrorCode()).isEqualTo("INFERENCE_FAILED");
         assertThat(run.getModelVersion()).as("admin stats group the failure with that model").isEqualTo("fake-animallift@1+rig");
+    }
+
+    @Test
+    void aRunTheModelNeverSawCountsAgainstNoModel() throws Exception {
+        gpuUp.set(true); // /healthz is open without a token and reports the loaded model
+        String jobId = upload("token-dog.png");
+        await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(jobId).equals("FAILED"));
+        await().atMost(Duration.ofSeconds(5)).until(() -> !jobRuns.findByJobIdOrderByAttemptAsc(jobId).isEmpty());
+        var run = jobRuns.findByJobIdOrderByAttemptAsc(jobId).get(0);
+        assertThat(run.getErrorCode()).isEqualTo("INFERENCE_UNAVAILABLE");
+        assertThat(run.getModelVersion()).as("a refused token is not a failure of the loaded model").isNull();
     }
 
     private String upload() throws Exception {

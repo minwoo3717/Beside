@@ -221,13 +221,13 @@ public class InferenceClient {
         JsonNode root = answerOf(send(request, call), call);
         String glbPath = root.path("glbPath").asText(null);
         if (glbPath == null || glbPath.isBlank()) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without glbPath",
+            throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without glbPath",
                     call + " -> HTTP 200: " + quote(root.toString()));
         }
         try {
             return resultOf(root, Path.of(glbPath));
         } catch (InvalidPathException e) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 with an invalid glbPath",
+            throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 with an invalid glbPath",
                     call + " -> HTTP 200 glbPath=" + glbPath);
         }
     }
@@ -255,7 +255,7 @@ public class InferenceClient {
         String glbUrl = root.path("glbUrl").asText(null);
         URI artifact = artifactUri(glbUrl);
         if (artifact == null) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without a usable glbUrl",
+            throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without a usable glbUrl",
                     call + " -> HTTP 200 glbUrl=" + glbUrl + ": " + quote(root.toString()));
         }
         return resultOf(root, download(jobId, artifact));
@@ -388,7 +388,7 @@ public class InferenceClient {
             throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
                     "No connection to the inference service within " + CONNECT_TIMEOUT.toMillis() + " ms", call + ": " + e);
         } catch (HttpTimeoutException e) {
-            throw new InferenceFailure(ErrorCode.INFERENCE_TIMEOUT,
+            throw InferenceFailure.modelRan(ErrorCode.INFERENCE_TIMEOUT,
                     "No answer from the inference service within inference.timeout-ms=" + timeout.toMillis(), call + ": " + e);
         } catch (IOException e) {
             throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
@@ -408,7 +408,7 @@ public class InferenceClient {
             root = null;
         }
         if (root == null || !root.isObject()) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 that is not a JSON object",
+            throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 that is not a JSON object",
                     call + " -> HTTP 200: " + quote(response.body()));
         }
         return root;
@@ -434,8 +434,11 @@ public class InferenceClient {
             mapped = unavailable ? ErrorCode.INFERENCE_UNAVAILABLE : ErrorCode.INFERENCE_FAILED;
         }
         String answered = "HTTP " + status + (code == null ? "" : " " + code);
-        return new InferenceFailure(mapped, "Inference service answered " + answered,
-                call + " -> " + answered + ": " + (message != null ? message : quote(response.body())));
+        String detail = call + " -> " + answered + ": " + (message != null ? message : quote(response.body()));
+        // An availability or auth answer (401/403, 501-504, INFERENCE_UNAVAILABLE) means the model did not run.
+        return mapped == ErrorCode.INFERENCE_UNAVAILABLE
+                ? new InferenceFailure(mapped, "Inference service answered " + answered, detail)
+                : InferenceFailure.modelRan(mapped, "Inference service answered " + answered, detail);
     }
 
     private static Result resultOf(JsonNode root, Path glb) {

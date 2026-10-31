@@ -135,13 +135,14 @@ public class RealJobWorker implements JobWorker {
                         result.modelVersion(), result.metrics());
             }
         } catch (InferenceFailure failure) {
-            jobFinisher.fail(job, failure.code(), failure.getMessage(), type(), failedRunDetails());
+            jobFinisher.fail(job, failure.code(), failure.getMessage(), type(),
+                    failure.modelRan() ? failedRunDetails() : RunDetails.NONE);
             log.warn("jobId={} stage=FAILED code={} {} [{}]", jobId, failure.code(), failure.getMessage(), failure.logDetail());
         } catch (RuntimeException unexpected) {
             log.error("jobId={} real worker error", jobId, unexpected);
             // The exception text may name server paths; it stays in the log.
             jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type(),
-                    failedRunDetails());
+                    RunDetails.NONE); // Spring's own error: not the model's
         } finally {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
             // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.
@@ -149,12 +150,15 @@ public class RealJobWorker implements JobWorker {
         }
     }
 
-    /** The offline wait is over: FAILED INFERENCE_UNAVAILABLE, unless the job was canceled at the last moment. */
-    /** A failed run reached the model: it counts against the model the service reports on /healthz (null if unknown). */
+    /**
+     * A run the model failed (InferenceFailure.modelRan): it counts against the model the service reports on /healthz
+     * (null if unknown). Transport, auth and Spring-side failures keep RunDetails.NONE, as failUnavailable does.
+     */
     private RunDetails failedRunDetails() {
         return new RunDetails(null, null, null, null, null, null, null, null, healthMonitor.current().modelVersion());
     }
 
+    /** The offline wait is over: FAILED INFERENCE_UNAVAILABLE, unless the job was canceled at the last moment. */
     private void failUnavailable(String jobId, int attempt) {
         InferenceHealthMonitor.Status status = healthMonitor.current();
         String message = "The inference service was not ready within " + offlineWaitMs / 1000 + " s (last check: "
@@ -225,11 +229,11 @@ public class RealJobWorker implements JobWorker {
     private StoredGlb storeBaseGlb(String jobId, Path glb) throws InferenceFailure {
         try {
             if (!Files.isRegularFile(glb)) {
-                throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED,
                         "The GLB from the inference service is missing or unreadable", "glbPath=" + glb);
             }
             if (!isGlb(glb)) {
-                throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED,
                         "The GLB from the inference service is not a glTF 2.0 binary", "glbPath=" + glb);
             }
             Path target = resultDir.resolve(jobId).resolve("base.glb");
