@@ -107,7 +107,8 @@ ROWS = {
     "real_path": REAL_ROWS, "real_upload": REAL_ROWS, "real_upload_prod": REAL_ROWS,
 }
 SCALE_METRICS = ["listFirstMs", "listDeepMs", "getMs", "postMs"]
-# The cover table: (scenario, row, short label). "{N}" = the largest N of the scale scenario in the data.
+# The cover table: (scenario, row, short label). "{N}" = the largest scale target in the data, "{NAME}" = the N it
+# was really measured at (measured_n).
 KEY_ROWS = [
     ("startup", ("value", "bench.startupMs"), "기동 시간"),
     ("startup", ("value", "bench.idleRssMB"), "유휴 메모리 (RSS)"),
@@ -121,10 +122,10 @@ KEY_ROWS = [
     ("concurrent_e2e", ("value", "bench.jobsPerSec"), "동시 E2E 처리량"),
     ("poll_load", ("sample", "pollMs"), "폴링 부하 응답"),
     ("poll_load", ("value", "bench.pollReqPerSec"), "폴링 처리량"),
-    ("scale", ("sample", "listFirstMs@{N}"), "목록 첫 페이지 (N={N})"),
-    ("scale", ("sample", "listDeepMs@{N}"), "목록 중간 페이지 (N={N})"),
-    ("scale", ("sample", "getMs@{N}"), "단건 조회 (N={N})"),
-    ("scale", ("sample", "postMs@{N}"), "업로드 (N={N})"),
+    ("scale", ("sample", "listFirstMs@{N}"), "목록 첫 페이지 ({NAME})"),
+    ("scale", ("sample", "listDeepMs@{N}"), "목록 중간 페이지 ({NAME})"),
+    ("scale", ("sample", "getMs@{N}"), "단건 조회 ({NAME})"),
+    ("scale", ("sample", "postMs@{N}"), "업로드 ({NAME})"),
     ("pending_poll", ("value", "bench.restartStartupMs"), "재기동 시간"),
     ("pending_poll", ("sample", "pendingPollMs"), "PENDING 조회"),
     ("resources", ("value", "bench.peakRssMB"), "최대 메모리 (RSS)"),
@@ -576,6 +577,9 @@ figcaption { font-size: 7.6pt; color: #898781; margin-top: 1mm; }
 .scenario { break-inside: auto; }
 .scenario h3 { break-before: auto; }
 .what { color: #52514e; font-size: 8.6pt; }
+.notes { font-size: 7.6pt; color: #898781; margin: 0 0 2.5mm; break-inside: avoid; }
+.notes ul { margin: 0.4mm 0 0; padding-left: 4mm; }
+.notes li { margin: 0.2mm 0; }
 .muted { color: #898781; }
 .small { font-size: 8pt; }
 svg text { font-family: "Malgun Gothic", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif; }
@@ -659,11 +663,27 @@ def scale_targets(groups) -> list:
     return sorted(targets)
 
 
+def measured_n(groups, labels, target) -> str:
+    """The N a scale row was really measured at: "N=390 (목표 200)" when earlier scenarios had already made more jobs
+    than the target (a full run makes about 390 before scale starts), "N=200" when it matches, a range when the
+    versions or repetitions differ."""
+    values = []
+    for version in labels:
+        values += [rep[0] for rep in reps_for(groups.get(version, []), "scale", ("value", f"bench.actualN@{target}"))]
+    if not values:
+        return f"N={target}"
+    low, high = min(values), max(values)
+    shown = f"{low:.0f}" if low == high else f"{low:.0f}–{high:.0f}"
+    return f"N={shown}" if low == high == target else f"N={shown} (목표 {target})"
+
+
 def scale_section(labels, groups, colors, meta, baseline) -> str:
     targets = scale_targets(groups)
     if not targets:
         return ""
-    rows = [("scale", ("sample", f"{m}@{n}"), f"{SAMPLE_LABELS[m]} · N={n}") for m in SCALE_METRICS for n in targets]
+    names = {n: measured_n(groups, labels, n) for n in targets}
+    rows = [("scale", ("sample", f"{m}@{n}"), f"{SAMPLE_LABELS[m]} · {names[n]}") for m in SCALE_METRICS
+            for n in targets]
     rows += [("scale", ("value", f"bench.actualN@{n}"), f"실제 작업 수 (목표 N={n})") for n in targets]
     table = metrics_table(rows, labels, groups, colors, baseline)
     charts = []
@@ -705,7 +725,9 @@ def env_table(runs) -> str:
             elif key == "jvmArgs" and value:
                 value = " ".join(value)
             elif key == "pinnedCpus":
-                value = (", ".join(map(str, value)) + " (마지막 논리 CPU)") if value else "고정 안 함"
+                cores = env.get("pinnedCores")
+                value = ((", ".join(map(str, value)) + " (마지막 논리 CPU" + (f", 물리 코어 {cores}개" if cores else "")
+                          + ")") if value else "고정 안 함")
             elif key == "power" and isinstance(value, dict):
                 value = ", ".join(f"{k} {v}" for k, v in value.items()) or "–"
             cells.append(f"<td>{esc(str(value if value not in (None, '') else '–'))}</td>")
@@ -743,6 +765,158 @@ def counts_text(counts: dict, scenario: str) -> str:
     return texts.get(scenario, real if scenario.startswith("real") else "")
 
 
+def scenario_notes(labels, groups, key, per_version: int = 4) -> list:
+    """The notes of one scenario as "<label> r<rep>[·r<rep>]: <note>", in version and repetition order. A note that
+    several repetitions of a version share is shown once with all of them; at most per_version notes per version."""
+    out = []
+    for label in labels:
+        found = {}
+        for suite in sorted(groups.get(label, []), key=lambda s: (s.get("rep") or 0, s.get("_dir", ""))):
+            for note in (((suite.get("scenarios") or {}).get(key) or {}).get("notes") or []):
+                reps = found.setdefault(str(note), [])
+                if f"r{suite.get('rep')}" not in reps:
+                    reps.append(f"r{suite.get('rep')}")
+        items = [f"{label} {'·'.join(reps)}: {note}" for note, reps in found.items()]
+        if len(items) > per_version:
+            items = items[:per_version] + [f"{label}: 메모 {len(items) - per_version}개 더 (결과 JSON 의 notes)"]
+        out.extend(items)
+    return out
+
+
+def condition_of(suite) -> tuple:
+    """What a suite was measured with: (--quick, the counts as canonical JSON)."""
+    return bool(suite.get("quick")), json.dumps((suite.get("settings") or {}).get("counts") or {}, sort_keys=True)
+
+
+def differing_counts(conditions) -> list:
+    """The count names whose values differ between these conditions (condition_of tuples)."""
+    docs = [json.loads(counts) for _quick, counts in conditions]
+    names = sorted(set().union(*docs)) if docs else []
+    return [name for name in names if len({json.dumps(d.get(name), sort_keys=True) for d in docs}) > 1]
+
+
+def _suite_name(suite) -> str:
+    return f"{Path(suite.get('_dir', '')).name}/{suite.get('_file', '?')}"
+
+
+def check_pooling(groups) -> None:
+    """Suites of one version become one pooled p50/p95 and one input of the noise rule, so they must have been
+    measured the same way. Raises ValueError (listing the files) when --quick or the counts differ."""
+    problems = []
+    for label, suites in groups.items():
+        by_condition = {}
+        for suite in suites:
+            by_condition.setdefault(condition_of(suite), []).append(_suite_name(suite))
+        if len(by_condition) > 1:
+            parts = [f"{'--quick' if quick else 'full'} [{', '.join(files)}]"
+                     for (quick, _counts), files in by_condition.items()]
+            differ = differing_counts(list(by_condition))
+            problems.append(f"{label}: " + " vs ".join(parts)
+                            + (f"; counts differ in {', '.join(differ[:8])}" + (" ..." if len(differ) > 8 else "")
+                               if differ else ""))
+    if problems:
+        raise ValueError("suites of one version were measured with different settings and are not pooled; pass "
+                         "--data folders measured the same way (or report them separately):\n  " + "\n  ".join(problems))
+
+
+def conditions_list(data) -> str:
+    """When the --data folders were measured with different counts (only possible across versions): which folder
+    used what, the differing counts only. Empty when all agree."""
+    per_folder = {}
+    for suite in data["suites"]:
+        per_folder.setdefault(Path(suite.get("_dir", "")).name, {}).setdefault(condition_of(suite), set()).add(
+            suite["label"])
+    conditions = {c for folder in per_folder.values() for c in folder}
+    if len(conditions) < 2:
+        return ""
+    differ = differing_counts(list(conditions))
+    items = []
+    for folder, by_condition in per_folder.items():
+        for (quick, counts_json), versions in by_condition.items():
+            counts = json.loads(counts_json)
+            shown = ", ".join(f"{name}={json.dumps(counts.get(name))}" for name in differ[:10])
+            shown += f" 외 {len(differ) - 10}개" if len(differ) > 10 else ""
+            items.append(f"<li><code>{esc(folder)}</code> ({esc(', '.join(sorted(versions)))}): "
+                         f"{'--quick' if quick else '보고용 횟수'} — {esc(shown)}</li>")
+    return ("<h2>데이터별 조건</h2><p class=\"small\">--data 폴더마다 측정 횟수가 달라 버전 사이 비교는 참고용이다. "
+            "서로 다른 항목만 적는다. 위 시나리오 표의 횟수는 기준 버전 데이터의 것이다.</p><ul class=\"small\">"
+            + "".join(items) + "</ul>")
+
+
+def per_run_text(runs, make) -> str:
+    """make(run doc) for every --data folder that has a run.json: one text when they agree, otherwise each text
+    prefixed with its folders."""
+    texts = {}
+    for run in runs:
+        doc = run["run"] or {}
+        if doc:
+            texts.setdefault(make(doc), []).append(run["dir"].name)
+    if len(texts) <= 1:
+        return next(iter(texts), "")
+    return " ".join(f"[{esc(', '.join(names))}] {text}" for text, names in texts.items())
+
+
+def _active_processors(env):
+    return next((a.partition("=")[2] for a in env.get("jvmArgs") or [] if a.startswith("-XX:ActiveProcessorCount=")),
+                None)
+
+
+def cpu_text(doc) -> str:
+    """The pinning sentence of the server conditions, from run.json (serverCpus, pinnedCpus, pinnedCores, jvmArgs)."""
+    env = doc.get("env") or {}
+    cpus = env.get("pinnedCpus")
+    if not cpus:
+        why = "--server-cpus 0" if env.get("serverCpus") == 0 else "이 OS 에서는 고정할 수 없음"
+        return (f"서버 CPU 를 고정하지 않았다({esc(why)}): 서버, 부하 생성기(Python), 추론 스텁이 모든 논리 CPU 를 "
+                "나눠 쓴다.")
+    listed = esc(", ".join(map(str, cpus)))
+    cores = env.get("pinnedCores")
+    if cores is None:
+        smt = ("SMT CPU 에서는 이 논리 CPU 들이 물리 코어 하나를 나눠 쓰는 두 스레드일 수 있다 — 이 실행은 코어 구성을 "
+               "기록하지 않았다")
+    elif cores < len(cpus):
+        smt = f"물리 코어 {cores}개를 SMT 로 나눈 논리 CPU {len(cpus)}개라 계산 자원은 코어 {cores}개 분량이다"
+    else:
+        smt = f"물리 코어 {cores}개"
+    active = _active_processors(env)
+    jvm = (f" JVM 에는 <code>-XX:ActiveProcessorCount={esc(active)}</code> 로 CPU {esc(active)}개라고 알렸다."
+           if active else "")
+    return (f"서버 프로세스는 마지막 논리 CPU {listed} 에 고정했다({smt}).{jvm} 부하 생성기(Python)와 추론 스텁은 "
+            "고정하지 않는다.")
+
+
+def storage_text(doc) -> str:
+    work = str(doc.get("workDir") or "")
+    where = f"작업 폴더 <code>{esc(work)}</code> 의 실행 폴더 아래에" if work else "작업 폴더의 실행 폴더 아래에"
+    synced = (" 작업 폴더가 OneDrive 안이라 동기화가 디스크 I/O 에 섞일 수 있다." if "onedrive" in work.lower()
+              else "")
+    return (f"저장소(H2 파일 DB, 업로드, 결과, events.jsonl)는 {where} 서버 A 와 서버 C(real 시나리오마다)를 띄울 때마다 "
+            "새로 만든다. 서버 B 는 A 의 저장소를 그대로 다시 연다(재기동 시나리오). 모든 <code>storage.*</code> 경로는 "
+            "절대 경로로 지정." + synced)
+
+
+def shared_pc_text(doc) -> str:
+    env = doc.get("env") or {}
+    cpus = env.get("pinnedCpus")
+    if cpus:
+        cores = env.get("pinnedCores")
+        core_text = f", 물리 코어 {cores}개" if cores else ""
+        pinned = (f"서버는 논리 CPU {esc(', '.join(map(str, cpus)))}({len(cpus)}개{core_text})에 고정했지만 부하 생성기와 "
+                  "추론 스텁은 고정하지 않았고")
+    else:
+        pinned = "서버 CPU 를 고정하지 않아 서버와 부하 생성기가 같은 CPU 를 다투고"
+    return (f"서버와 클라이언트가 같은 PC 에서 돈다. {pinned}, 디스크·메모리 대역은 공유한다. 백신 실시간 검사 등 "
+            "OS 활동도 포함된다.")
+
+
+def clock_text(doc) -> str:
+    env = doc.get("env") or {}
+    java = str(env.get("java") or "").strip().splitlines()
+    facts = [fact for fact in (java[0].strip() if java else "", env.get("os") or "") if fact]
+    where = f" (이 측정의 서버: {esc(' · '.join(facts))})" if facts else ""
+    return f"서버 쪽 시간(events.jsonl)은 ms 단위 정수(버림)라 1 ms 보다 작은 차이는 보이지 않는다{where}."
+
+
 def failed_suites(suites) -> list:
     """"<label> r<rep> (<scenarios with errors>)" for every suite with an error, sorted by label and repetition."""
     out = []
@@ -756,8 +930,10 @@ def failed_suites(suites) -> list:
 
 
 def build_html(data, versions_file, notes_dir, report_command) -> str:
+    """The whole report. Raises ValueError when suites of one version were measured with different settings."""
     order, baseline, meta = version_meta(data, versions_file)
     groups = by_label(data["suites"])
+    check_pooling(groups)
     labels = [label for label in order if label in groups]
     colors = colors_for(order)
     if baseline not in groups:
@@ -766,11 +942,13 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     run_docs = [r["run"] or {} for r in runs]
     dates = sorted({(d.get("startedAt") or "")[:10] for d in run_docs if d.get("startedAt")}
                    or {s.get("startedAt", "")[:10] for s in data["suites"]})
-    quick = any(s.get("quick") for s in data["suites"])
+    quick_labels = sorted({s["label"] for s in data["suites"] if s.get("quick")})
+    mixed = len({condition_of(s) for s in data["suites"]}) > 1
     reps = {label: len(groups[label]) for label in labels}
     failed = failed_suites(data["suites"])
-    counts = next((d.get("counts") for d in run_docs if d.get("counts")),
-                  data["suites"][0].get("settings", {}).get("counts", {}))
+    reference = (groups.get(baseline) or data["suites"])[0]  # the counts shown are those of the baseline's data
+    counts = ((reference.get("settings") or {}).get("counts")
+              or next((d.get("counts") for d in run_docs if d.get("counts")), {}))
 
     out = ['<!doctype html><html lang="ko"><head><meta charset="utf-8">'
            '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -782,8 +960,14 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     out.append(f'<p class="sub">측정일 {esc(", ".join(dates) or "–")} · 반복 {esc(rep_text)} · '
                f'기준 {esc(baseline or "없음")}</p>')
     banners = []
-    if quick:
+    if quick_labels and len(quick_labels) == len(groups):
         banners.append("<b>빠른 측정(--quick)</b>: 모든 횟수가 1/10 이고 N 이 작다. 동작 확인용이며 보고용 수치가 아니다.")
+    elif quick_labels:
+        banners.append("<b>빠른 측정(--quick)이 섞여 있다</b>: " + esc(", ".join(quick_labels)) + " 은(는) 횟수 1/10 로 잰 "
+                       "동작 확인용 값이라 다른 버전과 비교하지 않는다.")
+    if mixed:
+        banners.append("<b>측정 조건이 다른 데이터</b>: --data 폴더마다 측정 횟수가 달라 버전 사이 비교·판정은 참고용이다 "
+                       "(측정 방법의 '데이터별 조건').")
     if any(n < 2 for n in reps.values()):
         banners.append("<b>반복 1회</b>인 버전이 있다. 판정의 '반복별 p50 범위'가 한 점이라 판정은 참고용이다 "
                        "(보고용은 --reps 3 이상).")
@@ -805,7 +989,8 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     out.append("</tbody></table>")
     targets = scale_targets(groups)
     n_max = str(targets[-1]) if targets else "?"
-    key_rows = [(s, (r[0], r[1].replace("{N}", n_max)), t.replace("{N}", n_max)) for s, r, t in KEY_ROWS
+    n_name = measured_n(groups, labels, targets[-1]) if targets else "N=?"
+    key_rows = [(s, (r[0], r[1].replace("{N}", n_max)), t.replace("{NAME}", n_name)) for s, r, t in KEY_ROWS
                 if targets or s != "scale"]
     out.append("<h2>핵심 지표</h2>")
     out.append('<p class="small muted">칸: p50 / p95 (ms) 또는 값, 아래 줄은 기준 대비 p50 변화율과 판정. '
@@ -822,24 +1007,25 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     out.append("<h2>서버 조건</h2><ul>")
     out.append(f"<li>JVM: <code>{esc(' '.join(env.get('jvmArgs') or []))}</code>, 버전마다 <code>bootJar</code> 로 만든 jar 를 "
                "<code>java -jar</code> 로 실행.</li>")
-    out.append("<li>서버 프로세스는 " + (f"마지막 논리 CPU {esc(', '.join(map(str, cpus)))} 에 고정" if cpus else "CPU 고정 없음")
-               + ", 부하 생성기(Python)와 추론 스텁은 고정하지 않는다.</li>")
+    out.append(f"<li>{per_run_text(runs, cpu_text) or ('CPU 고정: ' + esc(str(cpus or '기록 없음')))}</li>")
     out.append("<li>서버 A·B: 프로파일 <code>mock</code>, 지연 0 (<code>mock.worker.pending-ms=0</code>, "
                "<code>processing-ms=0</code>), 실패 트리거 끔, 결과 GLB 는 합성 GLB(1,500,000 바이트). "
                "서버 B 는 A 의 저장소로 다시 띄우고 <code>pending-ms=600000</code> 으로 작업을 PENDING 에 둔다.</li>")
     out.append("<li>서버 C: 프로파일 <code>real</code> 또는 <code>real,prod</code>, 추론 서비스 스텁(<code>generation/"
                "inference_service/app.py</code>, 패스스루: 모델 없이 같은 GLB 를 즉시 돌려줌), 전송 path / upload, 토큰 없음.</li>")
-    out.append("<li>저장소(H2 파일 DB, 업로드, 결과, events.jsonl)는 서버마다 OS 임시 폴더의 새 폴더(OneDrive 밖), "
-               "모든 <code>storage.*</code> 경로를 절대 경로로 지정.</li>")
+    out.append(f"<li>{per_run_text(runs, storage_text) or storage_text({})}</li>")
     out.append("<li>클라이언트: Python <code>http.client</code>, 127.0.0.1 루프백, 스레드마다 keep-alive 연결. "
-               "시간은 요청 쓰기 직전부터 응답 본문을 다 읽을 때까지(<code>perf_counter_ns</code>), 연결 수립은 제외. "
-               "POST 마다 새 <code>Idempotency-Key</code>.</li>")
+               "시간은 요청 쓰기 직전부터 응답 본문을 다 읽을 때까지(<code>perf_counter_ns</code>), 연결 수립은 제외 — "
+               "E2E 흐름(<code>flowMs</code>·<code>completeMs</code>)도 흐름 안에서 다시 연결한 시간(Tomcat 은 100번째 응답에 "
+               "연결을 닫는다)을 뺀다. POST 마다 새 <code>Idempotency-Key</code>.</li>")
     out.append("<li>반복마다 버전 순서를 돌린다(1회차 v0,v1,v2 → 2회차 v1,v2,v0 → …). 워밍업 요청은 기록하지 않는다.</li></ul>")
     out.append("<h2>시나리오</h2><table><thead><tr><th>이름</th><th>무엇을</th><th>횟수</th></tr></thead><tbody>")
     for key, title, what in SCENARIOS:
         out.append(f"<tr><th>{esc(title)}<div class=\"unit\"><code>{esc(key)}</code></div></th><td>{esc(what)}</td>"
                    f"<td>{esc(counts_text(counts, key))}</td></tr>")
     out.append("</tbody></table>")
+    if mixed:
+        out.append(conditions_list(data))
     out.append("<h2>통계와 판정</h2><ul>"
                "<li>p50·p95 등 백분위수는 반복을 합친 표본에서 선형 보간(numpy 'linear', Hyndman–Fan type 7)으로 구한다. "
                "원시 표본은 0.01 ms 단위로 저장한다.</li>"
@@ -861,9 +1047,8 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "<li>로컬 루프백(127.0.0.1)에서 잰 값이다. 클라우드 VM, Tailscale, 실제 GPU 추론 경로가 아니다.</li>"
                "<li>real 시나리오는 모델 없는 스텁이라 Spring 쪽 오버헤드(전송·저장·대기열)만 보인다.</li>"
                "<li>부하 생성기는 Python(GIL, http.client)이라 동시 시나리오에는 클라이언트 자신의 지연이 섞일 수 있다.</li>"
-               "<li>서버와 클라이언트가 같은 PC 에서 돈다. 서버는 CPU 2개에 고정했지만 디스크·메모리 대역은 공유한다. "
-               "백신 실시간 검사 등 OS 활동도 포함된다.</li>"
-               "<li>서버 쪽 시간(events.jsonl)은 ms 정수이고 JDK 17 Windows 의 시계 해상도를 따른다.</li></ul>")
+               f"<li>{per_run_text(runs, shared_pc_text) or shared_pc_text({})}</li>"
+               f"<li>{per_run_text(runs, clock_text) or clock_text({})}</li></ul>")
     out.append("</section>")
 
     # 3. results per scenario
@@ -891,10 +1076,10 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
             rows = [(key, row, row_meta(row)[0]) for row in ROWS.get(key, [])]
             out.append(metrics_table(rows, labels, groups, colors, baseline) + "</div>")
             out.append(scenario_chart(key, ROWS.get(key, []), labels, groups, colors, meta))
-        notes = sorted({n for s in groups.values() for suite in s
-                        for n in (suite["scenarios"].get(key, {}).get("notes") or [])})
+        notes = scenario_notes(labels, groups, key)
         if notes:
-            out.append('<p class="small muted">메모: ' + esc(" / ".join(notes[:6])) + "</p>")
+            out.append('<div class="notes">메모<ul>' + "".join(f"<li>{esc(note)}</li>" for note in notes)
+                       + "</ul></div>")
         out.append("</div>")
     out.append("</section>")
 
@@ -1034,7 +1219,11 @@ def main(argv=None) -> int:
         print(f"versions file {args.versions_file} not found: titles and baseline come from run.json")
     command = "python scripts/perf/report.py " + " ".join(
         subprocess.list2cmdline([a]) if os.name == "nt" else a for a in argv)
-    page = build_html(data, args.versions_file, args.notes, command)
+    try:
+        page = build_html(data, args.versions_file, args.notes, command)
+    except ValueError as error:
+        print(f"report not built: {error}")
+        return 2
     html_out = Path(args.html_out)
     html_out.parent.mkdir(parents=True, exist_ok=True)
     html_out.write_text(page, encoding="utf-8")

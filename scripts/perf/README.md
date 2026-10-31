@@ -72,8 +72,11 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 - 백분위수는 선형 보간(numpy `linear`, Hyndman–Fan type 7). 요약은 `{n, min, p50, p90, p95, p99, max, mean, stdev}`(ms, 소수 셋째 자리, stdev 는 표본 표준편차).
 - 버전 비교(`stats.compare`): 반복을 모두 합친 표본의 중앙값으로 Δ% = (후보 − 기준) ÷ 기준 × 100. 값 지표(기동 시간, RSS, 처리량)는 반복별 값을 표본으로 쓴다.
 - 판정: **|Δ%| ≥ 10 이고, 반복별 중앙값의 [최소, 최대] 범위가 기준의 범위와 겹치지 않을 때만** `better`(개선) / `worse`(악화). 그 밖에는 `same`(차이 없음, 잡음). 시간은 작을수록, 처리량(`bench.uploadMBps`, `bench.jobsPerSec`, `bench.pollReqPerSec`)은 클수록 개선.
+- 기준 중앙값이 0 이고 후보가 0 이 아니면 변화율이 없으므로 `n/a`(보고서 '비교 불가'). `same` 으로 두면 0 → 5 같은 변화가 잡음으로 보인다.
+- 오류 수 `bench.errors` 는 측정값이 아니라 사건 수라 반복을 **합한** 값을 보이고(한 반복에서만 난 실패가 중앙값 0 에 묻히지 않게), 0 이 아니면 빨간 칸, 변화율·판정은 없다. 실패한 요청·흐름이 하나라도 있으면 그 시나리오는 `status: "error"`(표본은 성공분 그대로)라 칸에 '오류 포함', 표지에 `<라벨> r<반복> (시나리오)` 가 나온다.
 - 반복이 1회면 범위가 한 점이라 10 % 만 넘으면 판정이 나온다. 보고서는 이때 "참고용" 경고를 띄운다. 보고용은 `--reps 3` 이상.
 - 기준 버전은 versions 파일의 `baseline`.
+- `--data` 를 여러 개 주면 같은 라벨의 스위트를 반복으로 합친다. 단 `--quick` 여부나 횟수(`settings.counts`)가 다른 스위트는 한 p50 으로 합치지 않고 보고서 생성을 거부한다(종료 코드 2, 파일 목록 출력). 라벨마다 조건이 다르면(예: v0 는 quick, v1 은 보고용) 만들되 표지 경고와 측정 방법의 '데이터별 조건'에 다른 횟수를 적는다.
 
 ## 이름 규칙
 
@@ -84,10 +87,10 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 ## 측정 조건
 
 - 서버: `java -Xms256m -Xmx1536m -XX:ActiveProcessorCount=2 -XX:+UseG1GC -jar <jar> --server.port=<빈 포트> --spring.profiles.active=<프로파일>` + 모든 `storage.*` 경로를 실행마다 새 폴더의 절대 경로로(`db.path`, `upload.dir`, `events.path`, `result.dir`, `tmp.dir`, `thumb.dir`, `backup.dir`, `root.dir`), 작업 폴더는 그 실행 폴더. `--notify.webhook-url=`·`--inference.token=` 을 비워 넘기고, 측정에 영향을 줄 수 있는 환경변수(`JAVA_TOOL_OPTIONS`, `SPRING_*`, `INFERENCE_*`, `NOTIFY_*`, `STORAGE_*`, `BESIDE_*` 등)는 서버·스텁에 넘기지 않는다.
-- CPU 고정: 서버만 마지막 2개 논리 CPU(Windows `SetProcessAffinityMask`, Linux `sched_setaffinity`; macOS 는 고정 불가). 부하 생성기와 추론 스텁은 고정하지 않는다. SMT CPU 에서는 마지막 두 논리 CPU 가 한 물리 코어일 수 있다.
+- CPU 고정: 서버만 마지막 2개 논리 CPU(Windows `SetProcessAffinityMask`, Linux `sched_setaffinity`; macOS 는 고정 불가). 부하 생성기와 추론 스텁은 고정하지 않는다. SMT CPU 에서는 마지막 두 논리 CPU 가 한 물리 코어일 수 있다 — `run.json` 의 `env.pinnedCores` 에 고정한 CPU 가 걸친 물리 코어 수를 남기고(Windows `GetLogicalProcessorInformation`, Linux sysfs), 보고서의 서버 조건·한계 문장은 이 값과 `serverCpus`·`pinnedCpus`·`jvmArgs`·`os`·`java`·`workDir` 로 만든다(이 PC: 논리 CPU 10, 11 = 물리 코어 1개).
 - 포트는 OS 가 고른 빈 포트(8080 은 쓰지 않는다). 기동 시간은 Popen 직후부터 25 ms 간격 healthz(연결 제한 25 ms: Windows 는 닫힌 포트 연결 거부에 약 1초 걸려서).
 - 종료: 먼저 정상 종료(Windows 는 자식 콘솔에만 Ctrl+C, 그 밖은 SIGTERM → Spring 이 H2 를 닫는다), 30초 안에 안 끝나면 프로세스 트리를 강제 종료(`taskkill /T /F`). 서버 B 는 PENDING 작업이 Spring 작업 실행기의 30초 종료 대기를 붙잡으므로 5초만 기다린다(저장소는 버린다). 이 도구가 띄운 프로세스만 건드리고, Windows 에서는 kill-on-close 작업 개체에 넣어 도구가 강제 종료돼도 남지 않게 한다.
-- 클라이언트: `http.client`, 127.0.0.1, 스레드마다 keep-alive 연결. 시간은 요청을 쓰기 직전부터 응답 본문을 다 읽을 때까지(`perf_counter_ns`). 연결 수립은 시간에서 뺀다(Tomcat 이 100 요청마다 연결을 닫는 것 포함). 끊긴 연결은 한 번 다시 연결해 재시도하고 성공한 시도만 잰다. POST 마다 새 `Idempotency-Key`.
+- 클라이언트: `http.client`, 127.0.0.1, 스레드마다 keep-alive 연결. 시간은 요청을 쓰기 직전부터 응답 본문을 다 읽을 때까지(`perf_counter_ns`). 연결 수립은 시간에서 뺀다(Tomcat 이 100 요청마다 연결을 닫는 것 포함). 끊긴 연결은 한 번 다시 연결해 재시도하고 성공한 시도만 잰다. E2E 흐름(`flowMs`, `completeMs`)도 흐름 안에서 일어난 연결 수립·죽은 시도 시간(`HttpClient.untimed_ns`)을 빼고, 뺀 값은 흐름마다 `untimedMs`. POST 마다 새 `Idempotency-Key`.
 - jar: `git rev-parse <ref>^{commit}` → 캐시에 없으면 `git worktree add --detach` 한 임시 폴더에서 `gradlew bootJar -x test --no-daemon` → 복사 → `git worktree remove --force`. 같은 작업 폴더를 여러 실행이 함께 써도 되도록 커밋별 잠금 파일과 실행별 폴더를 쓴다. `gradlew --stop` 은 같은 Gradle 버전의 **모든** 데몬(사용자 것 포함)을 멈추므로 쓰지 않고 데몬 없이 빌드한다.
 - 픽스처는 시드 고정 생성기로 만들고 작업 폴더에 내용 해시와 함께 캐시한다: 64×64 노이즈 PNG, 1230×1230 노이즈 PNG(약 4.5 MB), 4000×3000 그라디언트 PNG(약 1.1 MB), 합성 GLB(1,500,000 바이트, glTF 2.0 헤더·JSON·BIN 청크).
 
@@ -105,5 +108,6 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 - 로컬 루프백(127.0.0.1)에서 잰 값이다. 클라우드 VM, Tailscale, 실제 GPU 추론 경로가 아니다. real 시나리오는 모델 없는 스텁이라 Spring 쪽 오버헤드만 보인다.
 - 부하 생성기가 Python(GIL, http.client)이라 동시 시나리오에는 클라이언트 자신의 지연이 섞일 수 있다(`poll_load` 는 이를 줄이려 4프로세스).
 - 서버와 클라이언트가 한 PC 를 나눠 쓴다. 디스크·메모리 대역, 백신 실시간 검사, 다른 프로그램의 부하가 섞인다.
-- 서버 쪽 시간(events.jsonl)은 ms 정수이고 JDK 17 Windows 의 시계 해상도를 따른다. `completeMs` 는 폴링 간격만큼 늦게 관측된다(`bench.pollsPerJob` 참고).
-- 앞 시나리오가 JIT 를 데우므로 시나리오 사이 비교보다 같은 시나리오의 버전 사이 비교에 쓴다. `scale` 의 첫 N 은 앞 시나리오가 만든 작업 수보다 작을 수 있어 실제 N(`bench.actualN@N`)을 함께 본다.
+- 서버 쪽 시간(events.jsonl)은 ms 단위 정수(버림)라 1 ms 보다 작은 차이는 보이지 않는다. `completeMs` 는 폴링 간격만큼 늦게 관측된다(`bench.pollsPerJob` 참고).
+- 앞 시나리오가 JIT 를 데우므로 시나리오 사이 비교보다 같은 시나리오의 버전 사이 비교에 쓴다. `scale` 의 첫 N 은 앞 시나리오가 만든 작업 수(보고용 약 390, `--quick` 68)보다 작을 수 있다. 보고서의 scale 행 이름은 실제로 잰 N 이다(`bench.actualN@N`, 예: `N=390 (목표 200)`).
+- 시나리오 메모(`notes`)는 보고서에 `<라벨> r<반복>: 메모` 로 버전마다 4개까지 나온다(나머지는 결과 JSON).

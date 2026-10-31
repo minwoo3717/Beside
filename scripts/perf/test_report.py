@@ -1,4 +1,5 @@
 """report.py and mdlite.py: HTML from synthetic results of three versions, valid inline SVG, tables, labels."""
+import io
 import json
 import random
 import re
@@ -6,6 +7,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest import mock
 
 import mdlite
 import report
@@ -133,6 +135,13 @@ class ReportTest(unittest.TestCase):
         for label in ("v0", "v1", "v2"):
             self.assertIn(f"{label}-r1.json", html)
 
+    def test_scale_rows_name_the_n_they_were_measured_at(self):
+        # earlier scenarios had made 390 jobs before scale started: the "200" rows were measured at 390
+        self.assertIn("목록 첫 페이지 (limit 20) · N=390 (목표 200)", self.html)
+        self.assertIn("단건 조회 · N=1000<", self.html)
+        self.assertNotIn("· N=200<", self.html)
+        self.assertIn("목록 첫 페이지 (N=2000)", self.html)  # cover row: the largest N was reached as planned
+
     def test_sections_and_notes_order(self):
         html = self.html
         positions = [html.index(text) for text in ("<h1>측정 방법</h1>", "<h1>시나리오별 결과</h1>",
@@ -206,6 +215,98 @@ class ErrorsAndZeroBaselineTest(unittest.TestCase):
                 run.write_json(Path(folder) / suite["_file"], {k: v for k, v in suite.items() if k[0] != "_"})
             html = report.build_html(report.load_data([folder]), Path(folder) / "none.json", None, "cmd")
         self.assertIn("오류가 있는 측정</b>: v0 r2 (concurrent_e2e)", html)
+
+
+def write_data(folder: Path, suites, env=None, work_dir=""):
+    """A results folder: the suites and a run.json with this environment."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for suite in suites:
+        run.write_json(folder / f"{suite['label']}-r{suite['rep']}.json", suite)
+    run.write_json(folder / "run.json", {"schema": run.RUN_SCHEMA, "startedAt": "2026-10-31T10:00:00+09:00",
+                                         "env": env or {}, "workDir": work_dir,
+                                         "counts": suites[0]["settings"]["counts"]})
+    return folder
+
+
+def quick_suite(label, rep, capabilities=("mock",)):
+    suite = make_suite(label, rep, 1.0, list(capabilities))
+    suite["quick"] = True
+    suite["settings"] = {"counts": scenarios.effective_counts(True)}
+    return suite
+
+
+class ConditionsTest(unittest.TestCase):
+    def test_one_version_measured_two_ways_is_not_pooled(self):
+        with tempfile.TemporaryDirectory() as root:
+            full = write_data(Path(root) / "full", [make_suite("v1", 1, 1.0, ["mock"])])
+            quick = write_data(Path(root) / "quick", [quick_suite("v1", 2)])
+            with self.assertRaises(ValueError) as caught:
+                report.build_html(report.load_data([full, quick]), Path(root) / "none.json", None, "cmd")
+            message = str(caught.exception)
+            self.assertIn("v1: full [full/v1-r1.json] vs --quick [quick/v1-r2.json]", message)
+            self.assertIn("healthz.n", message)
+            html_out = Path(root) / "report.html"
+            with mock.patch("sys.stdout", new_callable=io.StringIO) as printed:
+                code = report.main(["--data", str(full), "--data", str(quick), "--versions-file",
+                                    str(Path(root) / "none.json"), "--html-out", str(html_out),
+                                    "--out", str(Path(root) / "report.pdf")])
+            self.assertEqual(code, 2)
+            self.assertIn("report not built", printed.getvalue())
+            self.assertFalse(html_out.exists())
+
+    def test_versions_measured_with_different_counts_are_flagged(self):
+        with tempfile.TemporaryDirectory() as root:
+            quick = write_data(Path(root) / "q-run", [quick_suite("v0", 1)])
+            full = write_data(Path(root) / "f-run", [make_suite("v1", 1, 1.0, ["mock"])])
+            html = report.build_html(report.load_data([quick, full]), Path(root) / "none.json", None, "cmd")
+        self.assertIn("측정 조건이 다른 데이터", html)
+        self.assertIn("빠른 측정(--quick)이 섞여 있다</b>: v0", html)
+        self.assertIn("<h2>데이터별 조건</h2>", html)
+        self.assertIn("<code>q-run</code> (v0): --quick", html)
+        self.assertIn("<code>f-run</code> (v1): 보고용 횟수", html)
+        self.assertIn("healthz.n=50", html)
+        self.assertIn("healthz.n=500", html)
+
+    def test_condition_sentences_come_from_run_json(self):
+        pinned = {"os": "Linux-6.1-x86_64", "java": 'openjdk version "21.0.2"\nOpenJDK Runtime', "serverCpus": 2,
+                  "pinnedCpus": [10, 11], "pinnedCores": 1,
+                  "jvmArgs": ["-Xms256m", "-XX:ActiveProcessorCount=2"]}
+        unpinned = {"os": "Windows-11", "serverCpus": 0, "pinnedCpus": None, "jvmArgs": ["-Xms256m"]}
+        with tempfile.TemporaryDirectory() as root:
+            a = write_data(Path(root) / "a", [make_suite("v1", 1, 1.0, ["mock"])], pinned, "/tmp/beside-perf")
+            html_pinned = report.build_html(report.load_data([a]), Path(root) / "none.json", None, "cmd")
+            b = write_data(Path(root) / "b", [make_suite("v1", 1, 1.0, ["mock"])], unpinned,
+                           "C:/Users/x/OneDrive/work")
+            html_unpinned = report.build_html(report.load_data([b]), Path(root) / "none.json", None, "cmd")
+        for html in (html_pinned, html_unpinned):
+            self.assertNotIn("CPU 2개에 고정했지만", html)
+            self.assertNotIn("JDK 17 Windows", html)
+            self.assertNotIn("OS 임시 폴더의 새 폴더", html)
+            self.assertIn("서버 B 는 A 의 저장소를 그대로 다시 연다", html)
+        self.assertIn("물리 코어 1개를 SMT 로 나눈 논리 CPU 2개", html_pinned)
+        self.assertIn("ActiveProcessorCount=2</code> 로 CPU 2개라고 알렸다", html_pinned)
+        self.assertIn('openjdk version &quot;21.0.2&quot; · Linux-6.1-x86_64', html_pinned)
+        self.assertIn("<code>/tmp/beside-perf</code>", html_pinned)
+        self.assertNotIn("OneDrive 안이라", html_pinned)
+        self.assertIn("서버 CPU 를 고정하지 않았다(--server-cpus 0)", html_unpinned)
+        self.assertIn("같은 CPU 를 다투고", html_unpinned)
+        self.assertIn("OneDrive 안이라", html_unpinned)
+
+    def test_notes_name_version_and_repetition(self):
+        def suite(label, rep, notes):
+            s = make_suite(label, rep, 1.0, ["mock"])
+            s["scenarios"]["scale"]["notes"] = notes
+            s["_dir"], s["_file"] = "data", f"{label}-r{rep}.json"
+            return s
+
+        groups = {"v0": [suite("v0", 1, ["N=200: not every awaited job COMPLETED", "server lists 5 jobs"]),
+                         suite("v0", 2, ["N=200: not every awaited job COMPLETED"])],
+                  "v1": [suite("v1", 1, ["server lists 5 jobs"] + [f"note {i}" for i in range(5)])]}
+        notes = report.scenario_notes(["v0", "v1"], groups, "scale")
+        self.assertEqual(notes[:3], ["v0 r1·r2: N=200: not every awaited job COMPLETED",
+                                     "v0 r1: server lists 5 jobs", "v1 r1: server lists 5 jobs"])
+        self.assertEqual(notes[-1], "v1: 메모 2개 더 (결과 JSON 의 notes)")  # at most 4 per version
+        self.assertEqual(len(notes), 2 + 4 + 1)
 
 
 class HelpersTest(unittest.TestCase):

@@ -361,7 +361,8 @@ def collect_env(java: dict, jvm_args, cpus, server_cpus: int, removed_env) -> di
         "machine": platform.machine(), "cpuModel": cpu_model(), "logicalCpus": os.cpu_count(), "ramGB": ram_gb(),
         "python": platform.python_version(), "pythonImplementation": platform.python_implementation(),
         "java": java["version"], "javaPath": java["path"], "jvmArgs": list(jvm_args), "serverCpus": server_cpus,
-        "pinnedCpus": cpus, "loadGeneratorPinned": False, "power": power_info(),
+        "pinnedCpus": cpus, "pinnedCores": procs.physical_cores(cpus), "loadGeneratorPinned": False,
+        "power": power_info(),
         "envRemovedForServers": list(removed_env),
     }
 

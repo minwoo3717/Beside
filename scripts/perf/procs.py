@@ -94,6 +94,29 @@ def pick_cpus(count: int):
     return available[-count:]
 
 
+def physical_cores(cpus):
+    """How many physical cores the logical CPUs `cpus` belong to (2 SMT siblings of one core -> 1), or None when
+    unknown. Best effort: Windows GetLogicalProcessorInformation, Linux sysfs topology."""
+    if not cpus:
+        return None
+    wanted = set(cpus)
+    try:
+        if IS_WINDOWS:
+            cores = [mask for mask in _core_masks_windows() if mask & wanted]
+            covered = set().union(*cores) if cores else set()
+            return len(cores) if wanted <= covered else None
+        topology = Path("/sys/devices/system/cpu")
+        if topology.is_dir():
+            keys = set()
+            for cpu in wanted:
+                base = topology / f"cpu{cpu}" / "topology"
+                keys.add(((base / "physical_package_id").read_text().strip(), (base / "core_id").read_text().strip()))
+            return len(keys)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return None
+
+
 # ----------------------------------------------------------------------------------------------- Windows helpers
 
 if IS_WINDOWS:
@@ -196,6 +219,26 @@ if IS_WINDOWS:
             return bool(_k32.AssignProcessToJobObject(job, handle))
         finally:
             _k32.CloseHandle(handle)
+
+    class _SLPI(ctypes.Structure):  # SYSTEM_LOGICAL_PROCESSOR_INFORMATION (union as 16 reserved bytes)
+        _fields_ = [("ProcessorMask", ctypes.c_size_t), ("Relationship", ctypes.c_int),
+                    ("Union", ctypes.c_ulonglong * 2)]
+
+    _k32.GetLogicalProcessorInformation.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD)]
+    _k32.GetLogicalProcessorInformation.restype = wintypes.BOOL
+
+    def _core_masks_windows() -> list:
+        """One set of logical CPU numbers per physical core (RelationProcessorCore), processor group 0."""
+        length = wintypes.DWORD(0)
+        _k32.GetLogicalProcessorInformation(None, ctypes.byref(length))
+        size = ctypes.sizeof(_SLPI)
+        if length.value < size:
+            return []
+        items = (_SLPI * (length.value // size))()
+        if not _k32.GetLogicalProcessorInformation(items, ctypes.byref(length)):
+            return []
+        return [{c for c in range(64) if item.ProcessorMask >> c & 1}
+                for item in items[:length.value // size] if item.Relationship == 0]
 
     def _memory_windows(pid: int):
         psapi = ctypes.WinDLL("psapi", use_last_error=True)
