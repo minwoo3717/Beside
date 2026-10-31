@@ -38,7 +38,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<?> handleApi(ApiException ex, HttpServletRequest request) {
-        log.warn("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), ex.getMessage());
+        log.warn("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getJobId());
         }
@@ -63,7 +63,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<?> handleInvalidUpload(MultipartException ex, HttpServletRequest request) {
-        log.warn("Invalid multipart upload: {}", ex.getMessage());
+        log.warn("Invalid multipart upload: {}", forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, "Invalid photo upload: " + ex.getMessage(), null);
         }
@@ -90,7 +90,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        log.warn("Bad request: {}", ex.getMessage());
+        log.warn("Bad request: {}", forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, ex.getMessage(), null);
         }
@@ -118,6 +118,33 @@ public class GlobalExceptionHandler {
             return v1(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR, "Internal server error", null);
         }
         return flat(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+    }
+
+    /**
+     * Messages that carry request text (a {jobId} path variable is URL-decoded, a client filename) are logged with
+     * control characters escaped, so CR/LF cannot forge log lines and escape sequences cannot rewrite a terminal.
+     */
+    static String forLog(String text) {
+        if (text == null) {
+            return null;
+        }
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            switch (c) {
+                case '\r' -> out.append("\\r");
+                case '\n' -> out.append("\\n");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (Character.isISOControl(c)) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.toString();
     }
 
     private static boolean isV1(HttpServletRequest request) {
