@@ -600,7 +600,7 @@ figcaption { font-size: 7.6pt; color: #898781; margin-top: 1mm; }
 .banner b { color: #7a5200; }
 .scenario { break-inside: auto; }
 .scenario h3 { break-before: auto; }
-.scenario h3, .what { break-after: avoid; }
+.head { break-after: avoid; }
 .what { color: #52514e; font-size: 8.6pt; }
 .notes { font-size: 7.6pt; color: #898781; margin: 0 0 2.5mm; break-inside: avoid; }
 .notes ul { margin: 0.4mm 0 0; padding-left: 4mm; }
@@ -1242,8 +1242,9 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     out.append('<p class="small muted">표: p50 / p95 와 표본 수 n(값 지표는 반복의 중앙값), 아래 줄은 기준 대비 Δ% 와 판정. '
                "그림: 같은 값을 막대로.</p>")
     for index, (key, title, what) in enumerate(SCENARIOS, 1):
-        # heading, description and (short) table stay on one page; the chart may move to the next one
-        out.append(f'<div class="scenario"><div class="{"" if key == "scale" else "keep"}">'
+        # heading, description and (short) table stay on one page; the chart may move to the next one. The scale
+        # table is too long for that, so its heading and description only stay with the table's start ("head")
+        out.append(f'<div class="scenario"><div class="{"keep head" if key == "scale" else "keep"}">'
                    f'<h3>{index}. {esc(title)} <code>{esc(key)}</code></h3>'
                    f'<p class="what">{esc(what)} {esc(counts_text(counts, key))}.</p>')
         states = {label: state_of(groups.get(label, []), key) for label in labels}
