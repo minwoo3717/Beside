@@ -62,7 +62,7 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 ## 출력
 
 - 결과 폴더(기본 `docs/perf/data/<YYYY-MM-DD_HHMM>`, `--quick` 이면 `scripts/perf/out/quick/<...>`):
-  - `<label>-r<rep>.json` — 스위트 하나: 버전(ref, 해석한 SHA), jar(SHA-256, 출처), 설정(JVM 옵션, 고정 CPU, 횟수), 픽스처 해시, 서버별 기동·종료 방식, 시나리오별 `{status, reason?, samples, values, jobs, jobGroups, notes, server}`. 원시 표본은 0.01 ms 단위. `server` 는 작업 묶음마다 `{n, jobs, missing, results, measured, excluded, passthrough, samples}`(`results` 는 모든 줄의 결과별 개수, `samples` 는 COMPLETED 실행 `measured` 개의 값, `excluded` 는 뺀 줄 수).
+  - `<label>-r<rep>.json` — 스위트 하나: 버전(ref, 해석한 SHA), jar(SHA-256, 출처), 설정(JVM 옵션, 고정 CPU, 횟수, 스위트 직전 2초의 PC 전체 CPU 사용률 `backgroundCpuPct` — 다른 프로그램의 부하), 픽스처 해시, 서버별 기동·종료 방식, 시나리오별 `{status, reason?, samples, values, jobs, jobGroups, notes, server}`. 원시 표본은 0.01 ms 단위. `server` 는 작업 묶음마다 `{n, jobs, missing, results, measured, excluded, passthrough, samples}`(`results` 는 모든 줄의 결과별 개수, `samples` 는 COMPLETED 실행 `measured` 개의 값, `excluded` 는 뺀 줄 수).
   - `run.json` — 환경(OS, CPU, 논리 CPU, RAM, java -version, Python, JVM 옵션, 고정 CPU `pinnedCpus` 와 그 물리 코어 수 `pinnedCores`, `serverCpus`, 전원), 작업 폴더 `workDir`, 버전과 SHA, 반복별 순서, 시작·끝, 도구 커밋(`git rev-parse HEAD`, scripts/perf 미커밋 변경 여부), 명령줄. 쓰기가 OneDrive 잠금 등으로 실패하면 측정을 멈추지 않고 끝에 다시 쓰며, 그래도 안 되면 작업 폴더의 실행 폴더(`runDir`)에 남긴다.
 - 작업 폴더(`--work-dir`): `jars/<sha>.jar`(한 번 쓰면 바꾸지 않는 캐시, 이 도구가 만든 것은 `<sha>.jar.json` 기록이 붙음), `fixtures/`(내용 해시로 검증하는 픽스처), `runs/<stamp>-p<pid>/<label>-r<rep>/logs/`(서버·스텁 로그)와 `events.jsonl`. 업로드·DB 등 큰 저장소는 서버마다 끝나면 지운다.
 - 보고서: `--out` 의 PDF 와 `--html-out`(기본 `scripts/perf/out/report.html`, gitignore). `scripts/perf/out/` 의 결과·PDF·HTML 은 커밋하지 않는다.
@@ -108,7 +108,7 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 
 - 로컬 루프백(127.0.0.1)에서 잰 값이다. 클라우드 VM, Tailscale, 실제 GPU 추론 경로가 아니다. real 시나리오는 모델 없는 스텁이라 Spring 쪽 오버헤드만 보인다.
 - 부하 생성기가 Python(GIL, http.client)이라 동시 시나리오에는 클라이언트 자신의 지연이 섞일 수 있다(`poll_load` 는 이를 줄이려 4프로세스).
-- 서버와 클라이언트가 한 PC 를 나눠 쓴다. 디스크·메모리 대역, 백신 실시간 검사, 다른 프로그램의 부하가 섞인다.
+- 서버와 클라이언트가 한 PC 를 나눠 쓴다. 디스크·메모리 대역, 백신 실시간 검사, 다른 프로그램의 부하가 섞인다. 다른 프로그램의 부하는 스위트마다 `backgroundCpuPct` 로 남기고, 보고서는 그 범위를 '한계'에 적으며 최대가 10 % 이상이면 표지에 경고한다.
 - 서버 쪽 시간(events.jsonl)은 ms 단위 정수(버림)라 1 ms 보다 작은 차이는 보이지 않는다. `completeMs` 는 폴링 간격만큼 늦게 관측된다(`bench.pollsPerJob` 참고).
 - 앞 시나리오가 JIT 를 데우므로 시나리오 사이 비교보다 같은 시나리오의 버전 사이 비교에 쓴다. `scale` 의 첫 N 은 앞 시나리오가 만든 작업 수(보고용 약 390, `--quick` 68)보다 작을 수 있다. 보고서의 scale 행 이름은 실제로 잰 N 이다(`bench.actualN@N`, 예: `N=390 (목표 200)`).
 - 시나리오 메모(`notes`)는 보고서에 `<라벨> r<반복>: 메모` 로 버전마다 4개까지 나온다(나머지는 결과 JSON).

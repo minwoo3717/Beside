@@ -131,6 +131,8 @@ if IS_WINDOWS:
     _k32.GetProcessAffinityMask.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_size_t),
                                             ctypes.POINTER(ctypes.c_size_t)]
     _k32.GetProcessAffinityMask.restype = wintypes.BOOL
+    _k32.GetSystemTimes.argtypes = [ctypes.POINTER(wintypes.FILETIME)] * 3
+    _k32.GetSystemTimes.restype = wintypes.BOOL
     _k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     _k32.CreateJobObjectW.restype = wintypes.HANDLE
     _k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
@@ -409,6 +411,38 @@ def memory(pid: int):
         return values.get("VmRSS"), values.get("VmHWM")
     out = subprocess.run(["ps", "-o", "rss=", "-p", str(pid)], capture_output=True, text=True, timeout=10)
     return (int(out.stdout.strip()) * 1024 if out.stdout.strip() else None), None
+
+
+def _cpu_times():
+    """(idle, total) CPU time counters of the whole machine (all logical CPUs), or None where unknown."""
+    if IS_WINDOWS:
+        idle, kernel, user = wintypes.FILETIME(), wintypes.FILETIME(), wintypes.FILETIME()
+        if not _k32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user)):
+            return None
+
+        def ticks(ft):
+            return (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+
+        return ticks(idle), ticks(kernel) + ticks(user)  # kernel time includes the idle time
+    stat = Path("/proc/stat")
+    if stat.exists():
+        fields = [int(x) for x in stat.read_text().splitlines()[0].split()[1:]]
+        return fields[3] + (fields[4] if len(fields) > 4 else 0), sum(fields[:8])  # idle + iowait; guest is in user
+    return None
+
+
+def cpu_busy_pct(seconds: float = 2.0):
+    """Machine-wide CPU busy percentage over `seconds` (every process, all logical CPUs), or None where the OS has
+    no counters (macOS). Taken while none of our servers runs, it is the load of the other programs on the PC."""
+    first = _cpu_times()
+    if first is None:
+        return None
+    time.sleep(seconds)
+    second = _cpu_times()
+    total = second[1] - first[1]
+    if total <= 0:
+        return None
+    return round(100.0 * (1.0 - (second[0] - first[0]) / total), 1)
 
 
 def _ctrl_c(pid: int) -> bool:

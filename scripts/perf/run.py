@@ -639,6 +639,9 @@ def run_one(label, rep, position, version, jar, java, jvm_args, cpus, args, fx, 
     def suite_log(message):
         log(f"  {label} r{rep} {message}")
 
+    background = procs.cpu_busy_pct(2.0)  # none of our servers is up yet: the load of the PC's other programs
+    if background is not None:
+        suite_log(f"background CPU {background} % (other programs, 2 s before the suite)")
     ctx = scenarios.SuiteContext(label, rep, jar["path"], java["path"], jvm_args, cpus, fx, counts, run_dir,
                                  suite_log, keep_storage=args.keep_storage)
     try:
@@ -653,7 +656,7 @@ def run_one(label, rep, position, version, jar, java, jvm_args, cpus, args, fx, 
             errors.append(f"processes still running after the suite were killed: {leftovers}")
         procs.stop_all()
     settings = {"jvmArgs": list(jvm_args), "serverCpus": args.server_cpus, "pinnedCpus": cpus, "counts": counts,
-                "selected": list(selected), "runDir": str(run_dir)}
+                "selected": list(selected), "runDir": str(run_dir), "backgroundCpuPct": background}
     jar_info = {"sha": version["sha"], "bytes": jar["bytes"], "sha256": jar["sha256"], "file": Path(jar["path"]).name,
                 "origin": jar["origin"]}
     return suite_record(label, rep, position, version, args.quick, started_at, now_iso(), time.monotonic() - started,

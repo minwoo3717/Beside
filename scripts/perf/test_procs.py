@@ -136,5 +136,23 @@ class StopTest(unittest.TestCase):
             self.assertNotIn(proc.pid, procs.live_pids())
 
 
+class CpuBusyTest(unittest.TestCase):
+    def test_machine_wide_busy_percentage(self):
+        value = procs.cpu_busy_pct(0.3)
+        if os.name == "nt" or Path("/proc/stat").exists():
+            self.assertIsNotNone(value)
+            self.assertGreaterEqual(value, 0.0)
+            self.assertLessEqual(value, 100.0)
+        else:
+            self.assertIsNone(value)  # macOS: no counters, recorded as unknown
+
+    def test_busy_is_one_minus_the_idle_share(self):
+        with mock.patch.object(procs, "_cpu_times", side_effect=[(100, 1000), (400, 2000)]), \
+                mock.patch.object(procs.time, "sleep"):
+            self.assertEqual(procs.cpu_busy_pct(2.0), 70.0)  # 300 idle of 1000 ticks
+        with mock.patch.object(procs, "_cpu_times", return_value=None):
+            self.assertIsNone(procs.cpu_busy_pct(0.0))
+
+
 if __name__ == "__main__":
     unittest.main()
