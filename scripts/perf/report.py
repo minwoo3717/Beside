@@ -76,12 +76,15 @@ VALUE_META = {
     "bench.pollsPerJob": ("작업당 폴링 횟수 (평균)", "회", None),
     "bench.jobsPerSec": ("처리량 (완료 흐름 ÷ 경과 시간)", "건/s", False),
     "bench.pollReqPerSec": ("처리량 (성공 요청 ÷ 경과 시간)", "요청/s", False),
-    "bench.errors": ("오류", "건", True),
+    "bench.errors": ("오류 (실패한 요청·흐름)", "건", None),
     "bench.peakRssMB": ("최대 RSS", "MiB", True),
     "bench.jarBytes": ("jar 크기", "bytes", None),
     "bench.restartStartupMs": ("재기동 (Popen→healthz 200)", "ms", True),
     "bench.restartSpringStartedMs": ("재기동 Spring 'Started' 로그 시간", "ms", True),
 }
+# Values that count events rather than measure them: summed over the repetitions (a failure in one repetition must
+# not vanish in a median), shown in red when not zero, never given a change rate or a verdict.
+COUNTERS = {"bench.errors"}
 SERVER_LABELS = {"uploadMs": "서버 uploadMs", "totalMs": "서버 totalMs", "queuedMs": "서버 queuedMs",
                  "processingMs": "서버 processingMs"}
 REAL_ROWS = [("sample", "flowMs"), ("sample", "completeMs"), ("sample", "assetMs"), ("sample", "postMs"),
@@ -266,8 +269,13 @@ def row_name(row) -> str:
     return row[1] if row[0] != "server" else f"{row[1]} → {row[2]}"
 
 
+def is_counter(row) -> bool:
+    return row[0] == "value" and row[1] in COUNTERS
+
+
 def entry(suites, scenario, row) -> dict:
-    """What one version measured for one row: state, repetitions, pooled summary / value."""
+    """What one version measured for one row: state, repetitions, pooled summary / value (median of the
+    repetitions; the sum for COUNTERS)."""
     state, reason = state_of(suites, scenario)
     reps = reps_for(suites, scenario, row) if state in ("ok", "error") else []
     out = {"state": state, "reason": reason, "reps": reps}
@@ -279,7 +287,7 @@ def entry(suites, scenario, row) -> dict:
         out["summary"] = stats.summary(pooled)
         if row[0] == "value":
             per_rep = [rep[0] for rep in reps]
-            out["value"] = stats.median(per_rep)
+            out["value"] = math.fsum(per_rep) if is_counter(row) else stats.median(per_rep)
             out["range"] = (min(per_rep), max(per_rep))
     return out
 
@@ -329,7 +337,9 @@ def unit_label(unit) -> str:
 
 
 def cell(e: dict, row, base: dict, is_base: bool, lower) -> str:
-    """One table cell: p50 / p95 (or the value), then Δ% against the baseline with the verdict badge."""
+    """One table cell: p50 / p95 (or the value), then Δ% against the baseline with the verdict badge, or "비교 불가"
+    when the baseline is 0 and this version is not. Counters (COUNTERS) show the sum over the repetitions, in red
+    when it is not 0, with no change rate."""
     if e["state"] == "missing":
         return '<td class="na">–</td>'
     if e["state"] == "skipped":
@@ -339,9 +349,11 @@ def cell(e: dict, row, base: dict, is_base: bool, lower) -> str:
     if not e.get("reps"):
         return f'<td class="na err">오류<div class="why">{esc(short_reason(e["reason"]))}</div></td>'
     _label, unit, _lower = row_meta(row)
+    counter = is_counter(row)
     if row[0] == "value":
         main = fmt_value(e["value"], unit)
-        extra = f'<span class="n">{len(e["reps"])}회</span>' if len(e["reps"]) > 1 else ""
+        reps_text = f'{len(e["reps"])}회 합계' if counter else f'{len(e["reps"])}회'
+        extra = f'<span class="n">{reps_text}</span>' if len(e["reps"]) > 1 else ""
     else:
         s = e["summary"]
         main = f'{fmt_ms(s["p50"])} <span class="sep">/</span> {fmt_ms(s["p95"])}'
@@ -349,16 +361,19 @@ def cell(e: dict, row, base: dict, is_base: bool, lower) -> str:
     parts = [f'<div class="v">{main} {extra}</div>']
     if e["state"] == "error":
         parts.append(f'<div class="why err">오류 포함: {esc(short_reason(e["reason"]))}</div>')
-    if is_base:
+    if unit == "개" or counter:
+        pass  # counts, not measurements: no change rate, no verdict
+    elif is_base:
         parts.append('<div class="d"><span class="basetag">기준</span></div>')
-    elif unit == "개":
-        pass  # a count of jobs, not a measurement: no change rate
     elif base and base.get("reps") and e.get("reps"):
         cmp = stats.compare(base["reps"], e["reps"], lower_is_better=(lower is not False))
-        if cmp:
+        if cmp and cmp["verdict"] == "n/a":
+            parts.append('<div class="d">비교 불가 <span class="why">(기준 0)</span></div>')
+        elif cmp:
             verdict = badge(cmp["verdict"]) if lower is not None else ""
             parts.append(f'<div class="d">{fmt_delta(cmp["deltaPct"])} {verdict}</div>')
-    return "<td>" + "".join(parts) + "</td>"
+    td_class = ' class="err"' if counter and e["value"] else ""
+    return f"<td{td_class}>" + "".join(parts) + "</td>"
 
 
 def short_reason(reason: str) -> str:
@@ -728,6 +743,18 @@ def counts_text(counts: dict, scenario: str) -> str:
     return texts.get(scenario, real if scenario.startswith("real") else "")
 
 
+def failed_suites(suites) -> list:
+    """"<label> r<rep> (<scenarios with errors>)" for every suite with an error, sorted by label and repetition."""
+    out = []
+    for suite in sorted(suites, key=lambda s: (s["label"], s.get("rep") or 0, s.get("_dir", ""))):
+        bad = [name for name, result in (suite.get("scenarios") or {}).items() if result.get("status") == "error"]
+        if suite.get("errors"):
+            bad.append("스위트 실행")
+        if bad or suite.get("status") == "error":
+            out.append(f"{suite['label']} r{suite.get('rep')}" + (f" ({', '.join(bad)})" if bad else ""))
+    return out
+
+
 def build_html(data, versions_file, notes_dir, report_command) -> str:
     order, baseline, meta = version_meta(data, versions_file)
     groups = by_label(data["suites"])
@@ -741,7 +768,7 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                    or {s.get("startedAt", "")[:10] for s in data["suites"]})
     quick = any(s.get("quick") for s in data["suites"])
     reps = {label: len(groups[label]) for label in labels}
-    failed = [f"{s['label']} r{s.get('rep')}" for s in data["suites"] if s.get("status") == "error"]
+    failed = failed_suites(data["suites"])
     counts = next((d.get("counts") for d in run_docs if d.get("counts")),
                   data["suites"][0].get("settings", {}).get("counts", {}))
 
@@ -761,7 +788,8 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
         banners.append("<b>반복 1회</b>인 버전이 있다. 판정의 '반복별 p50 범위'가 한 점이라 판정은 참고용이다 "
                        "(보고용은 --reps 3 이상).")
     if failed:
-        banners.append("<b>오류가 있는 측정</b>: " + esc(", ".join(failed)) + ". 해당 칸의 이유를 확인한다.")
+        banners.append("<b>오류가 있는 측정</b>: " + esc("; ".join(failed)) + ". 실패한 요청은 표본에서 빠졌다. "
+                       "해당 칸의 '오류 포함' 이유와 오류 수를 확인한다.")
     if baseline is None:
         banners.append("<b>기준 버전 없음</b>: versions 파일의 baseline 이 데이터에 없어 비교·판정을 하지 않았다.")
     for text in banners:
@@ -782,7 +810,7 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     out.append("<h2>핵심 지표</h2>")
     out.append('<p class="small muted">칸: p50 / p95 (ms) 또는 값, 아래 줄은 기준 대비 p50 변화율과 판정. '
                "판정은 |Δ| ≥ 10% 이고 반복별 p50 범위가 기준과 겹치지 않을 때만 개선/악화, 나머지는 차이 없음(잡음). "
-               "처리량은 클수록 개선.</p>")
+               "처리량은 클수록 개선. 기준이 0 이면 비교 불가.</p>")
     out.append(metrics_table(key_rows, labels, groups, colors, baseline))
     out.append("</section>")
 
@@ -817,7 +845,11 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "원시 표본은 0.01 ms 단위로 저장한다.</li>"
                "<li>Δ% = (후보 p50 − 기준 p50) ÷ 기준 p50 × 100. 값 지표(기동 시간, RSS, 처리량)는 반복별 값의 중앙값끼리 비교한다.</li>"
                "<li>판정: |Δ%| ≥ 10 이고 반복별 p50(값 지표는 반복별 값)의 [최소, 최대] 범위가 기준의 범위와 겹치지 않을 때만 "
-               "<b>개선</b> 또는 <b>악화</b>. 그 밖에는 <b>차이 없음</b>(잡음으로 본다). 시간은 작을수록, 처리량은 클수록 개선.</li></ul>")
+               "<b>개선</b> 또는 <b>악화</b>. 그 밖에는 <b>차이 없음</b>(잡음으로 본다). 시간은 작을수록, 처리량은 클수록 개선. "
+               "기준이 0 이고 후보가 0 이 아니면 변화율이 없으므로 <b>비교 불가</b>.</li>"
+               "<li>오류 수(<code>bench.errors</code>)는 측정값이 아니라 사건 수라 반복을 <b>합한</b> 값을 보이고, 0 이 아니면 빨간색이며 "
+               "판정하지 않는다. 실패한 요청이 하나라도 있으면 그 시나리오는 '오류 포함'으로 표시되고, 표본(p50·p95)은 성공한 "
+               "요청만으로 계산된다.</li></ul>")
     out.append("<h2>이름 규칙</h2><ul>"
                "<li><code>bench.*</code> 값과 클라이언트 표본 이름(<code>postMs</code>, <code>flowMs</code>, <code>pollMs</code>, "
                "<code>assetMs</code> 등)은 이 벤치마크 전용이며 docs/METRICS.md 에 등록된 이름이 아니다. 앱의 "

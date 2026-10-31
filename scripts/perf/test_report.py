@@ -155,6 +155,59 @@ class ReportTest(unittest.TestCase):
             ET.fromstring(svg)
 
 
+class ErrorsAndZeroBaselineTest(unittest.TestCase):
+    @staticmethod
+    def _suites(label, errors_by_rep):
+        """Suites of one version whose concurrent_e2e had these error counts, one per repetition."""
+        suites = []
+        for rep, errors in enumerate(errors_by_rep, 1):
+            suite = make_suite(label, rep, 1.0, ["mock"])
+            result = suite["scenarios"]["concurrent_e2e"]
+            result["values"]["bench.errors"] = errors
+            if errors:
+                result.update(status="error", reason=f"{errors} failed flows (bench.errors)")
+                suite["status"] = "error"
+            suite["_dir"], suite["_file"] = "data", f"{label}-r{rep}.json"
+            suites.append(suite)
+        return suites
+
+    def test_errors_are_summed_shown_red_and_never_called_noise(self):
+        row = ("value", "bench.errors")
+        base = report.entry(self._suites("v1", [0, 0, 0]), "concurrent_e2e", row)
+        cand = report.entry(self._suites("v2", [5, 6, 5]), "concurrent_e2e", row)
+        self.assertEqual(cand["value"], 16)
+        html = report.cell(cand, row, base, False, report.row_meta(row)[2])
+        self.assertTrue(html.startswith('<td class="err">'), html)
+        self.assertIn("16", html)
+        self.assertIn("3회 합계", html)
+        self.assertNotIn("badge", html)
+        self.assertNotIn("차이 없음", html)
+        # a failure in one repetition out of three is not hidden by a median of 0
+        partial = report.entry(self._suites("v2", [5, 0, 0]), "concurrent_e2e", row)
+        self.assertEqual((partial["value"], partial["state"]), (5, "error"))
+        self.assertIn("오류 포함", report.cell(partial, row, base, False, None))
+        self.assertTrue(report.cell(base, row, None, True, None).startswith("<td>"))  # 0 errors: not red
+
+    def test_zero_baseline_is_not_comparable(self):
+        row = ("sample", "healthzMs")
+        base_suites, cand_suites = self._suites("v1", [0]), self._suites("v2", [0])
+        base_suites[0]["scenarios"]["healthz"]["samples"]["healthzMs"] = [0.0, 0.0]
+        cand_suites[0]["scenarios"]["healthz"]["samples"]["healthzMs"] = [1.0, 2.0]
+        html = report.cell(report.entry(cand_suites, "healthz", row), row, report.entry(base_suites, "healthz", row),
+                           False, True)
+        self.assertIn("비교 불가", html)
+        self.assertNotIn("badge", html)
+
+    def test_cover_banner_names_version_repetition_and_scenario(self):
+        suites = self._suites("v0", [0, 3]) + self._suites("v1", [0])
+        self.assertEqual(report.failed_suites(suites), ["v0 r2 (concurrent_e2e)"])
+        with tempfile.TemporaryDirectory() as folder:
+            for suite in suites:
+                run.write_json(Path(folder) / suite["_file"], {k: v for k, v in suite.items() if k[0] != "_"})
+            html = report.build_html(report.load_data([folder]), Path(folder) / "none.json", None, "cmd")
+        self.assertIn("오류가 있는 측정</b>: v0 r2 (concurrent_e2e)", html)
+
+
 class HelpersTest(unittest.TestCase):
     def test_nice_ticks(self):
         self.assertEqual(report.nice_ticks(7.3), ([0, 2, 4, 6, 8], 8))

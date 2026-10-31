@@ -88,9 +88,11 @@ class CompareTest(unittest.TestCase):
 
     def test_zero_baseline_and_empty(self):
         self.assertEqual(stats.compare([[0], [0]], [[0], [0]])["verdict"], "same")
-        result = stats.compare([[0]], [[5]])
+        # 0 -> 5 (say errors per repetition) has no rate of change; it must not read as noise
+        result = stats.compare([[0], [0], [0]], [[5], [6], [5]])
         self.assertIsNone(result["deltaPct"])
-        self.assertEqual(result["verdict"], "same")
+        self.assertEqual(result["verdict"], "n/a")
+        self.assertEqual(stats.compare([[0]], [[5]], lower_is_better=False)["verdict"], "n/a")
         self.assertIsNone(stats.compare([], [[1]]))
         self.assertIsNone(stats.compare([[1]], [[]]))
 

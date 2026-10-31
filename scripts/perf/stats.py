@@ -3,7 +3,8 @@
 percentile() interpolates linearly between closest ranks: numpy's default "linear" method, Hyndman & Fan type 7
 (also Excel PERCENTILE.INC). compare() pools the samples of every repetition for the medians and uses the spread of
 the per-repetition medians as the noise estimate: a difference counts only when it is at least THRESHOLD_PCT percent
-AND the ranges [min, max] of the per-repetition medians of the two versions do not overlap.
+AND the ranges [min, max] of the per-repetition medians of the two versions do not overlap. A baseline median of 0
+against a non-zero candidate has no rate of change: the verdict is then "n/a", never "same".
 """
 from __future__ import annotations
 
@@ -69,7 +70,8 @@ def compare(baseline_samples_by_rep, candidate_samples_by_rep, lower_is_better: 
     way). Returns the pooled medians, deltaPct = (candidate - baseline) / baseline * 100, the per-repetition median
     ranges, whether they overlap, and the verdict: "better" or "worse" only when |deltaPct| >= threshold_pct and the
     ranges do not overlap, otherwise "same". With lower_is_better=False (throughput) a higher candidate is "better".
-    deltaPct is None when the baseline median is 0 and the candidate is not (the verdict is then "same").
+    When the baseline median is 0 and the candidate's is not, deltaPct is None and the verdict is "n/a" (not
+    comparable): calling that "same" would hide, say, 0 -> 5 as noise.
     Returns None when either side has no samples.
     """
     base = _clean(baseline_samples_by_rep)
@@ -87,10 +89,13 @@ def compare(baseline_samples_by_rep, candidate_samples_by_rep, lower_is_better: 
         delta = (c - b) / abs(b) * 100.0
     else:
         delta = 0.0 if c == 0 else None
-    verdict = "same"
-    if delta is not None and abs(delta) >= threshold_pct and not overlap:
+    if delta is None:
+        verdict = "n/a"
+    elif abs(delta) >= threshold_pct and not overlap:
         improved = c < b if lower_is_better else c > b
         verdict = "better" if improved else "worse"
+    else:
+        verdict = "same"
     return {
         "baseline": _round(b),
         "candidate": _round(c),

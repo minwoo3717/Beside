@@ -606,11 +606,14 @@ def scenario_concurrent_e2e(ctx, server: Server, result: dict):
     for e in thread_errors:
         if e:
             result["notes"].append("thread: " + e)
-    if errors:
-        result["notes"].append(f"{errors} failed flows (counted in bench.errors)")
+    # Any failed flow marks the scenario (like every other scenario): the samples hold only the completed flows, so
+    # a partial failure must show in the report rather than vanish into a clean-looking p50.
     if completed == 0:
         result["status"] = "error"
         result["reason"] = "no flow completed"
+    elif errors:
+        result["status"] = "error"
+        result["reason"] = f"{errors} failed flows (bench.errors); samples are the {completed} completed flows"
 
 
 def _poll_load_process(port, path, threads, per_thread, warmup, start_event, queue):
@@ -698,7 +701,8 @@ def scenario_poll_load(ctx, server: Server, result: dict):
             if worker.is_alive():
                 worker.kill()
     samples = [s for out in outs if out for s in out["samples"]]
-    errors = sum(out["errors"] for out in outs if out)
+    dead = sum(1 for out in outs if not out)  # a load thread that died before reporting lost all of its GETs
+    errors = sum(out["errors"] for out in outs if out) + dead * c["poll_load.perThread"]
     starts = [out["start"] for out in outs if out]
     ends = [out["end"] for out in outs if out]
     wall_ms = _ms(min(starts), max(ends)) if starts else 0
@@ -707,8 +711,14 @@ def scenario_poll_load(ctx, server: Server, result: dict):
     result["values"]["bench.wallMs"] = _r3(wall_ms)
     result["values"]["bench.errors"] = errors
     result["jobGroups"]["pollMs"] = [job_id]
-    if errors:
-        result["notes"].append(f"{errors} failed GETs (counted in bench.errors)")
+    if dead:
+        result["notes"].append(f"{dead} load threads reported nothing (their GETs count as errors)")
+    if not samples:
+        result["status"] = "error"
+        result["reason"] = "no GET succeeded"
+    elif errors:  # samples hold only the successful GETs: a partial failure must show in the report
+        result["status"] = "error"
+        result["reason"] = f"{errors} failed GETs (bench.errors); samples are the {len(samples)} successful GETs"
 
 
 def _seed(ctx, server, body, content_type, need: int, threads: int):
