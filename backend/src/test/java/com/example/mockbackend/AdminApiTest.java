@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -299,7 +300,9 @@ class AdminApiTest {
         assertThat(empty.path("queue").path("oldestPendingMs").isNull()).isTrue();
         assertThat(empty.path("queue").path("oldestProcessingMs").isNull()).isTrue();
 
-        Instant now = Instant.now();
+        // Whole milliseconds, like QueueClock: H2 rounds a sub-microsecond instant up, and when the saves and the GET fall
+        // in one tick of the Windows clock, "now - (now - 60 s)" read back from the DB comes out as 59,999 ms.
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         saveJob(JOB_A, JobStatus.PENDING, now.minusSeconds(60), null, null, null);
         saveJob(JOB_B, JobStatus.PENDING, now.minusSeconds(5), null, null, null);
         saveJob(JOB_C, JobStatus.PROCESSING, now.minusSeconds(40), now.minusSeconds(30), null, null);
