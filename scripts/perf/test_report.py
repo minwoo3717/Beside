@@ -106,6 +106,13 @@ class ReportTest(unittest.TestCase):
             self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
             self.assertIsNotNone(root.find("{http://www.w3.org/2000/svg}title"))
 
+    def test_each_chart_is_its_own_svg(self):
+        # one picture per metric, so a page can break between charts (a real scenario's eight are taller than a page)
+        for svg in SVG.findall(self.html):
+            self.assertEqual(svg.count('class="ct"'), 1, svg[:200])
+        real_charts = [svg for svg in SVG.findall(self.html) if "real · path 전송" in svg]
+        self.assertEqual(len(real_charts), 8)                       # flow, complete, asset, post, queued, processing, total, gap
+
     def test_bar_chart_has_one_bar_per_version_in_fixed_colours(self):
         healthz = next(svg for svg in SVG.findall(self.html) if "헬스 체크" in svg)
         fills = re.findall(r'<path d="M[^"]*" fill="(#[0-9a-f]{6})"', healthz)
@@ -155,6 +162,25 @@ class ReportTest(unittest.TestCase):
         self.assertIn("부하 생성기는 올리지 못했다", report.priority_text(
             {"env": {"priority": {"servers": "above_normal", "loadGenerator": "normal"}}}))
         self.assertIn("바꾸지 않았다", report.priority_text({"env": {"priority": {"servers": "normal"}}}))
+
+    def test_idle_waits_are_values_without_a_change_rate_or_chart(self):
+        # a wait is whole check windows (0.5 ms against 1,000 ms is one window more): a change rate would read as news
+        label = "끝난 뒤 서버가 쉴 때까지 더 기다린 시간 (확인 창 제외)"
+        rows = [self.html[m.start():self.html.find("</tr>", m.start())]
+                for m in re.finditer(re.escape(label), self.html)]
+        row = next(r for r in rows if "1,000" in r)                 # upload_large: 1000 ms in every version
+        self.assertNotIn("%", row)
+        self.assertNotIn("badge", row)
+        self.assertFalse([svg for svg in SVG.findall(self.html) if label in svg])
+
+    def test_report_tool_line_flags_uncommitted_changes(self):
+        answers = {"rev-parse": "c" * 40, "status": " M scripts/perf/report.py"}
+        with mock.patch.object(report, "_git", side_effect=lambda *args: answers[args[0]]):
+            self.assertIn("(scripts/perf 에 커밋 안 된 변경 있음)", report.report_tool_line())
+            answers["status"] = ""
+            line = report.report_tool_line()
+        self.assertIn("c" * 40, line)
+        self.assertNotIn("커밋 안 된", line)
 
     def test_settle_sentence_comes_from_the_suites(self):
         waited, older = make_suite("v1", 1, 1.0, ["mock"]), make_suite("v0", 1, 1.0, ["mock"])
@@ -425,6 +451,11 @@ class MdliteTest(unittest.TestCase):
         self.assertIn("<p>첫 줄 이어지는 줄</p>", html)
         self.assertIn("<ul><li>가</li><li>나 계속</li></ul>", html)
         self.assertIn("<ol><li>하나</li><li>둘</li></ol>", html)
+
+    def test_ordered_list_keeps_its_first_number(self):
+        html = mdlite.render("1. 하나\n\n```\ncode\n```\n\n5. 다섯\n6. 여섯\n")
+        self.assertIn("<ol><li>하나</li></ol>", html)
+        self.assertIn('<ol start="5"><li>다섯</li><li>여섯</li></ol>', html)
 
     def test_inline_and_escaping(self):
         html = mdlite.render("**굵게** `a<b>|c` [링크](https://example.com/x) <script>alert(1)</script> & 끝")

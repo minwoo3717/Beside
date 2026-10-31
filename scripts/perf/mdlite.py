@@ -82,7 +82,7 @@ def _table(header: str, separator: str, rows: list) -> str:
 def render(text: str, heading_offset: int = 0) -> str:
     """Markdown subset -> HTML. heading_offset shifts heading levels (# -> h1+offset, capped at h6)."""
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    out, paragraph, items, list_kind = [], [], [], None
+    out, paragraph, items, list_kind, list_start = [], [], [], None, 1
 
     def flush_paragraph():
         if paragraph:
@@ -92,7 +92,9 @@ def render(text: str, heading_offset: int = 0) -> str:
     def flush_list():
         nonlocal list_kind
         if items:
-            out.append(f"<{list_kind}>" + "".join(f"<li>{inline(item)}</li>" for item in items) + f"</{list_kind}>")
+            start = f' start="{list_start}"' if list_kind == "ol" and list_start != 1 else ""
+            out.append(f"<{list_kind}{start}>" + "".join(f"<li>{inline(item)}</li>" for item in items)
+                       + f"</{list_kind}>")
             items.clear()
         list_kind = None
 
@@ -145,6 +147,8 @@ def render(text: str, heading_offset: int = 0) -> str:
             kind = "ul" if bullet else "ol"
             if list_kind and list_kind != kind:
                 flush_list()
+            if not items:  # a list resumed after a code block keeps its number ("5." stays 5)
+                list_start = int(line.split(".")[0].split(")")[0]) if number else 1
             list_kind = kind
             items.append((bullet or number).group(1).strip())
             i += 1

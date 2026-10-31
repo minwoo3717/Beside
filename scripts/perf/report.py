@@ -90,6 +90,9 @@ VALUE_META = {
 # Values that count events rather than measure them: summed over the repetitions (a failure in one repetition must
 # not vanish in a median), shown in red when not zero, never given a change rate or a verdict.
 COUNTERS = {"bench.errors"}
+# Idle waits are counted in whole check windows (settings.settle windowS): 0.5 ms against 1,000 ms is one window more,
+# not a change, so these are shown as values only: no change rate, no verdict, no chart.
+WINDOW_COUNTED = {"bench.settleAfterMs", "bench.settleTotalMs"}
 SERVER_LABELS = {"uploadMs": "서버 uploadMs", "totalMs": "서버 totalMs", "queuedMs": "서버 queuedMs",
                  "processingMs": "서버 processingMs"}
 REAL_ROWS = [("sample", "flowMs"), ("sample", "completeMs"), ("sample", "assetMs"), ("sample", "postMs"),
@@ -284,6 +287,10 @@ def is_counter(row) -> bool:
     return row[0] == "value" and row[1] in COUNTERS
 
 
+def is_window_counted(row) -> bool:
+    return row[0] == "value" and row[1] in WINDOW_COUNTED
+
+
 def entry(suites, scenario, row) -> dict:
     """What one version measured for one row: state, repetitions, pooled summary / value (median of the
     repetitions; the sum for COUNTERS)."""
@@ -372,8 +379,8 @@ def cell(e: dict, row, base: dict, is_base: bool, lower) -> str:
     parts = [f'<div class="v">{main} {extra}</div>']
     if e["state"] == "error":
         parts.append(f'<div class="why err">오류 포함: {esc(short_reason(e["reason"]))}</div>')
-    if unit == "개" or counter:
-        pass  # counts, not measurements: no change rate, no verdict
+    if unit == "개" or counter or is_window_counted(row):
+        pass  # counts and window-counted waits, not measurements: no change rate, no verdict
     elif is_base:
         parts.append('<div class="d"><span class="basetag">기준</span></div>')
     elif base and base.get("reps") and e.get("reps"):
@@ -561,6 +568,7 @@ tr { break-inside: avoid; }
 tbody th { font-weight: 600; word-break: keep-all; }
 table.metrics th:first-child { width: 30%; }
 table.pairs thead th { white-space: normal; word-break: keep-all; }
+table.pairs tbody th, table.pairs td { padding-top: 0.6mm; padding-bottom: 0.6mm; }
 .keep { break-inside: avoid; }
 tbody th .unit { font-weight: 400; color: #898781; font-size: 7.5pt; }
 td .v { white-space: nowrap; }
@@ -579,6 +587,11 @@ td.na { color: #898781; }
 .legend { display: flex; flex-wrap: wrap; gap: 1mm 5mm; font-size: 8pt; color: #52514e; margin: 1mm 0 1.5mm; }
 .legend .lt { color: #898781; }
 figure { margin: 2mm 0 4mm; break-inside: avoid; }
+figure.bars { break-inside: auto; }
+.facet { break-inside: avoid; }
+.facet + .facet { margin-top: 3mm; }
+.legend { break-after: avoid; }
+figcaption { break-before: avoid; }
 figure svg { width: 100%; height: auto; display: block; }
 figcaption { font-size: 7.6pt; color: #898781; margin-top: 1mm; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm 6mm; }
@@ -587,6 +600,7 @@ figcaption { font-size: 7.6pt; color: #898781; margin-top: 1mm; }
 .banner b { color: #7a5200; }
 .scenario { break-inside: auto; }
 .scenario h3 { break-before: auto; }
+.scenario h3, .what { break-after: avoid; }
 .what { color: #52514e; font-size: 8.6pt; }
 .notes { font-size: 7.6pt; color: #898781; margin: 0 0 2.5mm; break-inside: avoid; }
 .notes ul { margin: 0.4mm 0 0; padding-left: 4mm; }
@@ -652,7 +666,7 @@ def pair_cell(ea: dict, eb: dict, row, lower) -> str:
     `to` against `from` with the same rule and badge as the main tables; – when a side has no data or the row is a
     count."""
     _label, unit, _lower = row_meta(row)
-    if unit == "개" or is_counter(row) or not ea.get("reps") or not eb.get("reps"):
+    if unit == "개" or is_counter(row) or is_window_counted(row) or not ea.get("reps") or not eb.get("reps"):
         return '<td class="na">–</td>'
     cmp = stats.compare(ea["reps"], eb["reps"], lower_is_better=(lower is not False))
     if not cmp:
@@ -690,8 +704,8 @@ def scenario_chart(scenario, rows, labels, groups, colors, meta) -> str:
         label, unit, _lower = row_meta(row)
         if row[0] == "value" and unit not in ("ms", "MiB", "MB/s", "건/s", "요청/s"):
             continue
-        if row[0] == "value" and (row[1] == "bench.errors" or scenario.startswith("real")):
-            continue  # errors stay in the table; server C start-up is not what a real chart is about
+        if row[0] == "value" and (row[1] == "bench.errors" or is_window_counted(row) or scenario.startswith("real")):
+            continue  # errors and waits stay in the table; server C start-up is not what a real chart is about
         bars = []
         for version in labels:
             e = entry(groups.get(version, []), scenario, row)
@@ -711,8 +725,12 @@ def scenario_chart(scenario, rows, labels, groups, colors, meta) -> str:
             facets.append({"title": f"{label} · {row_name(row)}", "unit": unit, "rows": bars})
     if not facets:
         return ""
-    title = f"{SCENARIO_TITLES.get(scenario, scenario)}: 버전별 p50(막대)과 p95(가는 선)"
-    return (f"<figure>{legend(labels, colors, meta)}{svg_bars(facets, title)}"
+    # one SVG per metric: a real scenario has eight, taller than a page as one picture, so the page now breaks
+    # between two charts instead of through one (each row names its version, so later charts need no legend)
+    scenario_title = SCENARIO_TITLES.get(scenario, scenario)
+    charts = "".join(f'<div class="facet">{svg_bars([facet], f"{scenario_title}: {facet["title"]}, 버전별 p50(막대)과 p95(가는 선)")}</div>'
+                     for facet in facets)
+    return (f'<figure class="bars">{legend(labels, colors, meta)}{charts}'
             "<figcaption>막대 = p50(반복을 합친 표본; 값 지표는 반복의 중앙값), 가는 선 = p95, 숫자 = p50. "
             "지표마다 축이 따로다.</figcaption></figure>")
 
@@ -1277,9 +1295,9 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
         if tool.get("commit"):
             out.append(f"<li>측정 도구 커밋 <code>{esc(tool['commit'])}</code>"
                        + (" (scripts/perf 에 커밋 안 된 변경 있음)" if tool.get("dirty") else "") + "</li>")
-    report_commit = _git_head()
-    if report_commit:
-        out.append(f"<li>보고서 생성 도구 커밋 <code>{esc(report_commit)}</code></li>")
+    tool_line = report_tool_line()
+    if tool_line:
+        out.append(tool_line)
     for label in labels:
         for sha in meta.get(label, {}).get("shas", []):
             out.append(f"<li>{esc(label)}: <code>{esc(sha)}</code> ({esc(meta[label].get('ref', ''))})</li>")
@@ -1289,10 +1307,21 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
     return "\n".join(out)
 
 
-def _git_head() -> str:
+def report_tool_line() -> str:
+    """The appendix line naming the commit this report was generated with, flagged when scripts/perf has uncommitted
+    changes (the same rule as the measurement tool's record in run.json)."""
+    commit = _git("rev-parse", "HEAD")
+    if not commit:
+        return ""
+    dirty = bool(_git("status", "--porcelain", "--", "scripts/perf"))
+    return (f"<li>보고서 생성 도구 커밋 <code>{esc(commit)}</code>"
+            + (" (scripts/perf 에 커밋 안 된 변경 있음)" if dirty else "") + "</li>")
+
+
+def _git(*args) -> str:
     try:
-        done = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(REPO), capture_output=True, timeout=30)
-        return done.stdout.decode("ascii", "replace").strip() if done.returncode == 0 else ""
+        done = subprocess.run(["git", *args], cwd=str(REPO), capture_output=True, timeout=30)
+        return done.stdout.decode("utf-8", "replace").strip() if done.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
         return ""
 
