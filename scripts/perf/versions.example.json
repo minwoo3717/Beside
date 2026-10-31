@@ -1,0 +1,11 @@
+{
+  "baseline": "v1",
+  "order": ["v0", "v1", "v1p", "v2", "v2p"],
+  "versions": {
+    "v0":  {"ref": "e0e1c2b", "title": "이전 (10-14, #1 머지)", "description": "Unity 앱·AnimalLift 연동 직후. 업로드 전송·prod 프로파일 없음.", "capabilities": ["mock", "real_path"]},
+    "v1":  {"ref": "af4a747", "title": "현재 (4b 배포 기반)", "description": "prod 프로파일, /infer 업로드 전송, GPU 감시·오프라인 대기, Discord, H2 백업.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v1p": {"ref": "perf/backend-report", "title": "개선", "description": "v1 + 성능 개선 조각.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2":  {"ref": "backup/review-api-v1.1-6a3959f", "title": "다음 버전 후보 (v1.1)", "description": "관리·대기열·공유·평가·보관함·썸네일.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2p": {"ref": "review/api-v1.1", "title": "다음 버전 개선", "description": "v2 를 개선 위로 rebase + V2 전용 개선.", "capabilities": ["mock", "real_path", "real_upload", "prod"]}
+  }
+}
