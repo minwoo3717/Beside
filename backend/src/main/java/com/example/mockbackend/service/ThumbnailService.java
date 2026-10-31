@@ -25,15 +25,21 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Thumbnails of jobs for the web library: the first photo as a JPEG whose longer side is {@value #MAX_SIDE} px (smaller
@@ -53,7 +59,9 @@ public class ThumbnailService {
     /**
      * WEBP (TwelveMonkeys) decodes the full canvas before subsampling, so its memory follows the pixel count: a ~100 kB
      * lossless 64 MP file would cost ~200 MB per decode on the public upload path. 16 MP (~64 MB) is still more than
-     * phones save as WEBP; JPEG and PNG readers subsample row by row and keep MAX_PIXELS.
+     * phones save as WEBP. PNG and baseline JPEG readers subsample row by row and keep MAX_PIXELS; a progressive JPEG
+     * keeps a whole-image coefficient buffer and makes one output pass per scan (a file may carry thousands), which is
+     * why every decode also has a time limit (storage.thumb.decode-limit-ms).
      */
     static final long MAX_WEBP_PIXELS = 16L * 1024 * 1024;
     /** One decode at a time, server-wide: a burst of uploads cannot stack full-canvas rasters on the heap. */
@@ -62,16 +70,31 @@ public class ThumbnailService {
     private static final float JPEG_QUALITY = 0.85f;
 
     private final Path dir;
-    /** One thread: decodes run one at a time anyway (DECODES), and the queue keeps every upload's thumbnail. */
-    private final ExecutorService worker = Executors.newSingleThreadExecutor(task -> {
-        Thread thread = new Thread(task, "thumbnails");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final long decodeLimitMs;
+    /**
+     * One thread: decodes run one at a time anyway (DECODES). The queue keeps a burst of uploads' thumbnails up to
+     * queueLimit; past that a new upload gets none (thumbnailUrl stays null) instead of growing the heap.
+     */
+    private final ThreadPoolExecutor worker;
+    /** Aborts a decode that runs past decodeLimitMs (ImageReader.abort may be called from another thread). */
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(daemon("thumbnail-watchdog"));
     private final Logger log = LoggerFactory.getLogger(ThumbnailService.class);
 
-    public ThumbnailService(@Value("${storage.thumb.dir:storage/thumbs}") String dir) {
+    public ThumbnailService(@Value("${storage.thumb.dir:storage/thumbs}") String dir,
+                            @Value("${storage.thumb.decode-limit-ms:10000}") long decodeLimitMs,
+                            @Value("${storage.thumb.queue-limit:64}") int queueLimit) {
         this.dir = Path.of(dir);
+        this.decodeLimitMs = decodeLimitMs;
+        this.worker = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(queueLimit),
+                daemon("thumbnails"));
+    }
+
+    private static ThreadFactory daemon(String name) {
+        return task -> {
+            Thread thread = new Thread(task, name);
+            thread.setDaemon(true);
+            return thread;
+        };
     }
 
     @PostConstruct
@@ -84,7 +107,11 @@ public class ThumbnailService {
 
     @PreDestroy
     void stop() {
-        worker.shutdownNow();
+        List<Runnable> dropped = worker.shutdownNow();
+        watchdog.shutdownNow();
+        if (!dropped.isEmpty()) {
+            log.warn("{} queued thumbnails dropped at shutdown; a retry of those jobs makes them again", dropped.size());
+        }
     }
 
     /**
@@ -98,8 +125,12 @@ public class ThumbnailService {
                     delete(jobId);
                 }
             });
-        } catch (RejectedExecutionException shuttingDown) {
-            log.info("jobId={} no thumbnail: the server is shutting down", jobId);
+        } catch (RejectedExecutionException rejected) {
+            if (worker.isShutdown()) {
+                log.info("jobId={} no thumbnail: the server is shutting down", jobId);
+            } else {
+                log.warn("jobId={} no thumbnail: {} thumbnails are already waiting", jobId, worker.getQueue().size());
+            }
         }
     }
 
@@ -173,8 +204,11 @@ public class ThumbnailService {
         return dir.resolve(jobId + ".jpg");
     }
 
-    /** Decodes the first image, subsampled while reading when it is much bigger than needed. Null if unreadable. */
-    private static BufferedImage decode(Path photo) throws IOException {
+    /**
+     * Decodes the first image, subsampled while reading when it is much bigger than needed. Null if unreadable.
+     * @throws IOException also when the decode ran past decodeLimitMs (aborted)
+     */
+    private BufferedImage decode(Path photo) throws IOException {
         try (ImageInputStream in = ImageIO.createImageInputStream(photo.toFile())) {
             if (in == null) {
                 return null;
@@ -197,7 +231,20 @@ public class ThumbnailService {
                 if (step > 1) {
                     param.setSourceSubsampling(step, step, 0, 0);
                 }
-                return reader.read(0, param);
+                AtomicBoolean timedOut = new AtomicBoolean();
+                ScheduledFuture<?> guard = watchdog.schedule(() -> {
+                    timedOut.set(true);
+                    reader.abort();
+                }, decodeLimitMs, TimeUnit.MILLISECONDS);
+                try {
+                    BufferedImage image = reader.read(0, param);
+                    if (timedOut.get()) {
+                        throw new IOException("decode took longer than " + decodeLimitMs + " ms (aborted)");
+                    }
+                    return image;
+                } finally {
+                    guard.cancel(false);
+                }
             } finally {
                 reader.dispose();
             }
