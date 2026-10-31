@@ -24,8 +24,10 @@ import java.time.Duration;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -213,6 +215,16 @@ class JobThumbnailTest {
         BufferedImage image = TestImages.read(bytes);
         assertThat(image).isNotNull();
         return image;
+    }
+
+    @Test
+    void aRetryMakesAThumbnailThatWasLost() throws Exception {
+        String jobId = upload("fail-retry.png", "image/png", TestImages.pngWithAlpha(64, 32)); // the mock fails it
+        await().atMost(Duration.ofSeconds(10)).until(() -> readJob(jobId).path("status").asText().equals("FAILED"));
+        Files.delete(storage.resolve("thumbs").resolve(jobId + ".jpg")); // as if the queue was dropped at a shutdown
+        assertThat(readJob(jobId).path("thumbnailUrl").isNull()).isTrue();
+        mvc.perform(post("/api/v1/jobs/{id}/retry", jobId)).andExpect(status().isAccepted());
+        assertThat(readJob(jobId).path("thumbnailUrl").asText()).isEqualTo("/api/v1/jobs/" + jobId + "/thumbnail");
     }
 
     private String upload(String filename, String type, byte[] bytes) throws Exception {

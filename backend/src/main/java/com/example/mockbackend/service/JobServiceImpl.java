@@ -173,35 +173,33 @@ public class JobServiceImpl implements JobService {
 
     @Override
     public Job retry(String id) {
-        Job job = getJobOrThrow(id);
-        Job found = getJobOrThrow(id); // a second, unchanged copy (no persistence context spans the two reads)
-        if (job.getStatus() != JobStatus.FAILED) {
-            throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                    "Only FAILED jobs can be retried; current status is " + job.getStatus());
+        Job found = getJobOrThrow(id);
+        if (found.getStatus() != JobStatus.FAILED) {
+            throw notFailed(found);
         }
-        Instant now = queueClock.next(); // queue order = arrival order (QueueClock)
-        job.setErrorCode(null);
-        job.setErrorMessage(null);
-        job.setResultPath(null);
-        job.setHairResultPath(null);
-        job.setProcessingStartedAt(null);
-        job.setFinishedAt(null);
-        job.setProgress(0.0);
-        job.setAttempt(job.getAttempt() + 1);
-        job.setQueuedAt(now);
-        job.setUpdatedAt(now);
-        job.setStatus(JobStatus.PENDING);
-        jobRepository.save(job);
+        // Re-read and changed under JobTransitions' lock: a second retry of the same attempt, or a stale copy, cannot
+        // overwrite a run that already started, and a job deleted in between is not inserted again.
+        Job job = jobTransitions.retry(id, found.getAttempt(), queueClock.next()) // queue order = arrival order
+                .orElseThrow(() -> notFailed(getJobOrThrow(id)));
         try {
             jobWorker.dispatch(id, job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
             // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
             // attempt, so the job goes back to the FAILED attempt this request found.
-            jobRepository.save(found);
+            jobTransitions.undoRetry(found, job.getAttempt());
             throw shuttingDown;
+        }
+        if (!thumbnails.exists(id)) {
+            // Lost at a shutdown before it was made (the queue does not survive one): make it with the new attempt.
+            thumbnails.createLater(id, Path.of(job.getUploads().get(0).path()));
         }
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
+    }
+
+    private static ApiException notFailed(Job job) {
+        return ApiException.conflict(ErrorCode.JOB_NOT_FAILED, job.getId(),
+                "Only FAILED jobs can be retried; current status is " + job.getStatus());
     }
 
     @Override

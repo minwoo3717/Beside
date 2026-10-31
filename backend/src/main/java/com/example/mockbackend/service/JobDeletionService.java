@@ -37,14 +37,17 @@ public class JobDeletionService {
     private final PetRepository petRepository;
     private final ShareService shareService;
     private final ThumbnailService thumbnails;
+    private final JobTransitions jobTransitions;
     private final Path resultDir;
     private final Path tmpDir;
     private final Logger log = LoggerFactory.getLogger(JobDeletionService.class);
 
     public JobDeletionService(JobRepository jobRepository, IdempotencyKeyRepository idempotencyKeys,
                               PetRepository petRepository, ShareService shareService, ThumbnailService thumbnails,
+                              JobTransitions jobTransitions,
                               @Value("${storage.result.dir:storage/results}") String resultDir,
                               @Value("${storage.tmp.dir:storage/tmp}") String tmpDir) {
+        this.jobTransitions = jobTransitions;
         this.jobRepository = jobRepository;
         this.idempotencyKeys = idempotencyKeys;
         this.petRepository = petRepository;
@@ -58,13 +61,25 @@ public class JobDeletionService {
     public void delete(String jobId) {
         Job job = jobRepository.findById(jobId).orElseThrow(() -> ApiException.jobNotFound(jobId));
         requireFinished(job);
-        remove(job);
+        boolean[] removed = {false};
+        // The check is repeated and the row deleted under JobTransitions' lock: a retry in between cannot make it run.
+        jobTransitions.removeIfFinished(List.of(jobId), jobs -> {
+            jobs.forEach(this::remove);
+            removed[0] = !jobs.isEmpty();
+        }).ifPresent(JobDeletionService::requireFinished);
+        if (!removed[0]) {
+            throw ApiException.jobNotFound(jobId); // deleted by another request meanwhile
+        }
     }
 
-    /** All or nothing: refuses before deleting anything when one of them is still running. @throws ApiException 409 */
+    /**
+     * All or nothing: refuses before deleting anything when one of them is still running (checked again under
+     * JobTransitions' lock, together with the deletion). @throws ApiException 409
+     */
     public void deleteAll(List<Job> jobs) {
         jobs.forEach(JobDeletionService::requireFinished);
-        jobs.forEach(this::remove);
+        jobTransitions.removeIfFinished(jobs.stream().map(Job::getId).toList(), finished -> finished.forEach(this::remove))
+                .ifPresent(JobDeletionService::requireFinished);
     }
 
     static void requireFinished(Job job) {
