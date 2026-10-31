@@ -282,7 +282,7 @@ src/main/
 - **첫 화면**: 펫 목록(대표 썸네일·이름·종·모델 수) + **펫 추가**. 아래 **미분류 작업**은 `GET /api/v1/jobs` 에서 `petId` 가 없는 작업(앱에서 만든 작업)이다 — 펫을 골라 **넣기**(`PUT /jobs/{id}/pet`). 최근 500건까지만 살펴본다.
 - **펫 화면**(`/library/#/pets/{petId}`): 이름·종·메모 편집, 3D 보기(model-viewer 3.5.0, 동작 칩은 공유 뷰어와 같은 라벨), 생성 기록(썸네일·날짜·상태·modelVersion). 기록마다 3D 보기·대표로·상세(`/job/?id=` — 품질 평가·공유 링크·QR 은 작업 상세 페이지)·미분류로·삭제(끝난 작업만, 확인 대화). 펫 삭제는 기본으로 작업을 미분류로 돌리고, 확인 대화에서 고르면 작업도 지운다.
 - **새 모델 만들기**: 사진 1~10장(JPG·PNG·WEBP, 장당 5MB, 합계 18MB — Mock UI 와 같은 사전 검사) → `POST /api/v1/jobs` 에 `petId` 파트 → 2초 폴링(최대 20분)으로 "앞에 N명 · 약 M분"(`queue.ahead`·`estimate.remainingMs`), 대기 중이면 **취소**(`POST /cancel`). 끝나면 브라우저 알림(허용했을 때)을 보내고 기록을 새로 읽는다.
-- 썸네일은 작업을 접수할 때 첫 사진으로 만든다(`storage.thumb.dir`, 기본 `storage/thumbs/{jobId}.jpg`). 읽지 못하는 사진이면 썸네일 없이 접수한다. 작업 삭제는 사진·`storage.result.dir/{jobId}`·썸네일을 지우지만 Mock 의 공용 샘플 GLB 와 `job_runs`(측정)는 남긴다.
+- 썸네일은 작업을 접수할 때 첫 사진으로 만든다(`storage.thumb.dir`, 기본 `storage/thumbs/{jobId}.jpg`). 202 응답은 기다리지 않고 백그라운드 스레드 하나가 차례로 만든다(12MP 사진 디코드가 수백 ms라 업로드 응답에서 뺐다). 그 사이와 읽지 못하는 사진이면 `thumbnailUrl` 이 null 이다. 작업 삭제는 사진·`storage.result.dir/{jobId}`·썸네일을 지우지만 Mock 의 공용 샘플 GLB 와 `job_runs`(측정)는 남긴다.
 
 ## v0 `/api/jobs` (동결)
 
@@ -325,7 +325,7 @@ Remove-Item Env:BESIDE_MVP_URL
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
 | `PetApiTest` | 보관함: 펫 CRUD·검사(이름 공백·41자, 모르는 종, 메모 501자, JSON 아님 → 400), PATCH 는 보낸 필드만, `petId` 파트 업로드(없는 펫 400, 작업 안 만듦), 작업 이동·미분류, 워커가 옛 사본을 저장해도 `petId` 유지, 대표 규칙(고른 COMPLETED → 아니면 최신 COMPLETED), 작업별 modelVersion, 펫 삭제 두 방식(진행 중이면 409 로 아무것도 안 지움), `/library` 페이지 |
 | `JobDeleteTest` | 작업 삭제: 사진·결과 폴더·썸네일 삭제, Mock 공용 샘플 GLB 는 남김, 공유 링크 취소, Idempotency-Key 삭제(같은 키로 새 작업), `job_runs` 유지, PENDING 409 `JOB_IN_PROGRESS` → 취소 후 삭제, FAILED 삭제 |
-| `JobThumbnailTest` | 썸네일: JPEG·PNG(투명 → 흰 배경)·WEBP 에서 긴 변 256px JPEG, 작은 사진은 그대로, EXIF 방향 6·8, 읽지 못하는 사진은 작업은 만들고 썸네일만 없음(404 `ASSET_NOT_FOUND`) |
+| `JobThumbnailTest` | 썸네일: 업로드 응답이 썸네일을 기다리지 않음(12MP), JPEG·PNG(투명 → 흰 배경)·WEBP 에서 긴 변 256px JPEG, 작은 사진은 그대로, EXIF 방향 6·8, 읽지 못하는 사진은 작업은 만들고 썸네일만 없음(404 `ASSET_NOT_FOUND`) |
 | `library-core.test.cjs` | 보관함 페이지 순수 함수: 경로(`#/pets/{id}`), 종·상태 라벨(모르는 값), 오류 코드 문구, "앞에 N명 · 약 M분", 사진 선택 규칙, 펫 폼 검사, 미분류 거르기, 3D 첫 모델, 애니메이션 칩이 share.js 와 같은지 |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 

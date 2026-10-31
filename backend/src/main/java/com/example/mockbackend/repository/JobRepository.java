@@ -38,10 +38,11 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /**
      * Jobs in {@code status} that were queued before the given point: an earlier queuedAt, or the same instant and a
-     * smaller id (QueueEstimator: the PENDING jobs ahead of one).
+     * smaller id (QueueEstimator: the PENDING jobs ahead of one). Written as a range on queuedAt so H2 can count
+     * from idx_jobs_status_queued_at_id instead of scanning every job on each poll.
      */
     @Query("select count(j) from Job j where j.status = :status"
-            + " and (j.queuedAt < :queuedAt or (j.queuedAt = :queuedAt and j.id < :id))")
+            + " and j.queuedAt <= :queuedAt and (j.queuedAt < :queuedAt or j.id < :id)")
     long countQueuedBefore(@Param("status") JobStatus status, @Param("queuedAt") Instant queuedAt, @Param("id") String id);
 
     /** When each job in {@code status} started processing (QueueEstimator: how far the running jobs are). */
@@ -50,7 +51,7 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     // ------------------------------------------------------------------ library (tag pets)
 
-    /** The jobs of one pet, newest first (createdAt desc, then id desc), like findAllNewestFirst. */
+    /** The jobs of one pet, newest first (createdAt desc, then id desc), the order of the job list. */
     @Query("select j from Job j where j.petId = :petId order by j.createdAt desc, j.id desc")
     List<Job> findByPetNewestFirst(@Param("petId") String petId);
 

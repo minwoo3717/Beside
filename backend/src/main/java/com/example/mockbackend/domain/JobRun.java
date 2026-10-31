@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.PostLoad;
 import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
@@ -24,7 +25,10 @@ import java.time.Instant;
  * New columns must be nullable (boxed) types: ddl-auto=update cannot add a NOT NULL column to a table that has rows.
  */
 @Entity
-@Table(name = "job_runs")
+@Table(name = "job_runs", indexes = {
+        @Index(name = "idx_job_runs_job_id", columnList = "jobId"),
+        @Index(name = "idx_job_runs_finished_at", columnList = "finishedAt")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class JobRun implements Persistable<String> {
