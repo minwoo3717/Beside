@@ -14,7 +14,9 @@ CONDA_HOME="${CONDA_HOME:-$HOME/miniconda3}"
 CONDA_ENV="${CONDA_ENV:-animallift}"
 export BESIDE_ANIMALLIFT_DIR="${ANIMALLIFT_DIR:-$HOME/AnimalLift}"
 export BESIDE_PATH_MAP="${BESIDE_PATH_MAP:-C:\\=/mnt/c/}"
-export BESIDE_WORK_DIR="${WORK_DIR:-/mnt/c/beside/work}"
+# Job folders (photos, meshes, GLBs made from pets): inside the repo but ignored by git; under /mnt/c when the repo
+# is on C:, so BESIDE_PATH_MAP still reaches them from Windows Spring in path mode.
+export BESIDE_WORK_DIR="${WORK_DIR:-$REPO/generation/inference_service/work}"
 PORT="${PORT:-8001}"
 HOST="${BESIDE_HOST:-127.0.0.1}"
 RIG_TEMPLATE="${RIG_TEMPLATE:-$HOME/beside-rig/template-rigged.glb}"

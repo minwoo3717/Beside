@@ -30,7 +30,7 @@ GPU PC 에서 real 프로파일(실제 모델 E2E):
 ```powershell
 .\scripts\run_real.ps1                                                     # 추론 서비스 + Spring real, 각각 새 창
 .\scripts\run_real.ps1 -SampleGlb C:\beside\sample.glb                     # 모델 없이 연동만 확인
-.\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
+.\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\Beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
 .\scripts\e2e_mock.ps1 -BaseUrl http://192.168.0.20:8080 -Photos C:\photos\dog1.jpg -TimeoutSeconds 600   # real 은 수 분, 실제 사진으로
 ```
 

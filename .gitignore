@@ -42,6 +42,9 @@ deploy/backups/
 
 #추론 결과·로그, SMAL 파생 리깅 파일 (커밋 금지)
 generation/inference_service/work/
+# start_inference_wsl.sh 의 예전 기본 작업 폴더(/mnt/c/beside/work = C:\beside 에 클론한 리포의 work/)와 모델 가중치
+/work/
+*.pt
 logs/
 backend/storage/results/*.glb
 !backend/storage/results/sample-dog.glb
