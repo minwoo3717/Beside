@@ -2,6 +2,7 @@ package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.repository.JobQueueQueries;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
 import org.springframework.beans.factory.ObjectProvider;
@@ -35,7 +36,8 @@ import java.util.function.BooleanSupplier;
  * </ul>
  * One-GPU arithmetic on purpose: with max-concurrency &gt; 1 the estimate is pessimistic (nothing is divided). The mock
  * worker gets the same numbers although it really runs jobs side by side, so the app can show the queue without a GPU.
- * Cost per response: nothing for finished jobs, the cached median for PROCESSING, two small queries for PENDING.
+ * Cost per response: nothing for finished jobs, the cached median for PROCESSING, one read-only transaction with two
+ * small queries for PENDING (JobQueueQueries).
  */
 @Component
 public class QueueEstimator {
@@ -99,10 +101,10 @@ public class QueueEstimator {
                     : new Estimate(Math.max(0, median.ms() - elapsedMs(job.getProcessingStartedAt(), now)), median.runs());
             return new Outlook(null, estimate);
         }
-        List<Instant> running = jobRepository.findProcessingStartedAt(JobStatus.PROCESSING);
         Instant queuedAt = job.getQueuedAt() != null ? job.getQueuedAt() : job.getCreatedAt();
-        long before = jobRepository.countQueuedBefore(JobStatus.PENDING, queuedAt, job.getId());
-        int ahead = (int) Math.min(Integer.MAX_VALUE, before + running.size());
+        JobQueueQueries.QueueSnapshot snapshot = jobRepository.queueSnapshot(queuedAt, job.getId());
+        List<Instant> running = snapshot.processingStartedAt();
+        int ahead = (int) Math.min(Integer.MAX_VALUE, snapshot.pendingBefore() + running.size());
         Position position = new Position(ahead, inferenceReady.getAsBoolean() ? null : INFERENCE_OFFLINE);
         if (median.runs() == 0) {
             return new Outlook(position, null);

@@ -15,8 +15,9 @@ import java.util.List;
 
 /**
  * Jobs in the H2 file database (Spring Data JPA). save() merges, so workers can save the copy they loaded earlier.
+ * The queue reads of QueueEstimator are in {@link JobQueueQueries}.
  */
-public interface JobRepository extends JpaRepository<Job, String> {
+public interface JobRepository extends JpaRepository<Job, String>, JobQueueQueries {
 
     /** The newest jobs (createdAt desc, then id desc for a stable order); the page size is the limit. */
     @Query("select j from Job j order by j.createdAt desc, j.id desc")
@@ -35,19 +36,6 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /** Number of jobs in one state (admin overview). */
     long countByStatus(JobStatus status);
-
-    /**
-     * Jobs in {@code status} that were queued before the given point: an earlier queuedAt, or the same instant and a
-     * smaller id (QueueEstimator: the PENDING jobs ahead of one). Written as a range on queuedAt so H2 can count
-     * from idx_jobs_status_queued_at_id instead of scanning every job on each poll.
-     */
-    @Query("select count(j) from Job j where j.status = :status"
-            + " and j.queuedAt <= :queuedAt and (j.queuedAt < :queuedAt or j.id < :id)")
-    long countQueuedBefore(@Param("status") JobStatus status, @Param("queuedAt") Instant queuedAt, @Param("id") String id);
-
-    /** When each job in {@code status} started processing (QueueEstimator: how far the running jobs are). */
-    @Query("select j.processingStartedAt from Job j where j.status = :status")
-    List<Instant> findProcessingStartedAt(@Param("status") JobStatus status);
 
     // ------------------------------------------------------------------ library (tag pets)
 
