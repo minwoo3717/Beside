@@ -210,6 +210,27 @@ class ErrorsAndZeroBaselineTest(unittest.TestCase):
         self.assertIn("오류 포함", report.cell(partial, row, base, False, None))
         self.assertTrue(report.cell(base, row, None, True, None).startswith("<td>"))  # 0 errors: not red
 
+    def test_background_load_is_reported_and_warned_about(self):
+        quiet, busy = self._suites("v1", [0, 0]), self._suites("v2", [0])
+        for suite, pct in zip(quiet + busy, (3.0, 5.0, 18.0)):
+            suite["settings"]["backgroundCpuPct"] = pct
+        self.assertEqual(report.background_load(quiet + busy), (3.0, 5.0, 18.0, 3))
+        self.assertIsNone(report.background_load(self._suites("v1", [0])))  # older results: no sentence at all
+        self.assertIn("최소 3 %, 중앙 5 %, 최대 18 %", report.background_text(report.background_load(quiet + busy)))
+        with tempfile.TemporaryDirectory() as folder:
+            data = Path(folder)
+            for suite in quiet + busy:
+                run.write_json(data / f"{suite['label']}-r{suite['rep']}.json", suite)
+            html = report.build_html(report.load_data([data]), data / "none.json", None, "cmd")
+            self.assertIn("다른 프로그램이 돌던 PC", html)
+            self.assertIn("다른 프로그램의 부하", html)
+            for suite in busy:
+                suite["settings"]["backgroundCpuPct"] = 4.0
+                run.write_json(data / f"{suite['label']}-r{suite['rep']}.json", suite)
+            html = report.build_html(report.load_data([data]), data / "none.json", None, "cmd")
+            self.assertNotIn("다른 프로그램이 돌던 PC", html)  # below 10 %: the sentence stays, the banner goes
+            self.assertIn("다른 프로그램의 부하", html)
+
     def test_zero_baseline_is_not_comparable(self):
         row = ("sample", "healthzMs")
         base_suites, cand_suites = self._suites("v1", [0]), self._suites("v2", [0])

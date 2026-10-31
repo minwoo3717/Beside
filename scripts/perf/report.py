@@ -984,6 +984,25 @@ def failed_suites(suites) -> list:
     return out
 
 
+BUSY_BANNER_PCT = 10.0  # background load (other programs) from which the cover warns
+
+
+def background_load(suites):
+    """(min, median, max, count) of settings.backgroundCpuPct over the suites that have it, or None."""
+    values = [float(v) for v in ((s.get("settings") or {}).get("backgroundCpuPct") for s in suites)
+              if isinstance(v, (int, float))]
+    if not values:
+        return None
+    return min(values), stats.median(values), max(values), len(values)
+
+
+def background_text(load) -> str:
+    low, mid, high, count = load
+    return (f"다른 프로그램의 부하: 스위트마다 시작 직전 2초 동안(이 도구의 서버는 꺼진 상태) 잰 PC 전체 CPU 사용률이 "
+            f"최소 {low:.0f} %, 중앙 {mid:.0f} %, 최대 {high:.0f} % 였다(스위트 {count}개). 서버를 고정한 CPU 도 다른 "
+            "프로그램이 쓸 수 있어 이만큼 잡음이 섞인다.")
+
+
 def build_html(data, versions_file, notes_dir, report_command) -> str:
     """The whole report. Raises ValueError when suites of one version were measured with different settings."""
     order, baseline, meta = version_meta(data, versions_file)
@@ -1031,6 +1050,11 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                        "해당 칸의 '오류 포함' 이유와 오류 수를 확인한다.")
     if baseline is None:
         banners.append("<b>기준 버전 없음</b>: versions 파일의 baseline 이 데이터에 없어 비교·판정을 하지 않았다.")
+    load = background_load(data["suites"])
+    if load and load[2] >= BUSY_BANNER_PCT:
+        banners.append(f"<b>다른 프로그램이 돌던 PC</b>: 스위트 직전 CPU 사용률 중앙 {load[1]:.0f} %, 최대 {load[2]:.0f} % "
+                       "(측정 방법의 '한계'). 버전 순서를 반복마다 돌려 한 버전에만 몰리지 않게 했고, 판정 규칙이 반복 사이 "
+                       "흔들림을 걸러 낸다.")
     for text in banners:
         out.append(f'<div class="banner">⚠ {text}</div>')
     out.append('<h2>버전</h2><table><thead><tr><th>라벨</th><th>제목</th><th>커밋</th><th>설명</th></tr></thead><tbody>')
@@ -1111,6 +1135,7 @@ def build_html(data, versions_file, notes_dir, report_command) -> str:
                "<li>real 시나리오는 모델 없는 스텁이라 Spring 쪽 오버헤드(전송·저장·대기열)만 보인다.</li>"
                "<li>부하 생성기는 Python(GIL, http.client)이라 동시 시나리오에는 클라이언트 자신의 지연이 섞일 수 있다.</li>"
                f"<li>{per_run_text(runs, shared_pc_text) or shared_pc_text({})}</li>"
+               + (f"<li>{esc(background_text(load))}</li>" if load else "") +
                f"<li>{per_run_text(runs, clock_text) or clock_text({})}</li></ul>")
     out.append("</section>")
 
