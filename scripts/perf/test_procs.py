@@ -146,6 +146,46 @@ class CpuBusyTest(unittest.TestCase):
         else:
             self.assertIsNone(value)  # macOS: no counters, recorded as unknown
 
+    def test_process_cpu_time_grows_with_work(self):
+        before = procs.cpu_time_ms(os.getpid())
+        if os.name != "nt" and not Path("/proc/self/stat").exists():
+            self.assertIsNone(before)
+            return
+        self.assertIsNotNone(before)
+        deadline = time.perf_counter() + 0.25
+        while time.perf_counter() < deadline:  # busy for 250 ms (Windows counts in ~15.6 ms ticks)
+            sum(range(1000))
+        self.assertGreater(procs.cpu_time_ms(os.getpid()), before)
+        self.assertIsNone(procs.cpu_time_ms(2 ** 22 + 3))  # no such process
+
+    def test_wait_idle_returns_after_a_quiet_window_or_gives_up(self):
+        with mock.patch.object(procs.time, "sleep"):
+            # 400 ms of CPU in the first window (busy), then 20 ms (under 5 % of one CPU per second): idle
+            with mock.patch.object(procs, "cpu_time_ms", side_effect=[0.0, 400.0, 420.0]):
+                waited, idle = procs.wait_idle(1, max_s=60, window_s=1.0)
+            self.assertTrue(idle)
+            # always busy: gives up once max_s has passed
+            clock = iter(range(0, 1000))
+            with mock.patch.object(procs, "cpu_time_ms", side_effect=(i * 500.0 for i in range(100))), \
+                    mock.patch.object(procs.time, "monotonic", side_effect=lambda: float(next(clock))):
+                waited, idle = procs.wait_idle(1, max_s=5, window_s=1.0)
+            self.assertFalse(idle)
+            self.assertGreaterEqual(waited, 5000.0)
+            # no process CPU time on this OS: nothing is waited
+            with mock.patch.object(procs, "cpu_time_ms", return_value=None):
+                self.assertEqual(procs.wait_idle(1), (0.0, None))
+
+    def test_priority_is_reported(self):
+        if os.name != "nt":
+            self.assertEqual(procs.raise_own_priority(), "normal")
+            return
+        # patched: the test run itself must not keep an above-normal priority
+        with mock.patch.object(procs._k32, "SetPriorityClass", return_value=1) as set_class:
+            self.assertEqual(procs.raise_own_priority(), "above_normal")
+        self.assertEqual(set_class.call_args.args[1], procs.ABOVE_NORMAL_PRIORITY_CLASS)
+        with mock.patch.object(procs._k32, "SetPriorityClass", return_value=0):
+            self.assertEqual(procs.raise_own_priority(), "normal")
+
     def test_busy_is_one_minus_the_idle_share(self):
         with mock.patch.object(procs, "_cpu_times", side_effect=[(100, 1000), (400, 2000)]), \
                 mock.patch.object(procs.time, "sleep"):

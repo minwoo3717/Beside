@@ -29,6 +29,9 @@ from pathlib import Path
 
 IS_WINDOWS = os.name == "nt"
 CREATE_NO_WINDOW = 0x08000000
+# Our servers, the stub and the load generator run above the PC's ordinary programs (a game client, a messenger):
+# Windows does not keep those off the CPUs the server is pinned to, and a starved server stalls for seconds.
+ABOVE_NORMAL_PRIORITY_CLASS = 0x00008000
 
 # Environment variables that could change what is measured: JVM option injection and Spring relaxed binding of the
 # properties this project reads (an exported INFERENCE_TOKEN or NOTIFY_WEBHOOK_URL must not leak into a run).
@@ -133,6 +136,12 @@ if IS_WINDOWS:
     _k32.GetProcessAffinityMask.restype = wintypes.BOOL
     _k32.GetSystemTimes.argtypes = [ctypes.POINTER(wintypes.FILETIME)] * 3
     _k32.GetSystemTimes.restype = wintypes.BOOL
+    _k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    _k32.GetProcessTimes.restype = wintypes.BOOL
+    _k32.GetCurrentProcess.argtypes = []
+    _k32.GetCurrentProcess.restype = wintypes.HANDLE
+    _k32.SetPriorityClass.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    _k32.SetPriorityClass.restype = wintypes.BOOL
     _k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
     _k32.CreateJobObjectW.restype = wintypes.HANDLE
     _k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
@@ -291,6 +300,7 @@ class Proc:
         self.pinned = pinned
         self.in_job = in_job
         self.stop_method = None
+        self.priority = "normal"
 
     @property
     def pid(self) -> int:
@@ -309,14 +319,15 @@ class Proc:
         return "\n".join(self.log_text().splitlines()[-lines:])
 
 
-def start(name: str, cmd: list, cwd, log_path, env: dict, cpus=None) -> Proc:
-    """Start `cmd` in `cwd` with stdout+stderr appended to log_path; pin it to `cpus` (list) when given."""
+def start(name: str, cmd: list, cwd, log_path, env: dict, cpus=None, raise_priority: bool = False) -> Proc:
+    """Start `cmd` in `cwd` with stdout+stderr appended to log_path; pin it to `cpus` (list) when given.
+    raise_priority: Windows above-normal priority class (POSIX: unchanged, raising it needs privileges)."""
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     log_handle = open(log_path, "ab")
     kwargs = {"cwd": str(cwd), "env": env, "stdin": subprocess.DEVNULL, "stdout": log_handle,
               "stderr": subprocess.STDOUT}
     if IS_WINDOWS:
-        kwargs["creationflags"] = CREATE_NO_WINDOW
+        kwargs["creationflags"] = CREATE_NO_WINDOW | (ABOVE_NORMAL_PRIORITY_CLASS if raise_priority else 0)
         # "Ignore Ctrl+C" is a process attribute that children inherit; a parent started in a new process group (an
         # IDE, a CI agent, a tool runner) passes it on and the child would never see the graceful-stop Ctrl+C.
         # Restore normal Ctrl+C processing here so the child inherits that. stop() sends Ctrl+C to the child's own
@@ -335,6 +346,7 @@ def start(name: str, cmd: list, cwd, log_path, env: dict, cpus=None) -> Proc:
         raise
     pinned = None
     proc = Proc(name, popen, log_path, log_handle, started, [str(c) for c in cmd], str(cwd), cpus, None, False)
+    proc.priority = "above_normal" if IS_WINDOWS and raise_priority else "normal"
     _LIVE[popen.pid] = proc
     try:
         if cpus:
@@ -443,6 +455,60 @@ def cpu_busy_pct(seconds: float = 2.0):
     if total <= 0:
         return None
     return round(100.0 * (1.0 - (second[0] - first[0]) / total), 1)
+
+
+def cpu_time_ms(pid: int):
+    """CPU time (user + kernel, all threads) a process has used so far, in ms; None where unknown (macOS, or the
+    process is gone). Windows counts in scheduler ticks (about 15.6 ms)."""
+    if IS_WINDOWS:
+        try:
+            handle = _open(pid, PROCESS_QUERY_LIMITED_INFORMATION)
+        except OSError:
+            return None
+        try:
+            created, ended, kernel, user = (wintypes.FILETIME() for _ in range(4))
+            if not _k32.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(ended), ctypes.byref(kernel),
+                                        ctypes.byref(user)):
+                return None
+            ticks = sum((ft.dwHighDateTime << 32) | ft.dwLowDateTime for ft in (kernel, user))
+            return ticks / 10_000.0  # 100 ns units
+        finally:
+            _k32.CloseHandle(handle)
+    stat = Path(f"/proc/{pid}/stat")
+    try:
+        fields = stat.read_text().rpartition(")")[2].split()
+    except OSError:
+        return None
+    return (int(fields[11]) + int(fields[12])) * 1000.0 / os.sysconf("SC_CLK_TCK")  # utime, stime
+
+
+def wait_idle(pid: int, max_s: float = 120.0, window_s: float = 1.0, busy_pct: float = 5.0):
+    """Wait until process `pid` uses at most busy_pct % of one CPU over a window of window_s seconds: the work it
+    still does after the last answer (a background thumbnail queue, GC, JIT) is over. Returns (ms waited, idle):
+    idle is False when max_s ran out first, None when this OS gives no process CPU time (nothing was waited)."""
+    started = time.monotonic()
+    before = cpu_time_ms(pid)
+    if before is None:
+        return 0.0, None
+    budget_ms = window_s * 1000.0 * busy_pct / 100.0
+    while True:
+        time.sleep(window_s)
+        now = cpu_time_ms(pid)
+        waited = (time.monotonic() - started) * 1000.0
+        if now is None:
+            return waited, None
+        if now - before <= budget_ms:
+            return waited, True
+        if waited >= max_s * 1000.0:
+            return waited, False
+        before = now
+
+
+def raise_own_priority() -> str:
+    """This (load generator) process at above-normal priority, like the servers: Windows only."""
+    if IS_WINDOWS and _k32.SetPriorityClass(_k32.GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS):
+        return "above_normal"
+    return "normal"
 
 
 def _ctrl_c(pid: int) -> bool:
