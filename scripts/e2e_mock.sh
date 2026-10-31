@@ -33,7 +33,13 @@ json_field() {
   printf '%s' "$1" | sed -n "s/.*\"$2\":\"\{0,1\}\([^\",}]*\)\"\{0,1\}.*/\1/p" | head -n1
 }
 now_ms() {
-  date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time() * 1000))'
+  # GNU date. BSD/macOS date 는 %N 을 몰라 "...3N" 을 찍고도 0 으로 끝나므로 숫자인지 확인한다
+  local t
+  t="$(date +%s%3N 2>/dev/null || true)"
+  case "$t" in
+    ''|*[!0-9]*) t="$(python3 -c 'import time; print(int(time.time() * 1000))')" ;;
+  esac
+  printf '%s\n' "$t"
 }
 
 # 1. healthz
@@ -44,9 +50,11 @@ echo "[1/4] healthz  status=$(json_field "$HEALTH" status) profile=$(json_field 
 FORM=()
 for p in "${PHOTOS[@]}"; do FORM+=(-F "photos=@$p"); done
 T0=$(now_ms)
-BODY="$(curl -sS -D "$OUT_DIR/upload-headers.txt" -H "Idempotency-Key: e2e-$(date +%s)" "${FORM[@]}" "$BASE_URL/api/v1/jobs")"
+# Expect: 100-continue 는 보내지 않는다(curl 은 1 MB 넘는 본문에 붙이고, 그러면 -D 에 Tomcat 의 "HTTP/1.1 100" 이
+# 먼저 적힌다). 결과는 어느 쪽이든 마지막 상태 줄이다.
+BODY="$(curl -sS -D "$OUT_DIR/upload-headers.txt" -H "Expect:" -H "Idempotency-Key: e2e-$(date +%s)" "${FORM[@]}" "$BASE_URL/api/v1/jobs")"
 UPLOAD_MS=$(( $(now_ms) - T0 ))
-STATUS_LINE="$(head -n1 "$OUT_DIR/upload-headers.txt" | tr -d '\r')"
+STATUS_LINE="$(grep -a '^HTTP/' "$OUT_DIR/upload-headers.txt" | tail -n1 | tr -d '\r')"
 case "$STATUS_LINE" in
   *" 202 "*) ;;
   *) echo "upload failed: $STATUS_LINE"; echo "$BODY"; exit 1 ;;
