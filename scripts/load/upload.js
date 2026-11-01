@@ -16,7 +16,7 @@ import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { bytesSentThresholds, errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const SIZE = readStr(ENV, 'SIZE', 'small').toLowerCase();
@@ -79,7 +79,7 @@ const ctx = makeContext({
 });
 
 export function setup() {
-  return preflight(CONFIG);
+  return markReady(preflight(CONFIG));
 }
 
 export function upload() {
@@ -94,8 +94,10 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'upload.js',
     scenario: `A3-${SIZE}`,
+    plannedS: LEVELS.totalS,
+    thresholds: options.thresholds,
     stages: SCOPES.map((s) => ({ index: s.index, label: s.segment.label, users: null,
-      target: s.segment.target / 60, holdS: HOLD_S })),
+      target: s.segment.target / 60, holdS: HOLD_S, holdEndS: s.segment.end })),
     extra: {
       size: SIZE,
       ratesPerS: RATES,

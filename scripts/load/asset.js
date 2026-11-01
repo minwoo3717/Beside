@@ -15,7 +15,7 @@ import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight, seedJobs } from './lib/seed.js';
 import { buildLevels, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const A4 = TIERS.load.a4;
@@ -70,7 +70,7 @@ export function setup() {
     throw new Error(`setup: asset is ${small[0].asset ? small[0].asset.bytes : 'missing'} bytes < MIN_ASSET_BYTES ${MIN_ASSET}; ` +
       'put the 1.5 MB synthetic GLB on the load-test volume (deploy/loadtest) or lower MIN_ASSET_BYTES for a local check');
   }
-  return Object.assign(info, { jobs: seeded.completed });
+  return markReady(Object.assign(info, { jobs: seeded.completed }));
 }
 
 export function download(data) {
@@ -87,10 +87,16 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'asset.js',
     scenario: 'A4',
+    plannedS: LEVELS.totalS,
+    thresholds: options.thresholds,
     stages: scopes.map((s) => {
+      // k6 keeps the thresholded submetrics of a hold that never ran with every value 0: whether it ran comes from its
+      // asset requests, not from the bytes (load_assetBytes counts only valid downloads, so 0 there can be a result).
+      const reqs = metrics[`http_req_duration{endpoint:asset,${s.scope}}`];
+      const ran = !!(reqs && reqs.values && reqs.values.count > 0);
       const bytes = metrics[`load_assetBytes{${s.scope}}`];
-      const count = bytes && bytes.values ? bytes.values.count : null;
-      return { index: s.index, label: s.segment.label, users: null, target: s.segment.target / 60, holdS: HOLD_S,
+      const count = ran && bytes && bytes.values ? bytes.values.count : null;
+      return { index: s.index, label: s.segment.label, users: null, target: s.segment.target / 60, holdS: HOLD_S, holdEndS: s.segment.end,
         assetMbps: count === null ? null : Math.round(((count * 8) / 1e6 / HOLD_S) * 100) / 100 };
     }),
     extra: {

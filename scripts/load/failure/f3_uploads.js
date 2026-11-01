@@ -27,7 +27,7 @@ import * as m from '../lib/metrics.js';
 import { buildMultipart, photoParts, signedBytes, utf8 } from '../lib/multipart.js';
 import { preflight, seedJobs } from '../lib/seed.js';
 import { errorThresholds, latencyThresholds, merge } from '../lib/thresholds.js';
-import { summaryOutputs } from '../lib/summary.js';
+import { markReady, summaryOutputs } from '../lib/summary.js';
 
 const matchRatio = new Rate('load_f3MatchRatio');
 const resetCount = new Counter('load_f3ResetCount');
@@ -103,7 +103,7 @@ export function setup() {
   const one = buildMultipart(photos('png', 4096, 2, 'image/png', 'png'));
   const seeded = seedJobs(CONFIG, one, 1, { wait: false });
   if (seeded.created.length === 0) throw new Error('setup: could not create the background job');
-  return Object.assign(info, { pollJob: seeded.created[0] });
+  return markReady(Object.assign(info, { pollJob: seeded.created[0] }));
 }
 
 export function bad() {
@@ -135,6 +135,8 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'failure/f3_uploads.js',
     scenario: 'F3',
+    plannedS: BG_S + 10, // the background poller's duration
+    thresholds: options.thresholds,
     stages: [],
     extra: {
       verifyMagic: VERIFY_MAGIC,

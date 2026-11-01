@@ -1,7 +1,22 @@
 // handleSummary helper: the k6 end-of-test data plus run metadata and a per-stage verdict, written as JSON to
 // SUMMARY_PATH, and a short plain-text report on stdout. Pure module (no k6 imports, no remote jslib).
+//
+// How the run ended. k6 (checked on v2.3.0) calls handleSummary after every kind of end: a normal one, setup()
+// throwing (exit code 107), exec.test.abort() from lib/guard.js (108), an abortOnFail threshold (99) and Ctrl+C (105).
+// The data says nothing about which: data.state is only { testRunDurationMs, isStdOutTTY, isStdErrTTY }, and every
+// threshold on a metric that got no sample reads ok. So the end is reconstructed here (verdict.aborted):
+//   setup        data.setup_data is missing (every script's setup() returns an object)
+//   guard        load_guardAbort has a sample (lib/guard.js sets it just before exec.test.abort())
+//   threshold    the load stopped before its planned end and an abortOnFail threshold (info.thresholds) failed
+//   interrupted  the load stopped before its planned end and nothing above explains it (Ctrl+C, REST API stop)
+// The load's length is this summary's time minus setup_data.readyAtMs (markReady() at the end of setup());
+// state.testRunDurationMs is not used because it includes setup, which is minutes of seeding in asset.js and
+// poll_saturation.js. Its planned end is info.plannedS (seconds after the scenarios start), else the last holdEndS.
 
-import { parseMetricName } from './thresholds.js';
+import { abortRules, parseMetricName } from './thresholds.js';
+
+// A load that ended more than this before its planned end was cut short (scheduling slack of a normal end).
+const END_SLACK_S = 1;
 
 function failedThresholds(metrics) {
   const out = [];
@@ -27,6 +42,12 @@ function round(x, nd) {
   return Math.round(x * f) / f;
 }
 
+// For the end of setup(): stamps the moment the scenarios start (k6 starts them as soon as setup() returns) on the
+// setup data, so the summary can tell how long the load ran.
+export function markReady(setupData) {
+  return Object.assign(setupData, { readyAtMs: Date.now() });
+}
+
 // dropped_iterations{scenario:<name>} of one scenario: { count, failed }, or null when the summary has no such
 // submetric. k6 tags dropped_iterations with the scenario name only (not with scenario `tags`), so only a script that
 // runs one scenario per stage (poll_saturation.js: stages[].scenario) can tie drops to a stage.
@@ -39,7 +60,9 @@ function droppedFor(metrics, scenario) {
 
 // One entry per stage index that has a hold part: ok when every threshold scoped to that hold passed, "not_run"
 // when none of its scoped metrics got a sample (the run stopped earlier). A stage whose own scenario dropped
-// iterations is "fail" (README: a stage with dropped iterations is not "pass").
+// iterations is "fail" (README: a stage with dropped iterations is not "pass"). k6 keeps a thresholded submetric that
+// got no sample in the summary with every value 0 and count 0: that endpoint gets no latency entry ("no data", not 0 ms).
+// heldS: the hold's seconds (holdS; buildReport shortens it for a hold an aborted run cut), null for "not_run".
 export function stageVerdicts(metrics, stages) {
   const byStage = {};
   Object.keys(metrics).forEach((name) => {
@@ -54,7 +77,7 @@ export function stageVerdicts(metrics, stages) {
     Object.keys(th).forEach((expr) => { if (th[expr] && th[expr].ok === false) entry.ok = false; });
     const count = m.values ? (m.values.count !== undefined ? m.values.count : (m.values.passes || 0) + (m.values.fails || 0)) : 0;
     entry.samples += count || 0;
-    if (parsed.metric === 'http_req_duration' && parsed.tags.endpoint && m.values) {
+    if (parsed.metric === 'http_req_duration' && parsed.tags.endpoint && m.values && m.values.count !== 0) {
       entry.latency[parsed.tags.endpoint] = { med: round(m.values.med), p95: round(m.values['p(95)']), p99: round(m.values['p(99)']),
         count: m.values.count === undefined ? null : m.values.count };
     }
@@ -68,8 +91,9 @@ export function stageVerdicts(metrics, stages) {
     const drop = s.scenario ? droppedFor(metrics, s.scenario) : null;
     let status = !e || e.samples === 0 ? 'not_run' : e.ok ? 'pass' : 'fail';
     if (drop && (drop.failed || drop.count > 0)) status = 'fail';
+    const holdS = s.holdS === undefined ? null : s.holdS;
     return { stage: i, label: s.label || '', users: s.users === undefined ? null : s.users, target: s.target === undefined ? null : s.target,
-      holdS: s.holdS === undefined ? null : s.holdS, status, dropped: drop ? drop.count : null, latency: e ? e.latency : {} };
+      holdS, heldS: status === 'not_run' ? null : holdS, status, dropped: drop ? drop.count : null, latency: e ? e.latency : {} };
   });
 }
 
@@ -85,6 +109,9 @@ function unattributedDrops(verdicts, dropped) {
     'passed and there is no breaking point; raise PRE_VUS/MAX_VUS (or check the load PC) and run again';
 }
 
+// A1's capacity search (TRAFFIC_MODEL.md §8): the levels only go up, the operating limit is 70 % of the users of the
+// last level that passed before the first failure. (users x 7) / 10, not users x 0.7: 0.7 is not exact in binary and
+// Math.floor(5400 x 0.7) is 3779.
 export function breakingPoint(verdicts) {
   const run = verdicts.filter((v) => v.status !== 'not_run');
   const firstFail = run.find((v) => v.status === 'fail');
@@ -94,35 +121,132 @@ export function breakingPoint(verdicts) {
     if (run[i].status === 'pass') lastPass = run[i];
   }
   return { firstFailingStage: firstFail ? firstFail.stage : null, lastPassingStage: lastPass ? lastPass.stage : null,
-    lastPassingUsers: lastPass ? lastPass.users : null, operatingLimitUsers: lastPass && lastPass.users ? Math.floor(lastPass.users * 0.7) : null };
+    lastPassingUsers: lastPass ? lastPass.users : null, operatingLimitUsers: lastPass && lastPass.users ? Math.floor((lastPass.users * 7) / 10) : null };
 }
 
 // Upload Mbps of each stage's hold: load_bytesSent{stage:N,phase:hold} (bytes, kept in the summary by a no-op
-// threshold) x 8 / 1e6 / that stage's holdS. Returns { "<stage>": Mbps } for the stages that have both.
-export function stageSentMbps(metrics, stages) {
-  const hold = {};
-  (stages || []).forEach((s) => { if (s.holdS > 0) hold[String(s.index)] = s.holdS; });
+// threshold) x 8 / 1e6 / the seconds that hold ran (verdict heldS). Returns { "<stage>": Mbps } for the stages that
+// have both; a stage that did not run has no heldS, so its all-zero submetric gives no 0 Mbps.
+export function stageSentMbps(metrics, verdicts) {
+  const held = {};
+  (verdicts || []).forEach((v) => { if (v.heldS > 0) held[String(v.stage)] = v.heldS; });
   const out = {};
   Object.keys(metrics).forEach((name) => {
     const parsed = parseMetricName(name);
     if (parsed.metric !== 'load_bytesSent' || parsed.tags.phase !== 'hold' || parsed.tags.stage === undefined) return;
-    const holdS = hold[parsed.tags.stage];
+    const heldS = held[parsed.tags.stage];
     const count = metrics[name].values ? metrics[name].values.count : null;
-    if (!holdS || typeof count !== 'number') return;
-    out[parsed.tags.stage] = (count * 8) / 1e6 / holdS;
+    if (!heldS || typeof count !== 'number') return;
+    out[parsed.tags.stage] = (count * 8) / 1e6 / heldS;
   });
   return out;
 }
 
+// Seconds from the scenarios' start to this summary (null without setup_data.readyAtMs, e.g. hand-made data) and the
+// planned end of the load (info.plannedS, else the latest stages[].holdEndS, else null).
+function loadTimes(data, info, endedAt) {
+  const setup = data.setup_data || {};
+  const end = Date.parse(endedAt);
+  const ranS = typeof setup.readyAtMs === 'number' && isFinite(end) ? (end - setup.readyAtMs) / 1000 : null;
+  let plannedS = typeof info.plannedS === 'number' ? info.plannedS : null;
+  if (plannedS === null) {
+    (info.stages || []).forEach((s) => { if (typeof s.holdEndS === 'number' && (plannedS === null || s.holdEndS > plannedS)) plannedS = s.holdEndS; });
+  }
+  return { ranS, plannedS };
+}
+
+function guardFailureText(code, cfg) {
+  if (code === null) return null;
+  if (code >= 100) return `HTTP ${code}`;
+  if (code === 0) return 'no response (connection refused, timeout or DNS)';
+  if (code === -1) return 'not a Prometheus query result';
+  if (code === -2) return `no disk_free_bytes series for env="${cfg.promEnv}" (PROM_ENV vs the backend's METRICS_ENV?)`;
+  return `failure code ${code}`;
+}
+
+function guardAbortReason(metrics, cfg, code) {
+  const g = cfg.guard || {};
+  if (code === 1) {
+    return `server 5xx ratio ${round(value(metrics, 'load_guardErrorRatio', 'value'), 3)} > GUARD_MAX_ERROR_RATIO ${g.maxErrorRatio} over 1m ` +
+      `(${g.breaches} checks in a row)`;
+  }
+  if (code === 2) return `disk ${round(value(metrics, 'load_guardDiskRatio', 'value') * 100, 1)} % used > GUARD_MAX_DISK_RATIO ${g.maxDiskRatio}`;
+  if (code === 3) {
+    return `Prometheus at ${cfg.promUrl} could not be read in the first ${g.blindAbort} checks ` +
+      `(${guardFailureText(value(metrics, 'load_guardLastFailure', 'value'), cfg)})`;
+  }
+  return `guard abort code ${code}`;
+}
+
+// verdict.aborted: null for a run whose load ran to its planned end, else { by, reason, atS, plannedS, cutStages }.
+// atS = seconds after the scenarios started at which the load stopped (null when unknown or for "setup").
+function detectAbort(data, metrics, info, cfg, times) {
+  const ended = (by, reason) => ({ by, reason, atS: by === 'setup' ? null : round(times.ranS, 1), plannedS: times.plannedS, cutStages: [] });
+  if (data.setup_data === undefined || data.setup_data === null) {
+    return ended('setup', 'setup() did not finish (it threw, timed out or was interrupted; the error is on k6 stderr, exit code 107): no load ran');
+  }
+  const code = value(metrics, 'load_guardAbort', 'value');
+  if (code !== null) return ended('guard', `${guardAbortReason(metrics, cfg, code)} (k6 exit code 108)`);
+  if (times.ranS === null || times.plannedS === null || times.ranS >= times.plannedS - END_SLACK_S) return null;
+  const crossed = abortRules(info.thresholds).filter((r) => {
+    const th = metrics[r.metric] && metrics[r.metric].thresholds;
+    return th && th[r.threshold] && th[r.threshold].ok === false;
+  });
+  if (crossed.length > 0) {
+    return ended('threshold', `${crossed.map((r) => `${r.metric} ${r.threshold}`).join(', ')} crossed (k6 exit code 99)`);
+  }
+  return ended('interrupted', 'the load stopped before its planned end and neither the guard nor an abortOnFail threshold did it: ' +
+    'Ctrl+C (k6 exit code 105), a REST API stop or another exec.test.abort()');
+}
+
+// The holds an aborted run cut short: their planned end (stages[].holdEndS) is after the moment the load stopped. A
+// cut hold that had passed so far reads "incomplete" (never "pass", so never the last passing stage); one that had
+// already failed stays "fail". Without the times, the last stage that got samples is taken as cut. Returns the indexes.
+function markCut(verdicts, stages, aborted) {
+  const byIndex = {};
+  (stages || []).forEach((s) => { byIndex[String(s.index)] = s; });
+  const ran = verdicts.filter((v) => v.status !== 'not_run');
+  const timed = aborted.atS !== null && ran.every((v) => byIndex[String(v.stage)] && typeof byIndex[String(v.stage)].holdEndS === 'number');
+  const cut = timed ? ran.filter((v) => aborted.atS < byIndex[String(v.stage)].holdEndS) : ran.slice(-1);
+  cut.forEach((v) => {
+    const s = byIndex[String(v.stage)] || {};
+    if (v.status === 'pass') v.status = 'incomplete';
+    v.heldS = timed && typeof s.holdS === 'number' ? round(Math.max(0, aborted.atS - (s.holdEndS - s.holdS)), 1) : null;
+  });
+  return cut.map((v) => v.stage);
+}
+
+// verdict.guard: what lib/guard.js saw (null without PROM_URL). failures > 0 means the run was not fully guarded.
+function guardReport(metrics, cfg) {
+  if (!cfg.promUrl) return null;
+  const failures = value(metrics, 'load_guardFailures', 'count') || 0;
+  return {
+    promUrl: cfg.promUrl,
+    env: cfg.promEnv,
+    queries: value(metrics, 'load_guardQueries', 'count') || 0,
+    failures,
+    lastError: failures > 0 ? guardFailureText(value(metrics, 'load_guardLastFailure', 'value'), cfg) : null,
+    maxErrorRatio: round(value(metrics, 'load_guardErrorRatio', 'max'), 4),
+    maxDiskRatio: round(value(metrics, 'load_guardDiskRatio', 'max'), 4),
+  };
+}
+
+// info: { script, scenario, stages: [{ index, label, users, target, holdS, holdEndS, scenario? }], plannedS,
+//         thresholds (the script's options.thresholds, for its abortOnFail rules), breakingPoint (false: the levels
+//         are not an increasing search), extra }
 export function buildReport(data, info, cfg, endedAt) {
   const metrics = data.metrics || {};
+  const stages = info.stages || [];
   const failed = failedThresholds(metrics);
-  const verdicts = stageVerdicts(metrics, info.stages || []);
+  const verdicts = stageVerdicts(metrics, stages);
+  const times = loadTimes(data, info, endedAt);
+  const aborted = detectAbort(data, metrics, info, cfg, times);
+  if (aborted && aborted.by !== 'setup') aborted.cutStages = markCut(verdicts, stages, aborted);
   const sentMbps = value(metrics, 'data_sent', 'rate') === null ? null : (value(metrics, 'data_sent', 'rate') * 8) / 1e6;
   const recvMbps = value(metrics, 'data_received', 'rate') === null ? null : (value(metrics, 'data_received', 'rate') * 8) / 1e6;
   // data_sent.rate is total bytes / whole test time, which understates a staged script's busiest hold. The uplink
   // ratio uses the larger of the busiest stage's upload Mbps and the whole-run average; the latter is kept apart.
-  const perStage = stageSentMbps(metrics, info.stages || []);
+  const perStage = stageSentMbps(metrics, verdicts);
   let peakStage = null;
   Object.keys(perStage).forEach((k) => { if (peakStage === null || perStage[k] > perStage[peakStage]) peakStage = k; });
   verdicts.forEach((v) => { v.sentMbps = perStage[String(v.stage)] === undefined ? null : round(perStage[String(v.stage)], 3); });
@@ -131,7 +255,18 @@ export function buildReport(data, info, cfg, endedAt) {
   const uplinkRatio = cfg.uplinkMbps && highest.length ? Math.max.apply(null, highest) / cfg.uplinkMbps : null;
   const uplinkRatioWholeRun = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
   const dropped = value(metrics, 'dropped_iterations', 'count') || 0;
-  const invalidReason = unattributedDrops(verdicts, dropped);
+  const notes = [];
+  if (aborted && aborted.by === 'setup') notes.push('setup() failed and no load ran: no breaking point');
+  else if (aborted) {
+    notes.push(`the run was aborted (${aborted.by}): no breaking point is computed for an aborted run; read verdict.stages ` +
+      '(a hold cut short reads "incomplete", never "pass")');
+  }
+  const dropNote = unattributedDrops(verdicts, dropped);
+  if (dropNote) notes.push(dropNote);
+  if (info.breakingPoint === false) {
+    notes.push('the levels are not an increasing search (A5 spike and recovery, A6 one soak level): no breaking point; ' +
+      'read verdict.stages level by level');
+  }
   const setup = data.setup_data || {};
   const meta = Object.assign({
     script: info.script,
@@ -142,18 +277,23 @@ export function buildReport(data, info, cfg, endedAt) {
     startedAt: setup.startedAt || null,
     endedAt,
     testRunDurationMs: data.state ? data.state.testRunDurationMs : null,
+    loadPlannedS: times.plannedS,
+    loadRanS: round(times.ranS, 1),
     rttBaseMsUsed: cfg.rttBaseMs,
     rttBaseMsMeasured: round(value(metrics, 'load_healthzMs', 'med'), 3),
     uplinkMbps: cfg.uplinkMbps,
-    stages: info.stages || [],
+    stages,
     status: '[실험 결과] 후보 — 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)은 collect.py 의 run.json 에 붙인다. 로컬 실행은 동작 확인용으로만 쓴다.',
   }, info.extra || {});
   const verdict = {
-    thresholdsOk: failed.length === 0,
+    // false for an aborted run too: a run that did not run to its planned end is never a pass
+    thresholdsOk: failed.length === 0 && aborted === null,
+    aborted,
     failedThresholds: failed,
     stages: verdicts,
-    breakingPoint: invalidReason === null ? breakingPoint(verdicts) : null,
-    breakingPointNote: invalidReason,
+    breakingPoint: notes.length === 0 ? breakingPoint(verdicts) : null,
+    breakingPointNote: notes.length === 0 ? null : notes.join('; '),
+    guard: guardReport(metrics, cfg),
     httpReqs: value(metrics, 'http_reqs', 'count'),
     httpReqRate: round(value(metrics, 'http_reqs', 'rate')),
     droppedIterations: dropped,
@@ -181,11 +321,25 @@ function pad(text, n) {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
 }
 
+function orDash(x) {
+  return x === null || x === undefined ? '-' : x;
+}
+
+function abortLine(a) {
+  if (a.by === 'setup') return `SETUP FAILED: ${a.reason}. Nothing below is a result.`;
+  const when = a.atS === null ? '' : ` after ${a.atS} s of the ${orDash(a.plannedS)} s planned`;
+  const head = a.by === 'interrupted' ? `STOPPED EARLY${when}`
+    : `ABORTED by the ${a.by === 'guard' ? 'Prometheus guard' : 'abortOnFail threshold'}${when}`;
+  const cut = a.cutStages.length ? `; hold cut short in stage ${a.cutStages.join(', ')} (incomplete, not a pass)` : '';
+  return `${head}: ${a.reason}${cut}. NOT a passing run.`;
+}
+
 export function textReport(report) {
   const m = report.meta;
   const v = report.verdict;
   const lines = [];
   lines.push(`== beside load: ${m.script} (${m.scenario}) run=${m.runId} base=${m.baseUrl}`);
+  if (v.aborted) lines.push(abortLine(v.aborted));
   lines.push(`requests ${v.httpReqs} (${v.httpReqRate}/s), dropped_iterations ${v.droppedIterations}, vus_max ${v.vusMax}`);
   lines.push(`data sent ${v.dataSentMbps} Mbps (whole-run average)` +
     (v.peakStageSentMbps === null ? '' : `, peak stage ${v.peakStage} upload ${v.peakStageSentMbps} Mbps`) +
@@ -193,19 +347,31 @@ export function textReport(report) {
     (v.uplinkRatio === null ? ' (UPLINK_MBPS not set)'
       : `, uplink ratio ${v.uplinkRatio} (whole run ${v.uplinkRatioWholeRun})${v.uplinkSaturated ? ' SATURATED (> 0.7)' : ''}`));
   if (m.rttBaseMsMeasured !== null) lines.push(`healthz p50 (RTT_base candidate) ${m.rttBaseMsMeasured} ms`);
+  if (v.guard) {
+    const g = v.guard;
+    lines.push(`guard ${g.promUrl}: ${g.queries} queries, ${g.failures} unreadable` +
+      (g.failures > 0 ? ` (last: ${g.lastError}): the run was NOT fully guarded` : '') +
+      `; max 5xx ratio ${orDash(g.maxErrorRatio)}, max disk ${orDash(g.maxDiskRatio)}`);
+  }
   if (v.checksFailed > 0) lines.push(`checks: ${v.checksFailed} failed of ${v.checksFailed + v.checksPassed}`);
   if (v.unexpectedCount > 0) lines.push(`unexpected responses (load_unexpectedCount): ${v.unexpectedCount}`);
   if (v.stages.length) {
-    lines.push('stage  users     target   status   latency p95 (ms)');
+    lines.push('stage  users     target   status     latency p95 (ms)');
     v.stages.forEach((s) => {
-      const lat = Object.keys(s.latency).sort().map((ep) => `${ep}=${s.latency[ep].p95}`).join(' ');
-      lines.push(`${pad(s.stage, 6)} ${pad(s.users === null ? '-' : s.users, 9)} ${pad(s.target === null ? '-' : s.target, 8)} ${pad(s.status, 8)} ${lat}`);
+      const lat = Object.keys(s.latency).sort().map((ep) => `${ep}=${orDash(s.latency[ep].p95)}`).join(' ') || '-';
+      lines.push(`${pad(s.stage, 6)} ${pad(orDash(s.users), 9)} ${pad(orDash(s.target), 8)} ${pad(s.status, 10)} ${lat}`);
     });
     const bp = v.breakingPoint;
-    if (bp === null) lines.push(`breaking point: invalid — ${v.breakingPointNote}`);
-    else lines.push(`last passing stage ${bp.lastPassingStage === null ? '-' : bp.lastPassingStage}, first failing stage ${bp.firstFailingStage === null ? '-' : bp.firstFailingStage}`);
+    if (bp === null) {
+      const label = v.stages.some((s) => s.status === 'invalid') ? 'invalid' : 'none';
+      lines.push(`breaking point: ${label} — ${v.breakingPointNote}`);
+    } else {
+      lines.push(`last passing stage ${orDash(bp.lastPassingStage)}, first failing stage ${orDash(bp.firstFailingStage)}`);
+    }
   }
-  lines.push(v.thresholdsOk ? 'thresholds: all passed' : `thresholds: ${v.failedThresholds.length} failed`);
+  if (v.aborted && v.aborted.by === 'setup') lines.push('thresholds: not judged (setup failed, no load ran)');
+  else if (v.failedThresholds.length) lines.push(`thresholds: ${v.failedThresholds.length} failed`);
+  else lines.push(v.aborted ? 'thresholds: none failed before the stop, but the run was cut short: NOT a pass' : 'thresholds: all passed');
   v.failedThresholds.slice(0, 40).forEach((f) => lines.push(`  FAIL ${f.metric} ${f.threshold}`));
   return lines.join('\n') + '\n';
 }

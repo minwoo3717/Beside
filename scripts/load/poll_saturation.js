@@ -20,7 +20,7 @@ import { guardLoop, guardScenario } from './lib/guard.js';
 import { checkIds, preflight, sampleIds, seedJobs } from './lib/seed.js';
 import { sequentialScenarios } from './lib/stages.js';
 import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const A2 = TIERS.load.a2;
@@ -98,16 +98,16 @@ function checkIdsFile() {
 
 export function setup() {
   const info = preflight(CONFIG);
-  if (IDS_FILE) return Object.assign(info, { completed: [], pending: [], seeded: false, idsChecked: checkIdsFile() });
+  if (IDS_FILE) return markReady(Object.assign(info, { completed: [], pending: [], seeded: false, idsChecked: checkIdsFile() }));
   const done = seedJobs(CONFIG, BODIES.body(), SEED_COMPLETED, { wait: true, waitS: SEED_WAIT_S });
   const pend = SEED_PENDING > 0 ? seedJobs(CONFIG, BODIES.body(), SEED_PENDING, { wait: false }) : { created: [] };
   if (done.completed.length === 0 && pend.created.length === 0) throw new Error('setup: no job could be seeded');
-  return Object.assign(info, {
+  return markReady(Object.assign(info, {
     completed: done.completed.map((j) => j.id),
     pending: pend.created,
     seeded: true,
     seedReport: { requested: SEED_COMPLETED, completed: done.completed.length, failed: done.failed.length, unfinished: done.unfinished.length },
-  });
+  }));
 }
 
 function pick(list) {
@@ -137,8 +137,11 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'poll_saturation.js',
     scenario: 'A2',
+    plannedS: LOAD_END_S,
+    thresholds: options.thresholds,
     // scenario: dropped_iterations{scenario:rpsN} fails step N (lib/summary.js stageVerdicts)
-    stages: RATES.map((rate, i) => ({ index: i, label: `${rate} rps`, users: null, target: rate, holdS: HOLD_S, scenario: `rps${i}` })),
+    stages: RATES.map((rate, i) => ({ index: i, label: `${rate} rps`, users: null, target: rate, holdS: HOLD_S,
+      holdEndS: i * (HOLD_S + GAP_S) + HOLD_S, scenario: `rps${i}` })),
     extra: {
       rps: RATES,
       ids: IDS_FILE ? { file: IDS_FILE, completed: FROM_FILE.completed.length, pending: FROM_FILE.pending.length,

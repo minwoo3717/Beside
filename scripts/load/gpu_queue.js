@@ -32,7 +32,7 @@ import { guardLoop, guardScenario } from './lib/guard.js';
 import { predict } from './lib/queue.js';
 import { preflight } from './lib/seed.js';
 import { errorThresholds, flowThresholds, latencyThresholds, merge } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const PATHS = photoPaths(ENV, TIERS.defaults.photoCount, './out/fixtures/photo-400k.png');
@@ -82,7 +82,7 @@ export const options = {
 const ctx = makeContext({ cfg: CONFIG, body: BODIES.body, makeFailBody: BODIES.makeFailBody, failRatio: FAIL_RATIO });
 
 export function setup() {
-  return preflight(CONFIG);
+  return markReady(preflight(CONFIG));
 }
 
 export function flow() {
@@ -106,6 +106,8 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'gpu_queue.js',
     scenario: RHO >= 1.5 ? 'G3' : SLOTS > 1 ? 'G2' : 'G1',
+    plannedS: DURATION_S,
+    thresholds: options.thresholds,
     stages: [],
     extra: {
       durationS: DURATION_S,

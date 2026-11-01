@@ -10,7 +10,7 @@ import { lazyBodies, openOnce } from './lib/bodies.js';
 import { makeContext, userFlow } from './lib/flow.js';
 import { preflight } from './lib/seed.js';
 import { errorThresholds, flowThresholds, latencyThresholds, merge } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const SMOKE = TIERS.load.smoke;
@@ -54,7 +54,7 @@ export const options = {
 const ctx = makeContext({ cfg: CONFIG, body: BODIES.body, makeFailBody: BODIES.makeFailBody, failRatio: FAIL_RATIO });
 
 export function setup() {
-  return preflight(CONFIG);
+  return markReady(preflight(CONFIG));
 }
 
 export function flow() {
@@ -65,6 +65,8 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'smoke.js',
     scenario: 'A0',
+    plannedS: DURATION_S,
+    thresholds: options.thresholds,
     stages: [],
     extra: {
       flowEveryS: EVERY_S,

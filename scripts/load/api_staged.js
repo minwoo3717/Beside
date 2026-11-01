@@ -19,7 +19,7 @@ import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { stagedThresholds } from './lib/thresholds.js';
-import { summaryOutputs } from './lib/summary.js';
+import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const PATHS = photoPaths(ENV, TIERS.defaults.photoCount, './out/fixtures/photo-400k.png');
@@ -110,7 +110,7 @@ const flowCtx = makeContext({
 const browseCtx = makeContext({ cfg: CONFIG, tags: () => tagsAt(BROWSE.segments, exec.scenario.startTime, Date.now()) });
 
 export function setup() {
-  return preflight(CONFIG);
+  return markReady(preflight(CONFIG));
 }
 
 export function flow() {
@@ -130,8 +130,12 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'api_staged.js',
     scenario: LABELS[SCENARIO],
+    // A5 goes 1,800 -> 5,400 -> 1,800 users and A6 holds one level: A1's "70 % of the last passing level" does not apply.
+    breakingPoint: SCENARIO === 'staged',
+    plannedS: FLOW.totalS,
+    thresholds: options.thresholds,
     stages: FLOW.segments.filter((s) => s.phase === 'hold').map((s) => ({
-      index: s.index, label: s.label, users: s.users, target: s.target, holdS: s.end - s.start,
+      index: s.index, label: s.label, users: s.users, target: s.target, holdS: s.end - s.start, holdEndS: s.end,
     })),
     extra: {
       conversionTier: CONVERSION_TIER,

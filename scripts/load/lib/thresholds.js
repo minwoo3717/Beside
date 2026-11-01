@@ -85,6 +85,22 @@ export function stagedThresholds(opts) {
   return merge.apply(null, parts);
 }
 
+// The abortOnFail thresholds of an options.thresholds object, as [{ metric, threshold }]. handleSummary's data does not
+// carry the options' thresholds (k6 v2.3.0 data.options is only the summary settings), so the scripts pass them to
+// lib/summary.js, which reads a failed one in a run that ended early as "aborted by a threshold". Inside handleSummary
+// k6 v2.3.0 hands the script a host-backed copy of `options` whose lists are not JS arrays (no forEach, Array.isArray
+// false), so the value is copied through JSON first.
+export function abortRules(thresholds) {
+  const plain = JSON.parse(JSON.stringify(thresholds || {}));
+  const out = [];
+  Object.keys(plain).forEach((metric) => {
+    (Array.isArray(plain[metric]) ? plain[metric] : []).forEach((t) => {
+      if (t && typeof t === 'object' && t.abortOnFail) out.push({ metric, threshold: t.threshold });
+    });
+  });
+  return out;
+}
+
 // Parse a summary metric name such as "http_req_duration{endpoint:poll,stage:3,phase:hold}".
 export function parseMetricName(name) {
   const open = name.indexOf('{');
