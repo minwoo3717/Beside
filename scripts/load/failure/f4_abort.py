@@ -1,5 +1,6 @@
 """F4 aborted downloads: start N asset downloads, abort each in the middle of the body, then check that the job is
-still COMPLETED and that a full re-download has the same SHA-256 as before (plan section 3, F4). Stdlib only.
+still COMPLETED and that a full re-download has the same SHA-256 as before (docs/perf/load/TRAFFIC_MODEL.md §9, F4).
+Stdlib only.
 
     python scripts/load/failure/f4_abort.py --base-url https://<domain> --job-id <uuid> --n 1000 --concurrency 20
     python scripts/load/failure/f4_abort.py --base-url http://localhost:18080 --run-id f4local \

@@ -1,5 +1,5 @@
 // F3 bad uploads: each case must get exactly the status and error.code of docs/api/ERROR_CODES.md, while a
-// background poller checks that GET /api/v1/jobs/{id} keeps its p95 (plan section 3, F3).
+// background poller checks that GET /api/v1/jobs/{id} keeps its p95 (docs/perf/load/TRAFFIC_MODEL.md §9, F3).
 //
 //   case            body                                              expected
 //   oversize_6mb    1 photo of 6,000,000 B                            413 PAYLOAD_TOO_LARGE (5 MB per photo)
@@ -12,7 +12,8 @@
 //   gif             image/gif part with GIF bytes                     400 UNSUPPORTED_IMAGE_TYPE
 //   fake_jpg        image/jpeg part whose bytes are text              400 UNSUPPORTED_IMAGE_TYPE with upload.verify-magic
 //   gif_as_jpeg     image/jpeg part whose bytes are a GIF             (prod profile); 202 without it (VERIFY_MAGIC=0)
-// The slow 10 kB/s upload of the plan is a curl command in scripts/load/README.md (k6 cannot throttle one request).
+// The slow 10 kB/s upload of F3 (TRAFFIC_MODEL.md §9) is a curl command in scripts/load/README.md (k6 cannot
+// throttle one request).
 // Leftover files are checked on the server after the run (README); this script cannot see the disk.
 //
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=f3r1 -e RTT_BASE_MS=23 scripts/load/failure/f3_uploads.js

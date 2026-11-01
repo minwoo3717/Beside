@@ -88,7 +88,8 @@ export function tierParams(doc, name) {
 
 // Users -> arrivals, from the model's two formulas: concurrent = DAU x share x sessionMin / 60 and
 // lambda = DAU x jobsPerDau x share / 3600, so concurrent / lambda = sessionMin x 60 / jobsPerDau seconds.
-// With the T3 values (6 min, 0.2 jobs per DAU) that is lambda = U / 1,800 per second, as in the plan.
+// With the T3 values (6 min, 0.2 jobs per DAU) that is lambda = U / 1,800 per second, as in
+// docs/perf/load/TRAFFIC_MODEL.md §3 (1,800 concurrent users, 1.0 job/s).
 export function usersPerJobPerS(doc, tierName) {
   const p = tierParams(doc, tierName);
   return (p.sessionMin * 60) / p.jobsPerDau;

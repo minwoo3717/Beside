@@ -1,11 +1,11 @@
-// Pure k6 libs: plan section 2 thresholds, queue predictions, summary verdicts.
+// Pure k6 libs: docs/perf/load/TRAFFIC_MODEL.md §8 thresholds, queue predictions, summary verdicts.
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { BASE_ENV, HERE, PHOTO, TMP, fakeServer, lib, load, samples, state } from './testing/harness.mjs';
 
-test('thresholds: plan section 2 criteria relative to RTT_base', async () => {
+test('thresholds: TRAFFIC_MODEL §8 criteria relative to RTT_base', async () => {
   const th = await lib('thresholds.js');
   const t = th.stagedThresholds({ rttMs: 20, endpoints: ['healthz', 'create', 'poll', 'asset'], flows: true, scopes: [{ scope: 'stage:3,phase:hold' }] });
   assert.deepEqual(t['http_req_duration{endpoint:healthz}'], ['p(95)<70', 'p(99)<170']);

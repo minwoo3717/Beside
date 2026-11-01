@@ -1,16 +1,20 @@
 """Collect one load-test run into its result folder (standard library only).
 
-    python scripts/load/collect.py docs/perf/load/data/2026-11-10_1400 --scenario A1 --tier T3 \
-        --summary docs/perf/load/data/2026-11-10_1400/k6-summary.json --k6-version "$(k6 version)" \
+    RUN=docs/perf/load/data/2026-11-10_1400-a1r1      # one folder per k6 run: <YYYY-MM-DD_HHMM>-<RUN_ID>
+    python scripts/load/collect.py $RUN --scenario A1 --tier T3 \
+        --summary $RUN/k6-summary.json --k6-version "$(k6 version)" \
         --vm-provider <provider> --vm-type <type> --vm-vcpu 2 --vm-ram-gb 4 --uplink-mbps 94.1 --client-cpu-max-pct 41 \
         --server-sha <deployed commit> --photo scripts/load/out/fixtures/photo-400k.png \
-        --prom-url http://localhost:9090 --attach events-lt.jsonl --attach docker-stats.txt
+        --prom-url http://localhost:9090 --attach $RUN/vm/events-lt.jsonl --attach $RUN/vm/docker-stats.txt
 
-Writes <run dir>/run.json (conditions of plan section 7: VM spec, commit SHAs, k6 version, uplink, photo sizes, tier,
-scenario, window, the k6 verdict) and <run dir>/prometheus/<name>.csv: a fixed list of query_range queries over the
-run window (start/end from --start/--end or the k6 summary, padded by --pad-s). --prom-url is any URL that reaches the
-VM's Prometheus (SSH tunnel, Tailscale); it is not opened to the internet. Files given with --attach are copied to
-<run dir>/attachments/. Exit code: 0 done, 1 written but some query failed, 2 nothing written (bad arguments).
+Run it once per run folder (scripts/load/README.md "결과 폴더"); the VM-side files of that run sit in its vm/
+subfolder and reach run.json only through --attach.
+
+Writes <run dir>/run.json (the conditions of docs/perf/load/TRAFFIC_MODEL.md §10: VM spec, commit SHAs, k6 version,
+uplink, photo sizes, tier, scenario, window, the k6 verdict) and <run dir>/prometheus/<name>.csv: a fixed list of
+query_range queries over the run window (start/end from --start/--end or the k6 summary, padded by --pad-s).
+--prom-url is any URL that reaches the VM's Prometheus (SSH tunnel, Tailscale); it is not opened to the internet.
+Files given with --attach are copied to <run dir>/attachments/. Exit code: 0 done, 1 written but some query failed, 2 nothing written (bad arguments).
 """
 from __future__ import annotations
 
