@@ -55,8 +55,8 @@
     "conversionTier": "T3",
     "a1": {"users": [25, 200, 1000, 1800, 3600, 5400, 7200, 9000], "rampS": 60, "holdS": 480},
     "a2": {"rps": [100, 300, 600, 900, 1200, 1800], "holdS": 300},
-    "a3Small": {"ratesPerS": [1, 2, 5, 10, 15, 20], "rampS": 30, "holdS": 180},
-    "a3Large": {"ratesPerS": [0.5, 1, 1.5, 2], "rampS": 30, "holdS": 180},
+    "a3Small": {"ratesPerS": [1, 2, 5, 10, 15, 20], "rampS": 30, "holdS": 120, "photoCount": 2},
+    "a3Large": {"ratesPerS": [0.5, 1, 1.5, 2], "rampS": 15, "holdS": 60, "photoCount": 4},
     "a4": {"ratesPerS": [1, 5, 10, 20, 30, 40], "rampS": 30, "holdS": 180},
     "a5": [
       {"users": 1800, "rampS": 60, "holdS": 300, "label": "base"},

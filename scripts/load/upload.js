@@ -1,0 +1,106 @@
+// A3 upload: POST /api/v1/jobs only (no polling), stepped arrival rates.
+//   SIZE=small  2 x 0.4 MB photos (0.8 MB), 1 -> 20 uploads/s   (tiers.json load.a3Small)
+//   SIZE=large  4 x ~5 MB photos (~20 MB, under the 20 MiB limit), 0.5 -> 2 uploads/s   (load.a3Large)
+// Every upload creates a real job and stays on the server's disk until the load-test volume is wiped, so the script
+// refuses to start when the expected upload volume exceeds DISK_BUDGET_GB (8) unless ALLOW_DISK=1.
+//
+//   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a3s1 -e RTT_BASE_MS=23 -e SIZE=small scripts/load/upload.js
+//
+// Env: SIZE, RATES=1,2,5 (per second, subset), RAMP_S, HOLD_S, LARGE_PHOTO (./out/fixtures/photo-5mb.png),
+//      PHOTOS/PHOTO_n (small), DISK_BUDGET_GB, ALLOW_DISK, MAX_VUS (600), REQUEST_TIMEOUT (120s), PROM_URL.
+import exec from 'k6/execution';
+import { CONFIG, ENV, photoPaths, readList, readNum, readStr, requireRtt } from './lib/config.js';
+import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
+import { createJob, makeContext } from './lib/flow.js';
+import { guardScenario, guardTick } from './lib/guard.js';
+import { preflight } from './lib/seed.js';
+import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
+import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
+import { summaryOutputs } from './lib/summary.js';
+
+const TIERS = JSON.parse(open('./tiers.json'));
+const SIZE = readStr(ENV, 'SIZE', 'small').toLowerCase();
+if (SIZE !== 'small' && SIZE !== 'large') throw new Error(`SIZE must be small or large (got '${SIZE}')`);
+const SPEC = SIZE === 'small' ? TIERS.load.a3Small : TIERS.load.a3Large;
+const PATHS = SIZE === 'small'
+  ? photoPaths(ENV, SPEC.photoCount, './out/fixtures/photo-400k.png')
+  : Array.from({ length: SPEC.photoCount }, () => readStr(ENV, 'LARGE_PHOTO', './out/fixtures/photo-5mb.png'));
+const FILES = openOnce(PATHS, (p) => open(p, 'b'));
+const BODIES = lazyBodies(CONFIG.runId, FILES, CONFIG.failToken, { tag: SIZE });
+
+const RATES = (readList(ENV, 'RATES', null) || SPEC.ratesPerS).map(Number);
+const RAMP_S = readNum(ENV, 'RAMP_S', SPEC.rampS);
+const HOLD_S = readNum(ENV, 'HOLD_S', SPEC.holdS);
+// timeUnit 1m keeps 0.5/s and 1.5/s whole numbers (30 and 90 per minute).
+const LEVELS = buildLevels(RATES.map((r) => ({ target: Math.round(r * 60), rampS: RAMP_S, holdS: HOLD_S, label: `${r}/s` })));
+const EXPECTED = expectedIterations(LEVELS.stages, 60, 0);
+const BYTES = totalBytes(FILES);
+const EXPECTED_GB = (EXPECTED * BYTES) / 1e9;
+const BUDGET_GB = readNum(ENV, 'DISK_BUDGET_GB', 8);
+if (EXPECTED_GB > BUDGET_GB && readNum(ENV, 'ALLOW_DISK', 0) <= 0) {
+  throw new Error(`upload.js: about ${EXPECTED_GB.toFixed(1)} GB of uploads expected (> DISK_BUDGET_GB ${BUDGET_GB}); ` +
+    'shorten HOLD_S/RATES or set ALLOW_DISK=1 after checking df on the server');
+}
+const RTT = requireRtt(CONFIG, 'upload.js');
+const MAX_PER_S = maxTarget(LEVELS.stages) / 60;
+const MAX_VUS = readNum(ENV, 'MAX_VUS', 600);
+const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 'small' ? 2 : 10))));
+// The 1.5 s / 3 s criteria are for the 0.8 MB upload (plan section 2); a 20 MB upload is reported, not judged.
+const LATENCY_EPS = SIZE === 'small' ? ['create'] : [];
+
+export const options = {
+  discardResponseBodies: true,
+  summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
+  setupTimeout: '60s',
+  scenarios: Object.assign({
+    uploads: {
+      executor: 'ramping-arrival-rate',
+      exec: 'upload',
+      startRate: 0,
+      timeUnit: '1m',
+      preAllocatedVUs: PRE_VUS,
+      maxVUs: MAX_VUS,
+      stages: LEVELS.stages,
+      gracefulStop: '2m',
+    },
+  }, guardScenario(CONFIG, LEVELS.totalS + 120)),
+  thresholds: merge.apply(null, [latencyThresholds(RTT, LATENCY_EPS, null), errorThresholds(null, true),
+    { dropped_iterations: ['count==0'] }].concat(holdScopes(LEVELS.segments).map((s) =>
+    merge(latencyThresholds(RTT, LATENCY_EPS, s.scope), errorThresholds(s.scope, false))))),
+};
+
+const ctx = makeContext({
+  cfg: CONFIG,
+  tags: () => tagsAt(LEVELS.segments, exec.scenario.startTime, Date.now()),
+  requestTimeout: readStr(ENV, 'REQUEST_TIMEOUT', '120s'),
+});
+
+export function setup() {
+  return preflight(CONFIG);
+}
+
+export function upload() {
+  createJob(ctx, BODIES.body());
+}
+
+export function guard() {
+  guardTick(CONFIG);
+}
+
+export function handleSummary(data) {
+  return summaryOutputs(data, {
+    script: 'upload.js',
+    scenario: `A3-${SIZE}`,
+    stages: holdScopes(LEVELS.segments).map((s) => ({ index: s.index, label: s.segment.label, users: null,
+      target: s.segment.target / 60, holdS: HOLD_S })),
+    extra: {
+      size: SIZE,
+      ratesPerS: RATES,
+      photos: PATHS,
+      bodyPhotoBytes: BYTES,
+      expectedUploads: Math.round(EXPECTED),
+      expectedUploadGB: Math.round(EXPECTED_GB * 100) / 100,
+      server: (data.setup_data && data.setup_data.server) || null,
+    },
+  }, CONFIG);
+}
