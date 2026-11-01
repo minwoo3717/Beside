@@ -59,6 +59,24 @@ test('summary: stage verdicts and breaking point', async () => {
   assert.match(s.textReport(report), /first failing stage 2/);
 });
 
+test('summary: failed checks and unexpected responses are counted and printed', async () => {
+  const s = await lib('summary.js');
+  const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
+  const metrics = {
+    checks: { values: { passes: 10, fails: 990, rate: 0.01 } },
+    load_unexpectedCount: { values: { count: 990, rate: 3 }, thresholds: { 'count==0': { ok: false } } },
+  };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'poll_saturation.js', scenario: 'A2', stages: [] }, cfg, 'T1');
+  assert.equal(report.verdict.checksFailed, 990);
+  assert.equal(report.verdict.unexpectedCount, 990);
+  const text = s.textReport(report);
+  assert.match(text, /checks: 990 failed of 1000/);
+  assert.match(text, /unexpected responses \(load_unexpectedCount\): 990/);
+  const clean = s.textReport(s.buildReport({ metrics: { checks: { values: { passes: 5, fails: 0 } } }, setup_data: {}, state: {} },
+    { script: 'x.js', scenario: 'A0', stages: [] }, cfg, 'T1'));
+  assert.doesNotMatch(clean, /checks:|unexpected responses/);
+});
+
 test('summary: uplink ratio from the busiest stage, whole-run value kept apart', async () => {
   const s = await lib('summary.js');
   const metrics = {

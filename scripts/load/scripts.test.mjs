@@ -1,6 +1,7 @@
 // Entry scripts: options (stages, scenarios, thresholds) and their setup/exec functions.
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { BASE_ENV, HERE, PHOTO, TMP, fakeServer, lib, load, samples, state } from './testing/harness.mjs';
@@ -44,6 +45,36 @@ test('poll_saturation.js A2: one constant-arrival-rate scenario per step', async
   assert.deepEqual(names.map((n) => mod.options.scenarios[n].rate), [100, 300, 600, 900, 1200, 1800]);
   assert.equal(mod.options.scenarios.rps2.startTime, '660s');
   assert.deepEqual(mod.options.thresholds['dropped_iterations{scenario:rps5}'], ['count==0']);
+  // a 404 poll is "unexpected", not an error: without these a run where every id is unknown would pass
+  assert.deepEqual(mod.options.thresholds.load_unexpectedCount, ['count==0']);
+  assert.deepEqual(mod.options.thresholds['load_unexpectedCount{stage:2,phase:hold}'], ['count==0']);
+});
+
+test('poll_saturation.js: IDS_FILE ids are checked in setup', async () => {
+  const known = ['00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002'];
+  const good = join(TMP, 'ids-good.json');
+  writeFileSync(good, JSON.stringify({ completed: [known[0]], pending: [known[1]] }));
+  const mod = await load('poll_saturation.js', { RTT_BASE_MS: '20', IDS_FILE: good }, { clock: 0 });
+  const server = fakeServer();
+  known.forEach((id) => { server.jobs[id] = { polls: 0, fail: false, status: 'COMPLETED', filenames: [] }; });
+  state.handler = server;
+  const data = mod.setup();
+  assert.equal(data.idsChecked, 2);
+  assert.ok(state.requests.every((r) => r.tags.endpoint === 'setup'));
+
+  const other = join(TMP, 'ids-other.json'); // ids of another server or an emptied volume: every GET is 404
+  const many = Array.from({ length: 50 }, (_, i) => `00000000-0000-4000-9000-${String(i).padStart(12, '0')}`);
+  writeFileSync(other, JSON.stringify({ completed: many, pending: [] }));
+  const bad = await load('poll_saturation.js', { RTT_BASE_MS: '20', IDS_FILE: other }, { clock: 0 });
+  state.handler = fakeServer();
+  assert.throws(() => bad.setup(), /20 of 20 sampled IDS_FILE ids did not return 200/);
+  assert.equal(state.requests.filter((r) => r.tags.endpoint === 'setup' && r.url.indexOf('/jobs/') > 0).length, 20);
+
+  const empty = join(TMP, 'ids-empty.json');
+  writeFileSync(empty, JSON.stringify({ completed: [], pending: [] }));
+  const none = await load('poll_saturation.js', { RTT_BASE_MS: '20', IDS_FILE: empty }, { clock: 0 });
+  state.handler = fakeServer();
+  assert.throws(() => none.setup(), /no completed or pending ids/);
 });
 
 test('upload.js A3: rates per minute and the disk budget guard', async () => {

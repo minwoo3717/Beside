@@ -129,6 +129,9 @@ export function buildReport(data, info, cfg, endedAt) {
     httpReqs: value(metrics, 'http_reqs', 'count'),
     httpReqRate: round(value(metrics, 'http_reqs', 'rate')),
     droppedIterations: value(metrics, 'dropped_iterations', 'count') || 0,
+    checksFailed: value(metrics, 'checks', 'fails') || 0,
+    checksPassed: value(metrics, 'checks', 'passes') || 0,
+    unexpectedCount: value(metrics, 'load_unexpectedCount', 'count') || 0,
     vusMax: value(metrics, 'vus_max', 'max') || value(metrics, 'vus_max', 'value'),
     dataSentMbps: round(sentMbps, 3),
     dataReceivedMbps: round(recvMbps, 3),
@@ -162,6 +165,8 @@ export function textReport(report) {
     (v.uplinkRatio === null ? ' (UPLINK_MBPS not set)'
       : `, uplink ratio ${v.uplinkRatio} (whole run ${v.uplinkRatioWholeRun})${v.uplinkSaturated ? ' SATURATED (> 0.7)' : ''}`));
   if (m.rttBaseMsMeasured !== null) lines.push(`healthz p50 (RTT_base candidate) ${m.rttBaseMsMeasured} ms`);
+  if (v.checksFailed > 0) lines.push(`checks: ${v.checksFailed} failed of ${v.checksFailed + v.checksPassed}`);
+  if (v.unexpectedCount > 0) lines.push(`unexpected responses (load_unexpectedCount): ${v.unexpectedCount}`);
   if (v.stages.length) {
     lines.push('stage  users     target   status   latency p95 (ms)');
     v.stages.forEach((s) => {

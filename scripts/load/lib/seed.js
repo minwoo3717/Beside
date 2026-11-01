@@ -17,6 +17,27 @@ export function preflight(cfg) {
   return { startedAt: new Date().toISOString(), server };
 }
 
+// Up to n ids spread evenly over `list` (index access only: a k6 SharedArray has no slice/map).
+export function sampleIds(list, n) {
+  const len = list.length;
+  const k = Math.min(len, n);
+  const out = [];
+  for (let i = 0; i < k; i++) out.push(list[Math.floor((i * len) / k)]);
+  return out;
+}
+
+// GET /api/v1/jobs/{id} once per id (tagged endpoint=setup, not measured). Returns { checked, bad: [{ id, status }] }.
+export function checkIds(cfg, ids) {
+  const res = ids.length === 0 ? [] : http.batch(ids.map((id) => ({
+    method: 'GET',
+    url: `${cfg.baseUrl}/api/v1/jobs/${id}`,
+    params: { tags: { endpoint: 'setup', name: '/api/v1/jobs/{id}' }, responseType: 'none', timeout: '30s' },
+  })));
+  const bad = [];
+  res.forEach((r, i) => { if (r.status !== 200) bad.push({ id: ids[i], status: r.status }); });
+  return { checked: ids.length, bad };
+}
+
 function jsonField(res, field) {
   try { return res.json(field); } catch (e) { return null; }
 }
