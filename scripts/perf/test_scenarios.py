@@ -173,6 +173,17 @@ class SettleTest(unittest.TestCase):
             with mock.patch.object(scenarios.procs, "wait_idle", return_value=(0.0, None)):
                 self.assertEqual(ctx.settle(server), (0.0, None))
 
+    def test_servers_start_without_the_actuator_management_port(self):
+        # Jars with Actuator bind management.server.port (8081) besides server.port; -1 keeps two servers, or a
+        # leftover one, from clashing on it. Older jars ignore the unknown property.
+        with tempfile.TemporaryDirectory() as folder:
+            ctx = scenarios.SuiteContext("v1", 1, "x.jar", "java", [], None, {}, {}, folder, print)
+            proc = mock.Mock(pid=1, pinned=None, in_job=False, priority=None)
+            with mock.patch.object(scenarios.procs, "start", return_value=proc) as start, \
+                    mock.patch.object(scenarios.procs, "wait_http_ok", return_value=1.0):
+                ctx.start_server("A-mock", Path(folder) / "storage", "mock", [])
+            self.assertIn("--management.server.port=-1", start.call_args.args[1])
+
 
 class WaitPlacementTest(unittest.TestCase):
     """Idle waits and CPU readings sit between timed regions, never inside one."""
