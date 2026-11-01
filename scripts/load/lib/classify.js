@@ -1,5 +1,5 @@
-// How one HTTP result counts (plan section 2: "5xx and connection errors < 0.5 %; intended 4xx, 429 and 503 are
-// counted separately"). Pure module.
+// How one HTTP result counts (docs/perf/load/TRAFFIC_MODEL.md §8: "5xx and connection errors < 0.5 %; intended 4xx,
+// 429 and 503 are counted separately"). Pure module.
 //
 //   ok          the status this request expects (e.g. 202 for POST /jobs, 400 for an intentionally bad upload)
 //   error       status 0 (connection error, timeout, reset) or any 5xx that is not an intended rejection

@@ -1,5 +1,5 @@
-// Custom k6 metrics. Names use the load_ prefix (the "load.*" values of the plan; k6 forbids dots). They are perf-only
-// like bench.* and are not registered in docs/METRICS.md (agenda #15).
+// Custom k6 metrics. Names use the load_ prefix (the "load.*" values of docs/perf/load/TRAFFIC_MODEL.md §11; k6
+// forbids dots). They are perf-only like bench.* and are not registered in docs/METRICS.md (agenda #15).
 import { Counter, Rate, Trend } from 'k6/metrics';
 
 export const healthzMs = new Trend('load_healthzMs', true);

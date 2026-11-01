@@ -3,7 +3,8 @@
 // exec.scenario.startTime and Date.now().
 //
 // A "level" is one load step: ramp to `target` over rampS seconds, then hold it for holdS seconds. Pass/fail is
-// judged on the hold part (plan section 2: the breaking point is the first level whose hold breaks a criterion).
+// judged on the hold part (docs/perf/load/TRAFFIC_MODEL.md §8: the breaking point is the first level whose hold breaks
+// a criterion).
 
 export function buildLevels(levels) {
   const stages = [];

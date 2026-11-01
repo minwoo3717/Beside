@@ -1,4 +1,4 @@
-// Optional abort guard (plan section 2 "중단 조건"): when PROM_URL points at the run's Prometheus (SSH tunnel or
+// Optional abort guard (docs/perf/load/TRAFFIC_MODEL.md §8 "중단 조건"): when PROM_URL points at the run's Prometheus (SSH tunnel or
 // Tailscale, e.g. http://localhost:9090), one VU checks every GUARD_EVERY_S seconds
 //   - the server's 5xx ratio over the last minute  > 5 %  (GUARD_BREACHES checks in a row)
 //   - the fullest disk the backend reports          > 80 %

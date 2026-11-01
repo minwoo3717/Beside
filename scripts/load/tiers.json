@@ -1,6 +1,6 @@
 {
   "schema": "beside-traffic-model/1",
-  "status": "[가정] 모든 비율과 사용자 수는 가정이다. 파생 값은 model.py 가 계산한다 [파생]. 계획 문서 1절과 같은 값이며, 바꾸면 model.py 와 k6 단계가 함께 바뀐다.",
+  "status": "[가정] 모든 비율과 사용자 수는 가정이다. 파생 값은 model.py 가 계산한다 [파생]. docs/perf/load/TRAFFIC_MODEL.md §2(가정)·§3(목표 등급)과 같은 값이며, 바꾸면 model.py 와 k6 단계가 함께 바뀐다.",
   "sources": {
     "socarScale": "쏘카 MAU 약 100만 (증권사 분석 2025-12-05, 공식 공시 아님). 사용자 규모만 빌리고 요청 패턴은 Beside 가정이다.",
     "pollIntervalS": "Unity JobManager.pollingIntervalSeconds = 2 (unity/Assets/Beside/Job/JobManager.cs)",
@@ -32,14 +32,14 @@
       "peakHourShare": 0.5,
       "sessionMin": 30,
       "jobsPerDau": 1.0,
-      "note": "팀원 20명이 매일 쓰고, 시험하는 한 시간에 절반이 30분씩 머물며 하루 1건씩 만든다고 가정 — 계획 표의 동시 약 5명, 10건/h 를 내는 값"
+      "note": "팀원 20명이 매일 쓰고, 시험하는 한 시간에 절반이 30분씩 머물며 하루 1건씩 만든다고 가정 — TRAFFIC_MODEL.md §2·§3 의 동시 약 5명, 10건/h 를 내는 값"
     },
     "T2": {
       "label": "공개 베타",
       "mau": 10000,
       "dauPerMau": 0.2,
       "jobsPerDau": 0.5,
-      "note": "계획 표의 DAU 2,000, 120건/h 를 내려면 DAU/MAU 0.2, DAU당 0.5건이어야 한다(공통 가정 0.15·0.2 이면 DAU 1,500, 36건/h). 베타 사용자가 더 자주 시도한다는 가정으로 둔다"
+      "note": "TRAFFIC_MODEL.md §3 의 DAU 2,000, 120건/h 를 내려면 DAU/MAU 0.2, DAU당 0.5건이어야 한다(공통 가정 0.15·0.2 이면 DAU 1,500, 36건/h). 베타 사용자가 더 자주 시도한다는 가정으로 둔다"
     },
     "T3": {
       "label": "쏘카 수준",
