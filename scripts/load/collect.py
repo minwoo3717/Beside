@@ -16,10 +16,11 @@ query_range queries over the run window (start/end from --start/--end or the k6 
 --prom-url is any URL that reaches the VM's Prometheus (SSH tunnel, Tailscale); it is not opened to the internet.
 Files given with --attach are copied to <run dir>/attachments/. Exit code: 0 done, 1 written but some query failed, 2 nothing written (bad arguments).
 
-run.json "outcome" says how the k6 run ended (k6_outcome: normal, capacityStop, aborted, unknown) from the summary's
+run.json "outcome" says how the k6 run ended (k6_outcome: normal, ruleStop, aborted, unknown) from the summary's
 verdict.aborted and verdict.guard, and "status"/"resultCandidate" say whether it may be cited as [실험 결과]: not a local
-run, not one aborted for a reason other than capacity, not a summary without verdict.aborted; a run whose guard could
-not read Prometheus is named in the status. collect.py prints the status and how many of the 18 CSVs it wrote.
+run, not one aborted for a reason other than capacity, not a summary without verdict.aborted. A run stopped by an error
+rule stays a candidate, but its status says to rule out a server restart or a network drop first; a run whose guard
+could not read Prometheus is named in the status. collect.py prints the status and how many of the 18 CSVs it wrote.
 """
 from __future__ import annotations
 
@@ -191,10 +192,13 @@ def k6_outcome(summary: dict | None) -> dict:
 
     ended: None without --summary (e.g. F4, window from --start/--end); "unknown" when the summary has no
     verdict.aborted (written before lib/summary.js reported aborts: an aborted run then read "all passed");
-    "normal" when verdict.aborted is null; "capacityStop" when the abortOnFail error rule ("threshold") or the guard's
-    5xx rule (load_guardAbort 1) stopped the load in the level that broke, the A1 search's usual end on the VM, whose
-    stages and breaking point still hold (buildReport's brokeAt); "aborted" for any other stop (setup, guard disk or
-    unreadable Prometheus, Ctrl+C or REST stop, flows cut off in the drain), which says nothing about capacity.
+    "normal" when verdict.aborted is null; "ruleStop" when the abortOnFail error rule ("threshold") or the guard's 5xx
+    rule (load_guardAbort 1) stopped the load. lib/summary.js still computes its stages and breaking point
+    (buildReport's brokeAt), because that is how the A1 search ends on the VM when a level breaks; but the same rules
+    fire when the backend restarts or is redeployed, Caddy goes down or the load PC loses its uplink (a real k6 v2.3.0
+    run whose server was killed at about 0.5 req/s ended exactly so), so the name says which rule fired, not why;
+    "aborted" for any other stop (setup, guard disk or unreadable Prometheus, Ctrl+C or REST stop, flows cut off in the
+    drain), which says nothing about capacity.
     guardFailures: Prometheus answers the guard could not read (verdict.guard.failures; None without PROM_URL)."""
     if summary is None:
         return {"ended": None, "abortedBy": None, "reason": None, "guardFailures": None, "guardLastError": None}
@@ -213,7 +217,7 @@ def k6_outcome(summary: dict | None) -> dict:
     metrics = (summary.get("k6") or {}).get("metrics") or {}
     code = ((metrics.get("load_guardAbort") or {}).get("values") or {}).get("value")
     guard_5xx = code == 1 or (code is None and str(aborted.get("reason") or "").startswith("server 5xx ratio"))
-    out["ended"] = "capacityStop" if by == "threshold" or (by == "guard" and guard_5xx) else "aborted"
+    out["ended"] = "ruleStop" if by == "threshold" or (by == "guard" and guard_5xx) else "aborted"
     return out
 
 
@@ -221,23 +225,26 @@ CITE = "인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 �
 
 
 def run_status(outcome: dict, local: bool) -> tuple:
-    """(status text, resultCandidate) for run.json: only a run on the VM that ended normally, or by a capacity stop, is a
-    [실험 결과] candidate. A run whose guard could not read Prometheus stays one, with the gap named in the text."""
+    """(status text, resultCandidate) for run.json: only a run on the VM that ended normally, or was stopped by an error
+    rule, is a [실험 결과] candidate. A rule stop names the rule, not a cause: it is a capacity result only once a
+    server restart or network drop at that moment is ruled out, which collect.py cannot see, so the text says so. A
+    run whose guard could not read Prometheus stays a candidate, with the gap named in the text."""
     ended, by = outcome["ended"], outcome["abortedBy"]
     failures = outcome.get("guardFailures") or 0
     caveat = (f"주의: 가드가 Prometheus 응답 {failures}개를 읽지 못했다(마지막: {outcome.get('guardLastError')}) — 그동안 "
               "중단 조건(5xx·디스크)을 지켜보지 못했고 prometheus/*.csv 에도 빈 구간이 있을 수 있다") if failures > 0 else ""
-    if ended in ("normal", None, "capacityStop") and not local:
+    if ended in ("normal", None, "ruleStop") and not local:
         # a candidate: the caveat goes before the citing rule, so the label never reads plain when the guard was blind
         body = ""
-        if ended == "capacityStop":
+        if ended == "ruleStop":
             rule = "가드의 5xx 기준" if by == "guard" else "abortOnFail 오류 기준"
-            body = (f"용량 한계에서 멈춘 실행({rule}, k6.verdict.aborted.by = {by}): 중단된 실행이라 thresholdsOk 는 늘 false "
-                    "이고, 판정은 k6.verdict.stages·breakingPoint(·breakingPointNote)로 읽는다. ")
+            body = (f"오류 기준으로 멈춘 실행({rule}, k6.verdict.aborted.by = {by}): 용량 한계일 때만 결과다 — 그 시각에 "
+                    "서버 재시작·재배포·네트워크 끊김이 없었음을 VM 쪽 기록(vm/backend.log)과 k6 출력으로 확인한 뒤 "
+                    "k6.verdict.stages·breakingPoint(·breakingPointNote)를 읽는다. thresholdsOk 는 늘 false 다. ")
         return f"[실험 결과] 원시 데이터 — {body}{caveat + '. ' if caveat else ''}{CITE}", True
     if local:
         text = "동작 확인용 로컬 실행 — 보고서에 인용하지 않는다"
-        if ended in ("aborted", "capacityStop"):
+        if ended in ("aborted", "ruleStop"):
             text += f" (중단된 실행, k6.verdict.aborted.by = {by})"
     elif ended == "unknown":
         text = ("인용하지 않는다 — k6 요약에 verdict.aborted 가 없다(중단을 알리기 전의 lib/summary.js): 중단된 실행도 "
@@ -279,6 +286,7 @@ def build_run_json(args, summary: dict | None, window: dict, tool: dict, photos:
             "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 k6.meta.stages[].users(도착률 환산)로 적는다.",
             "'API 계층이 T3 를 통과했다'는 T3 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화일 때만 쓴다.",
             "resultCandidate 가 false 인 실행(로컬, 용량과 무관하게 중단된 실행, 끝난 방식을 모르는 요약)은 [실험 결과] 로 인용하지 않는다.",
+            "오류 기준으로 멈춘 실행(outcome.ended = ruleStop)은 후보지만, 그 시각에 서버 재시작·재배포·네트워크 끊김이 없었을 때만 용량 한계로 쓴다.",
             "GC 뒤 힙 < 75 % 는 prometheus/jvm_heap_after_gc.csv(0~1)로 본다. jvm_heap_used/max 는 Eden 을 포함한 순간값이다.",
         ],
         "collectedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),

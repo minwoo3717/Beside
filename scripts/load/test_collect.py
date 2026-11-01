@@ -14,7 +14,8 @@ import collect
 
 REQUIRED = ["http_p95_by_uri", "http_rps_by_uri", "http_5xx_ratio", "jobs_queue", "process_cpu", "system_cpu", "jvm_heap_used",
             "jvm_heap_max", "jvm_heap_after_gc", "tomcat_busy", "disk_free"]
-# scripts/load/README.md says how many CSVs collect.py writes ("Prometheus query_range CSV 18개"): change both together.
+# The number of CSVs collect.py writes. scripts/load/README.md names it too ("Prometheus query_range CSV N개"):
+# ReadmeTest compares the two.
 CSV_COUNT = 18
 
 
@@ -87,6 +88,30 @@ class QueryListTest(unittest.TestCase):
         for q in qs.values():
             self.assertNotIn("{,", q)
             self.assertNotIn("{}", q)
+
+
+class ReadmeTest(unittest.TestCase):
+    """scripts/load/README.md against collect.py, so the documented CSV count and heap criterion cannot drift again.
+
+    README.md is not part of the change that added jvm_heap_after_gc: it still says "CSV 17개" and judges "GC 뒤 힙 < 75 %"
+    from jvm_heap_used/max, so both checks fail today and are marked expectedFailure. The commit that fixes README.md
+    removes the two decorators; fixing README.md without removing them is an "unexpected success", which unittest
+    counts as a failed run, so the two documents cannot silently disagree in either direction."""
+
+    @staticmethod
+    def readme() -> str:
+        return (collect.HERE / "README.md").read_text(encoding="utf-8")
+
+    @unittest.expectedFailure  # README.md:24 still says "CSV 17개"
+    def test_readme_names_the_csv_count(self):
+        self.assertIn(f"Prometheus query_range CSV {CSV_COUNT}개", self.readme())
+
+    @unittest.expectedFailure  # README.md:84 still judges "GC 뒤 힙 < 75 %" from jvm_heap_used/max
+    def test_readme_judges_heap_after_gc_from_its_csv(self):
+        lines = [line for line in self.readme().splitlines() if "GC 뒤 힙" in line]
+        self.assertTrue(lines)
+        for line in lines:
+            self.assertIn("jvm_heap_after_gc", line)
 
 
 class CsvTest(unittest.TestCase):
@@ -182,20 +207,29 @@ class OutcomeTest(unittest.TestCase):
                 self.assertIn(reason, doc["status"])
                 self.assertEqual(doc["k6"]["verdict"]["aborted"]["by"], by)  # the verdict is still copied unchanged
 
-    def test_capacity_stops_stay_candidates_with_their_rule_named(self):
+    def test_rule_stops_stay_candidates_but_name_only_the_rule(self):
+        # the abortOnFail error rule and the guard's 5xx rule also fire when the server restarts or the network drops
+        # (a real k6 run whose server was killed at 0.5 req/s ended with exit 99 and a breaking point), so the status names
+        # the rule, not "capacity", and says what to rule out before reading the breaking point
         threshold = self.doc(summary_with(aborted=aborted("threshold", "load_errorRatio rate<0.05 crossed (k6 exit code 99)")))
         guard = self.doc(summary_with(aborted=aborted("guard", "server 5xx ratio 0.2 > GUARD_MAX_ERROR_RATIO 0.05 over 1m"),
                                       guard=GUARD_OK, guard_abort=1))
-        for doc, rule in ((threshold, "abortOnFail 오류 기준"), (guard, "가드의 5xx 기준")):
-            self.assertEqual(doc["outcome"]["ended"], "capacityStop")
-            self.assertTrue(doc["resultCandidate"])
-            self.assertTrue(doc["status"].startswith("[실험 결과] 원시 데이터 — 용량 한계에서 멈춘 실행(" + rule))
-            self.assertIn("breakingPoint", doc["status"])
-            self.assertNotEqual(doc["status"], "[실험 결과] 원시 데이터 — " + collect.CITE)  # never the plain label
+        for doc, by, rule in ((threshold, "threshold", "abortOnFail 오류 기준"), (guard, "guard", "가드의 5xx 기준")):
+            with self.subTest(by=by):
+                self.assertEqual(doc["outcome"]["ended"], "ruleStop")
+                self.assertTrue(doc["resultCandidate"])  # as lib/summary.js brokeAt: stages and breakingPoint are kept
+                self.assertTrue(doc["status"].startswith(
+                    f"[실험 결과] 원시 데이터 — 오류 기준으로 멈춘 실행({rule}, k6.verdict.aborted.by = {by}): 용량 한계일 때만 결과다"))
+                self.assertNotIn("용량 한계에서 멈춘", doc["status"])
+                self.assertIn("서버 재시작·재배포·네트워크 끊김이 없었음을", doc["status"])
+                self.assertIn("확인한 뒤 k6.verdict.stages·breakingPoint", doc["status"])
+                self.assertTrue(doc["status"].endswith(collect.CITE))
+                self.assertNotEqual(doc["status"], "[실험 결과] 원시 데이터 — " + collect.CITE)  # never the plain label
+        self.assertTrue(any("ruleStop" in line and "서버 재시작" in line for line in threshold["honesty"]))
 
     def test_guard_5xx_stop_without_the_gauge_is_read_from_the_reason(self):
         doc = self.doc(summary_with(aborted=aborted("guard", "server 5xx ratio 0.3 > GUARD_MAX_ERROR_RATIO 0.05 over 1m")))
-        self.assertEqual(doc["outcome"]["ended"], "capacityStop")
+        self.assertEqual(doc["outcome"]["ended"], "ruleStop")
         doc = self.doc(summary_with(aborted=aborted("guard", "disk 90.0 % used > GUARD_MAX_DISK_RATIO 0.8")))
         self.assertEqual(doc["outcome"]["ended"], "aborted")
 
@@ -207,8 +241,9 @@ class OutcomeTest(unittest.TestCase):
         # the caveat comes right after the label, before the citing rule
         self.assertTrue(doc["status"].startswith("[실험 결과] 원시 데이터 — 주의: 가드가 Prometheus 응답 4개를 읽지 못했다(마지막: HTTP 500)"))
         self.assertTrue(doc["status"].endswith(collect.CITE))
-        capacity = self.doc(summary_with(aborted=aborted("threshold", "load_errorRatio rate<0.05 crossed"), guard=GUARD_BLIND))
-        self.assertIn("breakingPointNote)로 읽는다. 주의: 가드가 Prometheus 응답 4개", capacity["status"])
+        rule_stop = self.doc(summary_with(aborted=aborted("threshold", "load_errorRatio rate<0.05 crossed"), guard=GUARD_BLIND))
+        self.assertIn("thresholdsOk 는 늘 false 다. 주의: 가드가 Prometheus 응답 4개", rule_stop["status"])
+        self.assertTrue(rule_stop["status"].endswith(collect.CITE))
 
     def test_summary_without_verdict_aborted_is_not_a_result(self):
         doc = self.doc(summary_with(drop_aborted=True))
@@ -222,6 +257,11 @@ class OutcomeTest(unittest.TestCase):
         self.assertFalse(doc["resultCandidate"])
         self.assertTrue(doc["status"].startswith("동작 확인용 로컬 실행 — 보고서에 인용하지 않는다 (중단된 실행, k6.verdict.aborted.by = guard)"))
         self.assertIn("응답 4개를 읽지 못했다", doc["status"])
+        rule_stop = self.doc(summary_with(aborted=aborted("threshold", "load_errorRatio rate<0.05 crossed")),
+                             "--base-url", "http://127.0.0.1:18740")
+        self.assertEqual(rule_stop["outcome"]["ended"], "ruleStop")
+        self.assertFalse(rule_stop["resultCandidate"])
+        self.assertEqual(rule_stop["status"], "동작 확인용 로컬 실행 — 보고서에 인용하지 않는다 (중단된 실행, k6.verdict.aborted.by = threshold)")
 
     def test_no_summary_keeps_the_previous_status(self):
         args = collect.parse_args(["out"])
