@@ -63,7 +63,8 @@ export function scenarioLabel(opts) {
 }
 
 // G1~G3: the queue model (and so a recompute of the prediction) applies. Not for F1a/F1b/F2: retries add arrivals, and
-// failures and timeouts are in the slot time.
+// failures and timeouts are in the slot time. A G run that retried anyway (an F1a/F2 run started without SCENARIO, or
+// failures that happened) loses its recompute in gpu_queue.js handleSummary for the same reason.
 export function isQueueRun(label) {
   return label.charAt(0) === 'G';
 }

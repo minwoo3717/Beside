@@ -11,7 +11,8 @@
 //   F1a, F2 the G1 knobs with the failure set on the stub (BESIDE_PASSTHROUGH_FAIL_RATE) or by stopping it: k6 cannot
 //       see these, so name the run with SCENARIO=F1a / SCENARIO=F2.
 // meta.scenario (and the stdout banner) is SCENARIO when set, else F1b for FAIL_RATIO > 0 with FAIL_TOKEN=slow (F1a for
-// another token), else G3 (RHO >= 1.5), G2 (SLOTS > 1) or G1 (lib/queue.js scenarioLabel).
+// another token), else G3 (RHO >= 1.5), G2 (SLOTS > 1) or G1 (lib/queue.js scenarioLabel). An F1a / F2 run started
+// without SCENARIO is therefore named G1; its retries still take the recompute away (below).
 //
 // Arrivals: k6's arrival-rate executors start iterations on a fixed tick (evenly spaced), which makes the queue
 // D/D/c, not the M/D/c and M/M/c of the predictions. So the scenario runs lambda x ARRIVAL_THIN (K, default 20)
@@ -33,7 +34,10 @@
 //   python scripts/load/model.py --queue-rate-per-h <meta.measuredJobsPerHour>
 //     --queue-service-s <meta.measuredProcessingMs.mean / 1000> --queue-slots <SLOTS>
 // It is null for the fault runs (F1a, F1b, F2): retries add arrivals and failures or timeouts are in the slot time.
-// meta.measuredRetries counts the retries (load_retryMs); a G run should have none. The stdout report ends with these.
+// It is also null for a G run with any retry (meta.measuredRetries, the load_retryMs count): a flow retries only after
+// its job ended FAILED, so failures were injected (an F1a / F2 run without SCENARIO) or occurred, and the same holds.
+// An F2 run whose jobs all waited out the outage has no retry: only SCENARIO=F2 marks it. The stdout report ends with
+// these.
 //
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=g1r07 -e RTT_BASE_MS=23 -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 \
 //          scripts/load/gpu_queue.js
@@ -146,16 +150,25 @@ function meanMs(t) {
   return t && t.count > 0 ? `${Math.round(t.mean)} ms` : '-';
 }
 
+function retriesText(n) {
+  return `${n} ${n === 1 ? 'retry' : 'retries'}`;
+}
+
+// Why a G run that retried gets no recompute (meta.predictionNote and the stdout report).
+function retriedText(n) {
+  return `${retriesText(n)}: failures were injected or occurred (an F1a/F2 run without SCENARIO?)`;
+}
+
 // The stdout lines under the common report: what the run created, and for a G run the measured means and the recompute.
 function queueLines(x) {
   const created = x.measuredCreates === null ? 'no load ran'
     : `${x.measuredCreates} jobs created in ${x.measuredArrivalWindowS} s = ${x.measuredJobsPerHour === null ? '-' : x.measuredJobsPerHour}/h ` +
-      `(requested ${x.prediction.jobsPerHour}/h), ${x.measuredRetries} retries`;
+      `(requested ${x.prediction.jobsPerHour}/h), ${retriesText(x.measuredRetries)}`;
   if (!QUEUE_RUN) return `queue ${LABEL}: ${created}; fault run, so no queue prediction or recompute\n`;
   const lines = [`queue ${LABEL}: ${created}; mean slot (server processingMs) ${meanMs(x.measuredProcessingMs)}, ` +
     `mean queuedMs ${meanMs(x.measuredQueuedMs)}`];
-  if (x.measuredRetries > 0) lines.push('  WARNING: a G run should have no retry: retries add arrivals that the recompute leaves out');
-  lines.push(`  recompute: ${x.recompute === null ? '- (no job created or no processingMs)' : x.recompute}`);
+  if (x.measuredRetries > 0) lines.push(`  ${retriedText(x.measuredRetries)}, so no recompute`);
+  else lines.push(`  recompute: ${x.recompute === null ? '- (no job created or no processingMs)' : x.recompute}`);
   return lines.join('\n') + '\n';
 }
 
@@ -164,6 +177,10 @@ export function handleSummary(data) {
   const processing = trendValues(data, 'load_serverProcessingMs');
   const slotS = processing && processing.mean > 0 ? Math.round(processing.mean) / 1000 : null;
   const creates = requestCount(data, 'load_postMs');
+  const retries = requestCount(data, 'load_retryMs');
+  // A retry follows a FAILED job, so the run had failures (injected, e.g. an F1a/F2 run without SCENARIO, or not):
+  // retries add arrivals and failed attempts are in the mean slot time, as in a fault run, so no queue recompute.
+  const queueModel = QUEUE_RUN && !(retries > 0);
   const windowS = arrivalWindowS(data);
   const perHour = realizedPerHour(creates, windowS);
   const extra = {
@@ -174,19 +191,22 @@ export function handleSummary(data) {
     preAllocatedVUs: PRE_ALLOCATED_VUS,
     maxVUs: MAX_VUS,
     prediction: PREDICTION,
-    predictionNote: QUEUE_RUN
-      ? 'prediction uses T_SEC as the slot time and the requested rate; compare measuredQueuedMs with the values that ' +
-        '`recompute` prints (the jobs the run created, measuredJobsPerHour; mean server processingMs as the slot time, ' +
-        'a little short of it; Poisson arrivals)'
-      : `${LABEL} is a fault run: the queue model does not apply (retries add arrivals, failures and timeouts are in the ` +
-        'slot time), so recompute is null',
+    predictionNote: !QUEUE_RUN
+      ? `${LABEL} is a fault run: the queue model does not apply (retries add arrivals, failures and timeouts are in the ` +
+        'slot time), so recompute is null'
+      : !queueModel
+        ? `${retriedText(retries)}, so the queue model does not apply (retries add arrivals, failed attempts are in ` +
+          'the slot time) and recompute is null'
+        : 'prediction uses T_SEC as the slot time and the requested rate; compare measuredQueuedMs with the values that ' +
+          '`recompute` prints (the jobs the run created, measuredJobsPerHour; mean server processingMs as the slot time, ' +
+          'a little short of it; Poisson arrivals)',
     measuredQueuedMs: queued,
     measuredProcessingMs: processing,
     measuredCreates: creates,
-    measuredRetries: requestCount(data, 'load_retryMs'),
+    measuredRetries: retries,
     measuredArrivalWindowS: windowS,
     measuredJobsPerHour: perHour,
-    recompute: !QUEUE_RUN || slotS === null || !(perHour > 0) ? null
+    recompute: !queueModel || slotS === null || !(perHour > 0) ? null
       : `python scripts/load/model.py --queue-rate-per-h ${perHour} --queue-service-s ${slotS} --queue-slots ${SLOTS}`,
     failRatio: FAIL_RATIO,
     failToken: FAIL_RATIO > 0 ? CONFIG.failToken : null,

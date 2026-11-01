@@ -72,10 +72,21 @@ test('gpu_queue.js: the recompute uses the jobs the run created, not the request
   assert.ok(early.measuredArrivalWindowS >= 60 && early.measuredArrivalWindowS < 60.5, String(early.measuredArrivalWindowS));
   assert.equal(early.measuredJobsPerHour, Math.round((40 * 3600) / early.measuredArrivalWindowS));
 
-  // a G run with retries says so (they add arrivals the recompute leaves out)
-  const retried = summarize(mod, Object.assign(g1Metrics(), { load_retryMs: trend(20, 3) }), {}).text;
-  assert.match(retried, /^queue G1: .*, 3 retries;/m);
-  assert.match(retried, /^ {2}WARNING: a G run should have no retry/m);
+  // a G run with retries had failures (injected or not): the queue model does not apply, so no recompute
+  const retried = summarize(mod, Object.assign(g1Metrics(), { load_retryMs: trend(20, 3) }), {});
+  assert.equal(retried.doc.meta.scenario, 'G1');
+  assert.equal(retried.doc.meta.measuredRetries, 3);
+  assert.equal(retried.doc.meta.measuredJobsPerHour, 1200);
+  assert.equal(retried.doc.meta.recompute, null);
+  assert.match(retried.doc.meta.predictionNote,
+    /^3 retries: failures were injected or occurred \(an F1a\/F2 run without SCENARIO\?\), so the queue model does not apply/);
+  assert.match(retried.text, /^queue G1: .*, 3 retries; mean slot/m);
+  assert.match(retried.text, /^ {2}3 retries: failures were injected or occurred \(an F1a\/F2 run without SCENARIO\?\), so no recompute$/m);
+  assert.doesNotMatch(retried.text, /recompute: python|WARNING/);
+  const once = summarize(mod, Object.assign(g1Metrics(), { load_retryMs: trend(20, 1) }), {});
+  assert.equal(once.doc.meta.recompute, null);
+  assert.match(once.text, /^queue G1: .*, 1 retry; mean slot/m);
+  assert.match(once.text, /^ {2}1 retry: failures were injected/m);
 
   // setup() failed: no load ran, so no rate and no recompute
   const none = summarize(mod, { load_serverProcessingMs: trend(0, 0) }, undefined);
@@ -123,6 +134,20 @@ test('gpu_queue.js: fault runs carry their own name and get no queue recompute',
   assert.match(text, /^== beside load: gpu_queue\.js \(F1b\) /m);
   assert.match(text, /^queue F1b: 13 jobs created in 120 s = 390\/h \(requested 540\/h\), 2 retries; fault run, so no queue prediction or recompute$/m);
   assert.doesNotMatch(text, /recompute: python/);
+
+  // F1a as deploy/loadtest/README.md gives it (the G1 knobs, BESIDE_PASSTHROUGH_FAIL_RATE=0.2 on the stub) without
+  // SCENARIO: k6 v2.3.0 against the real,prod backend (T_SEC=2, 60 s) created 22 jobs and retried 7 of them. The run is
+  // named G1, but its retries take the recompute away (the 22 creates leave out the 7 retries the slot also served).
+  const unnamed = await load('gpu_queue.js', Object.assign({}, G1, { DURATION_S: '60' }));
+  const f1aMetrics = { load_postMs: trend(30, 22), load_retryMs: trend(15, 7), load_serverProcessingMs: trend(2047.4, 29),
+    load_serverQueuedMs: trend(1500, 29) };
+  const u = summarize(unnamed, f1aMetrics, { readyAtMs: Date.now() - 62000 });
+  assert.equal(u.doc.meta.scenario, 'G1');
+  assert.equal(u.doc.meta.measuredJobsPerHour, 1320);
+  assert.equal(u.doc.meta.recompute, null);
+  assert.match(u.text, /^queue G1: 22 jobs created in 60 s = 1320\/h \(requested 1260\/h\), 7 retries; /m);
+  assert.match(u.text, /^ {2}7 retries: failures were injected or occurred \(an F1a\/F2 run without SCENARIO\?\), so no recompute$/m);
+  assert.doesNotMatch(u.text, /--queue-rate-per-h/);
 
   // F1a and F2 are set on the stub / VM side with the G1 knobs: only SCENARIO names them
   const f1a = await load('gpu_queue.js', Object.assign({}, G1, { SCENARIO: 'F1a' }));

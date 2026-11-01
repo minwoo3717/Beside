@@ -3,6 +3,8 @@
 Each expected value below is copied from TRAFFIC_MODEL.md, not from model.py's output. Where the document rounds, the
 tolerance is half of its last digit. A disagreement is reported, not hidden: see the disk-days test at the bottom.
 """
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -142,7 +144,7 @@ class PlanNumbersTest(unittest.TestCase):
 
 
 class QueuePredictionTest(unittest.TestCase):
-    """--queue-*: the G series prediction recomputed from the measured mean slot time (TRAFFIC_MODEL.md §4, §9)."""
+    """--queue-*: the G series prediction recomputed from the measured arrival rate and mean slot time (TRAFFIC_MODEL.md §4, §9)."""
 
     def test_single_slot(self):
         # lambda = 180/h = 0.05/s, S = 10 s: rho 0.5, M/M/1 Wq = rho S / (1 - rho) = 10 s, M/D/1 half of that.
@@ -160,20 +162,24 @@ class QueuePredictionTest(unittest.TestCase):
         self.assertIsNone(p["wqMD1Sec"])
 
     def test_measured_slot_time_changes_the_prediction(self):
-        # G1 rho 0.7 sends 252 jobs/h for T_SEC = 10; a measured slot of 12 s (upload, download, cleanup) is rho 0.84.
+        # G1 rho 0.7 sends 252 jobs/h for T_SEC = 10; a measured slot of 12 s (upload, stub sleep, download) is rho 0.84.
         p = model.queue_prediction(252, 12, 1)
         self.assertAlmostEqual(p["rho"], 0.84, places=12)
         self.assertAlmostEqual(p["wqMMcSec"], 0.84 * 12 / 0.16, places=9)
         self.assertAlmostEqual(p["wqMD1Sec"], 0.84 * 12 / 0.16 / 2, places=9)
 
-    def test_measured_arrival_rate_changes_the_prediction(self):
-        # gpu_queue.js meta.recompute takes the jobs the run created: a 120 s G1 at T_SEC = 2 asked for 1,260/h (42 jobs)
-        # and created 40, i.e. 1,200/h; with the measured slot of 2.089 s that is rho 0.696, not 0.731 at 1,260/h.
-        measured = model.queue_prediction(1200, 2.089, 1)
-        requested = model.queue_prediction(1260, 2.089, 1)
-        self.assertAlmostEqual(measured["rho"], 1200 * 2.089 / 3600, places=12)
-        self.assertAlmostEqual(requested["rho"], 1260 * 2.089 / 3600, places=12)
-        self.assertLess(measured["wqMD1Sec"], requested["wqMD1Sec"])
+    def test_recompute_names_both_measured_inputs(self):
+        # gpu_queue.js meta.recompute passes the arrival rate the run really had (meta.measuredJobsPerHour), not the
+        # requested meta.prediction.jobsPerHour, so the status, the text title and the --help say "measured arrival rate".
+        p = model.queue_prediction(1200, 2.089, 1)
+        self.assertIn("측정한 도착률과 평균 슬롯 시간", p["status"])
+        self.assertIn("측정한 도착률과 평균 슬롯 시간", model.queue_text(p).splitlines()[0])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), self.assertRaises(SystemExit) as done:
+            model.main(["--help"])
+        self.assertEqual(done.exception.code, 0)
+        self.assertIn("meta.measuredJobsPerHour", buf.getvalue())
+        self.assertNotIn("meta.prediction.jobsPerHour", buf.getvalue())
 
     def test_overload_has_no_steady_state(self):
         p = model.queue_prediction(432, 10, 1)
