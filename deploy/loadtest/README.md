@@ -7,7 +7,7 @@
 | 항목 | 상태 |
 |---|---|
 | [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI 가 확인하도록 넣었지만 아직 돌지 않았다(이 PC 에 Docker 없음) |
-| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | **[계획]** — VM 에서 한 번도 실행하지 않았다. 실행한 뒤 이 표와 결과 문서에 날짜·커밋을 적는다. 그중 합성 GLB 생성 명령(3번)과 H2 Shell 조회 명령(6번)만 개발 PC 에서 따로 돌려 확인했다(각 절에 적음) |
+| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | **[계획]** — VM 에서 한 번도 실행하지 않았다. 실행한 뒤 이 표와 결과 문서에 날짜·커밋을 적는다. 그중 합성 GLB 생성 명령(3번, 스텁 PC 용 포함)과 H2 Shell 조회 명령(6번)만 개발 PC 에서 따로 돌려 확인했다(각 절에 적음) |
 
 ## 지키는 것
 
@@ -52,18 +52,36 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | F2 (GPU 꺼짐·backend 재시작) | G1 + `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | 시험 중 스텁을 끄고 다시 켠다 |
 | F3·F4 (잘못된 업로드·다운로드 중단) | 기본값(mock) | — |
 
-스텁의 `BESIDE_PASSTHROUGH_*` 설정은 기본값이 모두 꺼져 있다(같은 W1 의 B5). 스텁은 실제 GPU PC 가 아닌 PC(예: 개발 PC)에서 Tailscale 주소에 띄운다:
+스텁의 `BESIDE_PASSTHROUGH_*` 설정은 기본값이 모두 꺼져 있다(같은 W1 의 B5). 스텁은 실제 GPU PC 가 아닌 PC(예: 개발 PC)에서 Tailscale 주소에 띄운다. 스텁이 돌려줄 GLB(`BESIDE_SAMPLE_GLB`)는 **스텁 PC 에** 있어야 한다. VM 에 만든 파일(3번)은 스텁 PC 에서 보이지 않으므로, 같은 합성 GLB(아래 '합성 GLB 는 하나')를 스텁 PC 에서 따로 만든다:
 
 ```bash
 # 스텁 PC (Linux·WSL bash). Python 환경은 generation/inference_service/README.md.
 cd generation/inference_service
+python -c "import sys; sys.path.insert(0, '../../scripts/perf'); import fixtures; open('/tmp/lt-sample-1500000.glb', 'wb').write(fixtures.glb_synthetic(1_500_000, seed=14))"
+ls -l /tmp/lt-sample-1500000.glb && sha256sum /tmp/lt-sample-1500000.glb
+# 1500000 바이트, 03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9 — 다르면 멈추고 원인을 본다
 BESIDE_SAMPLE_GLB=/tmp/lt-sample-1500000.glb \
 BESIDE_INFERENCE_TOKEN='<LOADTEST_INFERENCE_TOKEN 과 같은 값>' \
 BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 \
 python -m uvicorn app:app --host "$(tailscale ip -4)" --port 8001
 ```
 
-VM 의 backend 컨테이너에서 스텁이 닿는지 먼저 본다: `$L exec backend curl -sS http://<스텁>:8001/healthz`(`"passthrough": true`). 컨테이너에서만 안 닿으면 [deploy/README.md](../README.md) '문제 해결'의 Tailscale 항목.
+```powershell
+# 스텁 PC (Windows PowerShell). Windows Python 의 '/tmp' 는 C:\tmp 이고 WSL 의 /tmp 와 다른 곳이므로 경로를 Windows 식으로 쓴다.
+cd generation\inference_service
+New-Item -ItemType Directory -Force C:\tmp | Out-Null
+python -c "import sys; sys.path.insert(0, '../../scripts/perf'); import fixtures; open(r'C:\tmp\lt-sample-1500000.glb', 'wb').write(fixtures.glb_synthetic(1_500_000, seed=14))"
+(Get-Item C:\tmp\lt-sample-1500000.glb).Length; (Get-FileHash C:\tmp\lt-sample-1500000.glb -Algorithm SHA256).Hash
+# 1500000, 03A0C8F2B05AEE204237CEE07DDB41C42173014B33EF0007A43C7B83E2FC0EE9 (대문자로 나온다)
+$env:BESIDE_SAMPLE_GLB = 'C:\tmp\lt-sample-1500000.glb'
+$env:BESIDE_INFERENCE_TOKEN = '<LOADTEST_INFERENCE_TOKEN 과 같은 값>'
+$env:BESIDE_PASSTHROUGH_DELAY_MS = '10000'; $env:BESIDE_PASSTHROUGH_SLOTS = '1'
+python -m uvicorn app:app --host (tailscale ip -4) --port 8001
+```
+
+- 설정을 바꿀 때는 uvicorn 을 멈추고 새 값으로 다시 띄운다. PowerShell 의 `$env:` 값은 그 창에 남으므로, 비워야 하는 값은 지운다(예 `Remove-Item Env:BESIDE_PASSTHROUGH_FAIL_TOKEN -ErrorAction SilentlyContinue`).
+- VM 의 backend 컨테이너에서 스텁이 닿는지 먼저 본다: `$L exec backend curl -sS http://<스텁>:8001/healthz`(`"passthrough": true`). 컨테이너에서만 안 닿으면 [deploy/README.md](../README.md) '문제 해결'의 Tailscale 항목.
+- **healthz 의 `"passthrough": true` 는 파일이 있다는 증거가 아니다.** `BESIDE_SAMPLE_GLB` 가 설정됐다는 뜻일 뿐이고, 파일이 없으면 healthz 는 그대로 true 인 채 작업마다 `/infer` 가 500 `CONVERSION_FAILED` 로 끝난다. 그래서 위의 `ls -l`·`sha256sum`(PowerShell 은 `Get-Item`·`Get-FileHash`)으로 직접 확인하고, 그 해시를 결과 폴더에 남긴다(5번).
 
 ## 0. 준비 (하루 전까지)
 
@@ -113,6 +131,8 @@ backend 가 healthy 가 될 때까지 30~60초 걸린다. 볼륨이 처음 만�
 
 mock 워커는 COMPLETED 작업에 `storage.result.sample` = `storage/results/sample-dog.glb`(작업 폴더 `/app` 기준)를 내준다. 즉 컨테이너의 `/app/storage/results/sample-dog.glb` = **볼륨 `beside-loadtest-storage` 의 `results/sample-dog.glb`** 다. 새 볼륨과 이미지에는 이 파일이 없고(저장소의 `backend/storage/results/sample-dog.glb` 는 0 B), 없으면 asset 요청이 실패한다.
 
+**합성 GLB 는 하나다.** 부하 시험의 1.5 MB GLB 는 [scripts/perf/fixtures.py](../../scripts/perf/fixtures.py) 의 `glb_synthetic(1_500_000, seed=14)` 하나뿐이다: 1,500,000 바이트, sha256 `03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9`. VM 의 mock(이 절)과 스텁 PC 의 `BESIDE_SAMPLE_GLB`(위 스텁 절)가 같은 바이트를 쓴다. `scripts/load/make_fixtures.py` 의 `glb-1.5mb.glb` 도 같은 인자(seed 14)로 만들어 같은 파일이어야 한다. 어느 파일이든 해시가 위 값과 다르면 쓰지 않는다.
+
 ```bash
 # VM 의 리포 루트에서: scripts/perf/fixtures.py 의 glb_synthetic(seed 14 = 루프백 벤치마크의 glb_sample 과 같은 바이트)
 python3 -c "import sys; sys.path.insert(0, 'scripts/perf'); import fixtures; open('/tmp/lt-sample-1500000.glb', 'wb').write(fixtures.glb_synthetic(1_500_000, seed=14))"
@@ -122,7 +142,7 @@ $L exec -T backend sh -c 'mkdir -p /app/storage/results && cat > /app/storage/re
 $L exec -T backend sh -c 'ls -l /app/storage/results/sample-dog.glb && sha256sum /app/storage/results/sample-dog.glb'   # 1500000 바이트, 같은 해시
 ```
 
-위 생성 명령은 개발 PC(Python 3.14)에서 실행해 1,500,000 바이트·glTF 2 헤더·위 해시를 확인했다(2026-11-01). 생성기는 시드 고정이라 VM 의 Python 3.12 에서도 같은 바이트가 나와야 한다 — 해시가 다르면 멈추고 원인을 본다.
+위 생성 명령은 개발 PC(Python 3.14)에서 실행해 1,500,000 바이트·glTF 2 헤더·위 해시를 확인했다(2026-11-01). 스텁 PC 용 명령(`generation/inference_service` 에서 `../../scripts/perf` 를 읽는 형태)도 개발 PC 의 Windows Python 3.14 로 PowerShell 형태와 Git Bash 형태(출력 경로만 바꿈)를 돌려 1,500,000 바이트·같은 해시를 확인했다(2026-11-01). WSL·Linux 와 VM 에서는 아직 돌리지 않았다. 생성기는 시드 고정이라 VM 의 Python 3.12 에서도 같은 바이트가 나와야 한다 — 해시가 다르면 멈추고 원인을 본다.
 
 한 건으로 끝까지 확인한다(1×1 PNG, `MOCK_WORKER_PROCESSINGMS` 만큼 기다린 뒤 asset 이 1500000 바이트):
 
