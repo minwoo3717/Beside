@@ -590,7 +590,7 @@ figure { margin: 2mm 0 4mm; break-inside: avoid; }
 figure.bars { break-inside: auto; }
 .facet { break-inside: avoid; }
 .facet + .facet { margin-top: 3mm; }
-.legend { break-after: avoid; }
+.legend { break-after: avoid; break-inside: avoid; }
 figcaption { break-before: avoid; }
 figure svg { width: 100%; height: auto; display: block; }
 figcaption { font-size: 7.6pt; color: #898781; margin-top: 1mm; }
