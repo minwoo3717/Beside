@@ -156,6 +156,9 @@ test('poll_saturation.js: seeds completed jobs in setup and polls them', async (
   assert.equal(last.tags.jobState, 'completed');
   const out = mod.handleSummary({ metrics: {}, setup_data: data, state: {} });
   assert.deepEqual(JSON.parse(out[join(TMP, 'ids.json')]).completed, data.completed);
+  // each step names its scenario so dropped_iterations{scenario:rpsN} can fail that step
+  const summary = JSON.parse(out[BASE_ENV.SUMMARY_PATH]);
+  assert.deepEqual(summary.meta.stages.map((s) => s.scenario), ['rps0', 'rps1', 'rps2', 'rps3', 'rps4', 'rps5']);
 });
 
 test('asset.js: setup refuses a 0 B sample asset', async () => {

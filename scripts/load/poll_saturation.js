@@ -135,7 +135,8 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'poll_saturation.js',
     scenario: 'A2',
-    stages: RATES.map((rate, i) => ({ index: i, label: `${rate} rps`, users: null, target: rate, holdS: HOLD_S })),
+    // scenario: dropped_iterations{scenario:rpsN} fails step N (lib/summary.js stageVerdicts)
+    stages: RATES.map((rate, i) => ({ index: i, label: `${rate} rps`, users: null, target: rate, holdS: HOLD_S, scenario: `rps${i}` })),
     extra: {
       rps: RATES,
       ids: IDS_FILE ? { file: IDS_FILE, completed: FROM_FILE.completed.length, pending: FROM_FILE.pending.length,

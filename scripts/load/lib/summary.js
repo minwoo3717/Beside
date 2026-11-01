@@ -27,8 +27,19 @@ function round(x, nd) {
   return Math.round(x * f) / f;
 }
 
+// dropped_iterations{scenario:<name>} of one scenario: { count, failed }, or null when the summary has no such
+// submetric. k6 tags dropped_iterations with the scenario name only (not with scenario `tags`), so only a script that
+// runs one scenario per stage (poll_saturation.js: stages[].scenario) can tie drops to a stage.
+function droppedFor(metrics, scenario) {
+  const m = metrics[`dropped_iterations{scenario:${scenario}}`];
+  if (!m) return null;
+  const th = m.thresholds || {};
+  return { count: (m.values && m.values.count) || 0, failed: Object.keys(th).some((expr) => th[expr] && th[expr].ok === false) };
+}
+
 // One entry per stage index that has a hold part: ok when every threshold scoped to that hold passed, "not_run"
-// when none of its scoped metrics got a sample (the run stopped earlier).
+// when none of its scoped metrics got a sample (the run stopped earlier). A stage whose own scenario dropped
+// iterations is "fail" (README: a stage with dropped iterations is not "pass").
 export function stageVerdicts(metrics, stages) {
   const byStage = {};
   Object.keys(metrics).forEach((name) => {
@@ -54,10 +65,24 @@ export function stageVerdicts(metrics, stages) {
   return indexes.map((i) => {
     const e = byStage[String(i)];
     const s = info[String(i)] || {};
-    const status = !e || e.samples === 0 ? 'not_run' : e.ok ? 'pass' : 'fail';
+    const drop = s.scenario ? droppedFor(metrics, s.scenario) : null;
+    let status = !e || e.samples === 0 ? 'not_run' : e.ok ? 'pass' : 'fail';
+    if (drop && (drop.failed || drop.count > 0)) status = 'fail';
     return { stage: i, label: s.label || '', users: s.users === undefined ? null : s.users, target: s.target === undefined ? null : s.target,
-      holdS: s.holdS === undefined ? null : s.holdS, status, latency: e ? e.latency : {} };
+      holdS: s.holdS === undefined ? null : s.holdS, status, dropped: drop ? drop.count : null, latency: e ? e.latency : {} };
   });
+}
+
+// Dropped iterations that no stage owns (ramping-arrival-rate scripts cannot tag drops by stage) could have happened
+// in any stage, so no stage may read as "pass" and there is no breaking point. Returns the reason, or null.
+function unattributedDrops(verdicts, dropped) {
+  if (!(dropped > 0) || verdicts.length === 0) return null;
+  let attributed = 0;
+  verdicts.forEach((v) => { if (typeof v.dropped === 'number') attributed += v.dropped; });
+  if (dropped <= attributed) return null;
+  verdicts.forEach((v) => { if (v.status === 'pass') v.status = 'invalid'; });
+  return `dropped_iterations ${dropped} > 0 and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as ` +
+    'passed and there is no breaking point; raise PRE_VUS/MAX_VUS (or check the load PC) and run again';
 }
 
 export function breakingPoint(verdicts) {
@@ -105,6 +130,8 @@ export function buildReport(data, info, cfg, endedAt) {
   const highest = [peakSent, sentMbps].filter((x) => x !== null);
   const uplinkRatio = cfg.uplinkMbps && highest.length ? Math.max.apply(null, highest) / cfg.uplinkMbps : null;
   const uplinkRatioWholeRun = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
+  const dropped = value(metrics, 'dropped_iterations', 'count') || 0;
+  const invalidReason = unattributedDrops(verdicts, dropped);
   const setup = data.setup_data || {};
   const meta = Object.assign({
     script: info.script,
@@ -125,10 +152,11 @@ export function buildReport(data, info, cfg, endedAt) {
     thresholdsOk: failed.length === 0,
     failedThresholds: failed,
     stages: verdicts,
-    breakingPoint: breakingPoint(verdicts),
+    breakingPoint: invalidReason === null ? breakingPoint(verdicts) : null,
+    breakingPointNote: invalidReason,
     httpReqs: value(metrics, 'http_reqs', 'count'),
     httpReqRate: round(value(metrics, 'http_reqs', 'rate')),
-    droppedIterations: value(metrics, 'dropped_iterations', 'count') || 0,
+    droppedIterations: dropped,
     checksFailed: value(metrics, 'checks', 'fails') || 0,
     checksPassed: value(metrics, 'checks', 'passes') || 0,
     unexpectedCount: value(metrics, 'load_unexpectedCount', 'count') || 0,
@@ -174,7 +202,8 @@ export function textReport(report) {
       lines.push(`${pad(s.stage, 6)} ${pad(s.users === null ? '-' : s.users, 9)} ${pad(s.target === null ? '-' : s.target, 8)} ${pad(s.status, 8)} ${lat}`);
     });
     const bp = v.breakingPoint;
-    lines.push(`last passing stage ${bp.lastPassingStage === null ? '-' : bp.lastPassingStage}, first failing stage ${bp.firstFailingStage === null ? '-' : bp.firstFailingStage}`);
+    if (bp === null) lines.push(`breaking point: invalid — ${v.breakingPointNote}`);
+    else lines.push(`last passing stage ${bp.lastPassingStage === null ? '-' : bp.lastPassingStage}, first failing stage ${bp.firstFailingStage === null ? '-' : bp.firstFailingStage}`);
   }
   lines.push(v.thresholdsOk ? 'thresholds: all passed' : `thresholds: ${v.failedThresholds.length} failed`);
   v.failedThresholds.slice(0, 40).forEach((f) => lines.push(`  FAIL ${f.metric} ${f.threshold}`));

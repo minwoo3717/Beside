@@ -59,6 +59,48 @@ test('summary: stage verdicts and breaking point', async () => {
   assert.match(s.textReport(report), /first failing stage 2/);
 });
 
+test('summary: dropped iterations fail the stage of their scenario (poll_saturation.js)', async () => {
+  const s = await lib('summary.js');
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<120': { ok: true } } };
+  const metrics = {
+    'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'http_req_duration{endpoint:poll,stage:1,phase:hold}': pass,
+    'dropped_iterations{scenario:rps0}': { values: { count: 0, rate: 0 }, thresholds: { 'count==0': { ok: true } } },
+    'dropped_iterations{scenario:rps1}': { values: { count: 12, rate: 0.04 }, thresholds: { 'count==0': { ok: false } } },
+    dropped_iterations: { values: { count: 12, rate: 0.02 }, thresholds: { 'count==0': { ok: false } } },
+  };
+  const stages = [0, 1].map((i) => ({ index: i, users: null, target: [100, 300][i], holdS: 300, label: '', scenario: `rps${i}` }));
+  const v = s.stageVerdicts(metrics, stages);
+  assert.deepEqual(v.map((x) => x.status), ['pass', 'fail']);
+  assert.deepEqual(v.map((x) => x.dropped), [0, 12]);
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'poll_saturation.js', scenario: 'A2', stages },
+    { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' }, 'T1');
+  assert.deepEqual(report.verdict.breakingPoint, { firstFailingStage: 1, lastPassingStage: 0, lastPassingUsers: null, operatingLimitUsers: null });
+  assert.equal(report.verdict.breakingPointNote, null);
+});
+
+test('summary: dropped iterations that no stage can own make the staged result invalid (ramping-arrival-rate)', async () => {
+  const s = await lib('summary.js');
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<120': { ok: true } } };
+  const metrics = {
+    'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'http_req_duration{endpoint:poll,stage:1,phase:hold}': pass,
+    dropped_iterations: { values: { count: 3, rate: 0.01 }, thresholds: { 'count==0': { ok: false } } },
+  };
+  const stages = [0, 1].map((i) => ({ index: i, users: [25, 200][i], target: i, holdS: 480, label: '' }));
+  const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.equal(report.verdict.breakingPoint, null);
+  assert.match(report.verdict.breakingPointNote, /dropped_iterations 3/);
+  assert.deepEqual(report.verdict.stages.map((x) => x.status), ['invalid', 'invalid']);
+  assert.match(s.textReport(report), /breaking point: invalid/);
+  // without drops the same stages pass
+  delete metrics.dropped_iterations;
+  const ok = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.deepEqual(ok.verdict.stages.map((x) => x.status), ['pass', 'pass']);
+  assert.equal(ok.verdict.breakingPoint.lastPassingStage, 1);
+});
+
 test('summary: failed checks and unexpected responses are counted and printed', async () => {
   const s = await lib('summary.js');
   const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
