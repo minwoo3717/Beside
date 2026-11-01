@@ -7,7 +7,7 @@
 | 항목 | 상태 |
 |---|---|
 | [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI 가 확인하도록 넣었지만 아직 돌지 않았다(이 PC 에 Docker 없음) |
-| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | **[계획]** — VM 에서 한 번도 실행하지 않았다. 실행한 뒤 이 표와 결과 문서에 날짜·커밋을 적는다 |
+| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | **[계획]** — VM 에서 한 번도 실행하지 않았다. 실행한 뒤 이 표와 결과 문서에 날짜·커밋을 적는다. 그중 합성 GLB 생성 명령(3번)과 H2 Shell 조회 명령(6번)만 개발 PC 에서 따로 돌려 확인했다(각 절에 적음) |
 
 ## 지키는 것
 
@@ -116,11 +116,13 @@ mock 워커는 COMPLETED 작업에 `storage.result.sample` = `storage/results/sa
 ```bash
 # VM 의 리포 루트에서: scripts/perf/fixtures.py 의 glb_synthetic(seed 14 = 루프백 벤치마크의 glb_sample 과 같은 바이트)
 python3 -c "import sys; sys.path.insert(0, 'scripts/perf'); import fixtures; open('/tmp/lt-sample-1500000.glb', 'wb').write(fixtures.glb_synthetic(1_500_000, seed=14))"
-sha256sum /tmp/lt-sample-1500000.glb      # run.json 에 적는다
+sha256sum /tmp/lt-sample-1500000.glb      # 03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9 (run.json 에 적는다)
 # backend 사용자(beside)로 써서 소유자가 맞게
 $L exec -T backend sh -c 'mkdir -p /app/storage/results && cat > /app/storage/results/sample-dog.glb' < /tmp/lt-sample-1500000.glb
 $L exec -T backend sh -c 'ls -l /app/storage/results/sample-dog.glb && sha256sum /app/storage/results/sample-dog.glb'   # 1500000 바이트, 같은 해시
 ```
+
+위 생성 명령은 개발 PC(Python 3.14)에서 실행해 1,500,000 바이트·glTF 2 헤더·위 해시를 확인했다(2026-11-01). 생성기는 시드 고정이라 VM 의 Python 3.12 에서도 같은 바이트가 나와야 한다 — 해시가 다르면 멈추고 원인을 본다.
 
 한 건으로 끝까지 확인한다(1×1 PNG, `MOCK_WORKER_PROCESSINGMS` 만큼 기다린 뒤 asset 이 1500000 바이트):
 
@@ -179,7 +181,7 @@ $C up -d backend
 $C ps                                      # backend healthy
 ```
 
-- (2) 의 명령은 이미지 안의 Spring Boot 실행 jar 에서 H2 의 `org.h2.tools.Shell` 을 꺼내 쓰는 방법이다(Spring Boot 3.2 의 `PropertiesLauncher` 는 jar 안 `BOOT-INF/lib` 를 클래스패스에 넣는다). **아직 실행해 본 적 없다 [계획]**. 안 되면 대신 운영 backend 를 띄운 뒤 목록 API 로 최근 작업을 본다: `curl -fsS -u 'team:팀 비밀번호' "$D/api/v1/jobs?limit=100" | grep -c '"name":"lt-'` 가 0(응답의 `nextCursor` 로 다음 쪽).
+- (2) 의 명령은 이미지 안의 Spring Boot 실행 jar 에서 H2 의 `org.h2.tools.Shell` 을 꺼내 쓰는 방법이다(Spring Boot 3.2 의 `PropertiesLauncher` 는 jar 안 `BOOT-INF/lib` 를 클래스패스에 넣는다). 개발 PC 에서 같은 커밋의 bootJar 로 임시 H2 파일 DB(`lt-` 사진이 든 작업 2건 + 아닌 것 1건)를 만들어 같은 `-url ...;ACCESS_MODE_DATA=r`·`-sql` 로 돌려 `LT_JOBS = 2` 를 확인했다(2026-11-01, Windows·JDK 17). **VM 의 컨테이너·운영 DB 에서는 아직 [계획]**. 안 되면 대신 운영 backend 를 띄운 뒤 목록 API 로 최근 작업을 본다: `curl -fsS -u 'team:팀 비밀번호' "$D/api/v1/jobs?limit=100" | grep -c '"name":"lt-'` 가 0(응답의 `nextCursor` 로 다음 쪽).
 - `uploads` 열은 사진 목록 JSON(`[{"name":"lt-...","bytes":...,"path":...}]`)이라 LIKE 로 파일명을 찾는다.
 
 ## 7. 확인 (복구 뒤)
