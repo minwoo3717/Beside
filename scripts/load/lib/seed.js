@@ -26,16 +26,65 @@ export function sampleIds(list, n) {
   return out;
 }
 
-// GET /api/v1/jobs/{id} once per id (tagged endpoint=setup, not measured). Returns { checked, bad: [{ id, status }] }.
-export function checkIds(cfg, ids) {
+// GET /api/v1/jobs/{id} once per id (tagged endpoint=setup, not measured). Without `states` only the HTTP status is
+// checked. With `states` (e.g. ['PENDING']) the body is read and a 200 whose job status is not one of them is bad too:
+// a PENDING job that a backend restart closed (InterruptedJobRecovery: FAILED) still answers 200.
+// Returns { checked, bad: [{ id, status, state }], maxQueuedMs } (maxQueuedMs: the largest timings.queuedMs among the
+// ids in one of `states`, i.e. how long the oldest PENDING one has waited; null without `states` or values).
+export function checkIds(cfg, ids, states) {
   const res = ids.length === 0 ? [] : http.batch(ids.map((id) => ({
     method: 'GET',
     url: `${cfg.baseUrl}/api/v1/jobs/${id}`,
-    params: { tags: { endpoint: 'setup', name: '/api/v1/jobs/{id}' }, responseType: 'none', timeout: '30s' },
+    params: { tags: { endpoint: 'setup', name: '/api/v1/jobs/{id}' }, responseType: states ? 'text' : 'none', timeout: '30s' },
   })));
   const bad = [];
-  res.forEach((r, i) => { if (r.status !== 200) bad.push({ id: ids[i], status: r.status }); });
-  return { checked: ids.length, bad };
+  let maxQueuedMs = null;
+  res.forEach((r, i) => {
+    if (r.status !== 200) {
+      bad.push({ id: ids[i], status: r.status, state: null });
+      return;
+    }
+    if (!states) return;
+    const state = jsonField(r, 'status');
+    if (states.indexOf(state) < 0) {
+      bad.push({ id: ids[i], status: 200, state });
+      return;
+    }
+    const timings = jsonField(r, 'timings');
+    const q = timings && typeof timings.queuedMs === 'number' ? timings.queuedMs : null;
+    if (q !== null && (maxQueuedMs === null || q > maxQueuedMs)) maxQueuedMs = q;
+  });
+  return { checked: ids.length, bad, maxQueuedMs };
+}
+
+// The id lists of one or more id files ({"completed": [...], "pending": [...]}, e.g. the IDS_OUT of two SEED_ONLY
+// runs of poll_saturation.js) joined in file order, each id once. `names` label the files in errors. An id in both
+// lists cannot have both states, so it is refused.
+export function joinIdLists(docs, names) {
+  const out = { completed: [], pending: [] };
+  const seen = { completed: {}, pending: {} };
+  docs.forEach((doc, i) => {
+    const name = names && names[i] ? names[i] : `#${i + 1}`;
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) {
+      throw new Error(`id file ${name}: not an object with "completed" and "pending" lists`);
+    }
+    ['completed', 'pending'].forEach((key) => {
+      const list = doc[key] === undefined || doc[key] === null ? [] : doc[key];
+      if (!Array.isArray(list)) throw new Error(`id file ${name}: "${key}" is not a list`);
+      list.forEach((id) => {
+        if (typeof id !== 'string' || id === '') throw new Error(`id file ${name}: "${key}" holds ${JSON.stringify(id)}, not a job id`);
+        if (!seen[key][id]) {
+          seen[key][id] = true;
+          out[key].push(id);
+        }
+      });
+    });
+  });
+  const both = out.completed.filter((id) => seen.pending[id]);
+  if (both.length > 0) {
+    throw new Error(`id files: ${both.length} id(s) are in both "completed" and "pending" (first ${both[0]})`);
+  }
+  return out;
 }
 
 function jsonField(res, field) {

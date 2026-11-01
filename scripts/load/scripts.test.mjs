@@ -56,8 +56,10 @@ test('poll_saturation.js: IDS_FILE ids are checked in setup', async () => {
   const good = join(TMP, 'ids-good.json');
   writeFileSync(good, JSON.stringify({ completed: [known[0]], pending: [known[1]] }));
   const mod = await load('poll_saturation.js', { RTT_BASE_MS: '20', IDS_FILE: good }, { clock: 0 });
-  const server = fakeServer();
-  known.forEach((id) => { server.jobs[id] = { polls: 0, fail: false, status: 'COMPLETED', filenames: [] }; });
+  // each list's ids must have that list's state now (poll_ids.test.mjs covers the refusals)
+  const server = fakeServer({ completeAfterPolls: null });
+  server.jobs[known[0]] = { polls: 0, fail: false, status: 'COMPLETED', filenames: [] };
+  server.jobs[known[1]] = { polls: 0, fail: false, status: 'PENDING', filenames: [] };
   state.handler = server;
   const data = mod.setup();
   assert.equal(data.idsChecked, 2);
