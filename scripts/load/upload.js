@@ -15,7 +15,7 @@ import { createJob, makeContext } from './lib/flow.js';
 import { guardScenario, guardTick } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
-import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
+import { bytesSentThresholds, errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
@@ -45,8 +45,10 @@ const RTT = requireRtt(CONFIG, 'upload.js');
 const MAX_PER_S = maxTarget(LEVELS.stages) / 60;
 const MAX_VUS = readNum(ENV, 'MAX_VUS', 600);
 const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 'small' ? 2 : 10))));
-// The 1.5 s / 3 s criteria are for the 0.8 MB upload (plan section 2); a 20 MB upload is reported, not judged.
+// The 1.5 s / 3 s criteria are for the 0.8 MB upload (docs/perf/load/TRAFFIC_MODEL.md §8); a 20 MB upload is
+// reported, not judged.
 const LATENCY_EPS = SIZE === 'small' ? ['create'] : [];
+const SCOPES = holdScopes(LEVELS.segments);
 
 export const options = {
   discardResponseBodies: true,
@@ -64,8 +66,9 @@ export const options = {
       gracefulStop: '2m',
     },
   }, guardScenario(CONFIG, LEVELS.totalS + 120)),
+  // bytesSentThresholds: per-stage upload bytes for the uplink ratio of the busiest stage (lib/summary.js)
   thresholds: merge.apply(null, [latencyThresholds(RTT, LATENCY_EPS, null), errorThresholds(null, true),
-    { dropped_iterations: ['count==0'] }].concat(holdScopes(LEVELS.segments).map((s) =>
+    { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES)].concat(SCOPES.map((s) =>
     merge(latencyThresholds(RTT, LATENCY_EPS, s.scope), errorThresholds(s.scope, false))))),
 };
 
@@ -91,7 +94,7 @@ export function handleSummary(data) {
   return summaryOutputs(data, {
     script: 'upload.js',
     scenario: `A3-${SIZE}`,
-    stages: holdScopes(LEVELS.segments).map((s) => ({ index: s.index, label: s.segment.label, users: null,
+    stages: SCOPES.map((s) => ({ index: s.index, label: s.segment.label, users: null,
       target: s.segment.target / 60, holdS: HOLD_S })),
     extra: {
       size: SIZE,

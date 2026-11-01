@@ -17,6 +17,10 @@ test('thresholds: plan section 2 criteria relative to RTT_base', async () => {
   assert.deepEqual(t.load_errorRatio[1], { threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '1m' });
   assert.deepEqual(t['load_errorRatio{stage:3,phase:hold}'], ['rate<0.005']);
   assert.deepEqual(t.dropped_iterations, ['count==0']);
+  assert.equal(t['load_bytesSent{stage:3,phase:hold}'], undefined); // only with uploads: true
+  const up = th.stagedThresholds({ rttMs: 20, endpoints: ['create'], flows: false, uploads: true, scopes: [{ scope: 'stage:3,phase:hold' }] });
+  assert.deepEqual(up['load_bytesSent{stage:3,phase:hold}'], ['count>=0']);
+  assert.deepEqual(th.bytesSentThresholds([{ scope: 'stage:0,phase:hold' }]), { 'load_bytesSent{stage:0,phase:hold}': ['count>=0'] });
   assert.deepEqual(th.parseMetricName('a{endpoint:poll,stage:3}'), { metric: 'a', tags: { endpoint: 'poll', stage: '3' } });
 });
 

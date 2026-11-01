@@ -95,7 +95,7 @@ export const options = {
   setupTimeout: '60s',
   scenarios,
   thresholds: stagedThresholds({
-    rttMs: RTT, endpoints: ['healthz', 'create', 'poll', 'asset'], flows: true, scopes: holdScopes(FLOW.segments),
+    rttMs: RTT, endpoints: ['healthz', 'create', 'poll', 'asset'], flows: true, uploads: true, scopes: holdScopes(FLOW.segments),
   }),
 };
 

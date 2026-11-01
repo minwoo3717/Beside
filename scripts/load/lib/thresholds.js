@@ -1,4 +1,4 @@
-// Pass criteria of plan section 2 [제안값 — 계약 회의 전] as k6 thresholds. Pure module.
+// Pass criteria of docs/perf/load/TRAFFIC_MODEL.md §8 [제안값 — 계약 회의 전] as k6 thresholds. Pure module.
 // Latency limits are relative to RTT_base (the healthz p50 that smoke.js measured), scoped by the endpoint tag and,
 // where the script has stages, by the stage/phase tags so each level's hold part is judged on its own.
 
@@ -60,13 +60,22 @@ export function merge() {
   return out;
 }
 
-// Everything a staged flow script judges: overall, then per hold scope.
+// No-op thresholds whose only job is to keep load_bytesSent{<scope>} (upload body bytes per hold) in the summary,
+// where lib/summary.js turns it into the stage's upload Mbps and the uplink ratio of the busiest stage.
+export function bytesSentThresholds(scopes) {
+  const out = {};
+  (scopes || []).forEach((s) => { out[key('load_bytesSent', null, s.scope)] = ['count>=0']; });
+  return out;
+}
+
+// Everything a staged flow script judges: overall, then per hold scope (opts.uploads adds bytesSentThresholds).
 export function stagedThresholds(opts) {
   const parts = [
     latencyThresholds(opts.rttMs, opts.endpoints, null),
     errorThresholds(null, true),
     opts.flows ? flowThresholds(null) : {},
     { dropped_iterations: ['count==0'] },
+    opts.uploads ? bytesSentThresholds(opts.scopes) : {},
   ];
   (opts.scopes || []).forEach((s) => {
     parts.push(latencyThresholds(opts.rttMs, opts.endpoints, s.scope));

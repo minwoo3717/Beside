@@ -18,6 +18,9 @@ test('api_staged.js A1: arrival stages, VUs and per-stage thresholds', async () 
   const th = mod.options.thresholds;
   assert.deepEqual(th['http_req_duration{endpoint:poll,stage:3,phase:hold}'], ['p(95)<120', 'p(99)<320']);
   assert.deepEqual(th['load_flowOkRatio{stage:7,phase:hold}'], ['rate>=0.95']);
+  // no-op thresholds keep the per-stage upload bytes in the summary (uplink ratio of the busiest stage)
+  assert.deepEqual(th['load_bytesSent{stage:0,phase:hold}'], ['count>=0']);
+  assert.deepEqual(th['load_bytesSent{stage:7,phase:hold}'], ['count>=0']);
 });
 
 test('api_staged.js A5 spike and A6 soak follow tiers.json', async () => {
@@ -49,6 +52,8 @@ test('upload.js A3: rates per minute and the disk budget guard', async () => {
   const large = await load('upload.js', { RTT_BASE_MS: '20', SIZE: 'large', LARGE_PHOTO: PHOTO });
   assert.deepEqual(large.options.scenarios.uploads.stages.filter((s, i) => i % 2 === 1).map((s) => s.target), [30, 60, 90, 120]);
   assert.equal(large.options.thresholds['http_req_duration{endpoint:create}'], undefined);
+  assert.deepEqual(small.options.thresholds['load_bytesSent{stage:5,phase:hold}'], ['count>=0']);
+  assert.deepEqual(large.options.thresholds['load_bytesSent{stage:3,phase:hold}'], ['count>=0']);
   await assert.rejects(load('upload.js', { RTT_BASE_MS: '20', DISK_BUDGET_GB: '0.0001' }), /DISK_BUDGET_GB/);
 });
 
