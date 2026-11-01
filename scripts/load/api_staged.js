@@ -15,7 +15,7 @@ import { browsePerHourForUsers, CONFIG, ENV, jobsPerHourForUsers, photoPaths, re
   from './lib/config.js';
 import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
 import { browseOnly, makeContext, userFlow } from './lib/flow.js';
-import { guardScenario, guardTick } from './lib/guard.js';
+import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { stagedThresholds } from './lib/thresholds.js';
@@ -87,7 +87,8 @@ if (BROWSE_ON) {
     gracefulStop: '30s',
   };
 }
-Object.assign(scenarios, guardScenario(CONFIG, FLOW.totalS + GRACEFUL_S));
+// The guard returns when the flows (and the browse sessions) are done, at most at the end of their gracefulStop.
+Object.assign(scenarios, guardScenario(CONFIG, FLOW.totalS, FLOW.totalS + Math.max(GRACEFUL_S, 30)));
 
 export const options = {
   discardResponseBodies: true,
@@ -121,7 +122,7 @@ export function browse() {
 }
 
 export function guard() {
-  guardTick(CONFIG);
+  guardLoop(CONFIG, FLOW.totalS);
 }
 
 export function handleSummary(data) {

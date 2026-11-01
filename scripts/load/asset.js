@@ -11,7 +11,7 @@ import exec from 'k6/execution';
 import { CONFIG, ENV, photoPaths, readList, readNum, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { downloadAsset, makeContext } from './lib/flow.js';
-import { guardScenario, guardTick } from './lib/guard.js';
+import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight, seedJobs } from './lib/seed.js';
 import { buildLevels, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
@@ -53,7 +53,7 @@ export const options = {
       stages: LEVELS.stages,
       gracefulStop: '1m',
     },
-  }, guardScenario(CONFIG, LEVELS.totalS + 60)),
+  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + 60)), // the guard returns when the downloads are done
   thresholds: merge.apply(null, [latencyThresholds(RTT, ['asset'], null), errorThresholds(null, true),
     { dropped_iterations: ['count==0'] }, bandwidth].concat(scopes.map((s) =>
     merge(latencyThresholds(RTT, ['asset'], s.scope), errorThresholds(s.scope, false))))),
@@ -79,7 +79,7 @@ export function download(data) {
 }
 
 export function guard() {
-  guardTick(CONFIG);
+  guardLoop(CONFIG, LEVELS.totalS);
 }
 
 export function handleSummary(data) {

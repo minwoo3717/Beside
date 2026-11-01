@@ -60,6 +60,14 @@ export function parseConfig(env) {
     tier: readStr(env, 'TIER', ''),
     promUrl: readStr(env, 'PROM_URL', '').replace(/\/+$/, ''),
     promEnv: readStr(env, 'PROM_ENV', 'loadtest'),
+    // lib/guard.js (only with PROM_URL); lib/summary.js reads the same values to word the guard's abort reason.
+    guard: {
+      everyS: readNum(env, 'GUARD_EVERY_S', 15),
+      breaches: readNum(env, 'GUARD_BREACHES', 2),
+      maxErrorRatio: readNum(env, 'GUARD_MAX_ERROR_RATIO', 0.05),
+      maxDiskRatio: readNum(env, 'GUARD_MAX_DISK_RATIO', 0.8),
+      blindAbort: readNum(env, 'GUARD_BLIND_ABORT', 3),
+    },
   };
 }
 

@@ -13,6 +13,7 @@ export const state = globalThis.__k6stub || (globalThis.__k6stub = {
   clock: null,          // fake clock in ms when set; sleep() and each request advance it
   requestMs: 5,
   scenarioStartTime: 0,
+  vusActive: 1,
 });
 
 export function reset(fields) {
@@ -22,6 +23,7 @@ export function reset(fields) {
   state.clock = null;
   state.requestMs = 5;
   state.scenarioStartTime = 0;
+  state.vusActive = 1;
   state.handler = () => ({ status: 0, body: '' });
   Object.assign(state, fields || {});
   globalThis.__ENV = state.env;

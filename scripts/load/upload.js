@@ -12,7 +12,7 @@ import exec from 'k6/execution';
 import { CONFIG, ENV, photoPaths, readList, readNum, readStr, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
 import { createJob, makeContext } from './lib/flow.js';
-import { guardScenario, guardTick } from './lib/guard.js';
+import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { bytesSentThresholds, errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
@@ -65,7 +65,7 @@ export const options = {
       stages: LEVELS.stages,
       gracefulStop: '2m',
     },
-  }, guardScenario(CONFIG, LEVELS.totalS + 120)),
+  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + 120)), // the guard returns when the uploads are done
   // bytesSentThresholds: per-stage upload bytes for the uplink ratio of the busiest stage (lib/summary.js)
   thresholds: merge.apply(null, [latencyThresholds(RTT, LATENCY_EPS, null), errorThresholds(null, true),
     { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES)].concat(SCOPES.map((s) =>
@@ -87,7 +87,7 @@ export function upload() {
 }
 
 export function guard() {
-  guardTick(CONFIG);
+  guardLoop(CONFIG, LEVELS.totalS);
 }
 
 export function handleSummary(data) {

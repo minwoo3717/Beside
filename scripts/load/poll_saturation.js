@@ -16,7 +16,7 @@ import { CONFIG, ENV, photoPaths, readList, readNum, readStr, requireRtt } from 
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { call, makeContext } from './lib/flow.js';
 import * as m from './lib/metrics.js';
-import { guardScenario, guardTick } from './lib/guard.js';
+import { guardLoop, guardScenario } from './lib/guard.js';
 import { checkIds, preflight, sampleIds, seedJobs } from './lib/seed.js';
 import { sequentialScenarios } from './lib/stages.js';
 import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
@@ -56,7 +56,9 @@ const STEPS = sequentialScenarios('rps', RATES, HOLD_S, GAP_S, (rate) => {
   };
 });
 
-const scenarios = Object.assign({}, STEPS.scenarios, guardScenario(CONFIG, STEPS.totalS));
+// The last step ends at LOAD_END_S (no gap after it); the guard returns when its polls are done (gracefulStop 10s).
+const LOAD_END_S = (RATES.length - 1) * (HOLD_S + GAP_S) + HOLD_S;
+const scenarios = Object.assign({}, STEPS.scenarios, guardScenario(CONFIG, LOAD_END_S, LOAD_END_S + 10));
 // A poll that is not 200 (e.g. 404 for an id of another server) is "unexpected", not an error (lib/classify.js), and
 // a fast 404 passes the latency limit, so load_unexpectedCount must stay 0 overall and in every step.
 const perStage = RATES.map((rate, i) => {
@@ -124,7 +126,7 @@ export function poll(data) {
 }
 
 export function guard() {
-  guardTick(CONFIG);
+  guardLoop(CONFIG, LOAD_END_S);
 }
 
 export function handleSummary(data) {

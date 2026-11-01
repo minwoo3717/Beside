@@ -28,7 +28,7 @@
 import { CONFIG, ENV, photoPaths, readNum, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { makeContext, userFlow } from './lib/flow.js';
-import { guardScenario, guardTick } from './lib/guard.js';
+import { guardLoop, guardScenario } from './lib/guard.js';
 import { predict } from './lib/queue.js';
 import { preflight } from './lib/seed.js';
 import { errorThresholds, flowThresholds, latencyThresholds, merge } from './lib/thresholds.js';
@@ -73,7 +73,7 @@ export const options = {
       gracefulStop: `${CONFIG.maxWaitS + 120}s`,
       tags: { stage: '0', phase: 'hold' },
     },
-  }, guardScenario(CONFIG, DURATION_S + CONFIG.maxWaitS + 120)),
+  }, guardScenario(CONFIG, DURATION_S, DURATION_S + CONFIG.maxWaitS + 120)), // returns when the last flow is done
   // Overload (rho >= 1) is expected to time flows out, so the flow criteria apply only below saturation.
   thresholds: merge(latencyThresholds(RTT, ['healthz', 'create', 'poll', 'asset'], null), errorThresholds(null, true),
     RHO < 1 ? flowThresholds(null) : {}, { dropped_iterations: ['count==0'] }),
@@ -91,7 +91,7 @@ export function flow() {
 }
 
 export function guard() {
-  guardTick(CONFIG);
+  guardLoop(CONFIG, DURATION_S);
 }
 
 function trendValues(data, name) {

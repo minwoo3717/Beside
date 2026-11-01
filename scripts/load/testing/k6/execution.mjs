@@ -9,6 +9,10 @@ const exec = {
   test: {
     abort(message) { throw new Error(`test aborted: ${message}`); },
   },
+  // VUs running an iteration in this instance (lib/guard.js stops once only its own is left); the test sets it.
+  instance: {
+    get vusActive() { return state.vusActive; },
+  },
   vu: { idInTest: 1, metrics: { tags: {} } },
 };
 

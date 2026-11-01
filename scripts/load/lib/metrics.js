@@ -1,6 +1,6 @@
 // Custom k6 metrics. Names use the load_ prefix (the "load.*" values of docs/perf/load/TRAFFIC_MODEL.md §11; k6
 // forbids dots). They are perf-only like bench.* and are not registered in docs/METRICS.md (agenda #15).
-import { Counter, Rate, Trend } from 'k6/metrics';
+import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
 
 export const healthzMs = new Trend('load_healthzMs', true);
 export const postMs = new Trend('load_postMs', true);
@@ -29,3 +29,15 @@ export const assetBytes = new Counter('load_assetBytes');
 // computed (data_sent is only a whole-run average). Staged scripts keep the per-stage submetric in the summary with a
 // no-op threshold (lib/thresholds.js bytesSentThresholds).
 export const bytesSent = new Counter('load_bytesSent');
+
+// lib/guard.js (only with PROM_URL). k6 v2.3.0 tells handleSummary nothing about how a run ended (data.state is only
+// testRunDurationMs and the TTY flags), so the guard leaves its readings and its abort here for lib/summary.js. None of
+// them has a threshold: a metric with no sample stays out of the summary, so "present" means "it happened".
+export const guardQueries = new Counter('load_guardQueries'); // Prometheus queries sent
+export const guardFailures = new Counter('load_guardFailures'); // queries that could not be read
+// The last unreadable answer: its HTTP status, or 0 no response, -1 not a Prometheus answer, -2 no disk series.
+export const guardLastFailure = new Gauge('load_guardLastFailure');
+export const guardErrorRatio = new Gauge('load_guardErrorRatio'); // each reading of the server 5xx ratio over 1m
+export const guardDiskRatio = new Gauge('load_guardDiskRatio'); // each reading of the fullest disk's used ratio
+// Set once, just before exec.test.abort(): 1 = 5xx ratio, 2 = disk, 3 = Prometheus unreadable from the start.
+export const guardAbort = new Gauge('load_guardAbort');

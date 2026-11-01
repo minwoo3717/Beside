@@ -31,7 +31,8 @@ test('api_staged.js A5 spike and A6 soak follow tiers.json', async () => {
     { duration: '600s', target: 10800 }, { duration: '30s', target: 3600 }, { duration: '600s', target: 3600 }]);
   const soak = await load('api_staged.js', { SCENARIO: 'soak', RTT_BASE_MS: '20', SOAK_HOLD_S: '600', PROM_URL: 'http://localhost:9090' });
   assert.deepEqual(soak.options.scenarios.flows.stages, [{ duration: '60s', target: 3600 }, { duration: '600s', target: 3600 }]);
-  assert.equal(soak.options.scenarios.guard.executor, 'constant-vus');
+  // one iteration that returns when the load is over (lib/guard.js guardLoop), not a fixed-length constant-vus guard
+  assert.equal(soak.options.scenarios.guard.executor, 'per-vu-iterations');
 });
 
 test('api_staged.js refuses a remote target without RTT_BASE_MS', async () => {
