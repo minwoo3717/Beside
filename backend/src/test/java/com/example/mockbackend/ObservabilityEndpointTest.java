@@ -100,6 +100,8 @@ class ObservabilityEndpointTest {
                     .contains("process_cpu_usage")
                     .contains("tomcat_threads_busy_threads")
                     .contains("hikaricp_connections")
+                    .contains("executor_active_threads{")
+                    .contains("jvm_gc_memory_allocated_bytes_total") // jvm_gc_pause_seconds appears after the first GC
                     .contains("disk_free_bytes");
         });
     }

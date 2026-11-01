@@ -2,7 +2,7 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인).
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인), 운영 지표(Actuator·Prometheus, 관리 포트 8081 전용 — 2026-11-01, 아래 '운영 지표').
 - **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
@@ -24,6 +24,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/swagger-ui/index.html | v1 스펙 브라우저 (springdoc) |
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
+| http://localhost:8081/actuator/prometheus | 운영 지표(관리 포트 전용, 아래 '운영 지표'). `/actuator/health` 도 같은 포트 |
 | http://localhost:8080/h2-console | DB 보기 (mock·real 모두, 이 PC 에서 직접 연 요청만 — 폰용 터널(cloudflared·ngrok)이나 프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
@@ -160,6 +161,27 @@ CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
 
 빠르게 보려면 `SELECT * FROM job_runs ORDER BY finished_at`. 서버가 켜져 있는 동안 다른 프로세스는 DB 파일을 열 수 없다(AUTO_SERVER 없음). 측정 행을 넣지 못해도(디스크·DB 오류) 서버 로그에 ERROR 만 남고 작업 결과는 바뀌지 않는다. 같은 attempt 를 두 번 끝내는 것은 버그이며 첫 행이 유지된다.
 
+### 운영 지표 (Actuator · Prometheus, 관리 포트 8081)
+
+**[구현됨]** 2026-11-01. 멘토 지표 5종(생성 성공률, 생성 시간 평균/p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)을 Prometheus 형식으로 내보낸다. 이름·태그·PromQL 은 [docs/METRICS.md](../docs/METRICS.md) §5.
+
+- Actuator 는 **관리 포트 8081 에만** 있다(`management.server.port`, 환경변수 `MANAGEMENT_SERVER_PORT` 로 바꾼다). 공개 포트 8080 에는 `/actuator` 가 없다(404). 노출하는 엔드포인트는 `health`(UP/DOWN 만, 상세 없음)와 `prometheus` 둘뿐이다.
+- **내부 전용**이다. VM 에서는 compose 가 8081 을 publish 하지 않고 Prometheus 가 compose 내부망에서 `backend:8081` 을 긁는다. compose 없이 jar 를 인터넷에 직접 띄우면 8081 도 열리므로 방화벽에서 막는다.
+- 모든 시계열에 `env` 태그(`METRICS_ENV`, 기본 `local`)가 붙는다. compose 는 `prod`, 부하 시험 덮어쓰기는 `loadtest` 로 둔다.
+- 서버 지표: `JobMetrics`(실행이 끝날 때 `JobFinishedEvent` 로 `beside.jobs.finished` 와 queued/processing/total 타이머, 접수·retry 카운터), `JobQueueGauge`(5초마다 PENDING/PROCESSING 개수), `AssetDownloadMetricsFilter`(에셋 GET 의 outcome 과 시간). 내장: `http.server.requests`(SLO 버킷), JVM·GC, CPU, Tomcat 스레드, Hikari, `@Async` 풀, 디스크.
+- 다운로드 중 앱이 연결을 끊으면(`ClientAbortException`) `client_abort` 로 세고, 서버 로그에는 ERROR 스택 대신 DEBUG 한 줄만 남긴다.
+
+이 PC 에서 보기(`bootRun` 뒤):
+
+```powershell
+curl.exe -s http://localhost:8081/actuator/health                                   # {"status":"UP"}
+curl.exe -s http://localhost:8081/actuator/prometheus | Select-String "^beside_"     # 작업·다운로드 지표
+curl.exe -s http://localhost:8081/actuator/prometheus | Select-String "http_server_requests_seconds_count"
+curl.exe -i http://localhost:8080/actuator/prometheus                               # 404 — 공개 포트에는 없다
+```
+
+8081 을 이미 다른 프로그램이 쓰고 있으면 `--management.server.port=18081` 처럼 바꿔 띄운다. 서버 두 개를 한 PC 에 띄울 때(벤치마크 등)도 관리 포트를 서로 다르게(또는 `0` = 빈 포트, `-1` = 끔) 준다. 테스트는 `management.server.port=0` 이라 8081 을 잡지 않는다.
+
 ## 구조
 
 ```text
@@ -178,7 +200,10 @@ src/main/
 │  │                                     # metrics·passthrough·modelVersion → RunDetails, X-Inference-Token (전송 방식은 여기만)
 │  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository·JobRunRepository 도 같은 폴더
 │  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
-│  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → job_runs 행 + events.jsonl 줄 (같은 JobRun)
+│  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → job_runs 행 + events.jsonl 줄 (같은 JobRun) → JobFinishedEvent
+│  ├─ service/JobMetrics.java            # 운영 지표: JobFinishedEvent → beside.jobs.finished·작업 타이머, 접수·retry 카운터 (METRICS §5)
+│  ├─ service/JobQueueGauge.java         # 운영 지표: beside.jobs.queue (5초마다 PENDING/PROCESSING 개수)
+│  ├─ config/AssetDownloadMetricsFilter.java  # 운영 지표: 에셋 GET 의 outcome(ok·client_abort·…)과 시간
 │  ├─ domain/JobRun.java                 # job_runs 행: 서버 타이밍 + /infer 수치 + glbBytes·passthrough·modelVersion (삽입 전용)
 │  ├─ domain/RunDetails.java             # 워커가 JobFinisher 에 넘기는 추론 결과 값 객체 (mock 은 NONE)
 │  ├─ domain/JobTimings.java             # queuedMs/processingMs/totalMs 계산 (API 응답과 events.jsonl 공용)
@@ -187,7 +212,7 @@ src/main/
 │  ├─ exception/ErrorCode.java           # ERROR_CODES.md 와 1:1
 │  └─ config/OpenApiConfig.java
 └─ resources/
-   ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc)
+   ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc, 관리 포트 8081·지표)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
    ├─ application-real.properties        # inference.base-url·transfer·token·timeout-ms·max-concurrency, storage.result.dir·tmp.dir, DB 파일 beside-real, h2-console
    └─ static/                            # 브라우저 Mock UI (v1)
@@ -234,9 +259,13 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry. `job_runs`: 삽입 전용, 모든 컬럼 보존, 같은 attempt 두 번 종료해도 첫 행 유지·예외 없음, attempt 1·2 두 행 |
 | `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값. 업로드 모드: multipart 파트·파일명(한글·따옴표)·바이트·토큰 헤더, 응답 12종 같은 매핑, `glbUrl` 없음·절대 URL·다운로드 404/500/503/끊김 → `CONVERSION_FAILED`, 401·403 → `INFERENCE_UNAVAILABLE`(두 모드), cleanup 의 삭제·DELETE·실패 무시 (가짜 추론 서버) |
-| `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, 실패 4종 코드, retry, `/infer` 한 번에 1건, `job_runs` 행과 events 줄이 같은 수치(inferMs·glbBytes·passthrough·modelVersion), 패스스루 실행 표시 (가짜 추론 서버) |
+| `RealJobWorkerTest` | profile real 전체 흐름: PROCESSING 의 progress null, GLB 복사·서빙, 실패 4종 코드, retry, `/infer` 한 번에 1건, `job_runs` 행과 events 줄이 같은 수치(inferMs·glbBytes·passthrough·modelVersion), 패스스루 실행 표시(운영 지표 `passthrough="true"` 포함) (가짜 추론 서버) |
 | `RealJobWorkerUploadTest` | profile real + `inference.transfer=upload` + 토큰: 업로드 → COMPLETED → asset 서빙, 보낸 파트, 호출 순서 POST → GET → DELETE, 임시 폴더 정리, `job_runs` 행. GLB 404 면 `CONVERSION_FAILED` 이어도 DELETE·정리 (가짜 추론 서버) |
-| `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가) |
+| `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가), 클라이언트가 끊은 연결은 응답 없이 DEBUG(다른 IOException 은 500 + ERROR) |
+| `ObservabilityEndpointTest` | 실제 Tomcat: 공개 포트 `/actuator*` 404, 관리 포트 health(상세 없음)·prometheus 200, `http_server_requests` SLO 버킷·`env`·JVM/Tomcat/Hikari/디스크, `beside_*` 기동 직후 존재, RST 로 끊은 32 MB 다운로드가 `client_abort` 이고 ERROR 로그 없음 |
+| `JobMetricsTest` | `beside.jobs.finished` 태그(완료·실패 코드·패스스루), 작업 타이머 값과 버킷, processingMs 없음, 이상한 이벤트에도 예외 없음, 대기열 게이지 갱신과 실패 시 마지막 값 유지 (SimpleMeterRegistry) |
+| `OperationalMetricsFlowTest` | mock 흐름: created(재요청 제외)·retried·finished·타이머·게이지, 에셋 GET 409/404/200/404(hair) outcome, 폴링은 세지 않음 |
+| `AssetDownloadMetricsFilterTest` | outcome 판정: 전체·빈 GLB·짧은 본문·헤더 Content-Length·쓰는 중 끊김·flush 끊김·404/409/500/400·예외, 대상 아닌 요청 |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).
