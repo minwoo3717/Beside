@@ -17,7 +17,7 @@
 - **공개 경로만** 부른다(Basic 인증 경로 제외). 사진 파일명은 `lt-<runId>-` 로 시작하고 `Idempotency-Key` 를 붙인다(k6 스크립트가 한다). 파일명에 `fail` 이 들어가면 mock 워커가 일부러 `INFERENCE_FAILED` 로 끝낸다(A1·A5·A6 의 `FAIL_RATIO` 흐름이 retry 경로를 돌게). 그래서 `RUN_ID` 에 `fail` 을 넣지 않는다(k6 와 `f3_throttled.py` 가 거부한다).
 - prod 프로파일이 켜져 있어 사진 시그니처를 검사한다: k6 사진은 진짜 PNG/JPEG 여야 한다.
 - **`docker compose ... down -v` 를 쓰지 않는다.** 운영 볼륨 `beside-storage`(H2 DB·사진·GLB)까지 지워진다. 지우는 볼륨은 이름을 정확히 쓴다: `docker volume rm beside-loadtest-storage`.
-- **중단 조건**: 오류(5xx·연결 오류) > 5 % 가 1분 지속되거나 디스크 사용률 > 80 % 이면 k6 를 멈추고(Ctrl+C) 곧장 '6. 복구' 로 간다. `PROM_URL` 을 주면 k6 의 가드가 서버의 5xx 비율·디스크를 보고 스스로 멈춘다(k6 종료 코드 108, 5번 'Prometheus').
+- **중단 조건**: 오류(5xx·연결 오류) > 5 % 가 1분 지속되거나 디스크 사용률 > 80 % 이면 k6 를 멈추고(Ctrl+C) 곧장 '6. 복구' 로 간다. `PROM_URL` 을 주면 k6 의 가드가 서버의 5xx 비율·디스크를 보고 스스로 멈춘다(k6 종료 코드 108, 5번 'Prometheus'). A0(`smoke.js`)·F3(`f3_uploads.js`)에는 가드와 `abortOnFail` 이 없고 F4(`f4_abort.py`)는 k6 가 아니므로 사람이 Ctrl+C 한다.
   - 단계를 깨질 때까지 올리는 A1~A4 는 예외다. 오류 기준(k6 종료 코드 99)이나 가드의 5xx 기준(108)으로 멈춘 것은 그 시험의 예정된 끝이다(5번 `ruleStop`): 부하가 멈춘 뒤 healthz 가 200 이고 Grafana 의 5xx 비율이 0 으로 돌아오면 5번 수집 뒤 다음 실행으로 간다. 오류만으로는 Ctrl+C 하지 않고 이 두 기준이 멈추게 둔다(Ctrl+C 로 멈춘 실행은 `interrupted` 라 결과가 아니다). 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 % 이면 '6. 복구'. 그 밖의 실행(A0·A5·A6·G·F)은 위 조건대로 '6. 복구'.
 
 ## 덮어쓰기가 바꾸는 것
@@ -119,7 +119,7 @@ k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RUN_ID -e RTT_BASE_MS=<A0 의 
 ## 0. 준비 (하루 전까지)
 
 1. **팀 공지**(Discord 등): 시작 시각·예상 길이, "그동안 앱·웹으로 만든 작업은 처리되지 않는다(운영 backend 를 내린다), 시작 시점에 진행 중인 작업은 FAILED 가 되니 재시도", 담당자.
-2. 개발 PC: k6 설치(`k6 version` 기록 → `collect.py --k6-version`), 유선 연결, 업링크 측정(iperf3 또는 speedtest 결과 기록). 그 시간에 다른 측정·빌드가 없게 한다. 개발 PC 에는 winget 패키지 `GrafanaLabs.k6` 로 설치한 k6 v2.3.0 이 `C:\Program Files\k6\k6.exe` 에 있다(다시 설치할 때는 `winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget` 으로 확인한 버전에 고정한다. 설치하면 시스템 PATH 에 들어가지만 설치 전에 연 셸에는 없다 — 그러면 새 셸을 열거나 Git Bash 에서 `export PATH="$PATH:/c/Program Files/k6"` 로 넣고 `k6 version` 이 `k6.exe v2.3.0 (...)` 인지 본다). 리포 루트에서 `python scripts/load/make_fixtures.py` 로 사진·GLB 를 `scripts/load/out/fixtures/` 에 만든다(git 에 없어 새로 받은 리포에는 없다. 없으면 k6 는 init 에서 종료 코드 107, `f3_throttled.py` 는 2). 스크립트는 v2.3.0 으로만 돌려 봤고 끝난 방식의 판정도 그 버전의 `handleSummary` 데이터에 맞췄으므로, 다른 버전이면 먼저 로컬 smoke 로 확인한다([scripts/load/README.md](../../scripts/load/README.md) '로컬 smoke').
+2. 개발 PC: k6 설치(`k6 version` 기록 → `collect.py --k6-version`), 유선 연결, 업링크 측정(iperf3 또는 speedtest 결과 기록. A4 는 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생] 의 내려받기라 `iperf3 -R` 로 내려받기 속도도 재어 `collect.py --downlink-mbps` 로 남긴다). 그 시간에 다른 측정·빌드가 없게 한다. 개발 PC 에는 winget 패키지 `GrafanaLabs.k6` 로 설치한 k6 v2.3.0 이 `C:\Program Files\k6\k6.exe` 에 있다(다시 설치할 때는 `winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget` 으로 확인한 버전에 고정한다. 설치하면 시스템 PATH 에 들어가지만 설치 전에 연 셸에는 없다 — 그러면 새 셸을 열거나 Git Bash 에서 `export PATH="$PATH:/c/Program Files/k6"` 로 넣고 `k6 version` 이 `k6.exe v2.3.0 (...)` 인지 본다). 리포 루트에서 `python scripts/load/make_fixtures.py` 로 사진·GLB 를 `scripts/load/out/fixtures/` 에 만든다(git 에 없어 새로 받은 리포에는 없다. 없으면 k6 는 init 에서 종료 코드 107, `f3_throttled.py` 는 2). 스크립트는 v2.3.0 으로만 돌려 봤고 끝난 방식의 판정도 그 버전의 `handleSummary` 데이터에 맞췄으므로, 다른 버전이면 먼저 로컬 smoke 로 확인한다([scripts/load/README.md](../../scripts/load/README.md) '로컬 smoke').
 3. 개발 PC(부하 PC) 메모리 여유: k6 는 VU 마다 init 을 따로 돌려 사진을 VU 마다 한 벌씩 갖는다. 초기화된 VU 하나에 약 1.1 MB(0.4 MB 사진 사본 포함 — 개발 PC·k6 v2.3.0 로컬 측정: `PRE_VUS`=`MAX_VUS` 20 과 300 으로 A1 을 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`) 돌린 두 실행의 최대 작업 집합 84 MB·393 MB 의 차이)이고, 흐름을 돈 VU 는 본문 0.8 MB(실패 주입 흐름을 돌았으면 실패 본문 0.8 MB 더)를 더 갖는다. [파생] A1 은 처음에 `PRE_VUS` 450개만 만들고 흐름이 길어지면 `MAX_VUS` 기본 3,300개(browse 200개 따로)까지 늘리므로, 다 생기면 초기화만으로 약 3.6 GB 이고, 흐름을 돈 VU 마다 본문 0.8 MB(3,300개면 약 2.6 GB)가 더해져 약 6.3 GB, 실패 본문까지 들면 약 8.9 GB 에 browse 약 0.2 GB 다. A3 large(`upload.js SIZE=large`)는 VU 하나가 5 MB 사진 사본과 첫 업로드 때 만드는 20 MB 본문을 들어 약 25 MB 라, 미리 만드는 50개(`meta.vus.peakPreAllocated`)가 모두 업로드하면 약 1.25 GB, k6 가 VU 를 더 띄우면(`MAX_VUS` 기본 600 까지 — 그 단계는 drop 으로 `fail`) VU 하나마다 약 25 MB 가 더 들어 600개 모두면 약 15 GB 다. 모두 측정값이 아니다. 개발 PC 의 여유 메모리가 이 최악의 경우(A1 약 9 GB, A3 large 약 15 GB)보다 적으면 실행 중 k6 메모리(4번 '시험 중에 볼 것')를 본다. A3 large 는 `-e MAX_VUS=<50 이상>` 으로 상한을 낮출 수 있다: 미리 만든 VU 밖의 VU 는 drop 이 난 단계에서만 생기고 그 단계는 어차피 `fail` 이다(낮추면 그 단계의 drop 이 는다. `upload.js` 머리 주석).
 4. VM: `df -h /` 사용률이 50 % 아래인지(업로드가 쌓인다 — T3 피크면 시간당 수 GB. 30 GB 디스크면 중단선 80 %까지 약 9 GB 이상 남아야 하고, 4절 '디스크' 의 비우기 지점은 이 여유로 정했다), swap 2GB, monitoring 프로필이 떠 있는지([deploy/README.md](../README.md) '모니터링').
 5. 기록할 조건: VM 사양, 커밋 SHA(`git -C ~/Beside rev-parse --short HEAD`), k6 버전, 업링크, 사진 크기, 시각.
@@ -226,8 +226,9 @@ newrun a2r1; k6 run -e RUN_ID=$RUN_ID -e IDS_FILE="$SEEDC/ids.json,$SEEDP/ids.js
 
 - **3600000(1시간)**: (3) 의 부하는 1,950초(5분 유지 6단계 + 사이 30초 5번)에 드레인 10초다. (3) 의 setup 이 `setup: the oldest sampled PENDING id has waited X s and the load lasts 1950 s, so the backend's mock.worker.pending-ms must be above Z ...` 로 필요한 최소(Z = (X + 1,950 + 60) × 1,000)를 알려 준다. 1시간이면 (2) 의 PENDING 시드 시작부터 (3) 시작까지 약 26분 안에 하면 된다 [파생].
 - **기대**: (1)·(2) 는 종료 코드 0 과 `SEED ONLY: 1000 COMPLETED and 0 PENDING ids for IDS_OUT ...`((2) 는 `0 COMPLETED and 1000 PENDING`) 줄. 그 아래 `thresholds: all passed` 는 기준이 없는 실행이라 나오는 것이고 결과가 아니다. k6 가 그 경로에 `could not open` 오류를 내면 `IDS_OUT` 이 써지지 않은 것이다(id 는 `k6-summary.json` 의 `k6.setup_data` 에도 있다).
+- (1) 이 `SEED_WAIT_S`(900초) 뒤 종료 코드 107(`none of the 1000 SEED_COMPLETED jobs completed ...`)로 멈추면 backend 가 긴 pending-ms 로 떠 있는 것이다(예: (2) 뒤에 (1) 을 다시 할 때): 기본값(`MOCK_WORKER_PENDINGMS` 없이 `$L up -d backend`)으로 되돌린 뒤 (1) 부터.
 - (2) 의 시드가 setup 에서 멈추면(종료 코드 107, `pending -> 200 PROCESSING`) backend 가 작업을 PENDING 에 두지 않는 것이다: (2) 의 재시작과 env 값을 확인한다.
-- (3) 이 setup 에서 멈추면(종료 코드 107) 메시지가 표본 id 약 20개의 상태와 원인을 적는다: `pending -> 200 FAILED` 는 (2) 뒤에 backend 가 다시 떴다는 뜻, `pending -> 200 PROCESSING`·`COMPLETED` 는 pending-ms 가 다 됐다는 뜻, 404 는 다른 서버나 비운 볼륨의 id 다. (2) 부터 다시 한다.
+- (3) 이 setup 에서 멈추면(종료 코드 107) 메시지가 표본 id 약 20개의 상태와 원인을 적는다: `pending -> 200 FAILED` 는 (2) 뒤에 backend 가 다시 떴다는 뜻, `pending -> 200 PROCESSING`·`COMPLETED` 는 pending-ms 가 다 됐다는 뜻, 404 는 다른 서버나 비운 볼륨의 id 다. `pending -> 200 …` 이면 (2) 부터 다시 한다. `completed -> …` 이거나 404 면 completed 쪽 id 도 쓸 수 없으므로 (4) 처럼 기본값(`MOCK_WORKER_PENDINGMS` 없이 `$L up -d backend`)으로 되돌린 backend 에서 (1) 부터 다시 한다.
 - (3) 이 도는 동안 pending-ms 가 다 되거나 backend 가 다시 뜨면 teardown 이 PENDING id 표본을 다시 보고 `load_pendingLeft count==0` 이 실패한다(종료 코드 99, 글에 `pending ids: N of M sampled were no longer PENDING ...`). A2 의 혼합(COMPLETED·PENDING 반씩)이 아니므로 (2) 부터 다시 한다.
 - **시드 폴더**(`a2seedc`·`a2seedp`)에는 `ids.json` 과 시드 전용 `k6-summary.json`(`meta.mode` = `seed-only`)만 있다. 결과가 아니므로 5번(VM 파일 꺼내기, `collect.py`)을 하지 않는다: `collect.py` 는 시드 요약을 가려내지 못하고 중단 없이 끝난 실행처럼 `resultCandidate` true 로 적는다. 5번은 `a2r1` 폴더에만 한다.
 
@@ -243,7 +244,7 @@ k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failu
 wait $F3T; echo "f3_throttled exit $?"
 ```
 
-- **기대**: k6 글 끝의 사례 줄마다 `match 1` 과 계획대로의 업로드 수(기본 `F3_VUS` 2 × `F3_REPEATS` 10 = `20/20`, 모자라면 `FEWER THAN PLANNED`), k6 종료 코드 0. `total_30mb` 는 Caddy(25MB)가 v1 봉투 없는 413 으로 끊고, 그것도 일치로 센다. 느린 업로드는 약 40초 뒤 202(본문 400,517 B at 10,000 B/s, 기대 범위 `expected.minS`~`maxS` = 약 36~70초), 폴링 구간 안(`checks.insidePolling`), 그동안 폴링 기준 통과(`checks.pollHeld`), `f3_throttled exit 0`(1 = 확인 하나 실패, 2 = 시작 못 함).
+- **기대**: k6 글 끝의 사례 줄마다 `match 1` 과 계획대로의 업로드 수(기본 `F3_VUS` 2 × `F3_REPEATS` 10 = `20/20`, 모자라면 `FEWER THAN PLANNED`), k6 종료 코드 0. `total_30mb` 는 Caddy(25MB)의 v1 봉투 없는 413 이든 Spring 의 413 `PAYLOAD_TOO_LARGE` 든 일치로 센다(어느 쪽이 답하는지는 VM 에서 처음 본다 [계획]). 느린 업로드는 약 40초 뒤 202(본문 400,517 B at 10,000 B/s, 기대 범위 `expected.minS`~`maxS` = 약 36~70초), 폴링 구간 안(`checks.insidePolling`), 그동안 폴링 기준 통과(`checks.pollHeld`), `f3_throttled exit 0`(1 = 확인 하나 실패, 2 = 시작 못 함).
 - `k6-exit.txt` 가 있어야 k6 가 시작을 거부했을 때(예: `RTT_BASE_MS` 없음, 종료 코드 107) 도우미가 요약을 기다리지 않고 업로드 없이 바로 끝난다(종료 코드 2). 둘 다 다시 돌린다.
 - 남은 파일(거부된 업로드가 저장됐는지, Tomcat 의 `upload_*.tmp`)은 이 PC 에서 보이지 않는다: 5번의 VM 블록에서 F3 줄로 센다. 그 전에 부하 볼륨을 비우거나 backend 를 다시 띄우지 않는다.
 
@@ -287,7 +288,7 @@ df -h /
 
 시험 중에 볼 것:
 
-- Grafana **Beside 운영**, `env = loadtest`: 5xx 비율, API p95, 대기열, @Async 실행기, 힙·CPU, 디스크 여유. 생성 성공률은 필터 없는 선(A)을 본다. '패스스루 제외' 선(B)은 FAILED 가 늘 `passthrough="false"` 로 태그되어 스텁 실행(G·F)에서는 맞지 않는다([deploy/README.md](../README.md) '모니터링'). 결과는 `collect.py` 로 남긴다.
+- Grafana **Beside 운영**, `env = loadtest`: 5xx 비율, API p95, 대기열, @Async 실행기, 힙·CPU, 디스크 여유. 생성 성공률은 필터 없는 선(A)을 본다. '패스스루 제외' 선(B)은 FAILED 가 늘 `passthrough="false"` 로 태그되어 스텁 실행(G·F)에서는 맞지 않는다([deploy/README.md](../README.md) '모니터링'). 'JVM 힙' 패널의 'GC 뒤 살아 있는 데이터' 선(`jvm_gc_live_data_size_bytes`)은 G1 에서 0 에 머물러 'GC 뒤 힙 < 75 %' 판정에 쓰지 않는다: 판정은 `collect.py` 의 `prometheus/jvm_heap_after_gc.csv`(0~1)다(패널 고치기는 점검표 [계획]). 결과는 `collect.py` 로 남긴다.
 - VM 의 두 번째 ssh 창: `watch -n 10 'df -h / | tail -1; docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"'`
 - 개발 PC: k6 클라이언트 CPU(70 % 넘으면 결과를 'T3 통과'로 쓰지 않는다), k6 메모리(필요량은 0번), `dropped_iterations`.
 - 중단 조건(오류 > 5 % 1분, 디스크 > 80 %)이면 Ctrl+C → '6. 복구'. A1~A4 는 오류만으로는 Ctrl+C 하지 않는다: 오류 기준·가드의 5xx 기준으로 스스로 멈춘 것은 예정된 끝이고, 부하가 멈춘 뒤 healthz 200·5xx 비율 0 이면 5번 수집 뒤 다음 실행('지키는 것' 의 중단 조건).
@@ -303,7 +304,7 @@ newrun a1r1                                                    # 그 실행의 R
 k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json ... scripts/load/<스크립트>.js
 ```
 
-VM, 그 실행이 끝나면 곧바로(부하 볼륨을 비우거나 backend 를 다시 띄우기 전에 — 4번 '부하 볼륨 비우기'):
+VM, 그 실행이 끝나면 곧바로(부하 볼륨을 비우거나 backend 를 다시 띄우기 전에 — 4번 '부하 볼륨 비우기'). A3 은 업로드만 하고 작업이 끝나기를 기다리지 않아 k6 가 끝난 뒤에도 작업이 처리되며 `events.jsonl` 줄이 생기므로(서버 `uploadMs` 판정, scripts/load/README.md '합격 기준') Grafana 의 대기열이 빈 뒤에 한다:
 
 ```bash
 RID=<그 실행의 RUN_ID>; OUT=~/lt-$TS/$RID && mkdir -p "$OUT"
@@ -333,7 +334,10 @@ python scripts/load/collect.py "$RUN" --scenario <A0…F5> --summary "$RUN/k6-su
   --attach "$RUN/vm/events.jsonl" --attach "$RUN/vm/docker-stats-end.jsonl" --attach "$RUN/vm/df.txt" \
   --attach "$RUN/vm/commit.txt" --attach "$RUN/vm/glb.sha256" --attach "$RUN/vm/prom-up.json"
 # F3 은 --attach "$RUN/vm/f3-leftovers.txt" --attach "$RUN/f3-throttled.json" 을 더한다
-# 나머지 옵션(--tier, --k6-version, --vm-*, --uplink-mbps, --client-cpu-max-pct, --server-sha, --photo)은 scripts/load/README.md '결과 수집'
+# F4 는 k6 요약이 없다: --summary 대신 f4.json 의 구간과 대상을 준다(run.json outcome.ended 는 null):
+#   --scenario F4 --base-url "$BASE_URL" --start <f4.json 의 startedAt> --end <f4.json 의 endedAt> --attach "$RUN/f4.json"
+# 나머지 옵션(--tier, --k6-version, --vm-*, --uplink-mbps(A4 는 --downlink-mbps 도), --client-cpu-max-pct, --server-sha, --photo)은
+# scripts/load/README.md '결과 수집'
 ```
 
 `collect.py` 는 끝에 `status: <run.json 의 status>` 와 `prometheus: N of 18 CSV written to ...`(실패·빈 CSV 이름 포함)를 출력한다.

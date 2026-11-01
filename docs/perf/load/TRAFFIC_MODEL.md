@@ -146,7 +146,7 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 - **A3**: 업로드는 모두 유효하므로 202 가 아닌 4xx(413·400, 프록시의 404·413, `RATE_LIMITED` 코드가 없는 429)는 전체와 유지 구간마다 0건이다(`load_unexpectedCount == 0`). 빠른 거절은 지연 기준도 통과하기 때문이다. 429 `RATE_LIMITED`·503 `QUEUE_FULL`(아직 계약에 없는 코드)은 `load_rejectedCount` 로 따로 세고 기준이 없다. 이 거절이 A3 유지 구간을 실패로 만드는지는 정하지 않았다(안건 #19·#20). 위 표의 1.5·3초는 0.8 MB 업로드의 기준이라, 20 MB 업로드의 지연은 유지 구간마다 기록만 하고 판정하지 않는다.
 
 - **깨지는 지점**: 유지 구간에서 위 기준을 처음 넘는 단계다. 아래 중단 조건의 오류 기준(k6 누적 오류 비율, 가드의 5xx 비율)이 멈춘 단계도 깨진 단계로 친다. 통과는 유지 구간을 끝까지 돌고 그 구간에 시작한 흐름이 모두 끝난 단계뿐이다. 보고하는 용량은 마지막으로 통과한 단계다(요약의 `breakingPoint.lastPassingStage`). 단계가 올라가기만 하는 시험(A1~A4)에 쓰고, 운영 상한(그 단계 사용자 수의 70 %, `operatingLimitUsers`)은 사용자 수로 단계를 거는 A1 에만 둔다. A5(스파이크·회복)와 A6(소크 한 단계)는 깨지는 지점 없이 단계별 판정만 본다.
-- **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 멈춘다. k6 가 스스로 멈춘다: 누적 오류 비율 > 5 %(첫 1분 뒤부터, `abortOnFail`, k6 종료 코드 99)와, `PROM_URL` 을 주면 가드가 보는 서버의 최근 1분 5xx 비율 > 5 %(15초 간격 2번 연속)·디스크 > 80 %(108). 단계를 깨질 때까지 올리는 A1~A4 에서 오류 기준(누적 오류 비율, 가드의 5xx 비율)이 멈춘 것은 탐색의 예정된 끝이다(위 '깨지는 지점'): 부하가 멈춘 뒤 healthz 가 200 이고 5xx 비율이 0 으로 돌아오면 수집하고 다음 실행으로 간다. 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 %이면, 그리고 그 밖의 시험(A0·A5·A6·G·F)은 그 자리에서 멈추고 기본 스택으로 복구한다(`deploy/loadtest/README.md` '지키는 것').
+- **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 멈춘다. k6 가 스스로 멈춘다: 누적 오류 비율 > 5 %(첫 1분 뒤부터, `abortOnFail`, k6 종료 코드 99)와, `PROM_URL` 을 주면 가드가 보는 서버의 최근 1분 5xx 비율 > 5 %(15초 간격 2번 연속)·디스크 > 80 %(108). A0(`smoke.js`)·F3(`f3_uploads.js`)·F4(`f4_abort.py`)에는 이 둘이 없어 사람이 Ctrl+C 한다. 단계를 깨질 때까지 올리는 A1~A4 에서 오류 기준(누적 오류 비율, 가드의 5xx 비율)이 멈춘 것은 탐색의 예정된 끝이다(위 '깨지는 지점'): 부하가 멈춘 뒤 healthz 가 200 이고 5xx 비율이 0 으로 돌아오면 수집하고 다음 실행으로 간다. 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 %이면, 그리고 그 밖의 시험(A0·A5·A6·G·F)은 그 자리에서 멈추고 기본 스택으로 복구한다(`deploy/loadtest/README.md` '지키는 것').
 
 ## 9. 시험 구성 [계획]
 
@@ -156,7 +156,7 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 - **A 시리즈(API 계층)**: `mock,prod`, PENDING 0초·PROCESSING 60초, @Async 풀 400. 기본 풀은 8스레드라 늘리지 않으면 mock 이 "GPU 8대"처럼 동작한다. 합성 GLB 1.5 MB 를 볼륨에 미리 넣는다(리포의 `sample-dog.glb` 는 0 B). 합성 GLB 는 하나다: `scripts/perf/fixtures.py` 의 `glb_synthetic(1_500_000, seed=14)`, sha256 `03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9`. G 시리즈 스텁의 `BESIDE_SAMPLE_GLB` 도 같은 파일을 스텁 PC 에서 만들어 쓴다.
 - **G 시리즈(GPU 큐)**: `real,prod` + 추론 스텁(패스스루, 업로드 모드, Tailscale). 스텁의 `BESIDE_PASSTHROUGH_DELAY_MS`·`_JITTER_MS`·`_SLOTS`·`_FAIL_RATE`·`_FAIL_TOKEN`·`_SLOW_TOKEN`/`_SLOW_MS` 로 생성 시간·실패·GPU 수를 흉내 낸다. 실제 GPU PC 는 쓰지 않는다.
 - k6 시나리오는 공개 경로만 쓴다(Basic 인증 경로 제외). 파일명은 `lt-<runId>-` 로 시작하고 `Idempotency-Key` 를 붙인다.
-- 부하는 개발 PC 에서 유선으로 건다. 측정 전에 업링크(iperf3/speedtest, `UPLINK_MBPS`)와 k6 클라이언트 CPU 를 기록하고, 요약의 `verdict.uplinkRatio`(가장 바쁜 유지 구간의 업로드 본문 Mbps 와 전체 평균 `data_sent` Mbps 중 큰 값 ÷ 업링크)가 0.7 을 넘으면(`uplinkSaturated`) 같은 리전의 두 번째 VM 으로 옮긴다. `scripts/perf` 등 다른 측정과 겹치지 않게 한다.
+- 부하는 개발 PC 에서 유선으로 건다. 측정 전에 업링크(iperf3/speedtest, `UPLINK_MBPS`)와 k6 클라이언트 CPU 를 기록하고, 요약의 `verdict.uplinkRatio`(가장 바쁜 유지 구간의 업로드 본문 Mbps 와 전체 평균 `data_sent` Mbps 중 큰 값 ÷ 업링크)가 0.7 을 넘으면(`uplinkSaturated`) 같은 리전의 두 번째 VM 으로 옮긴다. A4 는 내려받기라 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생]: 내려받기 속도(`iperf3 -R`)도 기록하고(`collect.py --downlink-mbps`) 단계의 `verdict.stages[].assetMbps` 와 비교한다. 요약은 업링크만 판정한다. `scripts/perf` 등 다른 측정과 겹치지 않게 한다.
 - 주요 단계는 3회 반복한다. 판정 규칙은 [scripts/perf/stats.py](../../../scripts/perf/stats.py) 와 같다.
 
 | 시험 | 내용 | 단계 | 상태 |

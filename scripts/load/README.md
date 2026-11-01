@@ -52,6 +52,7 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 | `create` (0.8 MB) | 1,500 ms | 3,000 ms |
 | `asset` | 첫 바이트(`http_req_waiting`) RTT + 150 ms, 전체 3,000 ms | 전체 6,000 ms |
 
+- §8 의 서버 `uploadMs` p95 ≤ 300 ms(0.8 MB `create`)는 k6 가 볼 수 없다(API 응답에 없다). A1·A3 small 실행 폴더의 `vm/events.jsonl` 에서 그 실행에 접수된 작업(`attempt` 1 줄, 접수 시각 = `finishedAt` − `totalMs`)의 `uploadMs` 로 본다. 줄은 작업이 끝날 때 생기므로(mock 은 처리 60초 뒤, `@Async` 풀이 차면 기다린 만큼 더 뒤) 업로드만 하는 A3 은 서버 대기열(`beside_jobs_queue`)이 빈 뒤에 VM 파일을 가져온다.
 - `load_errorRatio`(5xx + 연결 오류) < 0.5 %. 429 `RATE_LIMITED`·503 `QUEUE_FULL`([계획] R1~R3, 아직 계약에 없음)은 `load_rejectedCount` 로 따로 세고 기준을 걸지 않는다. 이런 거부가 유지 구간(특히 A3)을 실패로 만들어야 하는지는 정하지 않았다: 계약 안건 #19(큐 상한·503)·#20(요청 제한·429)과 함께 정한다.
 - 흐름 스크립트(A0·A1·A5·A6·G)는 `load_flowTimeoutRatio == 0`, `load_flowOkRatio >= 0.95`(G 는 ρ < 1 일 때만). 모든 스크립트(F3 포함)는 `dropped_iterations == 0`.
 - **A2** 는 `load_unexpectedCount == 0` 도 전체와 단계마다 건다. 폴링이 404 같은 기대하지 않은 상태를 받으면 오류(5xx)가 아니라 'unexpected' 로만 세어지고, 빠른 404 는 지연 기준도 통과하기 때문이다. id 는 상태까지 확인한다:
@@ -71,17 +72,17 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 
 ### 실행이 어떻게 끝났는지 (`verdict.aborted`)
 
-k6 v2.3.0 은 어떤 끝(정상 0, setup 실패 107, 가드 108, `abortOnFail` 99, Ctrl+C 105, REST API 정지 103)에도 `handleSummary` 를 부르지만 어떻게 끝났는지는 알려 주지 않고, 표본이 없는 지표의 기준은 통과로 친다. 그래서 `lib/summary.js` 가 끝을 다시 짜 맞춘다. 정상 끝이면 `verdict.aborted` 는 null, 아니면 `{ by, reason, atS, plannedS, cutStages, unfinishedFlows }` 다.
+k6 v2.3.0 은 어떤 끝(정상 0, setup 예외 107·setup 시간 초과 100, 가드 108, `abortOnFail` 99, Ctrl+C 105, REST API 정지 103)에도 `handleSummary` 를 부르지만 어떻게 끝났는지는 알려 주지 않고, 표본이 없는 지표의 기준은 통과로 친다. 그래서 `lib/summary.js` 가 끝을 다시 짜 맞춘다. 정상 끝이면 `verdict.aborted` 는 null, 아니면 `{ by, reason, atS, plannedS, cutStages, unfinishedFlows }` 다.
 
 | `by` | 언제 |
 |---|---|
-| `setup` | setup() 이 끝나지 않았다(`setup_data` 없음). 부하는 돌지 않았다 |
+| `setup` | setup() 이 끝나지 않았다(`setup_data` 없음; 예외 107, `setupTimeout` 초과 100 — asset.js 20분, poll_saturation.js `SEED_WAIT_S` + 600초, 그 밖은 60초·F3 5분). 부하는 돌지 않았다 |
 | `guard` | 가드가 멈췄다(`load_guardAbort`: 1 = 5xx, 2 = 디스크, 3 = 처음부터 Prometheus 를 못 읽음) |
 | `threshold` | 부하가 예정 끝 전에 멈췄거나 흐름이 잘렸고, `abortOnFail` 기준이 실패했다 |
 | `interrupted` | 부하가 예정 끝(`plannedS`)보다 1초 넘게 일찍 멈췄고 위의 어느 것도 아니다(Ctrl+C, REST API 정지) |
-| `unfinished` | 부하는 예정 끝까지 갔지만 k6 가 끝날 때 아직 돌던 흐름이 있다: 드레인(gracefulStop) 중의 Ctrl+C·REST 정지, 또는 gracefulStop 이 다 됨 |
+| `unfinished` | 부하는 예정 끝까지 갔지만 k6 가 끝날 때 아직 돌던 흐름이 있다: 드레인(gracefulStop) 중의 Ctrl+C·REST 정지, gracefulStop 이 다 됨, 또는 흐름 안에서 난 스크립트 예외(k6 stderr 에 오류가 남는다) |
 
-- 부하 길이(`atS`, `meta.loadRanS`)는 요약 시각 − `setup_data.readyAtMs`(setup 끝)다. `testRunDurationMs` 는 setup(asset.js·poll_saturation.js 는 수 분의 시드)을 포함해서 쓰지 않는다. 예정 길이 `plannedS`(`meta.loadPlannedS`)는 단계형은 마지막 유지 구간의 끝, smoke·gpu_queue 는 `DURATION_S`, F3 은 `F3_BG_S + 10` 이다.
+- 부하 길이(`atS`, `meta.loadRanS`)는 요약 시각 − `setup_data.readyAtMs`(setup 끝)다. `testRunDurationMs` 는 setup(asset.js·poll_saturation.js 는 수 분의 시드)을 포함해서 쓰지 않는다. 예정 길이 `plannedS`(`meta.loadPlannedS`)는 단계형은 마지막 유지 구간의 끝, smoke 는 `SMOKE_DURATION_S`, gpu_queue 는 `DURATION_S`, F3 은 `F3_BG_S + 10` 이다.
 - **잘린 흐름**: k6 는 중간에 끊은 반복에 아무 표본도 남기지 않는다. 그래서 흐름(user flow, upload.js 의 업로드 하나, asset.js 의 다운로드 하나, F3 의 라운드 — VU 하나가 모든 사례를 한 번씩 보내는 반복)마다 시작할 때 `load_flowStarted`, 끝날 때 `load_flowEnded` 를 더하고, 그 차이(`verdict.unfinishedFlows`, 세지 않는 A2 는 null)가 결과를 모르는 흐름 수다. 잘린 흐름은 가장 느린 흐름(과부하 단계의 타임아웃)이라 하나라도 있으면 통과가 아니다. 그래서 gracefulStop 기본값은 정상 끝에서 어떤 흐름도 자르지 않게 잡았다: 흐름 스크립트(A0·A1·A5·A6·G)는 가장 긴 흐름(FAILED 로 끝난 대기 `MAX_WAIT_S` + `RETRY_WAIT_S` + retry 뒤 대기 `MAX_WAIT_S`) + 120초 = 1,323초(A1·A5·A6 은 `GRACEFUL_STOP_S` 로 바꿀 수 있고, healthz 만 하는 browse 시나리오는 30초), upload.js 는 `REQUEST_TIMEOUT`(120s) + 60초, asset.js 는 120초(요청 타임아웃 60초 + 60초), F3 의 잘못된 업로드는 `GRACEFUL_STOP_S`(기본 180초 = 요청 타임아웃 120초 + 60초)이고, A2 의 단계는 10초다. 정상 끝에서는 모든 흐름이 끝난다.
 - 잘린 유지 구간(`cutStages`): 예정 끝이 멈춘 시각보다 뒤인 구간(`heldS` 는 실제로 돈 초), 그리고 자기 흐름이 잘린 구간(A1 의 흐름은 유지 구간보다 길 수 있다; `heldS` 는 `holdS` 그대로). 그때까지 통과였으면 `incomplete`, 이미 실패였으면 `fail` 로 남는다. `sentMbps`·`assetMbps` 는 `heldS` 로 나눈다.
 - 중단된 실행은 `thresholdsOk` false 이고, 요약 글 첫머리에 `SETUP FAILED`·`ABORTED by …`·`STOPPED EARLY …`·`FLOWS CUT OFF …` 줄이 나오며 "thresholds: all passed" 는 나오지 않는다.
@@ -128,7 +129,7 @@ k6 run -e BASE_URL=http://localhost:18080 -e RUN_ID=local1 -e SMOKE_VUS=5 -e MIN
 
 ## VM (보고용)
 
-전제: `deploy/docker-compose.loadtest.yml` 덮어쓰기로 부하용 backend 가 떠 있다(절차는 `deploy/loadtest/README.md`). A 시리즈는 `mock,prod` + `pending-ms=0`, `processing-ms=60000`, `@Async` 풀 400(A2 는 PENDING 시드부터 측정이 끝날 때까지만 `MOCK_WORKER_PENDINGMS` 를 길게 둔다, 아래). 1.5 MB 합성 GLB 를 부하용 볼륨에 미리 넣는다: `make_fixtures.py` 의 `glb-1.5mb.glb` 와 deploy/loadtest/README.md 3번의 `/tmp/lt-sample-1500000.glb` 는 같은 파일이다(sha256 `03a0c8f2…`, 어느 쪽으로 만들어도 해시 확인이 같다). 부하는 개발 PC 에서 유선으로 걸고, 시작 전 iperf3/speedtest 업링크와 k6 클라이언트 CPU 를 적어 둔다.
+전제: `deploy/docker-compose.loadtest.yml` 덮어쓰기로 부하용 backend 가 떠 있다(절차는 `deploy/loadtest/README.md`). A 시리즈는 `mock,prod` + `pending-ms=0`, `processing-ms=60000`, `@Async` 풀 400(A2 는 PENDING 시드부터 측정이 끝날 때까지만 `MOCK_WORKER_PENDINGMS` 를 길게 둔다, 아래). 1.5 MB 합성 GLB 를 부하용 볼륨에 미리 넣는다: `make_fixtures.py` 의 `glb-1.5mb.glb` 와 deploy/loadtest/README.md 3번의 `/tmp/lt-sample-1500000.glb` 는 같은 파일이다(sha256 `03a0c8f2…`, 어느 쪽으로 만들어도 해시 확인이 같다). 부하는 개발 PC 에서 유선으로 걸고, 시작 전 iperf3/speedtest 업링크와 k6 클라이언트 CPU 를 적어 둔다. A4 는 내려받기라 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생]: 부하 PC 의 내려받기 속도(`iperf3 -R`)도 적어 `collect.py --downlink-mbps` 로 남기고 단계의 `verdict.stages[].assetMbps` 와 비교한다(요약은 업링크만 판정한다).
 
 **결과 폴더 규칙**: k6 실행 하나에 폴더 하나, `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`. 그 안에 그 실행의 k6 요약(`k6-summary.json`)과 `collect.py` 가 쓰는 `run.json` 이 있고, 그 실행의 VM 쪽 파일(events.jsonl, docker stats, glb.sha256 등 — deploy/loadtest/README.md 5번)은 하위 폴더 `vm/` 에 둔다. VM 파일은 `collect.py --attach` 로만 run.json 에 들어간다. 그래서 `RUN` 은 k6 명령마다 다시 정하고(G1 은 ρ 마다 폴더 하나), `collect.py` 는 폴더마다 한 번 돌린다. 한 폴더에 여러 실행을 쓰면 `k6-summary.json` 과 `run.json` 이 덮어써진다.
 
@@ -170,6 +171,8 @@ newrun a2r1; k6 run -e RUN_ID=$RUN_ID -e IDS_FILE="$SEEDC/ids.json,$SEEDP/ids.js
 #  'pending -> 200 PROCESSING' 같은 줄) 다시 뜨기 전에 시작한 것('healthz returned …')이다. (c) 가 setup 에서 107 로 멈추면 메시지대로:
 #  pending 쪽(pending -> FAILED 는 PENDING 시드 뒤 재시작, PROCESSING·COMPLETED 는 pending-ms 만료)이면 (b) 부터, completed 쪽이나
 #  404(다른 서버·비운 볼륨)면 (d) 로 되돌린 backend 에서 (a) 부터 다시 한다. 99 와 load_pendingLeft 면 pending-ms 를 늘려 (b) 부터.
+#  (a) 가 SEED_WAIT_S(900초) 뒤 107('none of the 1000 SEED_COMPLETED jobs completed')이면 backend 가 긴 pending-ms 로 떠 있는
+#  것이다(예: (b) 뒤에 (a) 를 다시 할 때): (d) 로 되돌린 뒤 (a) 부터.
 #  시드 폴더(ids.json + 시드 전용 k6-summary.json)는 결과가 아니다: collect.py 를 돌리지 않는다.
 
 # A3, A4 — 단계마다 시나리오 하나. drop 이 난 단계만 fail 이고, 느린 단계를 drop 없이 재려면 PRE_VUS 를 올린다(아래 표)
@@ -203,7 +206,8 @@ newrun g1postf1b1; k6 run -e RUN_ID=$RUN_ID -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 -e
 newrun f1a1; k6 run -e RUN_ID=$RUN_ID -e SCENARIO=F1a -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
 newrun f2r1; k6 run -e RUN_ID=$RUN_ID -e SCENARIO=F2  -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
 
-# F3 잘못된 업로드 (prod 프로파일: upload.verify-magic=true). 30 MB 는 Caddy(25MB)가 끊는다.
+# F3 잘못된 업로드 (prod 프로파일: upload.verify-magic=true). 30 MB 는 Caddy(25MB)가 v1 본문 없는 413 으로 끊거나 그 전에
+#   Spring 이 413 PAYLOAD_TOO_LARGE 로 답한다(둘 다 일치로 센다. 어느 쪽인지는 VM 에서 처음 본다 [계획]).
 #   느린 업로드(10 kB/s)는 k6 가 요청 하나의 속도를 못 줄이므로 failure/f3_throttled.py 가 k6 의 폴링 중에 올린다: 도우미를 먼저 띄운다
 newrun f3r1
 python scripts/load/failure/f3_throttled.py --base-url $BASE_URL --run-id $RUN_ID --k6-summary $RUN/k6-summary.json \
@@ -260,6 +264,10 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
   --server-sha <배포 커밋> --photo scripts/load/out/fixtures/photo-400k.png \
   --prom-url $PROM_URL --attach $RUN/vm/events.jsonl --attach $RUN/vm/docker-stats-end.jsonl
 # F3 은 --scenario F3 에 도우미 보고와 VM 의 남은 파일 확인을 붙인다: --attach $RUN/f3-throttled.json --attach $RUN/vm/f3-leftovers.txt
+# A4 는 내려받기 속도도 준다: --downlink-mbps <iperf3 -R 측정값>
+# F4 는 k6 요약이 없다: --summary 대신 f4.json 의 구간과 대상을 준다(run.json outcome.ended 는 null. 기본 --pad-s 60 이 끊기가
+#   끝난 뒤 30초의 복귀 구간을 덮는다):
+#   --scenario F4 --base-url $BASE_URL --start <f4.json 의 startedAt> --end <f4.json 의 endedAt> --attach $RUN/f4.json
 ```
 
 `collect.py` 는 `run.json written to <run>/run.json`, `status: <run.json 의 status>`, `prometheus: N of 18 CSV written to <run>/prometheus`(실패한 질의는 `; failed: …`, 머리줄만 온 CSV 는 `; no data: …`; `--prom-url` 이 없으면 `prometheus: no --prom-url`)를 출력한다. `no data` 는 `--prom-env`(기본 `loadtest`; k6 가드의 `PROM_ENV` 는 읽지 않으므로 바꿨으면 같은 값을 준다)가 서버의 `METRICS_ENV` 와 다르면 전부, 5xx 가 하나도 없으면 `http_5xx_ratio`(빈 합), Windows 서버면 `process_open_files` 에 나온다. 종료 코드는 0 완료, 1 썼지만 질의 일부 실패, 2 run.json 을 쓰지 않음(잘못된 인자, 읽을 수 없는 요약, 모르는 구간)이다. `--photo`·`--attach` 로 준 파일이 없으면 Python 오류(`FileNotFoundError`)와 종료 코드 1 로 끝나고 run.json 은 쓰지 않는다(`--attach` 쪽이면 `prometheus/*.csv` 는 이미 쓴 뒤다): VM 쪽 파일을 먼저 `vm/` 에 가져온 뒤 돌린다.
@@ -311,7 +319,7 @@ node --test "scripts/load/*.test.mjs"                             # k6 스크립
 
 개발 PC(Windows 11)의 k6 v2.3.0 으로 루프백에 짧고 줄인 실행을 돌려 확인했다(A 는 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus). 아래 수치는 스크립트가 맞게 도는지 보는 데만 쓴다.
 
-- **끝과 요약**: `handleSummary` 는 정상 끝(종료 코드 0), setup 예외(107), `exec.test.abort()`(108), `abortOnFail`(99; `delayAbortEval: '1m'` 이라 약 62초에 멈췄다), Ctrl+C(105; Python 이 보낸 CTRL_BREAK 로 대신했다), REST API 정지(103) 모두에서 불린다. `data.state` 는 `testRunDurationMs`·`isStdOutTTY`·`isStdErrTTY` 뿐이고, setup 이 예외로 끝나면 `data.setup_data` 가 없다. `handleSummary` 안의 `options` 는 host 객체 사본이라 목록이 JS 배열이 아니고(`forEach` 없음) `data.options` 에는 기준이 없다: 그래서 스크립트가 기준을 넘기고 `lib/thresholds.js` 가 JSON 으로 복사해 읽는다. `exec.test.abort()` 바로 앞에 더한 Gauge 표본(`load_guardAbort`)은 요약에 닿는다.
+- **끝과 요약**: `handleSummary` 는 정상 끝(종료 코드 0), setup 예외(107), `setupTimeout` 초과(100, `setup() execution timed out`), `exec.test.abort()`(108), `abortOnFail`(99; `delayAbortEval: '1m'` 이라 약 62초에 멈췄다), Ctrl+C(105; Python 이 보낸 CTRL_BREAK 로 대신했다), REST API 정지(103) 모두에서 불린다. `data.state` 는 `testRunDurationMs`·`isStdOutTTY`·`isStdErrTTY` 뿐이고, setup 이 예외로 끝나면 `data.setup_data` 가 없다. `handleSummary` 안의 `options` 는 host 객체 사본이라 목록이 JS 배열이 아니고(`forEach` 없음) `data.options` 에는 기준이 없다: 그래서 스크립트가 기준을 넘기고 `lib/thresholds.js` 가 JSON 으로 복사해 읽는다. `exec.test.abort()` 바로 앞에 더한 Gauge 표본(`load_guardAbort`)은 요약에 닿는다.
 - **기준**: 태그 두 개로 좁힌 하위 지표 기준(`http_req_duration{endpoint:poll,stage:3,phase:hold}`)이 평가된다. 기준이 걸린 하위 지표는 표본이 없어도 요약에 모든 값 0·count 0 으로 남고 기준은 통과(ok)로 친다 — 그래서 `lib/summary.js` 가 표본 수로 `not_run` 과 빈 지연을 가린다. Counter 의 `count==0` 도 표본 없이 통과하고 `values.count` 0 이 나온다. 요약 `checks` 는 `values.passes`·`values.fails` 를, 지연 지표는 `summaryTrendStats` 의 `count` 를 가진다.
 - **단계 태그**: `exec.scenario.startTime` 으로 계산한 `stage`·`phase`(ramp·hold·drain)가 모든 요청·사용자 지표 표본에 붙고, 단계별 create 수가 도착률의 적분과 맞았다(A1 `timeUnit: '1h'`, A3 `'1m'`). `startTime` 을 준 시나리오(A3·A4 의 `lvl1`…)의 `exec.scenario.startTime` 은 그 시나리오의 시작이다. 시나리오 `tags`(A2 의 단계)도 사용자 지표 표본(`load_unexpectedCount{stage:N,phase:hold}`)에 붙는다.
 - **drop 과 VU**: `dropped_iterations` 표본에는 `scenario` 태그만 붙는다(시나리오 `tags` 의 stage 는 없다). `ramping-arrival-rate` 는 미리 만든 VU 가 모자라면 반복을 drop 하고서야 VU 를 하나 더 시작한다. 단계마다 시나리오를 둔 A3·A4 는 겹치는 단계의 미리 만든 VU 를 합쳐 처음에 만든다(`vus_max` = `meta.vus.peakPreAllocated`).
@@ -325,9 +333,9 @@ node --test "scripts/load/*.test.mjs"                             # k6 스크립
 
 - Linux 의 k6(두 번째 VM 에서 걸 때): `open()` 의 오류 글(코드는 폴더 오류의 `can't be used with directories` 만 맞춘다)과 경로.
 - Caddy·TLS 경로: 원격 `RTT_BASE_MS` 기준, F3 의 30 MB 본문에 프록시가 413 을 주는지(로컬 Spring 은 21·30 MB 를 `Content-Length` 만 보고 바로 413 으로 끊었다), 느린 업로드가 Caddy 를 지나 202 인지, F4 의 끊김이 backend 에 `client_abort` 로 닿는지.
-- 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다).
+- 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다), `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열(`jvm_heap_after_gc` 의 원천, 로컬 `/actuator/prometheus` 에서만 이름을 봤다).
 - 컨테이너 경로: F3 남은 파일 확인 명령의 `/app/storage/uploads`·`/tmp/tomcat.8080.*`(Dockerfile·설정에서 추론했고 컨테이너에서 돌리지 않았다).
-- 전체 길이와 기본 VU: A1 의 3,500 VU(흐름 3,300 + browse 200)·A3 large 의 600 VU 까지의 클라이언트 메모리·CPU, 1,323초 드레인, 업링크 포화, 전체 길이 G1 의 도착 간격(`k6 run --out json=<파일>` 로 `endpoint=create` 요청 시각을 본다)과 `dropped_iterations`.
+- 전체 길이와 기본 VU: A1 의 3,500 VU(흐름 3,300 + browse 200)·A3 large 의 600 VU 까지의 클라이언트 메모리·CPU, 1,323초 드레인, 업링크 포화와 A4 최고 단계의 내려받기 대역(약 480 Mbps [파생]), 전체 길이 G1 의 도착 간격(`k6 run --out json=<파일>` 로 `endpoint=create` 요청 시각을 본다)과 `dropped_iterations`.
 
 ## 트래픽 모델 메모
 
