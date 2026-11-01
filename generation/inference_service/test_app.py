@@ -242,6 +242,28 @@ class PassthroughKnobTest(unittest.TestCase):
         self.assertEqual(held, [True, True, True])
         self.assertIn("outcome ok (slow token)", self.simulated_lines()[0])
 
+    def test_an_upload_whose_folder_is_deleted_during_the_run_answers_the_model_failure(self):
+        """F1b: Spring times out, then its cleanup DELETEs the job folder while the stub still sleeps in the slot."""
+        job_dir = service.WORK_DIR / "job-2"
+        deletes = []
+
+        def spring_gives_up(seconds):
+            deletes.append(self.client.delete("/artifacts/job-2").status_code)
+
+        self.sleep.side_effect = spring_gives_up
+        with _knobs(delay_ms=100, slow_token="slow", slow_ms=30000):
+            answer = self.upload("lt-f1b-gq-slow1.png")
+        self.assertEqual(deletes, [204])
+        self.assertEqual(self.slept(), [30.0])
+        self.assertEqual(answer.status_code, 500, answer.text)
+        self.assertEqual(set(answer.json()["detail"]), {"code", "message"})   # the model failure shape
+        self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.assertFalse(job_dir.exists())   # nothing left behind for a job Spring already cleaned up
+        warnings = [r.getMessage() for r in self.records.records
+                    if r.levelno == logging.WARNING and "work folder deleted during the run" in r.getMessage()]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("job-2", warnings[0])
+
     def test_infer_ms_is_the_simulated_generation_time(self):
         self.sleep.side_effect = time.sleep   # a real 60 ms sleep
         with _knobs(delay_ms=60):

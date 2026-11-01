@@ -495,7 +495,17 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
     result = _run(parsed.jobId, saved, parsed.options)
     artifact = job_dir / "base.glb"
     if result.glb != artifact.resolve():   # passthrough: serve a copy of the sample as this job's artifact
-        shutil.copyfile(result.glb, artifact)
+        try:
+            shutil.copyfile(result.glb, artifact)
+        except FileNotFoundError:
+            if job_dir.is_dir():   # the folder is there, so something else is missing: not the case below
+                raise
+            # Spring gave up (inference.timeout-ms) and its cleanup DELETE /artifacts/{jobId} removed the folder while
+            # this run still slept in its slot (README '패스스루 부하 설정', F1b). Nobody reads this answer any more;
+            # give the contract's failure instead of an unhandled traceback, and do not recreate the folder.
+            log.warning("job %s: work folder deleted during the run (DELETE /artifacts after the client gave up), "
+                        "answering INFERENCE_FAILED", parsed.jobId)
+            raise _inference_failed("job work folder deleted during the run (client gave up, DELETE /artifacts)")
     log.warning("job %s: upload mode, %d photo(s) in, %s out%s", parsed.jobId, len(saved), artifact,
                 " (passthrough sample)" if result.passthrough else "")
     return InferUploadResponse(

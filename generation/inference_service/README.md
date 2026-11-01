@@ -68,6 +68,7 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 - 숫자가 아닌 값은 기본값으로 두고 경고 로그를 남긴다. 음수는 0, `SLOTS` < 1 은 1, `FAIL_RATE` 는 0~1 로 자른다.
 - 슬롯은 모델 모드의 `MODEL_LOCK` 과 별개인 세마포어다(패스스루는 `MODEL_LOCK` 을 쓰지 않는다). 첫 요청 때 `SLOTS` 크기로 만들고 값이 바뀌면 새로 만든다(바뀌는 순간 옛 슬롯을 쥔 요청과 잠깐 겹칠 수 있다 — 시험용 설정이다).
 - Spring 이 시간 초과로 연결을 끊어도 sleep 은 끝까지 돌며 슬롯을 쥔다. 모델 모드에서 포기한 요청이 `MODEL_LOCK` 을 쥐는 것(아래 '가정과 열린 결정'의 동시성)과 같은 동작이라, F1b 에서 다음 작업이 그만큼 기다리는지 볼 수 있다.
+- 업로드 모드에서는 Spring 이 시간 초과 뒤 정리로 `DELETE /artifacts/{jobId}` 를 보내 sleep 중인 작업 폴더가 지워진다. sleep 이 끝나 샘플을 복사하려 할 때 폴더가 없으면 경고 로그 `job <id>: work folder deleted during the run …` 를 남기고 위와 같은 500 `INFERENCE_FAILED` 로 답한다(아무도 읽지 않는 답이지만 처리하지 않은 예외 트레이스백 대신). 폴더는 다시 만들지 않는다.
 - 동기 엔드포인트는 스레드 풀(anyio 기본 40)에서 돌고 슬롯을 기다리는 요청도 스레드를 하나 잡는다. Spring 은 `inference.max-concurrency` 건만 보내므로 보통은 문제없지만, 직접 40건 넘게 몰아넣으면 그 너머는 스레드 풀에서 기다린다.
 
 ```bash
@@ -79,7 +80,7 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 BESIDE_SAMPLE_GLB=/data/sample.glb BESIDE_PASSTHROUGH_SLOW_TOKEN=-slow- BESIDE_PASSTHROUGH_SLOW_MS=30000 uvicorn app:app --port 8001
 ```
 
-확인한 것 **[구현됨]**: `test_app.py` 의 `PassthroughKnobTest` 8개 — 설정 없음 → sleep·슬롯 없음, 지연+지터 범위와 sleep 중 슬롯 점유, `SLOTS=2` 에서 둘은 겹치고 셋째는 기다림, 실패 토큰·실패율 응답의 상태 코드·`detail` 모양이 모델 실패 경로(가짜 모델)와 같음, 느린 토큰, `inferMs`, 패스스루 밖(501·모델 모드)에서는 무시, 값 범위. 이 PC 에서 uvicorn 스텁을 직접 띄워 동시 4건을 보낸 동작 확인(성능 측정 아님): `DELAY_MS=300` 에서 `SLOTS=1` 은 약 300 ms 간격으로 하나씩, `SLOTS=2` 는 둘씩 끝났고, `FAIL_TOKEN` 사진은 위 500 응답을 받았다.
+확인한 것 **[구현됨]**: `test_app.py` 의 `PassthroughKnobTest` 9개 — 설정 없음 → sleep·슬롯 없음, 지연+지터 범위와 sleep 중 슬롯 점유, `SLOTS=2` 에서 둘은 겹치고 셋째는 기다림, 실패 토큰·실패율 응답의 상태 코드·`detail` 모양이 모델 실패 경로(가짜 모델)와 같음, 느린 토큰, 느린 업로드 도중 `DELETE /artifacts` 로 폴더가 지워지면 500 `INFERENCE_FAILED`·경고 로그·폴더 재생성 없음, `inferMs`, 패스스루 밖(501·모델 모드)에서는 무시, 값 범위. 이 PC 에서 uvicorn 스텁을 직접 띄워 동시 4건을 보낸 동작 확인(성능 측정 아님): `DELAY_MS=300` 에서 `SLOTS=1` 은 약 300 ms 간격으로 하나씩, `SLOTS=2` 는 둘씩 끝났고, `FAIL_TOKEN` 사진은 위 500 응답을 받았다.
 
 ## 계약 v0 (내부)
 
