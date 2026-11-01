@@ -140,10 +140,12 @@ done
 #   BESIDE_PASSTHROUGH_SLOW_MS=30000 (BESIDE_PASSTHROUGH_FAIL_TOKEN 은 설정하지 않는다), backend LOADTEST_INFERENCE_TIMEOUT_MS=20000.
 #   흐름의 20 % 만 사진 파일명에 slow 가 들어가고(FAIL_TOKEN=slow FAIL_RATIO=0.2), 그 흐름이 FAILED(INFERENCE_TIMEOUT)로
 #   끝나면 k6 는 의도한 결과로 센다. RUN_ID 에는 slow 가 들어가면 안 된다(들어가면 모든 작업이 느려지므로 시작을 거부한다).
-newrun f1b1; k6 run -e RUN_ID=$RUN_ID -e RHO=0.5 -e SLOTS=1 -e T_SEC=10 -e FAIL_TOKEN=slow -e FAIL_RATIO=0.2 \
+#   RHO=0.3: slow 흐름은 retry 까지 두 번 30초씩 슬롯을 잡아 스텁 이용률이 0.6 이 된다. 0.5 면 1.0 이 되어 타임아웃이 아니라
+#   과부하로 실패가 이어진다(계산은 deploy/loadtest/README.md 의 F1b).
+newrun f1b1; k6 run -e RUN_ID=$RUN_ID -e RHO=0.3 -e SLOTS=1 -e T_SEC=10 -e FAIL_TOKEN=slow -e FAIL_RATIO=0.2 \
   -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
 #   바로 이어서 보통 G1 한 번: 다음 작업이 연쇄로 실패하지 않는지 본다 (slow 이름이 없으므로 스텁 설정은 그대로 둬도 된다)
-newrun g1postf1b1; k6 run -e RUN_ID=$RUN_ID -e RHO=0.5 -e SLOTS=1 -e T_SEC=10 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
+newrun g1postf1b1; k6 run -e RUN_ID=$RUN_ID -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
 
 # F3 잘못된 업로드 (prod 프로파일: upload.verify-magic=true). 30 MB 는 Caddy(25MB)가 끊는다.
 newrun f3r1; k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failure/f3_uploads.js
