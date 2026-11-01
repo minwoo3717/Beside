@@ -48,7 +48,7 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | G2 (c = 1, 2, 4) | G1 + `LOADTEST_INFERENCE_MAX_CONCURRENCY=<c>` | `BESIDE_PASSTHROUGH_SLOTS=<c>` |
 | G3 (과부하 ρ=1.5) | G1 과 같음(도착률은 k6 가 정한다) | G1 과 같음 |
 | F1a (생성 실패 20 %) | G1 과 같음 | `BESIDE_PASSTHROUGH_FAIL_RATE=0.2` |
-| F1b (타임아웃) | G1 + `LOADTEST_INFERENCE_TIMEOUT_MS=20000` | `BESIDE_PASSTHROUGH_SLOW_TOKEN=slow BESIDE_PASSTHROUGH_SLOW_MS=30000` |
+| F1b (타임아웃) | G1 + `LOADTEST_INFERENCE_TIMEOUT_MS=20000` | `BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_SLOW_TOKEN=slow BESIDE_PASSTHROUGH_SLOW_MS=30000`, `BESIDE_PASSTHROUGH_FAIL_TOKEN` 은 설정하지 않는다. slow 사진 이름은 k6 가 만든다(아래 'F1b 명령') |
 | F2 (GPU 꺼짐·backend 재시작) | G1 + `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | 시험 중 스텁을 끄고 다시 켠다 |
 | F3·F4 (잘못된 업로드·다운로드 중단) | 기본값(mock) | — |
 
@@ -82,6 +82,31 @@ python -m uvicorn app:app --host (tailscale ip -4) --port 8001
 - 설정을 바꿀 때는 uvicorn 을 멈추고 새 값으로 다시 띄운다. PowerShell 의 `$env:` 값은 그 창에 남으므로, 비워야 하는 값은 지운다(예 `Remove-Item Env:BESIDE_PASSTHROUGH_FAIL_TOKEN -ErrorAction SilentlyContinue`).
 - VM 의 backend 컨테이너에서 스텁이 닿는지 먼저 본다: `$L exec backend curl -sS http://<스텁>:8001/healthz`(`"passthrough": true`). 컨테이너에서만 안 닿으면 [deploy/README.md](../README.md) '문제 해결'의 Tailscale 항목.
 - **healthz 의 `"passthrough": true` 는 파일이 있다는 증거가 아니다.** `BESIDE_SAMPLE_GLB` 가 설정됐다는 뜻일 뿐이고, 파일이 없으면 healthz 는 그대로 true 인 채 작업마다 `/infer` 가 500 `CONVERSION_FAILED` 로 끝난다. 그래서 위의 `ls -l`·`sha256sum`(PowerShell 은 `Get-Item`·`Get-FileHash`)으로 직접 확인하고, 그 해시를 결과 폴더에 남긴다(5번).
+
+### F1b 명령 (타임아웃)
+
+스텁은 첫 사진의 **파일 이름**에 `BESIDE_PASSTHROUGH_SLOW_TOKEN` 이 있을 때만 `SLOW_MS` 동안 잔다. `gpu_queue.js` 의 사진 이름은 `lt-<RUN_ID>-gq-<n>.png` 이고, `FAIL_RATIO` 만큼의 흐름만 `FAIL_TOKEN` 이 붙은 `lt-<RUN_ID>-gq-<FAIL_TOKEN>-<n>.png` 를 올린다. 그래서 `FAIL_TOKEN=slow FAIL_RATIO=0.2` 로 돌리면 흐름의 20 %만 30초 작업이 되고 나머지는 G1 처럼 10초다. k6 는 그 20 %가 FAILED 로 끝나면 예상한 결과로 센다(`load_flowOkRatio`). `RUN_ID` 에 `slow` 가 들어가면 모든 작업이 느려지므로 k6 가 시작을 거부한다.
+
+```bash
+# VM: G1 값 + 타임아웃 20초로 부하 backend 를 다시 띄운다
+LOADTEST_PROFILES=real,prod LOADTEST_INFERENCE_BASE_URL=http://<스텁>:8001 LOADTEST_INFERENCE_TOKEN='<스텁 토큰>' \
+LOADTEST_INFERENCE_TIMEOUT_MS=20000 $L up -d backend
+# 스텁 PC: G1 값 + slow 토큰으로 다시 띄운다(BESIDE_PASSTHROUGH_FAIL_TOKEN 은 설정하지 않는다)
+BESIDE_SAMPLE_GLB=/tmp/lt-sample-1500000.glb BESIDE_INFERENCE_TOKEN='<LOADTEST_INFERENCE_TOKEN 과 같은 값>' \
+BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 \
+BESIDE_PASSTHROUGH_SLOW_TOKEN=slow BESIDE_PASSTHROUGH_SLOW_MS=30000 \
+python -m uvicorn app:app --host "$(tailscale ip -4)" --port 8001
+# 개발 PC (결과 폴더는 5번의 규칙: k6 실행마다 한 폴더)
+RID=f1b1; RUN=docs/perf/load/data/$(date +%Y-%m-%d_%H%M)-$RID; mkdir -p "$RUN"
+k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RID -e RTT_BASE_MS=<A0 의 rttBaseMsMeasured> \
+       -e RHO=0.3 -e SLOTS=1 -e T_SEC=10 -e FAIL_TOKEN=slow -e FAIL_RATIO=0.2 \
+       -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
+```
+
+- **RHO=0.3**(λ = 108건/h): slow 흐름은 retry 까지 두 번, 매번 스텁 슬롯을 30초 잡는다. 스텁 이용률은 0.03/s × (0.8 × 10초 + 0.2 × 2 × 30초) = 0.6 이다 [파생]. G1 처럼 0.5 로 두면 이 값이 1.0 이 되어, 타임아웃이 아니라 과부하 때문에 실패가 이어진다. 요약의 큐 예측(`meta.prediction`)은 서비스 시간이 섞여 있어 F1b 에서는 쓰지 않는다.
+- **볼 것**: `vm/events.jsonl` 에서 `FAILED:INFERENCE_TIMEOUT` 줄의 `processingMs` 가 20,000 ± 1,000 인지 본다. 연쇄 실패는 `INFERENCE_TIMEOUT` 수에서 스텁 로그의 `slow token` 줄 수(slow 시도 수)를 뺀 값이다. 0 이 아니면 slow 가 아닌 작업도 시간 초과된 것이다. k6 의 `load_flowOkRatio` 가 1 아래면 slow 가 아닌 흐름이 retry 뒤에도 FAILED 로 끝난 것이다.
+- 스텁은 Spring 이 끊은 뒤에도 30초를 다 채우며 슬롯을 쥔다. 그래서 바로 뒤 작업이 그만큼 기다렸다가 같이 시간 초과될 수 있다(TRAFFIC_MODEL 의 'MODEL_LOCK 문제로 실패가 예상'). 그러면 그대로 기록한다.
+- **곧바로 보통 G1 을 한 번** 돌린다. backend·스텁은 그대로 두고 새 RUN_ID 와 새 결과 폴더로 `-e RUN_ID=g1post1 -e RHO=0.7 -e SLOTS=1 -e T_SEC=10` 을 준다(FAIL_TOKEN·FAIL_RATIO 없이). 이름에 `slow` 가 없으므로 모두 10초 작업이다. 모든 흐름이 COMPLETED 이고 `INFERENCE_TIMEOUT` 이 0 이면 F1b 뒤에 연쇄 실패가 남지 않은 것이다.
 
 ## 0. 준비 (하루 전까지)
 
