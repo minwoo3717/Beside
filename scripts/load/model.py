@@ -1,10 +1,12 @@
 """Beside traffic model: tiers.json [가정] -> derived load table [파생] (standard library only).
 
-    python scripts/load/model.py            # Markdown tables (the plan's section 1)
+    python scripts/load/model.py            # Markdown tables (docs/perf/load/TRAFFIC_MODEL.md §3, §5)
     python scripts/load/model.py --json     # the same numbers as JSON
     python scripts/load/model.py --tiers other.json --t 30
+    python scripts/load/model.py --queue-rate-per-h 252 --queue-service-s 11.8 --queue-slots 1 [--json]
+        # G series: rho, M/M/c Wq and (c = 1) M/D/1 Wq from the measured mean slot time of a gpu_queue.js run
 
-Formulas (plan section 1):
+Assumptions are TRAFFIC_MODEL.md §2 (tiers.json), formulas §4:
   DAU = MAU x DAU/MAU; peak concurrent users = DAU x peak-hour share x session minutes / 60;
   job arrival rate lambda = DAU x jobs per DAU x peak-hour share / 3600 per second; spike = x spikeFactor.
   Jobs in the system L = lambda x (Wq + T); the app polls every 2 s, so polling RPS = L / 2; it gives up after
@@ -68,6 +70,53 @@ def wq_mdc_approx(c: int, rho: float, t_sec: float):
     """M/D/c wait: exactly half of M/M/1 for c = 1 (Pollaczek-Khinchine); the usual half-of-M/M/c estimate above."""
     value = wq_mmc(c, rho, t_sec)
     return None if value is None else value / 2
+
+
+def queue_prediction(rate_per_h: float, service_s: float, slots: int) -> dict:
+    """G series prediction recomputed from a measured mean slot time (docs/perf/load/TRAFFIC_MODEL.md §4, §9).
+
+    rate_per_h  the Poisson arrival rate of the k6 run (gpu_queue.js meta.prediction.jobsPerHour)
+    service_s   the measured mean time a job holds an inference slot: the mean of the server's processingMs / 1000
+                (upload to the inference service, stub sleep, GLB download, cleanup), not the stub delay T_SEC
+    slots       c, the backend's inference.max-concurrency (= the stub's BESIDE_PASSTHROUGH_SLOTS)
+    M/M/c and M/D/1 assume Poisson arrivals, which gpu_queue.js produces by thinning (ARRIVAL_THIN).
+    """
+    if not rate_per_h > 0:
+        raise ValueError("rate per hour must be positive")
+    if not service_s > 0:
+        raise ValueError("service time must be positive")
+    if slots < 1 or int(slots) != slots:
+        raise ValueError("slots must be a whole number >= 1")
+    slots = int(slots)
+    lam = rate_per_h / 3600
+    rho = lam * service_s / slots
+    return {
+        "schema": "beside-queue-prediction/1",
+        "status": "[파생] 측정한 평균 슬롯 시간으로 다시 계산한 예측 (푸아송 도착 가정)",
+        "lambdaPerHour": rate_per_h,
+        "lambdaPerS": lam,
+        "serviceSec": service_s,
+        "slots": slots,
+        "rho": rho,
+        "wqMMcSec": wq_mmc(slots, rho, service_s),
+        "wqMD1Sec": wq_mdc_approx(1, rho, service_s) if slots == 1 else None,
+        "queueGrowthPerMin": max(0.0, (lam - slots / service_s) * 60),
+    }
+
+
+def queue_text(p: dict) -> str:
+    lines = ["# G 시리즈 큐 예측 [파생] — 측정한 평균 슬롯 시간으로 다시 계산", "",
+             f"λ = {p['lambdaPerHour']:g} 건/h ({p['lambdaPerS']:.4f}/s), 평균 슬롯 시간 S = {p['serviceSec']:g} s, "
+             f"슬롯 c = {p['slots']}",
+             f"ρ = λ·S/c = {p['rho']:.3f}"]
+    if p["wqMMcSec"] is None:
+        lines.append(f"ρ ≥ 1: 정상 상태가 없다. 큐가 분당 {p['queueGrowthPerMin']:.2f}건씩 늘어난다")
+    else:
+        lines.append(f"M/M/c Wq = {p['wqMMcSec']:.1f} s")
+        if p["wqMD1Sec"] is not None:
+            lines.append(f"M/D/1 Wq = {p['wqMD1Sec']:.1f} s")
+    lines.append("가정: 푸아송 도착(gpu_queue.js 의 솎아내기, ARRIVAL_THIN). M/D/1 은 c = 1 일 때만 적는다.")
+    return "\n".join(lines) + "\n"
 
 
 def gpus_needed(lam: float, t_sec: float, rho: float) -> int:
@@ -254,13 +303,31 @@ def main(argv=None) -> int:
     ap.add_argument("--tiers", default=str(HERE / "tiers.json"))
     ap.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     ap.add_argument("--t", type=float, action="append", help="generation time T in seconds (repeatable)")
+    ap.add_argument("--queue-rate-per-h", type=float,
+                    help="G series: arrival rate of the run in jobs per hour (gpu_queue.js meta.prediction.jobsPerHour)")
+    ap.add_argument("--queue-service-s", type=float,
+                    help="G series: measured mean slot time in seconds (mean server processingMs / 1000)")
+    ap.add_argument("--queue-slots", type=int, default=1, help="G series: slots c (inference.max-concurrency), default 1")
     args = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if args.queue_rate_per_h is not None or args.queue_service_s is not None:
+        if args.queue_rate_per_h is None or args.queue_service_s is None:
+            ap.error("--queue-rate-per-h and --queue-service-s go together (--queue-slots defaults to 1)")
+        try:
+            pred = queue_prediction(args.queue_rate_per_h, args.queue_service_s, args.queue_slots)
+        except ValueError as exc:
+            ap.error(str(exc))
+        if args.json:
+            json.dump(pred, sys.stdout, ensure_ascii=False, indent=2)
+            sys.stdout.write("\n")
+        else:
+            sys.stdout.write(queue_text(pred))
+        return 0
     doc = load_tiers(args.tiers)
     ts = [int(t) if float(t).is_integer() else t for t in args.t] if args.t else None
     table = compute(doc, ts)
     ref_t = table["referenceT"] if table["referenceT"] in table["illustrativeT"] else table["illustrativeT"][0]
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
     if args.json:
         json.dump(table, sys.stdout, ensure_ascii=False, indent=2)
         sys.stdout.write("\n")

@@ -1,7 +1,7 @@
-"""model.py: the derived traffic table must reproduce the numbers of the plan (section 1).
+"""model.py: the derived traffic table must reproduce the numbers of docs/perf/load/TRAFFIC_MODEL.md (§3, §5).
 
-Each expected value below is copied from the plan, not from model.py's output. Where the plan rounds, the tolerance
-is half of the plan's last digit. A disagreement is reported, not hidden: see the disk-days test at the bottom.
+Each expected value below is copied from TRAFFIC_MODEL.md, not from model.py's output. Where the document rounds, the
+tolerance is half of its last digit. A disagreement is reported, not hidden: see the disk-days test at the bottom.
 """
 import json
 import subprocess
@@ -136,16 +136,81 @@ class PlanNumbersTest(unittest.TestCase):
         self.assertAlmostEqual(rows[1.2]["queueGrowthPerMin"], 1.2, places=6)  # (lambda - mu) * 60 = (0.12 - 0.1) * 60
 
     def test_disk_days_to_fill_30gb(self):
-        # The plan says T2 fills 30 GB in "about 9 days"; 30 / 2.3 GB per day is 13.0 days with the plan's own
-        # assumptions (2.3 MB per job, 1,000 jobs a day). The test keeps the formula's value; the discrepancy is
-        # reported to the integrator instead of changing either number here.
+        # TRAFFIC_MODEL.md §7: "사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일)". model.py divides the whole
+        # diskBudgetGB (30) by 2.3 GB per day (2.3 MB per job, 1,000 jobs a day), which is the 13-day figure.
         self.assertAlmostEqual(self.t2["daysToFillDiskBudget"], 13.0, delta=0.05)
+
+
+class QueuePredictionTest(unittest.TestCase):
+    """--queue-*: the G series prediction recomputed from the measured mean slot time (TRAFFIC_MODEL.md §4, §9)."""
+
+    def test_single_slot(self):
+        # lambda = 180/h = 0.05/s, S = 10 s: rho 0.5, M/M/1 Wq = rho S / (1 - rho) = 10 s, M/D/1 half of that.
+        p = model.queue_prediction(180, 10, 1)
+        self.assertAlmostEqual(p["rho"], 0.5, places=12)
+        self.assertAlmostEqual(p["wqMMcSec"], 10.0, places=9)
+        self.assertAlmostEqual(p["wqMD1Sec"], 5.0, places=9)
+        self.assertAlmostEqual(p["lambdaPerS"], 0.05, places=12)
+
+    def test_two_slots(self):
+        # lambda = 0.1/s, S = 10 s, c = 2: a = 1 Erlang, Erlang C = 1/3, Wq = C S / (c - a) = 10/3 s; no M/D/1 for c > 1.
+        p = model.queue_prediction(360, 10, 2)
+        self.assertAlmostEqual(p["rho"], 0.5, places=12)
+        self.assertAlmostEqual(p["wqMMcSec"], 10 / 3, places=9)
+        self.assertIsNone(p["wqMD1Sec"])
+
+    def test_measured_slot_time_changes_the_prediction(self):
+        # G1 rho 0.7 sends 252 jobs/h for T_SEC = 10; a measured slot of 12 s (upload, download, cleanup) is rho 0.84.
+        p = model.queue_prediction(252, 12, 1)
+        self.assertAlmostEqual(p["rho"], 0.84, places=12)
+        self.assertAlmostEqual(p["wqMMcSec"], 0.84 * 12 / 0.16, places=9)
+        self.assertAlmostEqual(p["wqMD1Sec"], 0.84 * 12 / 0.16 / 2, places=9)
+
+    def test_overload_has_no_steady_state(self):
+        p = model.queue_prediction(432, 10, 1)
+        self.assertAlmostEqual(p["rho"], 1.2, places=12)
+        self.assertIsNone(p["wqMMcSec"])
+        self.assertIsNone(p["wqMD1Sec"])
+        self.assertAlmostEqual(p["queueGrowthPerMin"], 1.2, places=9)
+
+    def test_bad_arguments(self):
+        for args in ((0, 10, 1), (180, 0, 1), (180, 10, 0), (180, 10, 1.5), (-1, 10, 1)):
+            with self.assertRaises(ValueError, msg=str(args)):
+                model.queue_prediction(*args)
 
 
 class CliTest(unittest.TestCase):
     def run_cli(self, *args):
         return subprocess.run([sys.executable, "-I", str(HERE / "model.py"), *args], capture_output=True,
                               text=True, encoding="utf-8", check=True).stdout
+
+    def test_queue_text(self):
+        text = self.run_cli("--queue-rate-per-h", "180", "--queue-service-s", "10", "--queue-slots", "1")
+        self.assertIn("ρ = λ·S/c = 0.500", text)
+        self.assertIn("M/M/c Wq = 10.0 s", text)
+        self.assertIn("M/D/1 Wq = 5.0 s", text)
+        self.assertIn("[파생]", text)
+
+    def test_queue_text_two_slots_and_overload(self):
+        two = self.run_cli("--queue-rate-per-h", "360", "--queue-service-s", "10", "--queue-slots", "2")
+        self.assertIn("M/M/c Wq = 3.3 s", two)
+        self.assertNotIn("M/D/1 Wq =", two)
+        over = self.run_cli("--queue-rate-per-h", "432", "--queue-service-s", "10", "--queue-slots", "1")
+        self.assertIn("ρ = λ·S/c = 1.200", over)
+        self.assertIn("1.20", over)  # queue growth per minute
+
+    def test_queue_json(self):
+        data = json.loads(self.run_cli("--queue-rate-per-h", "180", "--queue-service-s", "10", "--queue-slots", "1", "--json"))
+        self.assertAlmostEqual(data["rho"], 0.5, places=9)
+        self.assertAlmostEqual(data["wqMMcSec"], 10.0, places=6)
+        self.assertAlmostEqual(data["wqMD1Sec"], 5.0, places=6)
+        self.assertEqual(data["slots"], 1)
+
+    def test_queue_needs_rate_and_service(self):
+        res = subprocess.run([sys.executable, "-I", str(HERE / "model.py"), "--queue-service-s", "10"],
+                             capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("--queue-rate-per-h", res.stderr)
 
     def test_json_output(self):
         data = json.loads(self.run_cli("--json"))
