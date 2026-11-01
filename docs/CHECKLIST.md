@@ -1,6 +1,6 @@
 # 프로젝트 점검표 (CHECKLIST)
 
-기준일 **2026-10-31(토)**, 부하 시험 항목(2·5절)은 2026-11-01 추가. 단계·기간·완료 기준(DoD)의 원본은 [PLAN.md](PLAN.md)이고, 이 문서는 "지금 무엇이 빠져 있고 누가 무엇을 해야 하나"를 한곳에 모은다. 주 1회 계약 회의 때 PLAN 과 함께 갱신한다.
+기준일 **2026-10-31(토)**, 부하 시험 항목(2·5절)은 2026-11-01 추가, 2026-11-02 갱신(k6 v2.3.0 실제 실행으로 스크립트 확인·수정). 단계·기간·완료 기준(DoD)의 원본은 [PLAN.md](PLAN.md)이고, 이 문서는 "지금 무엇이 빠져 있고 누가 무엇을 해야 하나"를 한곳에 모은다. 주 1회 계약 회의 때 PLAN 과 함께 갱신한다.
 
 - 표기: **[구현됨]** 코드·테스트가 리포에 있고 실행된다 / **[실험 결과]** 측정값과 조건이 기록돼 있다 / **[계획]** 아직 안 함 / **직접 할 일** 사람이 해야 함(하드웨어·계정·회의).
 - 담당: **BE** Backend · **UN** Unity · **GEN** 3D Generation · **전원**.
@@ -124,13 +124,28 @@
 
 ### 부하 시험 — 쏘카 수준 목표 (2026-11-01 추가)
 
-멘토링 피드백 "쏘카 수준 트래픽을 목표로 설정하고 테스트"(지표 5종 + 대시보드, 장애 시나리오 5종)와 교수님 피드백 "부하·장애 테스트도 배포 환경에서"는 2026-11-01 전까지 리포에 기록이 없었다. 목표 수치(T1/T2/T3, 모든 비율 [가정])·합격 기준(제안값)·시험 구성은 [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md), 작업은 브랜치 `load/socar`(PLAN 4b '부하·운영'). 아래는 모두 VM 이 준비된 뒤에 한다 — 루프백 벤치마크와 섞어 인용하지 않는다.
+멘토링 피드백 "쏘카 수준 트래픽을 목표로 설정하고 테스트"(지표 5종 + 대시보드, 장애 시나리오 5종)와 교수님 피드백 "부하·장애 테스트도 배포 환경에서"는 2026-11-01 전까지 리포에 기록이 없었다. 목표 수치(T1/T2/T3, 모든 비율 [가정])·합격 기준(제안값)·시험 구성은 [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md), 작업은 브랜치 `load/socar`(PLAN 4b '부하·운영'). 보고용 측정은 모두 VM 이 준비된 뒤에 한다 — 루프백 벤치마크나 아래 로컬 동작 확인과 섞어 인용하지 않는다.
 
+- [x] 스크립트 동작 확인 (2026-11-01~02): 개발 PC 에서 실제 k6 v2.3.0 으로 k6 스크립트 7개와 `collect.py`·F3/F4 도우미를 짧게 줄여 돌렸다(루프백, mock jar·패스스루 스텁·Prometheus 대역). 찾은 문제 — 중단된 실행이 'all passed' 로 적힘, 잘린 유지 구간이 pass, A3 의 4xx 거부가 통과, A3·A4 가 `PRE_VUS` 를 읽지 않음, A2 id 의 상태를 보지 않음, F3 느린 업로드가 폴링 뒤에 돎, 'GC 뒤 힙' 판정 CSV 없음 등 — 은 `load/socar` 에서 고치고 시험을 더했다 **[구현됨]**(Node 82·Python 84). 용량 결과가 아니므로 [실험 결과] 로 인용하지 않는다. (BE)
 - [ ] A0~A4 기준 측정(연기 시험·혼합 흐름·폴링 포화·업로드·에셋 송신)을 VM 에서. (BE)
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
 - [ ] 보호 장치(큐 상한 #19, 요청 제한 #20) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
 - [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #19 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산)
+- [ ] VM 에서만 확인할 수 있는 것 **[계획]** — 이 PC 에는 Docker 가 없다. (BE)
+  - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
+  - 실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지(`collect.py` 의 `jvm_heap_after_gc`, 'GC 뒤 힙 < 75 %' 판정). 이름은 로컬 `/actuator/prometheus` 에서만 봤다.
+  - 서버를 죽였을 때 실제 Prometheus 의 staleness: Prometheus 대역은 마지막 수집값을 계속 내서 CSV 에 빈 구간이 보이지 않았다.
+  - `SEED_ONLY` 의 `IDS_OUT` 검사가 기대는 k6 `open()` 오류 문구를 Linux k6 에서(Windows k6 v2.3.0 에서만 확인).
+  - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(개발 PC·k6 v2.3.0 에서 VU 초기화만 20→300 VU 로 잰 값)라 A1 기본 `MAX_VUS` 3,300 이면 약 3.6 GB + 본문 [파생]. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB [파생], VU 가 늘면 하나에 약 25 MB 씩 더. 시험 중 k6 메모리를 CPU 와 함께 본다.
+- [ ] 판정 기준 결정 — 지금 코드의 동작은 **[구현됨]**, 바꿀지는 미정. (BE, 첫째는 계약 회의)
+  - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #19·#20 과 함께 정한다.
+  - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다.
+  - `collect.py` 의 `http_5xx_ratio` 질의에 `or vector(0)` 을 붙일지: 5xx 가 하나도 없는 건강한 실행은 머리줄만 있는 CSV 와 'no data: http_5xx_ratio' 가 된다(Prometheus 대역에서 봄).
+- [ ] 찾은 개선 **[계획]**. (BE)
+  - Grafana 'Beside 운영' 의 'JVM 힙' 패널이 'GC 뒤' 선을 `jvm_gc_live_data_size_bytes` 로 그려 G1 에서는 0 이나 옛 값에 머문다(mock jar·G1 로컬 k6 실행에서 내내 0) → `jvm_memory_usage_after_gc_percent` 로(`deploy/monitoring/grafana/dashboards/beside-ops.json`).
+  - `collect.py` 는 실행 구간 안의 서버 재시작을 알아보지 못한다: 오류 기준으로 멈춘 실행(run.json `outcome.ended` = `ruleStop`)은 지금 `vm/backend.log`·k6 출력으로 손으로 확인한다. `process_start_time_seconds` 를 19번째 CSV 로 더하면 재시작이 보인다(README 의 CSV 수와 `test_collect.py` 도 함께 바꿈).
+- [ ] F2 는 `-e SCENARIO=F2` 로 돌리고 run.json `scenario` 가 F2 인지 확인한다 **[계획]**(VM). 이름 없이 돌린 F2 실행에서 오프라인 대기 안에 스텁이 돌아와 FAILED 작업이 하나도 없으면, retry 가 없어 G1 으로 적히고 큐 재계산(`meta.recompute`)도 남는다(`gpu_queue.js` 머리말). 빠뜨렸으면 `collect.py --scenario F2` 로 이름을 고치고 재계산은 쓰지 않는다. (BE)
 
 ## 6. 문서 불일치
 
