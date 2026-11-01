@@ -112,7 +112,7 @@ k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RID -e RTT_BASE_MS=<A0 의 rtt
 
 1. **팀 공지**(Discord 등): 시작 시각·예상 길이, "그동안 앱·웹으로 만든 작업은 처리되지 않는다(운영 backend 를 내린다), 시작 시점에 진행 중인 작업은 FAILED 가 되니 재시도", 담당자.
 2. 개발 PC: k6 설치(`k6 version` 기록), 유선 연결, 업링크 측정(iperf3 또는 speedtest 결과 기록). 그 시간에 다른 측정·빌드가 없게 한다.
-3. VM: `df -h /` 사용률이 50 % 아래인지(업로드가 쌓인다 — T3 피크면 시간당 수 GB), swap 2GB, monitoring 프로필이 떠 있는지([deploy/README.md](../README.md) '모니터링').
+3. VM: `df -h /` 사용률이 50 % 아래인지(업로드가 쌓인다 — T3 피크면 시간당 수 GB. 30 GB 디스크면 중단선 80 %까지 약 9 GB 이상 남아야 하고, 4번의 비우기 지점은 이 여유로 정했다), swap 2GB, monitoring 프로필이 떠 있는지([deploy/README.md](../README.md) '모니터링').
 4. 기록할 조건: VM 사양, 커밋 SHA(`git -C ~/Beside rev-parse --short HEAD`), k6 버전, 업링크, 사진 크기, 시각.
 
 ## 1. 운영 백업 (운영 backend 를 멈춘 채)
@@ -173,16 +173,54 @@ $L exec -T backend sh -c 'ls -l /app/storage/results/sample-dog.glb && sha256sum
 
 ```bash
 printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > /tmp/lt-probe.png
-JOB=$(curl -fsS -H "Idempotency-Key: lt-probe-$TS" -F 'photos=@/tmp/lt-probe.png;filename=lt-probe-0.png;type=image/png' "$D/api/v1/jobs" | grep -o '"jobId":"[^"]*"' | cut -d'"' -f4); echo "$JOB"
+JOB=$(curl -fsS -H "Idempotency-Key: lt-probe-$TS-$(date +%H%M%S)" -F 'photos=@/tmp/lt-probe.png;filename=lt-probe-0.png;type=image/png' "$D/api/v1/jobs" | grep -o '"jobId":"[^"]*"' | cut -d'"' -f4); echo "$JOB"
 # 60초 뒤
 curl -s -o /dev/null -w '%{http_code} %{size_download}\n' "$D/api/v1/jobs/$JOB/asset"    # 200 1500000
 ```
 
-볼륨이 남아 있는 동안에는 backend 를 다시 만들어도(설정을 바꾼 `$L up -d backend`) 파일이 그대로다. G 시리즈는 스텁이 자기 `BESIDE_SAMPLE_GLB` 를 돌려주므로 이 파일을 쓰지 않는다.
+볼륨이 남아 있는 동안에는 backend 를 다시 만들어도(설정을 바꾼 `$L up -d backend`) 파일이 그대로다. 볼륨을 비우면(4번 '디스크') 이 절을 처음부터 다시 한다. G 시리즈는 스텁이 자기 `BESIDE_SAMPLE_GLB` 를 돌려주므로 이 파일을 쓰지 않는다.
 
 ## 4. k6 실행 (개발 PC)
 
-명령과 옵션은 [scripts/load/README.md](../../scripts/load/README.md)(같은 W1 의 B7). 순서는 A0(연기 시험, RTT 기준) → A1~A4 → G1·G2 → F1~F4, 시리즈마다 VM 쪽 값을 바꿔야 하면 그 값으로 `$L up -d backend` 를 다시 한다(그때 진행 중이던 부하 작업은 부하 DB 에서 FAILED 가 된다 — 운영과 무관).
+명령과 옵션은 [scripts/load/README.md](../../scripts/load/README.md)(같은 W1 의 B7). 순서는 A0(연기 시험, RTT 기준) → A1~A4 → G1·G2 → F1~F4 이고, 아래 '디스크' 표의 지점마다 부하 볼륨을 비운다. 시리즈마다 VM 쪽 값을 바꿔야 하면 그 값으로 `$L up -d backend` 를 다시 한다(그때 진행 중이던 부하 작업은 부하 DB 에서 FAILED 가 된다 — 운영과 무관). 결과 폴더는 k6 실행마다 새로 만든다(5번).
+
+### 디스크: 실행 순서와 부하 볼륨 비우기
+
+업로드는 지우지 않는 한 부하 볼륨에 쌓인다. 작업마다 mock 은 사진 0.8 MB, real + 스텁은 사진 0.8 MB + 스텁 GLB 1.5 MB 다. 30 GB 디스크를 사용률 50 %(0번)에서 시작하면 중단선 80 %까지 약 9 GB 가 남는다. 비우지 않고 A0~A3 을 이어 돌리면 업로드만 약 21.6 GB(6.7 + 1.6 + 6.1 + 7.2)라 세션 중간에 디스크 80 % 중단에 걸린다. 그래서 아래 지점마다 비운다. 예상량은 [scripts/load/README.md](../../scripts/load/README.md) '디스크와 VU' 의 값과 λ × 시간으로 계산한 [파생] 값이고, 측정값이 아니다.
+
+| 순서 | 실행 | 예상 업로드 | 마지막으로 비운 뒤 누적 |
+|---|---|---|---|
+| 1 | A0 연기 시험 | 0.1 GB 미만 | 0.1 GB 미만 |
+| 2 | A1 (기본 단계 전부) | 약 6.7 GB | 약 6.7 GB |
+| 3 | A2 시드(COMPLETED 1,000건 + PENDING 1,000건) | 약 1.6 GB | 약 8.3 GB |
+| — | **비우기** | | 0 |
+| 4 | A3 small | 약 6.1 GB | 약 6.1 GB |
+| — | **비우기** | | 0 |
+| 5 | A3 large | 약 7.2 GB | 약 7.2 GB |
+| — | **비우기** | | 0 |
+| 6 | A4 (작업 10건) | 0.1 GB 미만 | 0.1 GB 미만 |
+| 7 | G1 (ρ 4개, 594건) · G2 (c 3개, 882건) | 약 1.4 + 2.0 GB (작업당 2.3 MB) | 약 3.4 GB |
+| 8 | F1a·F1b(+ 뒤의 G1)·F2(스텁), F3·F4(mock) | 약 1 GB | 약 4.4 GB |
+
+- **실행마다 먼저 본다**: `df -h /` 의 사용량 + 그 실행의 예상 업로드가 23 GB(30 GB 의 80 % − 1 GB, 로그·H2·`events.jsonl` 몫)를 넘으면 표와 상관없이 먼저 비운다. 예를 들어 A1 + A2(약 8.3 GB)를 잇달아 돌리려면 세션 시작 사용률이 약 49 % 이하여야 한다. 아니면 A2 앞에서도 비운다(A2 는 setup 에서 자기 작업을 만들므로 빈 볼륨에서도 돈다).
+- **반복 사이에도 비운다.** 주요 단계를 3회 반복할 때(TRAFFIC_MODEL §9) A1 은 한 번에 약 6.7 GB 라 두 번이면 남은 여유를 넘는다.
+- A2 의 `IDS_FILE`(미리 만든 작업 ID)은 그 볼륨에서만 유효하다. 시드를 만든 뒤 A2 를 끝낼 때까지는 비우지 않는다(비우면 모든 폴링이 404 다).
+
+비우는 방법(VM, k6 가 돌지 않을 때):
+
+```bash
+# (1) 이 볼륨에서 돈 실행들의 VM 파일을 먼저 꺼낸다(5번). events.jsonl 과 부하 DB 는 볼륨과 함께 지워진다.
+# (2) 부하 backend 컨테이너를 멈추고 지운다. 멈춘 컨테이너도 볼륨을 잡고 있으면 docker volume rm 이 실패한다.
+$L rm -s -f backend
+# (3) 부하 볼륨만 이름으로 지운다. 운영 볼륨 beside-storage 와 혼동하지 않는다(down -v 금지).
+docker volume rm beside-loadtest-storage
+# (4) 같은 시리즈 값으로 다시 띄운다. 새 볼륨이 이미지의 소유자(beside, uid 10001)로 생긴다.
+$L up -d backend
+docker inspect -f '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{println}}{{end}}' beside-backend-1   # beside-loadtest-storage -> /app/storage
+df -h /
+```
+
+그다음 **3번(합성 GLB 넣기와 한 건 확인)을 다시 한다.** 남은 실행이 G·F 의 real 실행뿐이면 3번은 건너뛴다(스텁이 GLB 를 준다).
 
 시험 중에 볼 것:
 
