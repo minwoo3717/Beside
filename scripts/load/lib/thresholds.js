@@ -45,11 +45,20 @@ export function latencyReportThresholds(endpoints, scope) {
   return out;
 }
 
-// "Not one" thresholds on Counters, e.g. load_unexpectedCount and load_rejectedCount where every request is valid and
-// any refusal is a failure (A3), optionally restricted by a scope such as "stage:3,phase:hold".
+// "Not one" thresholds on Counters, e.g. load_unexpectedCount where every request is valid and an unexpected answer
+// (a 413/400/404) is a failure (A3), optionally restricted by a scope such as "stage:3,phase:hold".
 export function zeroCountThresholds(metrics, scope) {
   const out = {};
   (metrics || []).forEach((name) => { out[key(name, null, scope)] = ['count==0']; });
+  return out;
+}
+
+// dropped_iterations{scenario:<name>} == 0 for each scenario that runs one level (lib/stages.js levelScenarios). Besides
+// judging, the threshold keeps the per-scenario submetric in the summary, where lib/summary.js reads it through
+// stages[].scenario to fail the level that dropped (and only that one).
+export function droppedThresholds(scenarioNames) {
+  const out = {};
+  (scenarioNames || []).forEach((name) => { out[key('dropped_iterations', null, `scenario:${name}`)] = ['count==0']; });
   return out;
 }
 

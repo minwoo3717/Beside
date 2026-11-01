@@ -31,9 +31,10 @@ export const flowEnded = new Counter('load_flowEnded');
 export const unexpectedCount = new Counter('load_unexpectedCount');
 export const rejectedCount = new Counter('load_rejectedCount');
 export const assetBytes = new Counter('load_assetBytes');
-// Upload body bytes of POST /api/v1/jobs, tagged like the request, so the uplink use of each stage's hold can be
-// computed (data_sent is only a whole-run average). Staged scripts keep the per-stage submetric in the summary with a
-// no-op threshold (lib/thresholds.js bytesSentThresholds).
+// Upload body bytes of POST /api/v1/jobs that got 202 (a lower bound: a refused, reset or timed-out upload sent an
+// unknown part of its body and is left out, lib/flow.js createJob), tagged like the request, so the uplink use of each
+// stage's hold can be computed (data_sent is only a whole-run average). Staged scripts keep the per-stage submetric in
+// the summary with a no-op threshold (lib/thresholds.js bytesSentThresholds).
 export const bytesSent = new Counter('load_bytesSent');
 
 // lib/guard.js (only with PROM_URL). k6 v2.3.0 tells handleSummary nothing about how a run ended (data.state is only

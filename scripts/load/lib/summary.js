@@ -58,7 +58,8 @@ export function markReady(setupData) {
 
 // dropped_iterations{scenario:<name>} of one scenario: { count, failed }, or null when the summary has no such
 // submetric. k6 tags dropped_iterations with the scenario name only (not with scenario `tags`), so only a script that
-// runs one scenario per stage (poll_saturation.js: stages[].scenario) can tie drops to a stage.
+// runs one scenario per stage (stages[].scenario: poll_saturation.js, and upload.js and asset.js through lib/stages.js
+// levelScenarios) can tie drops to a stage.
 function droppedFor(metrics, scenario) {
   const m = metrics[`dropped_iterations{scenario:${scenario}}`];
   if (!m) return null;
@@ -105,8 +106,9 @@ export function stageVerdicts(metrics, stages) {
   });
 }
 
-// Dropped iterations that no stage owns (ramping-arrival-rate scripts cannot tag drops by stage) could have happened
-// in any stage, so no stage may read as "pass" and there is no breaking point. Returns the reason, or null.
+// Dropped iterations that no stage owns (a script that runs all its stages in one ramping-arrival-rate scenario cannot
+// tag drops by stage) could have happened in any stage, so no stage may read as "pass" and there is no breaking point.
+// Returns the reason, or null.
 function unattributedDrops(verdicts, dropped) {
   if (!(dropped > 0) || verdicts.length === 0) return null;
   let attributed = 0;
