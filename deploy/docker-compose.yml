@@ -102,9 +102,11 @@ services:
       # 파일 하나를 마운트하므로 git pull 로 바뀌면 restart prometheus 로 다시 읽힌다(Caddyfile 과 같다).
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    # 9090 은 게시하지 않는다(내부망 전용). 보는 곳은 Grafana(/grafana, Basic 인증 + Grafana 로그인).
-    expose:
-      - "9090"
+    # 9090 은 VM 의 루프백에만 게시한다(인터넷에는 열지 않는다). 사람이 보는 곳은 Grafana(/grafana, Basic 인증 +
+    # Grafana 로그인)이고, 부하 시험의 수집기(scripts/load/collect.py)와 중단 감시(lib/guard.js)는 개발 PC 에서
+    # `ssh -L 9090:127.0.0.1:9090 <user@VM>` 터널로 http://localhost:9090 을 읽는다.
+    ports:
+      - "127.0.0.1:9090:9090"
     mem_limit: 384m
     logging: *default-logging
 

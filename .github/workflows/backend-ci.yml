@@ -46,6 +46,11 @@ jobs:
       - name: node test (browser Mock UI, API v1)
         run: node --test backend/src/test/js/mock-mvp.test.cjs
 
+      - name: load-test tools (traffic model, collector, k6 scripts against stand-ins)
+        run: |
+          python3 -I -m unittest discover -s scripts/load -p "test_*.py"
+          node --test scripts/load/*.test.mjs
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
@@ -101,10 +106,16 @@ jobs:
           import sys
 
           base, mon, lt = (json.load(open(path)) for path in sys.argv[1:4])
-          # only caddy publishes ports: backend 8080/8081 (Actuator), prometheus 9090 and grafana 3000 stay internal
+          # only caddy publishes to the network: backend 8080/8081 (Actuator) and grafana 3000 stay internal,
+          # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py)
           for name, svc in mon["services"].items():
-              if name != "caddy":
-                  assert not svc.get("ports"), f"{name} publishes {svc.get('ports')}"
+              ports = svc.get("ports") or []
+              if name == "caddy":
+                  continue
+              if name == "prometheus":
+                  assert ports and all(p.get("host_ip") == "127.0.0.1" for p in ports), f"prometheus publishes {ports}"
+                  continue
+              assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"

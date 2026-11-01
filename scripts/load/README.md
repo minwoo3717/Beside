@@ -100,7 +100,8 @@ k6 run -e BASE_URL=http://localhost:18080 -e RUN_ID=local1 -e SMOKE_VUS=5 -e MIN
 전제: `deploy/docker-compose.loadtest.yml` 덮어쓰기로 부하용 backend 가 떠 있다(절차는 `deploy/loadtest/README.md`). A 시리즈는 `mock,prod` + `pending-ms=0`, `processing-ms=60000`, `@Async` 풀 400. 1.5 MB 합성 GLB(`glb-1.5mb.glb`)를 부하용 볼륨에 미리 넣는다. 부하는 개발 PC 에서 유선으로 걸고, 시작 전 iperf3/speedtest 업링크와 k6 클라이언트 CPU 를 적어 둔다.
 
 ```bash
-export BASE_URL=https://<domain> UPLINK_MBPS=<측정값> PROM_URL=http://localhost:9090   # PROM_URL: SSH 터널/Tailscale 로 닿는 Prometheus
+# Prometheus 는 VM 의 127.0.0.1:9090 에만 게시된다 → 다른 터미널에서 터널: ssh -N -L 9090:127.0.0.1:9090 <user@VM>
+export BASE_URL=https://<domain> UPLINK_MBPS=<측정값> PROM_URL=http://localhost:9090
 TS=$(date +%Y-%m-%d_%H%M); RUN=docs/perf/load/data/$TS; mkdir -p $RUN
 
 # A0 — RTT_base

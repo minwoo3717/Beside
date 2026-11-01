@@ -135,12 +135,12 @@ TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름
 설정 파일 **[구현됨]** · VM 에서 띄우기 **[계획]**. 멘토 지표 5종(생성 성공률, 생성 시간 평균·p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)과 서버 자원을 한 화면에서 본다. 지표 이름은 [docs/METRICS.md](../docs/METRICS.md) §5(`beside.*` → Prometheus `beside_*`).
 
 ```text
-backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (내부망 전용, 14일 또는 1GB 보존)
+backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (VM 루프백에만 게시, 14일 또는 1GB 보존)
                                                         ▲
 브라우저 ── https://<도메인>/grafana/ ── caddy(Basic 인증) ── grafana:3000 (Grafana 로그인) ┘
 ```
 
-- **Actuator 는 관리 포트 8081** 에만 있다. compose 내부망에서만 닿고(`ports:` 없음), 공개 8080 에는 `/actuator` 가 없으며, Caddy 도 `/actuator*` 를 404 로 막는다. Prometheus(9090)도 게시하지 않는다.
+- **Actuator 는 관리 포트 8081** 에만 있다. compose 내부망에서만 닿고(`ports:` 없음), 공개 8080 에는 `/actuator` 가 없으며, Caddy 도 `/actuator*` 를 404 로 막는다. Prometheus(9090)는 VM 의 `127.0.0.1` 에만 게시한다(인터넷에는 안 열림). 개발 PC 에서 원시 값이 필요하면 `ssh -L 9090:127.0.0.1:9090 <user@VM>` 로 터널을 열고 `http://localhost:9090` 을 쓴다(부하 시험 수집기·중단 감시가 이 방법을 쓴다).
 - 대시보드: Grafana 의 **Beside** 폴더 → **Beside 운영**. 변수 `env`(`prod` 운영 / `loadtest` 부하 시험 / `local`), `worker`(mock·real), `창`(드문 작업 지표를 묶는 시간 창). 원본은 [monitoring/grafana/dashboards/beside-ops.json](monitoring/grafana/dashboards/beside-ops.json) 이고 화면에서 고친 것은 저장되지 않는다(JSON 을 고쳐 커밋하면 1분 안에 다시 읽는다).
 - `beside_*` 지표는 backend 의 Actuator·Micrometer 코드(같은 W1 의 B1~B3)가 있어야 나온다. 그 전 이미지로는 Prometheus 대상이 DOWN 이고 패널이 비어 있다.
 

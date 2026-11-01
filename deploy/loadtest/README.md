@@ -158,9 +158,11 @@ docker stats --no-stream --format '{{json .}}' > "$OUT/docker-stats-end.jsonl"
 df -h / > "$OUT/df.txt"
 git -C ~/Beside rev-parse HEAD > "$OUT/commit.txt"
 sha256sum /tmp/lt-sample-1500000.glb > "$OUT/glb.sha256"
-# Prometheus 는 게시하지 않으므로 VM 안에서 읽는다(예: 대상 상태)
+# 대상 상태(Prometheus 는 VM 루프백에만 있으므로 VM 안에서 읽는다)
 $L exec -T prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=up' > "$OUT/prom-up.json"
 ```
+
+구간 값(CSV)은 개발 PC 의 `scripts/load/collect.py --prom-url http://localhost:9090` 가 읽는다. 시험 전에 개발 PC 에서 터널을 연다: `ssh -N -L 9090:127.0.0.1:9090 <user@VM>`(Prometheus 는 compose 에서 `127.0.0.1:9090` 에만 게시된다). 같은 터널을 k6 의 `PROM_URL`(중단 감시)도 쓴다.
 
 개발 PC 에서 `scp -r <user@VM>:~/lt-<TS> docs/perf/load/data/<TS>/vm` 로 가져와 k6 쪽 파일과 같은 폴더에 둔다. 결과 문서에는 [실험 결과] 와 조건(VM 사양, 커밋, k6 버전, 업링크, 사진 크기)을 붙인다.
 
