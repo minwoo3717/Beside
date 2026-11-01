@@ -252,7 +252,7 @@ class PassthroughKnobTest(unittest.TestCase):
 
         self.sleep.side_effect = spring_gives_up
         with _knobs(delay_ms=100, slow_token="slow", slow_ms=30000):
-            answer = self.upload("lt-f1b-gq-slow1.png")
+            answer = self.upload("lt-f1b-gq-slow-1.png")   # the k6 F1b name (FAIL_TOKEN=slow)
         self.assertEqual(deletes, [204])
         self.assertEqual(self.slept(), [30.0])
         self.assertEqual(answer.status_code, 500, answer.text)
