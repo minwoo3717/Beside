@@ -1,12 +1,24 @@
 // A2 ids (poll_saturation.js): the setup state check, joined id files, SEED_ONLY runs and the end-of-run re-check.
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { BASE_ENV, TMP, fakeServer, lib, load, samples, state } from './testing/harness.mjs';
 
-const C = (i) => `00000000-0000-4000-8000-c${String(i).padStart(11, '0')}`;
+// k6's open() refuses a folder with "open() can't be used with directories, path: ..." (k6 v2.3.0); the stand-in reads
+// with Node's readFileSync, which throws EISDIR. Translated here so the IDS_OUT folder check of SEED_ONLY runs as in k6.
+const nodeOpen = globalThis.open;
+globalThis.open = function open(path, mode) {
+  try {
+    return nodeOpen(path, mode);
+  } catch (e) {
+    if (e && e.code === 'EISDIR') throw new Error(`open() can't be used with directories, path: "${path}"`);
+    throw e;
+  }
+};
+
+const C =(i) => `00000000-0000-4000-8000-c${String(i).padStart(11, '0')}`;
 const P = (i) => `00000000-0000-4000-8000-d${String(i).padStart(11, '0')}`;
 
 function idsFile(name, doc) {
@@ -158,9 +170,12 @@ test('SEED_ONLY: setup seeds and handleSummary writes IDS_OUT; no load, no thres
   assert.equal(samples('load_pendingRechecked').length, 0);
   const files = mod.handleSummary({ metrics: {}, setup_data: data, state: {} });
   assert.deepEqual(JSON.parse(files[out]), { completed: data.completed, pending: [] });
-  assert.match(files.stdout, /^SEED ONLY: 3 COMPLETED and 0 PENDING ids written to IDS_OUT .*no load ran/);
+  // k6 writes IDS_OUT after handleSummary and may fail to: the line does not claim the write, and says where else the ids are
+  assert.match(files.stdout, /^SEED ONLY: 3 COMPLETED and 0 PENDING ids for IDS_OUT .*seed-only-c\.json \(also in SUMMARY_PATH under k6\.setup_data; a k6 error "could not open" for this path means IDS_OUT was not written\); no load ran/);
+  assert.doesNotMatch(files.stdout, /written to IDS_OUT/);
   const doc = JSON.parse(files[BASE_ENV.SUMMARY_PATH]);
   assert.equal(doc.meta.mode, 'seed-only');
+  assert.deepEqual(doc.k6.setup_data.completed, data.completed);
   assert.deepEqual(doc.meta.stages, []);
   assert.equal(doc.meta.loadPlannedS, 0);
   assert.equal(doc.verdict.breakingPoint.lastPassingStage, null);
@@ -170,6 +185,47 @@ test('SEED_ONLY: setup seeds and handleSummary writes IDS_OUT; no load, no thres
   await assert.rejects(load('poll_saturation.js', { SEED_ONLY: '1', IDS_OUT: out, IDS_FILE: idsFile('x.json', { completed: [C(1)] }) }),
     /cannot be combined with IDS_FILE/);
   await assert.rejects(load('poll_saturation.js', { SEED_ONLY: '1', IDS_OUT: out, SEED_COMPLETED: '0' }), /seeds nothing/);
+});
+
+test('SEED_ONLY: IDS_OUT must be an absolute file path in an existing folder, checked before anything is seeded', async () => {
+  const seedOnly = (idsOut) => load('poll_saturation.js', { SEED_ONLY: '1', SEED_COMPLETED: '2', IDS_OUT: idsOut });
+  // k6 opens a relative path from scripts/load/ but writes the summary's from the current folder: it cannot be checked
+  await assert.rejects(seedOnly('out/a2/c.json'), /SEED_ONLY needs an absolute IDS_OUT .*: out\/a2\/c\.json/);
+  // a missing folder: k6 would seed, log "could not open" for IDS_OUT and still exit 0
+  const missing = join(TMP, 'no-such-run', 'c.json');
+  await assert.rejects(seedOnly(missing), (e) => {
+    assert.match(e.message, /^IDS_OUT folder .*no-such-run cannot be used \(ENOENT.*\): create it first, or k6 would seed/);
+    return true;
+  });
+  assert.equal(state.requests.length, 0); // refused in init, before setup sent anything
+  // a folder given as IDS_OUT (with or without the trailing slash), or a file where the folder should be
+  const run = join(TMP, 'a2-run');
+  mkdirSync(run, { recursive: true });
+  await assert.rejects(seedOnly(run), /^Error: IDS_OUT .*a2-run is a folder: name a file in it/);
+  await assert.rejects(seedOnly(`${run}/`), /IDS_OUT .*a2-run\/ is a folder/);
+  const file = idsFile('not-a-folder', 'x');
+  await assert.rejects(seedOnly(join(file, 'c.json')), /IDS_OUT folder .*not-a-folder is a file, not a folder/);
+  // an absolute file in an existing folder, new or written before, starts the run
+  const ok = await seedOnly(join(run, 'c.json'));
+  assert.deepEqual(Object.keys(ok.options.scenarios), ['seedOnly']);
+  writeFileSync(join(run, 'c.json'), '{}');
+  await seedOnly(join(run, 'c.json'));
+  // a seeding load run keeps its relative IDS_OUT (README: IDS_OUT=$RUN/ids.json); its ids are in the summary as well
+  const loadRun = await load('poll_saturation.js', { RTT_BASE_MS: '20', SEED_COMPLETED: '3', IDS_OUT: 'docs/perf/load/data/x/ids.json' });
+  assert.ok(loadRun.options.scenarios.rps0);
+});
+
+test('a seeding load run with PENDING ids only is refused unless PENDING_SHARE=1 asks for it', async () => {
+  // the old A2 step "SEED_PENDING=1000 SEED_COMPLETED=0 ... IDS_OUT" without SEED_ONLY ran the whole 33-minute load
+  await assert.rejects(load('poll_saturation.js', { RTT_BASE_MS: '20', SEED_PENDING: '1000', SEED_COMPLETED: '0', IDS_OUT: join(TMP, 'p.json') }),
+    /SEED_PENDING with no COMPLETED seed would run the whole A2 load on PENDING ids only: .*add -e SEED_ONLY=1 .*set PENDING_SHARE=1/);
+  await assert.rejects(load('poll_saturation.js', { RTT_BASE_MS: '20', SEED_PENDING: '4' }), /PENDING ids only/); // SEED_COMPLETED defaults to 0
+  const share = await load('poll_saturation.js', { RTT_BASE_MS: '20', SEED_PENDING: '4', PENDING_SHARE: '1' });
+  assert.ok(share.options.scenarios.rps0);
+  // both seeds, a SEED_ONLY run and a pending-only IDS_FILE are not affected
+  assert.ok((await load('poll_saturation.js', { RTT_BASE_MS: '20', SEED_PENDING: '4', SEED_COMPLETED: '4' })).options.scenarios.rps0);
+  assert.ok((await load('poll_saturation.js', { SEED_ONLY: '1', SEED_PENDING: '4', IDS_OUT: join(TMP, 'p.json') })).options.scenarios.seedOnly);
+  assert.ok((await load('poll_saturation.js', { RTT_BASE_MS: '20', IDS_FILE: idsFile('ids-p-only.json', { pending: [P(1)] }) })).options.scenarios.rps0);
 });
 
 test('SEED_PENDING: no COMPLETED seed unless asked, and the new jobs must still be PENDING', async () => {

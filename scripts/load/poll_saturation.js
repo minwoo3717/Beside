@@ -6,11 +6,15 @@
 // On the mock the two kinds need two backend settings: COMPLETED seeds need mock.worker.pending-ms 0, PENDING seeds a
 // long pending-ms, and a backend restart closes every PENDING job as FAILED (InterruptedJobRecovery), which still
 // answers 200. So A2 is three runs against the same backend volume, in this order (SEED_ONLY=1 seeds, writes IDS_OUT and
-// runs no load):
-//   1. pending-ms 0:  k6 run -e SEED_ONLY=1 -e SEED_COMPLETED=1000 -e IDS_OUT=/abs/c.json scripts/load/poll_saturation.js
+// runs no load; its IDS_OUT is an absolute path in an existing folder):
+//   1. on pending-ms 0:
+//      k6 run -e BASE_URL=https://<domain> -e RUN_ID=a2seedc -e SEED_ONLY=1 -e SEED_COMPLETED=1000 -e IDS_OUT=/abs/c.json scripts/load/poll_saturation.js
 //   2. restart the backend once with a pending-ms longer than steps 2 + 3 (the A2 load is about 33 min), then not again:
-//                     k6 run -e SEED_ONLY=1 -e SEED_PENDING=1000 -e IDS_OUT=/abs/p.json scripts/load/poll_saturation.js
-//   3. measure:       k6 run -e RUN_ID=a2r1 -e RTT_BASE_MS=23 -e IDS_FILE=/abs/c.json,/abs/p.json scripts/load/poll_saturation.js
+//      k6 run -e BASE_URL=https://<domain> -e RUN_ID=a2seedp -e SEED_ONLY=1 -e SEED_PENDING=1000 -e IDS_OUT=/abs/p.json scripts/load/poll_saturation.js
+//   3. measure:
+//      k6 run -e BASE_URL=https://<domain> -e RUN_ID=a2r1 -e RTT_BASE_MS=23 -e IDS_FILE=/abs/c.json,/abs/p.json scripts/load/poll_saturation.js
+// A seeding run with SEED_PENDING but no COMPLETED seed and no SEED_ONLY is refused (it would run the whole load on PENDING
+// ids only) unless PENDING_SHARE=1 asks for that.
 // Setup GETs about 20 of the ids (10 + 10 when both lists have ids) and refuses to start unless each answers 200 with
 // its list's state (completed -> COMPLETED, pending -> PENDING); seeded PENDING jobs are checked the same way just after
 // they are created. teardown() GETs up to 20 pending ids again: load_pendingLeft (ids no longer PENDING because
@@ -20,9 +24,9 @@
 //
 // Env: RPS=100,300 (subset), HOLD_S, GAP_S (30 s between steps), IDS_FILE (one or more absolute paths, comma-separated,
 //      each {"completed": [...], "pending": [...]}; the lists are joined), IDS_OUT (write the seeded ids; its folder must
-//      exist), SEED_ONLY (1: seed, write IDS_OUT and stop, no load), SEED_COMPLETED (1000, but 0 when SEED_PENDING is
-//      set), SEED_PENDING (0), SEED_WAIT_S (900), PENDING_SHARE (0.5 when pending ids exist), EXPECTED_LATENCY_MS (100:
-//      sizes VUs), MAX_VUS (2000), PROM_URL.
+//      exist, checked before seeding in a SEED_ONLY run), SEED_ONLY (1: seed, write IDS_OUT and stop, no load),
+//      SEED_COMPLETED (1000, but 0 when SEED_PENDING is set), SEED_PENDING (0), SEED_WAIT_S (900), PENDING_SHARE (0.5
+//      when pending ids exist), EXPECTED_LATENCY_MS (100: sizes VUs), MAX_VUS (2000), PROM_URL.
 import { sleep } from 'k6';
 import { SharedArray } from 'k6/data';
 import { Counter } from 'k6/metrics';
@@ -47,16 +51,61 @@ const SEED_PENDING = readNum(ENV, 'SEED_PENDING', 0);
 const SEED_COMPLETED = readNum(ENV, 'SEED_COMPLETED', SEED_PENDING > 0 ? 0 : 1000);
 const SEED_WAIT_S = readNum(ENV, 'SEED_WAIT_S', 900);
 if (SEED_ONLY && IDS_FILE) throw new Error('SEED_ONLY makes new ids; it cannot be combined with IDS_FILE');
-if (SEED_ONLY && !IDS_OUT) throw new Error('SEED_ONLY needs IDS_OUT (a file in an existing folder): the seeded ids would be lost');
+if (SEED_ONLY && !IDS_OUT) throw new Error('SEED_ONLY needs IDS_OUT (an absolute path in an existing folder): the seeded ids would be lost');
 if (SEED_ONLY && SEED_COMPLETED + SEED_PENDING <= 0) throw new Error('SEED_ONLY with SEED_COMPLETED=0 and SEED_PENDING=0 seeds nothing');
+if (!SEED_ONLY && !IDS_FILE && SEED_PENDING > 0 && SEED_COMPLETED <= 0 && !readStr(ENV, 'PENDING_SHARE', '')) {
+  throw new Error('SEED_PENDING with no COMPLETED seed would run the whole A2 load on PENDING ids only: to seed the PENDING ' +
+    'list for A2 add -e SEED_ONLY=1 (seeds, writes IDS_OUT, runs no load; the 3 runs are in the header of ' +
+    'poll_saturation.js); to poll PENDING ids only on purpose set PENDING_SHARE=1');
+}
+
+const ABSOLUTE = /^([A-Za-z]:)?[\\/]/;
+
+function errorText(e) {
+  return e && e.message ? e.message : String(e);
+}
+
+// open() of a folder throws "open() can't be used with directories, path: ..." (k6 v2.3.0); of a missing path, a
+// not-found error (GetFileAttributesEx ... on Windows).
+function isFolderError(e) {
+  return errorText(e).indexOf("can't be used with directories") >= 0;
+}
+
+// handleSummary hands IDS_OUT to k6, which writes it after the run: into a missing folder (or onto a folder) k6 only
+// logs "could not open" and still exits 0, after a SEED_ONLY run has seeded every job. So the path is checked here,
+// before setup. k6's open() resolves a relative path from scripts/load/ while the summary writes it from the current
+// folder, so only an absolute path can be checked.
+function requireOutFolder(path) {
+  if (!ABSOLUTE.test(path)) {
+    throw new Error(`SEED_ONLY needs an absolute IDS_OUT (k6 writes a relative one from the current folder, so its folder ` +
+      `cannot be checked before seeding): ${path}`);
+  }
+  try {
+    open(path); // an earlier file is fine (it is overwritten); a missing one is the usual case
+  } catch (e) {
+    if (isFolderError(e)) throw new Error(`IDS_OUT ${path} is a folder: name a file in it (e.g. .../ids.json)`);
+  }
+  let dir = path.replace(/[\\/]+[^\\/]*$/, '');
+  if (dir === '' || /^[A-Za-z]:$/.test(dir)) dir += '/';
+  try {
+    open(dir);
+  } catch (e) {
+    if (isFolderError(e)) return;
+    throw new Error(`IDS_OUT folder ${dir} cannot be used (${errorText(e)}): create it first, or k6 would seed, fail to ` +
+      'write the ids and still exit 0');
+  }
+  throw new Error(`IDS_OUT folder ${dir} is a file, not a folder`);
+}
+
+if (SEED_ONLY) requireOutFolder(IDS_OUT);
 
 function readIdsFile(path) {
   let text = null;
   try {
     text = open(path);
   } catch (e) {
-    const relative = !/^([A-Za-z]:)?[\\/]/.test(path);
-    throw new Error(`IDS_FILE ${path} cannot be read (${e && e.message ? e.message : e})` +
+    const relative = !ABSOLUTE.test(path);
+    throw new Error(`IDS_FILE ${path} cannot be read (${errorText(e)})` +
       (relative ? '; k6 reads a relative path from scripts/load/, not from the current folder: give an absolute path' : ''));
   }
   try {
@@ -287,8 +336,10 @@ export function handleSummary(data) {
     extra: { mode: SEED_ONLY ? 'seed-only' : 'load', rps: SEED_ONLY ? [] : RATES, ids, server: setup.server || null },
   }, CONFIG, extra);
   if (SEED_ONLY && setup.seeded) {
+    // k6 writes IDS_OUT after this returns and cannot tell the script whether it could: say where else the ids are
     out.stdout = `SEED ONLY: ${(setup.completed || []).length} COMPLETED and ${(setup.pending || []).length} PENDING ids ` +
-      `written to IDS_OUT ${IDS_OUT}; no load ran, so this run is not an A2 result\n${out.stdout}`;
+      `for IDS_OUT ${IDS_OUT} (also in SUMMARY_PATH under k6.setup_data; a k6 error "could not open" for this path means ` +
+      `IDS_OUT was not written); no load ran, so this run is not an A2 result\n${out.stdout}`;
   }
   if (endCheck && endCheck.leftPending > 0) {
     out.stdout += `pending ids: ${endCheck.leftPending} of ${endCheck.checked} sampled were no longer PENDING when the load ended ` +
