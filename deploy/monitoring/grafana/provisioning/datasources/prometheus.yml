@@ -1,0 +1,15 @@
+# Grafana 데이터소스: compose 내부망의 Prometheus. 대시보드 JSON 은 uid beside-prometheus 로 이것을 가리킨다.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: beside-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # prometheus.yml 의 scrape_interval 과 같게: $__rate_interval 이 최소 4 × 15s 로 잡힌다.
+      timeInterval: 15s
+      httpMethod: POST
