@@ -134,7 +134,7 @@ test('f3_uploads.js: a round left running at maxDuration may finish its upload (
   assert.equal(set.options.scenarios.bad.gracefulStop, '400s');
 });
 
-test('f3_uploads.js and f3_throttled.py document the same command (helper first, k6 exit file, wait)', () => {
+test('f3_uploads.js, f3_throttled.py and README.md document the same command (helper first, k6 exit file, wait)', () => {
   const block = (text, prefix) => {
     const lines = text.split(/\r?\n/);
     const from = lines.findIndex((l) => l.startsWith(`${prefix}newrun f3r1`));
@@ -144,7 +144,10 @@ test('f3_uploads.js and f3_throttled.py document the same command (helper first,
   };
   const js = block(readFileSync(join(HERE, 'failure', 'f3_uploads.js'), 'utf8'), '//   ');
   const py = block(readFileSync(join(HERE, 'failure', 'f3_throttled.py'), 'utf8'), '    ');
+  // the README's VM block (bash, no comment prefix) is the operator's copy of the same five lines
+  const md = block(readFileSync(join(HERE, 'README.md'), 'utf8'), '');
   assert.deepEqual(js, py);
+  assert.deepEqual(md, js);
   assert.equal(js.length, 5);
   assert.ok(js[1].startsWith('python scripts/load/failure/f3_throttled.py') && js[2].endsWith('& F3T=$!'), 'the helper first');
   assert.ok(js[3].startsWith('k6 run'), 'then k6');

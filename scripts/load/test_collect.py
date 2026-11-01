@@ -91,22 +91,17 @@ class QueryListTest(unittest.TestCase):
 
 
 class ReadmeTest(unittest.TestCase):
-    """scripts/load/README.md against collect.py, so the documented CSV count and heap criterion cannot drift again.
-
-    README.md is not part of the change that added jvm_heap_after_gc: it still says "CSV 17개" and judges "GC 뒤 힙 < 75 %"
-    from jvm_heap_used/max, so both checks fail today and are marked expectedFailure. The commit that fixes README.md
-    removes the two decorators; fixing README.md without removing them is an "unexpected success", which unittest
-    counts as a failed run, so the two documents cannot silently disagree in either direction."""
+    """scripts/load/README.md against collect.py, so the documented CSV count and heap criterion cannot drift again:
+    the README names the number of CSVs collect.py writes, and every README line on "GC 뒤 힙 < 75 %" names the
+    jvm_heap_after_gc CSV it is judged from (not jvm_heap_used/max, the heap at scrape time with Eden included)."""
 
     @staticmethod
     def readme() -> str:
         return (collect.HERE / "README.md").read_text(encoding="utf-8")
 
-    @unittest.expectedFailure  # README.md:24 still says "CSV 17개"
     def test_readme_names_the_csv_count(self):
         self.assertIn(f"Prometheus query_range CSV {CSV_COUNT}개", self.readme())
 
-    @unittest.expectedFailure  # README.md:84 still judges "GC 뒤 힙 < 75 %" from jvm_heap_used/max
     def test_readme_judges_heap_after_gc_from_its_csv(self):
         lines = [line for line in self.readme().splitlines() if "GC 뒤 힙" in line]
         self.assertTrue(lines)
