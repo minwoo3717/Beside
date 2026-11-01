@@ -122,7 +122,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 
 | Micrometer 이름 | Prometheus 이름 | 종류 | 태그 | 정의 | 기록하는 곳 |
 |---|---|---|---|---|---|
-| `beside.jobs.finished` | `beside_jobs_finished_total` | counter | `result`(`COMPLETED`\|`FAILED`), `code`(error.code, 성공이면 `none`), `worker`(`mock`\|`real`), `passthrough`(`true`\|`false`) | 끝난 실행(attempt) 수. retry 마다 하나 더 | `JobMetrics`(JobFinisher 가 내는 `JobFinishedEvent`) |
+| `beside.jobs.finished` | `beside_jobs_finished_total` | counter | `result`(`COMPLETED`\|`FAILED`), `code`(error.code, 성공이면 `none`), `worker`(`mock`\|`real`), `passthrough`(`true`\|`false`. FAILED 실행은 늘 `false`, 아래 주의) | 끝난 실행(attempt) 수. retry 마다 하나 더 | `JobMetrics`(JobFinisher 가 내는 `JobFinishedEvent`) |
 | `beside.job.queued` | `beside_job_queued_seconds_{bucket,sum,count,max}` | timer | `worker`, `result`, `passthrough` | 그 실행의 §1 `queuedMs` | 같은 곳 |
 | `beside.job.processing` | `beside_job_processing_seconds_*` | timer | 같음 | §1 `processingMs`. PROCESSING 없이 끝난 실행은 기록하지 않는다 | 같은 곳 |
 | `beside.job.total` | `beside_job_total_seconds_*` | timer | 같음 | §1 `totalMs` | 같은 곳 |
@@ -146,7 +146,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 
 버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30.
 
-주의: 재시작으로 끊긴 실행(`code="INTERNAL_ERROR"`, §1 주의)도 `FAILED` 로 세어지고 시간에는 서버가 꺼져 있던 시간이 들어간다. 패스스루 실행은 `passthrough="true"` 로 거른다. Mock 실행은 `worker="mock"` 이다.
+주의: 재시작으로 끊긴 실행(`code="INTERNAL_ERROR"`, §1 주의)도 `FAILED` 로 세어지고 시간에는 서버가 꺼져 있던 시간이 들어간다. 패스스루 실행은 `passthrough="true"` 로 거른다. Mock 실행은 `worker="mock"` 이다. 단, `passthrough="true"` 가 붙는 것은 **성공한** 패스스루 실행뿐이다. 추론 서비스의 실패 응답에는 패스스루 여부가 없어서 백엔드는 스텁(패스스루)의 실패와 모델의 실패를 구별하지 못하고, FAILED 실행은 늘 `passthrough="false"` 로 남는다(§1 `passthrough` 가 null → 태그 `false`). 그래서 `passthrough="false"` 로 거른 성공률은 스텁의 성공만 빼고 스텁의 실패는 남긴다. 이 성공률은 추론 서비스가 실제 모델을 돌리는 동안에만 맞다(§5.3 아래).
 
 ### 5.2 내장 지표 (Spring Boot / Micrometer)
 
@@ -166,12 +166,14 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 
 | 멘토 지표 | PromQL |
 |---|---|
-| 생성 성공률 | `sum(increase(beside_jobs_finished_total{env="prod",passthrough="false",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="prod",passthrough="false"}[1h]))` · 실패 코드별 `sum by (code) (increase(beside_jobs_finished_total{env="prod",result="FAILED"}[1h]))` |
+| 생성 성공률 | `sum(increase(beside_jobs_finished_total{env="prod",passthrough="false",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="prod",passthrough="false"}[1h]))` (추론 서비스가 실제 모델일 때만 맞다, 표 아래 주의) · 실패 코드별 `sum by (code) (increase(beside_jobs_finished_total{env="prod",result="FAILED"}[1h]))` |
 | 생성 시간 평균 | `sum(rate(beside_job_processing_seconds_sum{env="prod",result="COMPLETED",passthrough="false"}[15m])) / sum(rate(beside_job_processing_seconds_count{env="prod",result="COMPLETED",passthrough="false"}[15m]))` |
 | 생성 시간 p95 | `histogram_quantile(0.95, sum by (le) (rate(beside_job_processing_seconds_bucket{env="prod",result="COMPLETED",passthrough="false"}[15m])))` · 앱이 느끼는 시간은 `beside_job_total_seconds_bucket`, 대기만은 `beside_job_queued_seconds_bucket`(GPU 증설 기준 'p95 queuedMs > 60초') |
 | 대기열 길이 | `beside_jobs_queue{env="prod",state="pending"}` · 10분 최대 `max_over_time(beside_jobs_queue{env="prod",state="pending"}[10m])` · 들어온 양 대 끝난 양 `sum(rate(beside_jobs_created_total{env="prod"}[5m]))` 대 `sum(rate(beside_jobs_finished_total{env="prod"}[5m]))` |
 | API 응답 시간 | `histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env="prod",uri=~"/api/v1/.*"}[5m])))` · 5xx 비율 `sum(rate(http_server_requests_seconds_count{env="prod",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{env="prod"}[5m]))` |
 | 에셋 다운로드 실패율 | `sum(increase(beside_asset_downloads_total{env="prod",outcome=~"client_abort\|error"}[1h])) / sum(increase(beside_asset_downloads_total{env="prod",outcome=~"ok\|client_abort\|error"}[1h]))` · `not_found`·`not_completed` 는 따로 본다(완료 전 요청·잘못된 id 는 서버 실패가 아니다. 다만 완료된 작업의 파일이 없어진 `ASSET_NOT_FOUND` 도 `not_found` 에 들어가므로 0 이 아니면 로그를 확인한다) |
+
+주의(생성 성공률): FAILED 실행은 늘 `passthrough="false"` 로 세어진다(§5.1 주의, 백엔드는 스텁의 실패와 모델의 실패를 구별하지 못한다). 그래서 위의 `passthrough="false"` 식, 그리고 Grafana `beside-ops` 성공률 패널의 B 계열 `성공률 (패스스루 제외)` 는 추론 서비스가 **실제 모델**을 돌리는 동안에만 맞다. 패스스루 스텁으로 돌리는 부하 시험(G·F 계열)에서는 분자에서 스텁의 성공이 모두 빠지고 분모에는 스텁의 실패만 남아, 성공률이 0 이 되거나(실패가 있을 때) 값이 없다(실패가 없을 때). 이때는 거르지 않은 성공률 `sum(increase(beside_jobs_finished_total{env="loadtest",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="loadtest"}[1h]))`(같은 패널의 A 계열 `성공률`)이나 `scripts/load/collect.py` 가 모은 값을 쓴다.
 
 표 안의 `\|` 는 표 구분자를 피하려고 쓴 것이고, PromQL 에는 `|` 로 쓴다.
 
