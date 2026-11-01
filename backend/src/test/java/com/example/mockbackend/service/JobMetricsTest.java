@@ -1,5 +1,9 @@
 package com.example.mockbackend.service;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobRun;
 import com.example.mockbackend.domain.JobStatus;
@@ -10,20 +14,25 @@ import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.distribution.CountAtBucket;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
  * Operational job meters (docs/METRICS.md §5) on a plain SimpleMeterRegistry: one finished run → one count in
  * beside.jobs.finished with its result, error code, worker and passthrough tags, and the queue / processing / total
- * timers in seconds with the SLO buckets. The queue gauge reads two counts every refresh, never per scrape.
+ * timers in seconds with the SLO buckets. The queue gauge reads two counts every refresh, never per scrape, and shows
+ * NaN rather than an old number while the counts fail.
  */
 class JobMetricsTest {
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -132,11 +141,77 @@ class JobMetricsTest {
         gauge.refresh();
         assertThat(queue("pending")).isEqualTo(9.0);
         assertThat(queue("processing")).isEqualTo(1.0);
+    }
 
-        // A failed count (database closing at shutdown) keeps the last values instead of throwing into the scheduler.
-        when(jobs.countByStatus(JobStatus.PENDING)).thenThrow(new IllegalStateException("closed"));
-        assertThatCode(gauge::refresh).doesNotThrowAnyException();
-        assertThat(queue("pending")).isEqualTo(9.0);
+    @Test
+    void aFailedRefreshShowsNoNumberUntilACountSucceedsAndWarnsOncePerStreak() {
+        JobRepository jobs = mock(JobRepository.class);
+        JobQueueGauge gauge = new JobQueueGauge(jobs, registry);
+        when(jobs.countByStatus(JobStatus.PENDING)).thenReturn(9L);
+        when(jobs.countByStatus(JobStatus.PROCESSING)).thenReturn(1L);
+        gauge.refresh();
+
+        try (LogCapture log = new LogCapture(JobQueueGauge.class)) {
+            // The PENDING count works, the PROCESSING count fails: no half-new pair, and no old number that looks fine.
+            doReturn(12L).when(jobs).countByStatus(JobStatus.PENDING);
+            doThrow(new IllegalStateException("pool exhausted")).when(jobs).countByStatus(JobStatus.PROCESSING);
+            assertThatCode(gauge::refresh).doesNotThrowAnyException();
+            assertThat(queue("pending")).isNaN();
+            assertThat(queue("processing")).isNaN();
+            assertThatCode(gauge::refresh).doesNotThrowAnyException();
+            assertThat(log.at(Level.WARN)).singleElement().asString().contains("pool exhausted");
+
+            doReturn(2L).when(jobs).countByStatus(JobStatus.PROCESSING);
+            gauge.refresh();
+            assertThat(queue("pending")).isEqualTo(12.0);
+            assertThat(queue("processing")).isEqualTo(2.0);
+
+            // A new streak warns again.
+            doThrow(new IllegalStateException("pool exhausted again")).when(jobs).countByStatus(JobStatus.PENDING);
+            gauge.refresh();
+            assertThat(queue("processing")).isNaN();
+            assertThat(log.at(Level.WARN)).hasSize(2).last().asString().contains("pool exhausted again");
+        }
+    }
+
+    @Test
+    void aFailedRefreshWhileTheContextClosesIsOnlyDebug() {
+        // The database closes before the scheduler stops at shutdown: nothing to warn anyone about.
+        JobRepository jobs = mock(JobRepository.class);
+        JobQueueGauge gauge = new JobQueueGauge(jobs, registry);
+        try (LogCapture log = new LogCapture(JobQueueGauge.class)) {
+            gauge.contextClosing();
+            when(jobs.countByStatus(JobStatus.PENDING)).thenThrow(new IllegalStateException("closed"));
+            assertThatCode(gauge::refresh).doesNotThrowAnyException();
+            assertThat(queue("pending")).isNaN();
+            assertThat(log.at(Level.WARN)).isEmpty();
+            assertThat(log.at(Level.DEBUG)).singleElement().asString().contains("closed");
+        }
+    }
+
+    /** Collects one class's log lines at DEBUG and up while open, then restores its level. */
+    private static final class LogCapture implements AutoCloseable {
+        private final Logger logger;
+        private final Level levelBefore;
+        private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+
+        LogCapture(Class<?> type) {
+            logger = (Logger) LoggerFactory.getLogger(type);
+            levelBefore = logger.getLevel();
+            logger.setLevel(Level.DEBUG);
+            appender.start();
+            logger.addAppender(appender);
+        }
+
+        List<String> at(Level level) {
+            return appender.list.stream().filter(e -> e.getLevel() == level).map(ILoggingEvent::getFormattedMessage).toList();
+        }
+
+        @Override
+        public void close() {
+            logger.detachAppender(appender);
+            logger.setLevel(levelBefore);
+        }
     }
 
     private double finished(String result, String code, String worker, String passthrough) {

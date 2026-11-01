@@ -126,7 +126,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | `beside.job.queued` | `beside_job_queued_seconds_{bucket,sum,count,max}` | timer | `worker`, `result`, `passthrough` | 그 실행의 §1 `queuedMs` | 같은 곳 |
 | `beside.job.processing` | `beside_job_processing_seconds_*` | timer | 같음 | §1 `processingMs`. PROCESSING 없이 끝난 실행은 기록하지 않는다 | 같은 곳 |
 | `beside.job.total` | `beside_job_total_seconds_*` | timer | 같음 | §1 `totalMs` | 같은 곳 |
-| `beside.jobs.queue` | `beside_jobs_queue` | gauge | `state`(`pending`\|`processing`) | 지금 PENDING / PROCESSING 인 작업 수. 5초(`metrics.queue.refresh-ms`)마다 DB 에서 센 값을 들고 있어 스크레이프는 DB 를 읽지 않는다(최대 5초 묵은 값) | `JobQueueGauge` |
+| `beside.jobs.queue` | `beside_jobs_queue` | gauge | `state`(`pending`\|`processing`) | 지금 PENDING / PROCESSING 인 작업 수. 5초(`metrics.queue.refresh-ms`)마다 DB 에서 센 값을 들고 있어 스크레이프는 DB 를 읽지 않는다(최대 5초 묵은 값). 두 상태는 같은 갱신에서 센 값이 함께 바뀐다. 세기가 실패하면 다음 성공까지 두 값 모두 `NaN`(그래프에 빈칸, 옛 숫자를 그대로 두지 않음)이고, 실패가 시작될 때 서버 로그에 WARN 한 줄이 남는다(종료 중에는 DEBUG) | `JobQueueGauge` |
 | `beside.jobs.created` | `beside_jobs_created_total` | counter | — | 접수해 워커에 넘긴 작업(v1·v0). Idempotency-Key 재요청과 종료 중 거절은 세지 않는다 | `JobServiceImpl` |
 | `beside.jobs.retried` | `beside_jobs_retried_total` | counter | — | 접수해 워커에 넘긴 retry | `JobServiceImpl` |
 | `beside.asset.downloads` | `beside_asset_downloads_total` | counter | `outcome`(아래) | `GET /api/v1/jobs/{id}/asset` 한 번마다 하나 | `AssetDownloadMetricsFilter` |
