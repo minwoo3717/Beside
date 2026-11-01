@@ -25,7 +25,7 @@
 //
 // Env: RHO (0.7), SLOTS (1), T_SEC (10), DURATION_S (1800), ARRIVAL_THIN (20, whole number >= 1), FAIL_RATIO (0; F1a
 //      uses the stub's own fail rate), FAIL_TOKEN, MAX_VUS, PROM_URL, plus lib/config.js.
-import { CONFIG, ENV, photoPaths, readNum, requireRtt } from './lib/config.js';
+import { CONFIG, ENV, flowDrainS, photoPaths, readNum, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { makeContext, userFlow } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
@@ -56,6 +56,8 @@ const FLOW_S = PREDICTION.wqMMcSec === null ? CONFIG.maxWaitS + 30 : Math.min(CO
 const FLOWS_IN_PROGRESS = PREDICTION.lambdaPerS * FLOW_S * 1.5;
 const PRE_VUS = Math.max(5, Math.ceil(FLOWS_IN_PROGRESS + 3 * Math.sqrt(FLOWS_IN_PROGRESS))) + 2;
 const MAX_VUS = readNum(ENV, 'MAX_VUS', Math.max(PRE_VUS, Math.ceil(PREDICTION.lambdaPerS * (CONFIG.maxWaitS + 60) * 1.2) + 2));
+// Long enough for the longest flow (a FAILED wait, the retry and a second wait), so a normal end cuts off no flow.
+const DRAIN_S = flowDrainS(CONFIG);
 
 export const options = {
   discardResponseBodies: true,
@@ -70,10 +72,10 @@ export const options = {
       duration: `${DURATION_S}s`,
       preAllocatedVUs: PRE_VUS,
       maxVUs: MAX_VUS,
-      gracefulStop: `${CONFIG.maxWaitS + 120}s`,
+      gracefulStop: `${DRAIN_S}s`,
       tags: { stage: '0', phase: 'hold' },
     },
-  }, guardScenario(CONFIG, DURATION_S, DURATION_S + CONFIG.maxWaitS + 120)), // returns when the last flow is done
+  }, guardScenario(CONFIG, DURATION_S, DURATION_S + DRAIN_S)), // returns when the last flow is done
   // Overload (rho >= 1) is expected to time flows out, so the flow criteria apply only below saturation.
   thresholds: merge(latencyThresholds(RTT, ['healthz', 'create', 'poll', 'asset'], null), errorThresholds(null, true),
     RHO < 1 ? flowThresholds(null) : {}, { dropped_iterations: ['count==0'] }),

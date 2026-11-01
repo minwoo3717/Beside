@@ -162,13 +162,25 @@ function normalBody(ctx) {
 // The whole flow; returns completed | failed | timeout | rejected | error.
 export function userFlow(ctx) {
   const flowTags = ctx.tags();
+  m.flowStarted.add(1, flowTags);
   const t0 = Date.now();
   const injected = ctx.failRatio > 0 && ctx.makeFailBody !== null && Math.random() < ctx.failRatio;
   const outcome = runFlow(ctx, injected, flowTags);
   m.flowMs.add(Date.now() - t0, Object.assign({ outcome }, flowTags));
   m.flowTimeoutRatio.add(outcome === 'timeout' ? 1 : 0, flowTags);
   m.flowOkRatio.add(outcome === 'completed' || (injected && outcome === 'failed') ? 1 : 0, flowTags);
+  m.flowEnded.add(1, flowTags);
   return outcome;
+}
+
+// One upload (upload.js) or one download (asset.js) counted as a flow: load_flowStarted before, load_flowEnded after,
+// both with the stage/phase tags of its start, so lib/summary.js can tell a request k6 cut off from one that ended.
+export function countedFlow(ctx, fn) {
+  const flowTags = ctx.tags();
+  m.flowStarted.add(1, flowTags);
+  const out = fn();
+  m.flowEnded.add(1, flowTags);
+  return out;
 }
 
 function runFlow(ctx, injected, flowTags) {

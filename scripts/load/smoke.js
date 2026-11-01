@@ -5,7 +5,7 @@
 //
 // Env: BASE_URL, RUN_ID, PHOTOS or PHOTO_1/PHOTO_2, SMOKE_VUS (5), SMOKE_MAX_VUS (20), FAIL_RATIO (0),
 //      RTT_BASE_MS (optional here), SUMMARY_PATH, UPLINK_MBPS, MIN_ASSET_BYTES.
-import { CONFIG, ENV, photoPaths, readNum } from './lib/config.js';
+import { CONFIG, ENV, flowDrainS, photoPaths, readNum } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { makeContext, userFlow } from './lib/flow.js';
 import { preflight } from './lib/seed.js';
@@ -39,7 +39,7 @@ export const options = {
       duration: `${DURATION_S}s`,
       preAllocatedVUs: VUS,
       maxVUs: MAX_VUS,
-      gracefulStop: `${CONFIG.maxWaitS + 120}s`,
+      gracefulStop: `${flowDrainS(CONFIG)}s`, // the longest flow (with its retry) still ends: none is cut off
       tags: { stage: '0', phase: 'hold' },
     },
   },

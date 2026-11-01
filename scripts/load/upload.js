@@ -7,15 +7,16 @@
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a3s1 -e RTT_BASE_MS=23 -e SIZE=small scripts/load/upload.js
 //
 // Env: SIZE, RATES=1,2,5 (per second, subset), RAMP_S, HOLD_S, LARGE_PHOTO (./out/fixtures/photo-5mb.png),
-//      PHOTOS/PHOTO_n (small), DISK_BUDGET_GB, ALLOW_DISK, MAX_VUS (600), REQUEST_TIMEOUT (120s), PROM_URL.
+//      PHOTOS/PHOTO_n (small), DISK_BUDGET_GB, ALLOW_DISK, MAX_VUS (600), REQUEST_TIMEOUT (120s; the drain is 60 s
+//      longer), PROM_URL.
 import exec from 'k6/execution';
-import { CONFIG, ENV, photoPaths, readList, readNum, readStr, requireRtt } from './lib/config.js';
+import { CONFIG, durationS, ENV, photoPaths, readList, readNum, readStr, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
-import { createJob, makeContext } from './lib/flow.js';
+import { countedFlow, createJob, makeContext } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
-import { bytesSentThresholds, errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
+import { bytesSentThresholds, errorThresholds, flowCountThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
@@ -49,6 +50,9 @@ const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 's
 // reported, not judged.
 const LATENCY_EPS = SIZE === 'small' ? ['create'] : [];
 const SCOPES = holdScopes(LEVELS.segments);
+const REQUEST_TIMEOUT = readStr(ENV, 'REQUEST_TIMEOUT', '120s');
+// The request timeout + 60 s: a normal end cuts off no upload (one still running would make the summary "unfinished").
+const DRAIN_S = Math.ceil(durationS(REQUEST_TIMEOUT)) + 60;
 
 export const options = {
   discardResponseBodies: true,
@@ -63,19 +67,19 @@ export const options = {
       preAllocatedVUs: PRE_VUS,
       maxVUs: MAX_VUS,
       stages: LEVELS.stages,
-      gracefulStop: '2m',
+      gracefulStop: `${DRAIN_S}s`,
     },
-  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + 120)), // the guard returns when the uploads are done
+  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + DRAIN_S)), // the guard returns when the uploads are done
   // bytesSentThresholds: per-stage upload bytes for the uplink ratio of the busiest stage (lib/summary.js)
   thresholds: merge.apply(null, [latencyThresholds(RTT, LATENCY_EPS, null), errorThresholds(null, true),
-    { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES)].concat(SCOPES.map((s) =>
+    { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES), flowCountThresholds(SCOPES)].concat(SCOPES.map((s) =>
     merge(latencyThresholds(RTT, LATENCY_EPS, s.scope), errorThresholds(s.scope, false))))),
 };
 
 const ctx = makeContext({
   cfg: CONFIG,
   tags: () => tagsAt(LEVELS.segments, exec.scenario.startTime, Date.now()),
-  requestTimeout: readStr(ENV, 'REQUEST_TIMEOUT', '120s'),
+  requestTimeout: REQUEST_TIMEOUT,
 });
 
 export function setup() {
@@ -83,7 +87,7 @@ export function setup() {
 }
 
 export function upload() {
-  createJob(ctx, BODIES.body());
+  countedFlow(ctx, () => createJob(ctx, BODIES.body()));
 }
 
 export function guard() {

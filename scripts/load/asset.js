@@ -1,7 +1,8 @@
 // A4 asset delivery ceiling: GET /api/v1/jobs/{id}/asset at stepped rates 1 -> 40 downloads/s (tiers.json load.a4)
 // on ASSET_JOBS completed jobs seeded in setup. The asset must be the 1.5 MB synthetic GLB on the load-test volume
 // (the repository's sample-dog.glb is 0 B), so setup stops when a job's asset is smaller than MIN_ASSET_BYTES.
-// Bandwidth per stage = load_assetBytes{stage} / hold seconds (in the summary's stage list as assetMbps).
+// Bandwidth per stage = load_assetBytes{stage} x 8 / 1e6 / the seconds the hold ran (summary verdict.stages[].assetMbps,
+// computed by lib/summary.js from heldS, so a hold an abort cut short is not divided by the full HOLD_S).
 //
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a4r1 -e RTT_BASE_MS=23 scripts/load/asset.js
 //
@@ -10,11 +11,11 @@
 import exec from 'k6/execution';
 import { CONFIG, ENV, photoPaths, readList, readNum, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
-import { downloadAsset, makeContext } from './lib/flow.js';
+import { countedFlow, downloadAsset, makeContext } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight, seedJobs } from './lib/seed.js';
 import { buildLevels, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
-import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
+import { errorThresholds, flowCountThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
@@ -51,11 +52,11 @@ export const options = {
       preAllocatedVUs: PRE_VUS,
       maxVUs: MAX_VUS,
       stages: LEVELS.stages,
-      gracefulStop: '1m',
+      gracefulStop: '2m', // the 60 s request timeout + 60 s: a normal end cuts off no download
     },
-  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + 60)), // the guard returns when the downloads are done
+  }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + 120)), // the guard returns when the downloads are done
   thresholds: merge.apply(null, [latencyThresholds(RTT, ['asset'], null), errorThresholds(null, true),
-    { dropped_iterations: ['count==0'] }, bandwidth].concat(scopes.map((s) =>
+    { dropped_iterations: ['count==0'] }, bandwidth, flowCountThresholds(scopes)].concat(scopes.map((s) =>
     merge(latencyThresholds(RTT, ['asset'], s.scope), errorThresholds(s.scope, false))))),
 };
 
@@ -75,7 +76,7 @@ export function setup() {
 
 export function download(data) {
   const job = data.jobs[Math.floor(Math.random() * data.jobs.length)];
-  downloadAsset(ctx, job.id, { asset: job.asset });
+  countedFlow(ctx, () => downloadAsset(ctx, job.id, { asset: job.asset }));
 }
 
 export function guard() {
@@ -83,22 +84,14 @@ export function guard() {
 }
 
 export function handleSummary(data) {
-  const metrics = data.metrics || {};
   return summaryOutputs(data, {
     script: 'asset.js',
     scenario: 'A4',
     plannedS: LEVELS.totalS,
     thresholds: options.thresholds,
-    stages: scopes.map((s) => {
-      // k6 keeps the thresholded submetrics of a hold that never ran with every value 0: whether it ran comes from its
-      // asset requests, not from the bytes (load_assetBytes counts only valid downloads, so 0 there can be a result).
-      const reqs = metrics[`http_req_duration{endpoint:asset,${s.scope}}`];
-      const ran = !!(reqs && reqs.values && reqs.values.count > 0);
-      const bytes = metrics[`load_assetBytes{${s.scope}}`];
-      const count = ran && bytes && bytes.values ? bytes.values.count : null;
-      return { index: s.index, label: s.segment.label, users: null, target: s.segment.target / 60, holdS: HOLD_S, holdEndS: s.segment.end,
-        assetMbps: count === null ? null : Math.round(((count * 8) / 1e6 / HOLD_S) * 100) / 100 };
-    }),
+    // verdict.stages[].assetMbps comes from load_assetBytes{stage:N,phase:hold} and the hold's heldS (lib/summary.js)
+    stages: scopes.map((s) => ({ index: s.index, label: s.segment.label, users: null, target: s.segment.target / 60, holdS: HOLD_S,
+      holdEndS: s.segment.end })),
     extra: {
       ratesPerS: RATES,
       assetJobs: ASSET_JOBS,

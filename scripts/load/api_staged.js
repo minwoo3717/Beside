@@ -11,8 +11,8 @@
 //      retried once), EXPECTED_FLOW_S (75: sizes preAllocatedVUs), PRE_VUS, MAX_VUS, BROWSE, GRACEFUL_STOP_S,
 //      PROM_URL/PROM_ENV (abort guard), plus the common ones in lib/config.js.
 import exec from 'k6/execution';
-import { browsePerHourForUsers, CONFIG, ENV, jobsPerHourForUsers, photoPaths, readList, readNum, readStr, requireRtt }
-  from './lib/config.js';
+import { browsePerHourForUsers, CONFIG, ENV, flowDrainS, jobsPerHourForUsers, photoPaths, readList, readNum, readStr,
+  requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
 import { browseOnly, makeContext, userFlow } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
@@ -58,7 +58,9 @@ const MAX_PER_S = maxTarget(FLOW.stages) / 3600;
 const EXPECTED_FLOW_S = readNum(ENV, 'EXPECTED_FLOW_S', 75);
 const PRE_VUS = readNum(ENV, 'PRE_VUS', Math.max(5, Math.ceil(MAX_PER_S * EXPECTED_FLOW_S * 1.2)));
 const MAX_VUS = readNum(ENV, 'MAX_VUS', Math.min(4000, Math.max(PRE_VUS, Math.ceil(MAX_PER_S * (CONFIG.maxWaitS + 60)))));
-const GRACEFUL_S = readNum(ENV, 'GRACEFUL_STOP_S', CONFIG.maxWaitS + 120);
+// Default: the longest flow (a FAILED wait, the retry and a second wait) + 120 s, so a normal end cuts off no flow; a
+// flow still running when the drain ends makes the summary "unfinished" (no pass, no breaking point).
+const GRACEFUL_S = readNum(ENV, 'GRACEFUL_STOP_S', flowDrainS(CONFIG));
 const FAIL_RATIO = readNum(ENV, 'FAIL_RATIO', TIERS.defaults.failureRatio);
 const RTT = requireRtt(CONFIG, 'api_staged.js');
 const EXPECTED_FLOWS = expectedIterations(FLOW.stages, 3600, 0);

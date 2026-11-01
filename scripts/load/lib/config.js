@@ -71,6 +71,32 @@ export function parseConfig(env) {
   };
 }
 
+// The gracefulStop of the user-flow scripts: the longest flow lib/flow.js can run (a MAX_WAIT_S wait that ends FAILED,
+// RETRY_WAIT_S, the retry and a second MAX_WAIT_S wait; 1,203 s by default) plus 120 s for its requests. A normal end
+// then lets every flow finish; a flow k6 still cuts off makes lib/summary.js report the run "unfinished", never a pass.
+export function flowDrainS(cfg) {
+  return 2 * cfg.maxWaitS + cfg.retryWaitS + 120;
+}
+
+// Seconds of a k6 duration such as '120s', '2m', '1m30s' or '500ms'; a bare number is milliseconds, as in k6's
+// request params.
+export function durationS(text) {
+  const s = String(text).trim();
+  if (/^\d+(\.\d+)?$/.test(s)) return Number(s) / 1000;
+  const unit = { ms: 0.001, s: 1, m: 60, h: 3600 };
+  const re = /(\d+(?:\.\d+)?)(ms|h|m|s)/g;
+  let total = 0;
+  let used = 0;
+  let mt = re.exec(s);
+  while (mt !== null) {
+    total += Number(mt[1]) * unit[mt[2]];
+    used += mt[0].length;
+    mt = re.exec(s);
+  }
+  if (used === 0 || used !== s.length) throw new Error(`not a k6 duration: '${text}' (e.g. 120s, 2m, 1m30s)`);
+  return total;
+}
+
 // The latency criteria are relative to RTT_base (A0 healthz p50). A remote run without it would judge against 0 ms
 // of network delay, so it is refused instead of silently passing or failing.
 export function requireRtt(cfg, script) {

@@ -1,11 +1,12 @@
-// How a run ended (setup failure, guard / threshold abort, Ctrl+C), empty stages, the breaking point of non-search
-// scenarios and the Prometheus guard (drain, unreadable Prometheus). The k6 data shapes copy what k6 v2.3.0 passed to
-// handleSummary in real runs: no abort flag in data.state, no setup_data after setup() threw, and every thresholded
-// submetric that got no sample kept with all values 0 and count 0.
+// How a run ended (setup failure, guard / threshold abort, Ctrl+C, flows cut off in the drain), empty stages, the
+// breaking point of non-search scenarios and the Prometheus guard (drain, unreadable Prometheus). The k6 data shapes copy
+// what k6 v2.3.0 passed to handleSummary in real runs: no abort flag in data.state, no setup_data after setup() threw,
+// every thresholded submetric that got no sample kept with all values 0 and count 0, and no sample at all from an
+// iteration k6 cut off (so load_flowStarted > load_flowEnded).
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { BASE_ENV, lib, load, samples, state } from './testing/harness.mjs';
+import { BASE_ENV, fakeServer, lib, load, samples, state } from './testing/harness.mjs';
 
 const CFG = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '', promUrl: '', promEnv: 'loadtest',
   guard: { everyS: 15, breaches: 2, maxErrorRatio: 0.05, maxDiskRatio: 0.8, blindAbort: 3 } };
@@ -78,7 +79,7 @@ test('summary: a guard abort cuts the running hold: "incomplete", never the last
   assert.equal(report.meta.loadRanS, 60);
   assert.equal(report.meta.loadPlannedS, 80);
   const text = s.textReport(report);
-  assert.match(text, /ABORTED by the Prometheus guard after 60 s of the 80 s planned: .*hold cut short in stage 1/);
+  assert.match(text, /ABORTED by the Prometheus guard after 60 s of the 80 s planned: .*; stage 1 incomplete \(hold cut short/);
   assert.match(text, /breaking point: none — the run was aborted/);
   assert.match(text, /thresholds: none failed before the stop, but the run was cut short: NOT a pass/);
   assert.doesNotMatch(text, /all passed|last passing stage/);
@@ -130,6 +131,80 @@ test('summary: a load that stopped early with no guard or threshold behind it is
   assert.equal(v.stages[1].heldS, 5);
   assert.equal(v.thresholdsOk, false);
   assert.match(s.textReport(report), /^STOPPED EARLY after 55 s of the 80 s planned: .*Ctrl\+C/m);
+});
+
+// load_flowStarted / load_flowEnded as k6 v2.3.0 reports Counters: the whole metric, and the per-hold submetrics that
+// lib/thresholds.js flowCountThresholds keeps.
+function flowCounts(started, ended, perStage) {
+  const out = { load_flowStarted: { values: { count: started, rate: 0.1 } } };
+  if (ended > 0) out.load_flowEnded = { values: { count: ended, rate: 0.1 } }; // a Counter with no sample is left out
+  (perStage || []).forEach(([stage, s, e]) => {
+    out[`load_flowStarted{stage:${stage},phase:hold}`] = { values: { count: s, rate: 0 }, thresholds: { 'count>=0': { ok: true } } };
+    out[`load_flowEnded{stage:${stage},phase:hold}`] = { values: { count: e, rate: 0 }, thresholds: { 'count>=0': { ok: true } } };
+  });
+  return out;
+}
+
+test('summary: a run that reached its planned end with flows still running is "unfinished", not a pass', async () => {
+  const s = await lib('summary.js');
+  const info = { script: 'api_staged.js', scenario: 'A1', stages: STAGES, plannedS: 80, thresholds: {} };
+  // Ctrl+C or a REST stop 15 s into the drain: 14 flows started, 13 ended, the missing one started in hold 1
+  const metrics = Object.assign(twoStages(PASS(10)), flowCounts(14, 13, [[0, 6, 6], [1, 8, 7]]));
+  const report = s.buildReport({ metrics, setup_data: ranFor(95), state: {} }, info, CFG, ENDED);
+  const v = report.verdict;
+  assert.equal(v.aborted.by, 'unfinished');
+  assert.match(v.aborted.reason, /^1 flow\(s\) were still running when k6 ended/);
+  assert.equal(v.aborted.unfinishedFlows, 1);
+  assert.equal(v.unfinishedFlows, 1);
+  assert.equal(v.aborted.atS, 95);
+  assert.deepEqual(v.aborted.cutStages, [1]);
+  assert.deepEqual(v.stages.map((x) => x.status), ['pass', 'incomplete']);
+  assert.deepEqual(v.stages.map((x) => x.heldS), [30, 30]); // both holds ran to their end
+  assert.equal(v.thresholdsOk, false);
+  assert.equal(v.breakingPoint, null);
+  assert.match(v.breakingPointNote, /1 flow\(s\) have no outcome/);
+  const text = s.textReport(report);
+  assert.match(text, /^FLOWS CUT OFF at 95 s \(the load was planned for 80 s, then the drain\): .*; stage 1 incomplete/m);
+  assert.match(text, /thresholds: none failed among the flows that ended, but some flows have no outcome: NOT a pass/);
+  assert.doesNotMatch(text, /all passed|last passing stage/);
+  // a REST stop in the last seconds of the load: k6 runs on about 2 s, so the summary lands inside the 1 s slack
+  const late = s.buildReport({ metrics: Object.assign(twoStages(PASS(10)), flowCounts(5, 4)), setup_data: ranFor(79.5), state: {} },
+    info, CFG, ENDED).verdict;
+  assert.equal(late.aborted.by, 'unfinished');
+  assert.deepEqual(late.stages.map((x) => x.status), ['pass', 'pass']); // no per-hold counts: no hold to blame
+  // every flow ended (the drain ran out normally): a pass as before
+  const ok = s.buildReport({ metrics: Object.assign(twoStages(PASS(10)), flowCounts(14, 14, [[0, 6, 6], [1, 8, 8]])), setup_data: ranFor(95), state: {} },
+    info, CFG, ENDED).verdict;
+  assert.equal(ok.aborted, null);
+  assert.equal(ok.unfinishedFlows, 0);
+  assert.equal(ok.thresholdsOk, true);
+  assert.equal(ok.breakingPoint.lastPassingStage, 1);
+  // gracefulStop ran out with no flow ended at all (load_flowEnded absent)
+  const none = s.buildReport({ metrics: Object.assign(twoStages(PASS(10)), flowCounts(3, 0)), setup_data: ranFor(200), state: {} },
+    info, CFG, ENDED).verdict;
+  assert.equal(none.aborted.by, 'unfinished');
+  assert.equal(none.unfinishedFlows, 3);
+});
+
+test('summary: an abort after a hold ended still cuts that hold when its flows were cut off', async () => {
+  const s = await lib('summary.js');
+  // stopped 45 s in (ramp of stage 1): hold 0 ended at 40 s, but 15 of its 20 flows (the slow ones) had not ended
+  const metrics = Object.assign(twoStages(EMPTY), flowCounts(22, 5, [[0, 20, 5], [1, 0, 0]]));
+  const report = s.buildReport({ metrics, setup_data: ranFor(45), state: {} },
+    { script: 'api_staged.js', scenario: 'A1', stages: STAGES, plannedS: 80, thresholds: {} }, CFG, ENDED);
+  const v = report.verdict;
+  assert.equal(v.aborted.by, 'interrupted');
+  assert.match(v.aborted.reason, /; 17 flow\(s\) were still running and have no outcome$/);
+  assert.deepEqual(v.aborted.cutStages, [0]);
+  assert.deepEqual(v.stages.map((x) => x.status), ['incomplete', 'not_run']);
+  assert.equal(v.stages[0].heldS, 30); // the hold itself ran to its end
+  assert.equal(v.breakingPoint, null);
+  assert.match(s.textReport(report), /^STOPPED EARLY after 45 s of the 80 s planned: .*; stage 0 incomplete/m);
+  // the same hold that already failed stays "fail"
+  const failed = Object.assign({}, metrics, { 'http_req_duration{endpoint:poll,stage:0,phase:hold}': FAIL });
+  const f = s.buildReport({ metrics: failed, setup_data: ranFor(45), state: {} },
+    { script: 'api_staged.js', scenario: 'A1', stages: STAGES, plannedS: 80, thresholds: {} }, CFG, ENDED).verdict;
+  assert.deepEqual(f.stages.map((x) => x.status), ['fail', 'not_run']);
 });
 
 test('summary: a run that reached its planned end is not aborted; old data without readyAtMs is judged as before', async () => {
@@ -236,17 +311,82 @@ test('scripts: setup stamps readyAtMs and handleSummary passes the planned end a
   assert.equal(JSON.parse(f3.handleSummary({ metrics: {}, setup_data: { readyAtMs: Date.now() - 50000 }, state: {} })[BASE_ENV.SUMMARY_PATH]).meta.loadPlannedS, 40);
 });
 
+const BYTES = (n) => ({ values: { count: n, rate: 0 }, thresholds: { 'count>=0': { ok: true } } });
+
 test('asset.js: a hold that never ran has assetMbps null; one that ran and delivered nothing keeps 0', async () => {
   const mod = await load('asset.js', { RTT_BASE_MS: '20', RATES: '1,2', RAMP_S: '1', HOLD_S: '10' });
   const metrics = {
     'http_req_duration{endpoint:asset,stage:0,phase:hold}': PASS(8),
-    'load_assetBytes{stage:0,phase:hold}': { values: { count: 0, rate: 0 }, thresholds: { 'count>=0': { ok: true } } },
+    'load_assetBytes{stage:0,phase:hold}': BYTES(0),
     'http_req_duration{endpoint:asset,stage:1,phase:hold}': EMPTY,
-    'load_assetBytes{stage:1,phase:hold}': { values: { count: 0, rate: 0 }, thresholds: { 'count>=0': { ok: true } } },
+    'load_assetBytes{stage:1,phase:hold}': BYTES(0),
   };
   const doc = JSON.parse(mod.handleSummary({ metrics, setup_data: { jobs: [{ asset: { bytes: 1 } }] }, state: {} })[BASE_ENV.SUMMARY_PATH]);
-  assert.deepEqual(doc.meta.stages.map((x) => x.assetMbps), [0, null]);
+  assert.deepEqual(doc.verdict.stages.map((x) => x.assetMbps), [0, null]);
   assert.deepEqual(doc.meta.stages.map((x) => x.holdEndS), [11, 22]);
+  assert.equal(doc.meta.stages[0].assetMbps, undefined); // the Mbps is a result (verdict), not a planned stage value
+});
+
+test('asset.js: the Mbps of a hold an abort cut short is over the seconds it ran (heldS), not HOLD_S', async () => {
+  // RATES 1,2 RAMP 1 HOLD 10: hold 0 is 1-11 s, hold 1 is 12-22 s; the load stopped 16 s in, so hold 1 ran 4 s
+  const mod = await load('asset.js', { RTT_BASE_MS: '20', RATES: '1,2', RAMP_S: '1', HOLD_S: '10' });
+  const metrics = {
+    'http_req_duration{endpoint:asset,stage:0,phase:hold}': PASS(10),
+    'load_assetBytes{stage:0,phase:hold}': BYTES(15e6), // 1/s x 1.5 MB for 10 s
+    'http_req_duration{endpoint:asset,stage:1,phase:hold}': PASS(8),
+    'load_assetBytes{stage:1,phase:hold}': BYTES(12e6), // 2/s x 1.5 MB for 4 s
+  };
+  const doc = JSON.parse(mod.handleSummary({ metrics, setup_data: { readyAtMs: Date.now() - 16000, jobs: [{ asset: { bytes: 1 } }] },
+    state: {} })[BASE_ENV.SUMMARY_PATH]);
+  const v = doc.verdict;
+  assert.equal(v.aborted.by, 'interrupted');
+  assert.deepEqual(v.aborted.cutStages, [1]);
+  assert.deepEqual(v.stages.map((x) => x.heldS), [10, 4]);
+  assert.deepEqual(v.stages.map((x) => x.assetMbps), [12, 24]); // 12 MB x 8 / 4 s, not / 10 s (9.6)
+});
+
+test('scripts: flows, uploads and downloads are counted at start and end, per hold; the drain outlasts the longest one', async () => {
+  const config = await lib('config.js');
+  assert.equal(config.flowDrainS({ maxWaitS: 600, retryWaitS: 3 }), 1323);
+  assert.deepEqual(['120s', '2m', '1m30s', '500ms', '1h', '120'].map(config.durationS), [120, 120, 90, 0.5, 3600, 0.12]);
+  assert.throws(() => config.durationS('2 min'), /not a k6 duration/);
+
+  // api_staged.js: a flow started in hold 0 carries its stage on both counters; gracefulStop covers a retried flow
+  const st = await load('api_staged.js', { RTT_BASE_MS: '20', USERS: '25,200', RAMP_S: '10', HOLD_S: '30' }, { clock: 15000, scenarioStartTime: 0 });
+  assert.equal(st.options.scenarios.flows.gracefulStop, '1323s');
+  assert.deepEqual(st.options.thresholds['load_flowStarted{stage:1,phase:hold}'], ['count>=0']);
+  assert.deepEqual(st.options.thresholds['load_flowEnded{stage:1,phase:hold}'], ['count>=0']);
+  state.handler = fakeServer({ completeAfterPolls: 0 });
+  st.flow();
+  assert.deepEqual(samples('load_flowStarted').map((x) => [x.value, x.tags.stage, x.tags.phase]), [[1, '0', 'hold']]);
+  assert.deepEqual(samples('load_flowEnded').map((x) => [x.value, x.tags.stage, x.tags.phase]), [[1, '0', 'hold']]);
+  const smoke = await load('smoke.js', { MAX_WAIT_S: '10' });
+  assert.equal(smoke.options.scenarios.smoke.gracefulStop, '143s'); // 2 x 10 + 3 + 120
+  const gq = await load('gpu_queue.js', { RTT_BASE_MS: '20' });
+  assert.equal(gq.options.scenarios.queue.gracefulStop, '1323s');
+
+  // upload.js: one upload is one flow; the drain is the request timeout + 60 s
+  const up = await load('upload.js', { RTT_BASE_MS: '20', RATES: '1', RAMP_S: '5', HOLD_S: '10' }, { clock: 7000, scenarioStartTime: 0 });
+  assert.equal(up.options.scenarios.uploads.gracefulStop, '180s');
+  assert.deepEqual(up.options.thresholds['load_flowEnded{stage:0,phase:hold}'], ['count>=0']);
+  state.handler = fakeServer();
+  up.upload();
+  assert.deepEqual(samples('load_flowStarted').map((x) => x.tags.stage), ['0']);
+  assert.deepEqual(samples('load_flowEnded').map((x) => x.tags.stage), ['0']);
+  const slow = await load('upload.js', { RTT_BASE_MS: '20', REQUEST_TIMEOUT: '5m' });
+  assert.equal(slow.options.scenarios.uploads.gracefulStop, '360s');
+
+  // asset.js: one download is one flow; the drain is the 60 s request timeout + 60 s
+  const as = await load('asset.js', { RTT_BASE_MS: '20', RATES: '1', RAMP_S: '5', HOLD_S: '10' }, { clock: 7000, scenarioStartTime: 0 });
+  assert.equal(as.options.scenarios.downloads.gracefulStop, '2m');
+  assert.deepEqual(as.options.thresholds['load_flowStarted{stage:0,phase:hold}'], ['count>=0']);
+  const server = fakeServer({ completeAfterPolls: 0 });
+  state.handler = server;
+  server.jobs['00000000-0000-4000-8000-000000000009'] = { polls: 0, fail: false, status: 'COMPLETED', filenames: [] };
+  as.download({ jobs: [{ id: '00000000-0000-4000-8000-000000000009', asset: { bytes: 1500000 } }] });
+  assert.equal(samples('load_assetBytes').length, 1);
+  assert.deepEqual(samples('load_flowStarted').map((x) => x.tags.stage), ['0']);
+  assert.deepEqual(samples('load_flowEnded').map((x) => x.tags.stage), ['0']);
 });
 
 test('guard: one iteration whose length follows the load, not the drain upper bound', async () => {
@@ -254,7 +394,7 @@ test('guard: one iteration whose length follows the load, not the drain upper bo
     PROM_URL: 'http://localhost:9090' });
   assert.deepEqual(st.options.scenarios.guard, { executor: 'per-vu-iterations', exec: 'guard', vus: 1, iterations: 1, maxDuration: '110s', gracefulStop: '0s' });
   const gq = await load('gpu_queue.js', { RTT_BASE_MS: '20', DURATION_S: '60', PROM_URL: 'http://localhost:9090' });
-  assert.equal(gq.options.scenarios.guard.maxDuration, '780s');
+  assert.equal(gq.options.scenarios.guard.maxDuration, '1383s'); // 60 s + the flow drain 2 x 600 + 3 + 120
   const ps = await load('poll_saturation.js', { RTT_BASE_MS: '20', RPS: '5,5', HOLD_S: '6', GAP_S: '2', PROM_URL: 'http://localhost:9090' });
   assert.equal(ps.options.scenarios.guard.maxDuration, '24s');
   const none = await load('upload.js', { RTT_BASE_MS: '20' });

@@ -3,7 +3,7 @@
 쏘카 수준 목표 트래픽의 계산·시험 도구다. 가정·목표 등급·공식·합격 기준·시험 구성의 근거는 [docs/perf/load/TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md) 한 곳이고, 이 README 의 "§N" 은 모두 그 문서의 절이다(§2 가정, §3 목표 등급, §4 공식, §7 디스크, §8 합격 기준, §9 시험 구성, §10 정직성 규칙, §11 이름). 트래픽 모델(`model.py`)이 T1/T2/T3 의 요청률과 GPU 대수를 계산하고, k6 스크립트가 그 요청률을 배포 VM 에 건다. 결과는 k6 실행 하나마다 폴더 하나(`docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`)에 모으고, `collect.py` 가 그 폴더에 조건과 함께 `run.json` 을 쓴다.
 
 **상태**
-- 스크립트: **[구현됨, k6 미실행 — 이 PC 에 k6 없음]**. 단위 테스트(Python 56개, Node 30개)와 `node --check` 문법 검사만 통과했다. k6 의 실제 동작(아래 "k6 에 기대는 부분")은 첫 로컬 smoke 에서 확인해야 한다.
+- 스크립트: **[구현됨]**. 단위 테스트(Python 56개, Node 50개)와 `node --check` 문법 검사를 통과했다. k6 v2.3.0 으로는 개발 PC 루프백의 로컬 mock jar 에 30초 안팎의 짧은 실행만 했다: 실행이 끝난 방식의 판정(아래 "실행이 어떻게 끝났는지"), 가드, 흐름 수 세기를 확인하는 동작 확인용이고 결과로 쓰지 않는다. 그 밖의 k6 동작(아래 "k6 에 기대는 부분")은 첫 로컬 smoke 에서 확인해야 한다.
 - 트래픽 모델: **[파생]** — `tiers.json` 의 **[가정]** 으로 계산한 값이다. 측정값이 아니다.
 - 측정(A0~A6, G1~G3, F1~F5): **[계획]**. VM·k6·Docker 실행은 아직 없다.
 
@@ -38,7 +38,7 @@
 
 모든 요청에 `endpoint=healthz|create|poll|asset|retry`, 고정 `name`(작업 ID 없음), 단계 태그 `stage=<단계 번호>`·`phase=ramp|hold|drain` 이 붙는다. 단계 태그는 원격 jslib 없이 `exec.scenario.startTime` 부터의 경과 시간으로 계산한다(`lib/stages.js`).
 
-k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴다): `load_postMs`, `load_pollMs`, `load_assetMs`, `load_assetTtfbMs`, `load_healthzMs`, `load_retryMs`, `load_flowMs`, `load_waitMs`, `load_serverQueuedMs`·`load_serverProcessingMs`(서버 `timings.queuedMs`·`processingMs`), `load_errorRatio`, `load_flowTimeoutRatio`, `load_flowOkRatio`, `load_unexpectedCount`, `load_rejectedCount`, `load_assetBytes`, `load_bytesSent`(POST 본문 바이트, 단계별 업링크용), F3 의 `load_f3MatchRatio`. `bench.*` 처럼 docs/perf 전용이며 METRICS.md 에는 올리지 않는다(안건 #15).
+k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴다): `load_postMs`, `load_pollMs`, `load_assetMs`, `load_assetTtfbMs`, `load_healthzMs`, `load_retryMs`, `load_flowMs`, `load_waitMs`, `load_serverQueuedMs`·`load_serverProcessingMs`(서버 `timings.queuedMs`·`processingMs`), `load_errorRatio`, `load_flowTimeoutRatio`, `load_flowOkRatio`, `load_flowStarted`·`load_flowEnded`(흐름이 시작할 때와 끝날 때 1씩, 아래 "실행이 어떻게 끝났는지"), `load_unexpectedCount`, `load_rejectedCount`, `load_assetBytes`, `load_bytesSent`(POST 본문 바이트, 단계별 업링크용), 가드의 `load_guardQueries`·`load_guardFailures`·`load_guardLastFailure`·`load_guardErrorRatio`·`load_guardDiskRatio`·`load_guardAbort`, F3 의 `load_f3MatchRatio`. `bench.*` 처럼 docs/perf 전용이며 METRICS.md 에는 올리지 않는다(안건 #15).
 
 ## 합격 기준 (§8, [제안값 — 계약 회의 전])
 
@@ -54,15 +54,37 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 - `load_errorRatio`(5xx + 연결 오류) < 0.5 %. 429 `RATE_LIMITED`·503 `QUEUE_FULL`([계획] R1~R3, 아직 계약에 없음)은 `load_rejectedCount` 로 따로 센다.
 - `load_flowTimeoutRatio == 0`, `load_flowOkRatio >= 0.95`, `dropped_iterations == 0`.
 - **A2** 는 `load_unexpectedCount == 0` 도 전체와 단계마다 건다. 폴링이 404 같은 기대하지 않은 상태를 받으면 오류(5xx)가 아니라 'unexpected' 로만 세어지고, 빠른 404 는 지연 기준도 통과하기 때문이다. `IDS_FILE` 을 주면 setup 이 그 안의 id 약 20개를 GET 해 하나라도 200 이 아니면 시작하지 않는다(다른 서버·비운 볼륨의 id). 요약 글은 실패한 check 수와 `load_unexpectedCount` 가 0 이 아니면 출력한다.
-- 단계가 있는 스크립트는 같은 기준을 `{stage:N,phase:hold}` 로 단계마다 한 번 더 건다. 요약의 `verdict.stages`(단계마다 `pass | fail | not_run | invalid`)와 `verdict.breakingPoint`(마지막 통과 단계, 처음 실패 단계, 운영 상한 = 마지막 통과 사용자 수의 70 %)가 여기서 나온다.
+- 단계가 있는 스크립트는 같은 기준을 `{stage:N,phase:hold}` 로 단계마다 한 번 더 건다. 요약의 `verdict.stages`(단계마다 `pass | fail | not_run | invalid | incomplete`)와 `verdict.breakingPoint`(마지막 통과 단계, 처음 실패 단계, 운영 상한 = 마지막 통과 사용자 수 × 7 / 10 의 내림)가 여기서 나온다. `incomplete` 는 중단된 실행에서 잘린 유지 구간이다(아래 "실행이 어떻게 끝났는지"). 표본이 없는 엔드포인트는 지연 항목이 없고(글에서 `-`), 돌지 않은 단계의 `heldS`·`sentMbps`·`assetMbps` 는 0 이 아니라 null 이다.
+- `breakingPoint` 는 단계가 올라가기만 하는 탐색(A1)에만 있다. A5(스파이크 1,800 → 5,400 → 1,800)와 A6(소크 한 단계)는 null 이고 `breakingPointNote` 가 "not an increasing search" 라고 적는다. 단계별 판정만 읽는다.
 - **drop 이 있는 단계는 통과가 아니다.** A2 는 단계마다 시나리오(`rps0`…)가 따로라 `dropped_iterations{scenario:rpsN}` 이 그 단계를 `fail` 로 만든다. `ramping-arrival-rate` 스크립트(A1·A3·A4·A5·A6)는 k6 가 drop 에 단계 태그를 붙이지 못하므로, drop 이 하나라도 있으면 `pass` 단계를 `invalid` 로 바꾸고 `breakingPoint` 를 null 로 둔다(이유는 `verdict.breakingPointNote`). VU 를 늘려(`PRE_VUS`/`MAX_VUS`) 다시 돌린다.
 - **업링크**: `verdict.uplinkRatio` = max(가장 바쁜 단계 유지 구간의 업로드 본문 Mbps, 전체 평균 `data_sent` Mbps) / `UPLINK_MBPS`, 0.7 을 넘으면 `uplinkSaturated`. 단계 값은 `load_bytesSent{stage:N,phase:hold}` × 8 / 유지 초(A1·A3, 단계 항목의 `sentMbps`, `peakStage`·`peakStageSentMbps`)이고, 전체 평균은 `uplinkRatioWholeRun` 으로 따로 남는다. 본문만 세므로 헤더·폴링·TLS 몫이 빠진 하한이다.
-- **중단**: `load_errorRatio` 누적 > 5 % 를 첫 1분 뒤부터 `abortOnFail`. k6 기준은 누적값이라 "1분 지속"을 정확히 못 본다. `PROM_URL` 을 주면 `lib/guard.js` 가 15초마다 서버의 최근 1분 5xx 비율(> 5 % 두 번 연속)과 디스크 사용률(> 80 %)을 보고 `exec.test.abort()` 한다.
+- **중단**: `load_errorRatio` 누적 > 5 % 를 첫 1분 뒤부터 `abortOnFail`. k6 기준은 누적값이라 "1분 지속"을 정확히 못 본다. `PROM_URL` 을 주면 `lib/guard.js` 가 15초(`GUARD_EVERY_S`)마다 서버의 최근 1분 5xx 비율(> 5 % 두 번 연속)과 디스크 사용률(> 80 %)을 보고 `exec.test.abort()` 한다(k6 종료 코드 108).
+  - 가드는 `per-vu-iterations` 의 반복 한 번(VU 1개)이다. 부하의 예정 끝이 지나고 부하 VU 가 모두 끝나면(드레인 포함) 같이 끝나므로, 실행을 gracefulStop 상한까지 붙잡지 않는다.
+  - Prometheus 를 못 읽은 응답(HTTP 오류, 응답 없음, Prometheus 결과가 아닌 본문, `disk_free_bytes` 시리즈가 없는 빈 디스크 결과)은 가드를 조용히 끄지 않는다. 못 읽는 구간이 시작될 때와 다시 읽힐 때 경고를 한 번씩 내고 `load_guardQueries`·`load_guardFailures`·`load_guardLastFailure` 로 센다. 5xx 결과가 비어 있으면 5xx 0 으로 본다.
+  - 한 번도 읽지 못한 채 `GUARD_BLIND_ABORT`(기본 3, 0 이면 끔)번 연속 못 읽으면 실행을 멈춘다(`PROM_URL`·터널·`PROM_ENV` 설정 실수를 시작하자마자 알리려고). 한 번이라도 읽은 뒤에는 못 읽어도 멈추지 않고 경고와 수만 남긴다.
+  - 요약 `verdict.guard` = `{ promUrl, env, queries, failures, lastError, maxErrorRatio, maxDiskRatio }`(`PROM_URL` 이 없으면 null). `failures` > 0 이면 "가드가 다 지키지 못한 실행"이라고 글에 적지만 `thresholdsOk` 는 바꾸지 않는다.
+
+### 실행이 어떻게 끝났는지 (`verdict.aborted`)
+
+k6 v2.3.0 은 어떤 끝(정상 0, setup 실패 107, 가드 108, `abortOnFail` 99, Ctrl+C 105, REST API 정지 103)에도 `handleSummary` 를 부르지만 어떻게 끝났는지는 알려 주지 않고, 표본이 없는 지표의 기준은 통과로 친다. 그래서 `lib/summary.js` 가 끝을 다시 짜 맞춘다. 정상 끝이면 `verdict.aborted` 는 null, 아니면 `{ by, reason, atS, plannedS, cutStages, unfinishedFlows }` 다.
+
+| `by` | 언제 |
+|---|---|
+| `setup` | setup() 이 끝나지 않았다(`setup_data` 없음). 부하는 돌지 않았다 |
+| `guard` | 가드가 멈췄다(`load_guardAbort`: 1 = 5xx, 2 = 디스크, 3 = 처음부터 Prometheus 를 못 읽음) |
+| `threshold` | 부하가 예정 끝 전에 멈췄거나 흐름이 잘렸고, `abortOnFail` 기준이 실패했다 |
+| `interrupted` | 부하가 예정 끝(`plannedS`)보다 1초 넘게 일찍 멈췄고 위의 어느 것도 아니다(Ctrl+C, REST API 정지) |
+| `unfinished` | 부하는 예정 끝까지 갔지만 k6 가 끝날 때 아직 돌던 흐름이 있다: 드레인(gracefulStop) 중의 Ctrl+C·REST 정지, 또는 gracefulStop 이 다 됨 |
+
+- 부하 길이(`atS`, `meta.loadRanS`)는 요약 시각 − `setup_data.readyAtMs`(setup 끝)다. `testRunDurationMs` 는 setup(asset.js·poll_saturation.js 는 수 분의 시드)을 포함해서 쓰지 않는다. 예정 길이 `plannedS`(`meta.loadPlannedS`)는 단계형은 마지막 유지 구간의 끝, smoke·gpu_queue 는 `DURATION_S`, F3 은 `F3_BG_S + 10` 이다.
+- **잘린 흐름**: k6 는 중간에 끊은 반복에 아무 표본도 남기지 않는다. 그래서 흐름(user flow, upload.js 의 업로드 하나, asset.js 의 다운로드 하나)마다 시작할 때 `load_flowStarted`, 끝날 때 `load_flowEnded` 를 더하고, 그 차이(`verdict.unfinishedFlows`, 세지 않는 A2·F3 은 null)가 결과를 모르는 흐름 수다. 잘린 흐름은 가장 느린 흐름(과부하 단계의 타임아웃)이라 하나라도 있으면 통과가 아니다. 그래서 흐름 스크립트의 gracefulStop 기본값은 가장 긴 흐름(FAILED 로 끝난 대기 `MAX_WAIT_S` + `RETRY_WAIT_S` + retry 뒤 대기 `MAX_WAIT_S`) + 120초 = 1,323초이고(A1·A5·A6 은 `GRACEFUL_STOP_S` 로 바꿀 수 있다), upload.js 는 `REQUEST_TIMEOUT` + 60초, asset.js 는 2분이다. 정상 끝에서는 모든 흐름이 끝난다.
+- 잘린 유지 구간(`cutStages`): 예정 끝이 멈춘 시각보다 뒤인 구간(`heldS` 는 실제로 돈 초), 그리고 자기 흐름이 잘린 구간(A1 의 흐름은 유지 구간보다 길 수 있다; `heldS` 는 `holdS` 그대로). 그때까지 통과였으면 `incomplete`, 이미 실패였으면 `fail` 로 남는다. `sentMbps`·`assetMbps` 는 `heldS` 로 나눈다.
+- 중단된 실행은 `thresholdsOk` false, `breakingPoint` null(이유는 `breakingPointNote`)이고, 요약 글 첫머리에 `SETUP FAILED`·`ABORTED by …`·`STOPPED EARLY …`·`FLOWS CUT OFF …` 줄이 나오며 "thresholds: all passed" 는 나오지 않는다.
 - VM CPU < 85 %, GC 뒤 힙 < 75 % 는 k6 가 아니라 `collect.py` 의 Prometheus CSV(`process_cpu`, `system_cpu`, `jvm_heap_used/max`)로 판정한다.
 
 ## k6 설치 (지금 하지 않는다)
 
-k6 0.52 이상(1.x 포함). 이 PC 에는 아직 없다.
+k6 0.52 이상(1.x 포함). 이 PC 에는 k6 v2.3.0 이 PATH 밖(`C:\Program Files\k6\k6.exe`)에 있다. 끝난 방식의 판정은 v2.3.0 의 `handleSummary` 데이터에 맞췄다.
 
 ```powershell
 winget install k6 --source winget     # 또는: choco install k6
@@ -184,7 +206,7 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
 
 | 파일 | 내용 |
 |---|---|
-| `k6-summary.json` | handleSummary 출력: `meta`(스크립트, 시나리오, RUN_ID, 시작·끝, 단계별 사용자 수·도착률, RTT; G 는 `arrivalProcess`·`prediction`·`measuredQueuedMs`·`measuredProcessingMs`·`recompute`), `verdict`(실패 기준, 단계별 판정과 `sentMbps`·`dropped`, 깨지는 지점과 `breakingPointNote`, `dataSentMbps`·`peakStageSentMbps`·`uplinkRatio`·`uplinkRatioWholeRun`, `dropped_iterations`, `checksFailed`, `unexpectedCount`), `k6`(원본 지표) |
+| `k6-summary.json` | handleSummary 출력: `meta`(스크립트, 시나리오, RUN_ID, 시작·끝, 부하 예정·실제 길이 `loadPlannedS`·`loadRanS`, 단계별 사용자 수·도착률·`holdS`·`holdEndS`, RTT; G 는 `arrivalProcess`·`prediction`·`measuredQueuedMs`·`measuredProcessingMs`·`recompute`), `verdict`(`thresholdsOk`, 끝난 방식 `aborted`(정상이면 null, 위 "실행이 어떻게 끝났는지"), `unfinishedFlows`, 실패 기준, 단계별 판정과 `heldS`·`sentMbps`·`assetMbps`(A4)·`dropped`, 깨지는 지점과 `breakingPointNote`, 가드 `guard`, `dataSentMbps`·`peakStageSentMbps`·`uplinkRatio`·`uplinkRatioWholeRun`, `dropped_iterations`, `checksFailed`, `unexpectedCount`), `k6`(원본 지표). 중단된 실행은 `thresholdsOk` false, `breakingPoint` null 이다 |
 | `run.json` | 조건: VM 사양, 도구 커밋(`git rev-parse HEAD`, scripts/load 미커밋 변경 여부), 서버 커밋, k6 버전, 업링크, 클라이언트 CPU, 사진 크기·SHA-256, 티어, 시나리오, 구간, k6 판정 사본, Prometheus 질의 목록 |
 | `prometheus/*.csv` | `unix,time,series,value`: http p95/p99(uri별), RPS(uri·status별), 5xx 비율, `beside_jobs_queue`(state별), 작업 종료율, 에셋 다운로드(outcome별), process/system CPU, 힙 사용·최대, GC, Tomcat 바쁜 스레드, Hikari 대기, 열린 파일, 디스크 여유 |
 | `vm/` | 그 실행의 VM 쪽 원본(events.jsonl 의 `lt-` 줄, `docker stats`, glb.sha256 등). run.json 에는 `--attach` 로 준 것만 들어간다 |

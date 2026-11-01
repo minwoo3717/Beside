@@ -68,7 +68,19 @@ export function bytesSentThresholds(scopes) {
   return out;
 }
 
-// Everything a staged flow script judges: overall, then per hold scope (opts.uploads adds bytesSentThresholds).
+// No-op thresholds whose only job is to keep load_flowStarted{<scope>} and load_flowEnded{<scope>} (lib/metrics.js) in
+// the summary, where lib/summary.js finds the holds whose flows k6 cut off (started > ended): such a hold is never "pass".
+export function flowCountThresholds(scopes) {
+  const out = {};
+  (scopes || []).forEach((s) => {
+    out[key('load_flowStarted', null, s.scope)] = ['count>=0'];
+    out[key('load_flowEnded', null, s.scope)] = ['count>=0'];
+  });
+  return out;
+}
+
+// Everything a staged flow script judges: overall, then per hold scope (opts.uploads adds bytesSentThresholds,
+// opts.flows adds flowCountThresholds).
 export function stagedThresholds(opts) {
   const parts = [
     latencyThresholds(opts.rttMs, opts.endpoints, null),
@@ -76,6 +88,7 @@ export function stagedThresholds(opts) {
     opts.flows ? flowThresholds(null) : {},
     { dropped_iterations: ['count==0'] },
     opts.uploads ? bytesSentThresholds(opts.scopes) : {},
+    opts.flows ? flowCountThresholds(opts.scopes) : {},
   ];
   (opts.scopes || []).forEach((s) => {
     parts.push(latencyThresholds(opts.rttMs, opts.endpoints, s.scope));

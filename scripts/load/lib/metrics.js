@@ -21,6 +21,12 @@ export const errorRatio = new Rate('load_errorRatio');
 export const flowTimeoutRatio = new Rate('load_flowTimeoutRatio');
 // Per flow: 1 when it ended as intended (COMPLETED, or FAILED after the retry for a fail-injected flow).
 export const flowOkRatio = new Rate('load_flowOkRatio');
+// Per flow (a user flow of lib/flow.js userFlow, or the one upload of upload.js / download of asset.js), tagged with the
+// stage and phase it started in: +1 when it starts, +1 when it ends with any outcome. k6 records nothing for an
+// iteration it cuts off (Ctrl+C, a REST API stop, an abort, or the end of gracefulStop), so started > ended means the
+// summary is missing the outcome of that many flows, usually the slowest ones (lib/summary.js: "unfinished").
+export const flowStarted = new Counter('load_flowStarted');
+export const flowEnded = new Counter('load_flowEnded');
 
 export const unexpectedCount = new Counter('load_unexpectedCount');
 export const rejectedCount = new Counter('load_rejectedCount');
