@@ -128,14 +128,16 @@ test('gpu_queue.js: Poisson arrivals by thinning, VUs for bursts, prediction rec
   }
   assert.deepEqual(state.requests.map((r) => r.tags.endpoint), ['healthz', 'create', 'poll', 'asset']);
 
-  const out = again.handleSummary({ metrics: { load_serverProcessingMs: { values: { avg: 11800, med: 11700, 'p(95)': 12500, count: 20 } } },
-    setup_data: {}, state: {} });
+  const out = again.handleSummary({ metrics: { load_serverProcessingMs: { values: { avg: 11800, med: 11700, 'p(95)': 12500, count: 20 } },
+    load_postMs: { values: { avg: 100, med: 100, 'p(95)': 120, count: 140 } } }, setup_data: {}, state: {} });
   const doc = JSON.parse(out[BASE_ENV.SUMMARY_PATH]);
   assert.equal(doc.meta.arrivalProcess, 'poisson (thinned x20)');
   assert.equal(doc.meta.arrivalThin, 20);
   assert.equal(doc.meta.iterationsPerHour, 5040);
   assert.deepEqual(doc.meta.measuredProcessingMs, { mean: 11800, med: 11700, p95: 12500, count: 20 });
-  assert.equal(doc.meta.recompute, 'python scripts/load/model.py --queue-rate-per-h 252 --queue-service-s 11.8 --queue-slots 1');
+  // the recompute uses the jobs the run created (140 in DURATION_S 1800 s), not the requested 252/h
+  assert.equal(doc.meta.measuredJobsPerHour, 280);
+  assert.equal(doc.meta.recompute, 'python scripts/load/model.py --queue-rate-per-h 280 --queue-service-s 11.8 --queue-slots 1');
   const plainOut = JSON.parse(plain.handleSummary({ metrics: {}, setup_data: {}, state: {} })[BASE_ENV.SUMMARY_PATH]);
   assert.match(plainOut.meta.arrivalProcess, /^deterministic/);
   assert.equal(plainOut.meta.recompute, null);
