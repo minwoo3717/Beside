@@ -144,6 +144,7 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 - **Actuator 는 관리 포트 8081** 에만 있다. compose 내부망에서만 닿고(`ports:` 없음), 공개 8080 에는 `/actuator` 가 없으며, Caddy 도 `/actuator*` 를 404 로 막는다. Prometheus(9090)는 VM 의 `127.0.0.1` 에만 게시한다(인터넷에는 안 열림). 개발 PC 에서 원시 값이 필요하면 `ssh -L 9090:127.0.0.1:9090 <user@VM>` 로 터널을 열고 `http://localhost:9090` 을 쓴다(부하 시험 수집기·중단 감시가 이 방법을 쓴다).
 - 대시보드: Grafana 의 **Beside** 폴더 → **Beside 운영**. 변수 `env`(`prod` 운영 / `loadtest` 부하 시험 / `local`), `worker`(mock·real), `창`(드문 작업 지표를 묶는 시간 창). 원본은 [monitoring/grafana/dashboards/beside-ops.json](monitoring/grafana/dashboards/beside-ops.json) 이고 화면에서 고친 것은 저장되지 않는다(JSON 을 고쳐 커밋하면 1분 안에 다시 읽는다).
 - `beside_*` 지표는 backend 의 Actuator·Micrometer 코드(같은 W1 의 B1~B3)가 있어야 나온다. 그 전 이미지로는 Prometheus 대상이 DOWN 이고 패널이 비어 있다.
+- **생성 성공률의 '패스스루 제외' 선(B)은 실제 모델일 때만 맞다.** FAILED 실행은 늘 `passthrough="false"` 로 태그된다. backend 가 스텁(패스스루)의 실패와 모델의 실패를 구분하지 못하기 때문이다. 그래서 스텁이 답하는 동안 B 는 스텁의 성공은 빼고 실패만 센다. 스텁을 쓰는 부하 시험(G·F 시리즈, [loadtest/README.md](loadtest/README.md))에서는 필터 없는 성공률(선 A)이나 `scripts/load/collect.py` 결과를 본다.
 
 ### 메모리 (4GB VM)
 

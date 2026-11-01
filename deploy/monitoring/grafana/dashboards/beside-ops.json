@@ -473,7 +473,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "생성 성공률 추이 ($window 창)",
-      "description": "각 시점에서 지난 $window 동안 끝난 작업 중 COMPLETED 비율.",
+      "description": "각 시점에서 지난 $window 동안 끝난 작업 중 COMPLETED 비율. A = 전체, B = 패스스루 제외(passthrough=\"false\"). 주의: FAILED 실행은 늘 passthrough=\"false\" 로 태그된다(backend 는 스텁의 실패와 모델의 실패를 구분하지 못한다). 그래서 B 는 추론 서비스가 실제 모델을 돌릴 때만 맞다. 스텁을 쓰는 부하 시험(G·F)에서는 A(필터 없음)나 scripts/load/collect.py 결과를 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
