@@ -122,7 +122,7 @@ cd ~/Beside && mkdir -p deploy/backups
 # monitoring 을 안 띄웠으면 --profile monitoring 을 뺀다.
 C="docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring"
 L="$C -f deploy/docker-compose.loadtest.yml"
-TS=$(date +%F_%H%M); echo "$TS"          # 이 값이 docs/perf/load/data/<TS>/ 이름이 된다
+TS=$(date +%F_%H%M); echo "$TS"          # 이 세션의 백업·VM 쪽 파일 이름(~/lt-$TS). 결과 폴더 이름은 k6 실행마다 따로 정한다(5번)
 D=https://<도메인>
 
 # 진행 중인 작업이 없는지(최근 20건에 PENDING·PROCESSING 이 없어야 한다)
@@ -191,25 +191,47 @@ curl -s -o /dev/null -w '%{http_code} %{size_download}\n' "$D/api/v1/jobs/$JOB/a
 - 개발 PC: k6 클라이언트 CPU(70 % 넘으면 결과를 'T3 통과'로 쓰지 않는다), `dropped_iterations`.
 - 중단 조건(오류 > 5 % 1분, 디스크 > 80 %)이면 Ctrl+C → '6. 복구'.
 
-## 5. 수집 → `docs/perf/load/data/<YYYY-MM-DD_HHMM>/`
+## 5. 수집 → `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` (k6 실행마다 한 폴더)
 
-`<YYYY-MM-DD_HHMM>` 은 1번의 `$TS`. 수집 스크립트(scripts/load, B7)가 k6 summary · Prometheus 구간 값 · `events.jsonl` · `docker stats` 를 모아 `run.json` 을 만든다. 파일 이름은 그 스크립트를 따른다. VM 에서 꺼낼 원본:
+**k6 실행 하나 = 결과 폴더 하나**다. 폴더 이름은 그 실행을 시작한 시각과 `RUN_ID` 다. 그 폴더에 그 실행의 k6 summary(`k6-summary.json`), `collect.py` 가 쓰는 `run.json`(+ `prometheus/*.csv`, `attachments/`), 그 실행의 VM 쪽 파일(`vm/`)이 모인다. A1·A3 small·A3 large·G1 의 ρ 하나하나는 모두 다른 실행이므로 각자 폴더를 갖는다(한 폴더에 두 실행을 쓰면 summary 와 run.json 이 덮어써진다). 1번의 `$TS` 는 백업·VM 쪽 파일을 묶는 세션 이름일 뿐 결과 폴더 이름이 아니다.
+
+개발 PC, k6 실행마다(명령과 옵션은 [scripts/load/README.md](../../scripts/load/README.md)):
 
 ```bash
-OUT=~/lt-$TS && mkdir -p "$OUT"
-$L cp backend:/app/storage/events.jsonl "$OUT/events.jsonl"     # 부하 볼륨의 서버 측정 로그(docs/METRICS.md §1)
-$L logs --no-color --since 6h backend > "$OUT/backend.log"
+RID=a1r1                                                       # 그 실행의 RUN_ID(실행마다 새 값)
+RUN=docs/perf/load/data/$(date +%Y-%m-%d_%H%M)-$RID; mkdir -p "$RUN"
+k6 run -e RUN_ID=$RID -e SUMMARY_PATH=$RUN/k6-summary.json ... scripts/load/<스크립트>.js
+```
+
+VM, 그 실행이 끝나면 곧바로(부하 볼륨을 비우기 전에 — 4번 '부하 볼륨 비우기'):
+
+```bash
+RID=<그 실행의 RUN_ID>; OUT=~/lt-$TS/$RID && mkdir -p "$OUT"
+$L cp backend:/app/storage/events.jsonl "$OUT/events.jsonl"     # 부하 볼륨의 서버 측정 로그(docs/METRICS.md §1). 볼륨에 누적되므로
+                                                                 # 앞선 실행의 줄도 있다: finishedAt 으로 그 실행 구간만 본다
+$L logs --no-color --since 3h backend > "$OUT/backend.log"       # 실행 길이보다 길게(A6 소크는 2시간)
 docker stats --no-stream --format '{{json .}}' > "$OUT/docker-stats-end.jsonl"
 df -h / > "$OUT/df.txt"
 git -C ~/Beside rev-parse HEAD > "$OUT/commit.txt"
-sha256sum /tmp/lt-sample-1500000.glb > "$OUT/glb.sha256"
+sha256sum /tmp/lt-sample-1500000.glb > "$OUT/glb.sha256"        # A 시리즈(mock 이 내주는 GLB). G·F 는 아래 stub-glb.sha256
 # 대상 상태(Prometheus 는 VM 루프백에만 있으므로 VM 안에서 읽는다)
 $L exec -T prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=up' > "$OUT/prom-up.json"
 ```
 
-구간 값(CSV)은 개발 PC 의 `scripts/load/collect.py --prom-url http://localhost:9090` 가 읽는다. 시험 전에 개발 PC 에서 터널을 연다: `ssh -N -L 9090:127.0.0.1:9090 <user@VM>`(Prometheus 는 compose 에서 `127.0.0.1:9090` 에만 게시된다). 같은 터널을 k6 의 `PROM_URL`(중단 감시)도 쓴다.
+개발 PC, 그 실행의 폴더로 가져와 `run.json` 에 붙인다:
 
-개발 PC 에서 `scp -r <user@VM>:~/lt-<TS> docs/perf/load/data/<TS>/vm` 로 가져와 k6 쪽 파일과 같은 폴더에 둔다. 결과 문서에는 [실험 결과] 와 조건(VM 사양, 커밋, k6 버전, 업링크, 사진 크기)을 붙인다.
+```bash
+scp -r <user@VM>:~/lt-<TS>/$RID "$RUN/vm"                       # $RUN/vm 은 미리 만들지 않는다(scp 가 이 이름으로 만든다)
+python scripts/load/collect.py "$RUN" --scenario <A0…F5> --summary "$RUN/k6-summary.json" --prom-url http://localhost:9090 \
+  --attach "$RUN/vm/events.jsonl" --attach "$RUN/vm/docker-stats-end.jsonl" --attach "$RUN/vm/df.txt" \
+  --attach "$RUN/vm/commit.txt" --attach "$RUN/vm/glb.sha256" --attach "$RUN/vm/prom-up.json"
+# 나머지 옵션(--tier, --k6-version, --vm-*, --uplink-mbps, --client-cpu-max-pct, --server-sha, --photo)은 scripts/load/README.md '결과 수집'
+```
+
+- `vm/` 의 파일은 **`collect.py --attach` 로 준 것만** run.json 에 들어간다(사본이 `attachments/` 에, 크기·SHA-256 과 함께). `backend.log` 처럼 크고 덜 쓰는 파일은 `vm/` 에만 둔다.
+- G·F 시리즈는 `glb.sha256` 대신, 스텁 PC 에서 잰 해시(스텁 절의 `sha256sum`·`Get-FileHash` 출력)를 `$RUN/vm/stub-glb.sha256` 에 적어 `--attach` 한다.
+- 구간 값(CSV)은 `collect.py --prom-url http://localhost:9090` 가 읽는다. 시험 전에 개발 PC 에서 터널을 연다: `ssh -N -L 9090:127.0.0.1:9090 <user@VM>`(Prometheus 는 compose 에서 `127.0.0.1:9090` 에만 게시된다). 같은 터널을 k6 의 `PROM_URL`(중단 감시)도 쓴다.
+- 결과 문서에는 [실험 결과] 와 조건(VM 사양, 커밋, k6 버전, 업링크, 사진 크기)을 붙인다.
 
 ## 6. 복구 (운영 스택으로)
 
