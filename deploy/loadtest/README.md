@@ -52,6 +52,8 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | F2 (GPU 꺼짐·backend 재시작) | G1 + `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | 시험 중 스텁을 끄고 다시 켠다 |
 | F3·F4 (잘못된 업로드·다운로드 중단) | 기본값(mock) | — |
 
+G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내기, `ARRIVAL_THIN`), 큐 예측은 실행 뒤 잰 평균 슬롯 시간(서버 `processingMs`)으로 `scripts/load/model.py --queue-*` 를 돌려 다시 계산한다. 스텁 지연 10초만으로 낸 값은 참고용이다([TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md) 9절 'G 시리즈의 도착과 예측').
+
 스텁의 `BESIDE_PASSTHROUGH_*` 설정은 기본값이 모두 꺼져 있다(같은 W1 의 B5). 스텁은 실제 GPU PC 가 아닌 PC(예: 개발 PC)에서 Tailscale 주소에 띄운다. 스텁이 돌려줄 GLB(`BESIDE_SAMPLE_GLB`)는 **스텁 PC 에** 있어야 한다. VM 에 만든 파일(3번)은 스텁 PC 에서 보이지 않으므로, 같은 합성 GLB(아래 '합성 GLB 는 하나')를 스텁 PC 에서 따로 만든다:
 
 ```bash
