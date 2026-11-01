@@ -15,6 +15,11 @@ uplink, photo sizes, tier, scenario, window, the k6 verdict) and <run dir>/prome
 query_range queries over the run window (start/end from --start/--end or the k6 summary, padded by --pad-s).
 --prom-url is any URL that reaches the VM's Prometheus (SSH tunnel, Tailscale); it is not opened to the internet.
 Files given with --attach are copied to <run dir>/attachments/. Exit code: 0 done, 1 written but some query failed, 2 nothing written (bad arguments).
+
+run.json "outcome" says how the k6 run ended (k6_outcome: normal, capacityStop, aborted, unknown) from the summary's
+verdict.aborted and verdict.guard, and "status"/"resultCandidate" say whether it may be cited as [실험 결과]: not a local
+run, not one aborted for a reason other than capacity, not a summary without verdict.aborted; a run whose guard could
+not read Prometheus is named in the status. collect.py prints the status and how many of the 18 CSVs it wrote.
 """
 from __future__ import annotations
 
@@ -44,11 +49,27 @@ def selector(env: str, extra: str = "") -> str:
 
 
 def queries(env: str) -> list:
-    """(name, PromQL) pairs, the same for every run so runs can be compared file by file."""
+    """(name, PromQL) pairs, the same for every run so runs can be compared file by file. One CSV each (18)."""
     s = lambda extra="": selector(env, extra)  # noqa: E731
     req_count = f"http_server_requests_seconds_count{s()}"
     status_5xx = s('status=~"5.."')  # no backslashes inside f-string braces: Python 3.10 on the VM
     heap = s('area="heap"')
+    # jvm_heap_after_gc is the "GC 뒤 힙 < 75 %" criterion (TRAFFIC_MODEL.md §8), a 0..1 ratio to compare with 0.75.
+    # It is Micrometer's jvm_memory_usage_after_gc_percent (JvmHeapPressureMetrics, Spring Boot 3.2 / Micrometer 1.12):
+    # the long-lived heap pool (G1 Old Gen; Tenured Gen under Serial/Parallel) used after the last GC / that pool's
+    # max, set after every GC, young ones included, and 0..1 despite "_percent". Under G1 Old Gen's max is the whole
+    # -Xmx, so it reads as "share of the heap still used after GC". Old Gen garbage that no mixed or full GC has
+    # collected yet still counts, so it errs high (on the safe side). Not the other candidates:
+    #   jvm_heap_used / jvm_heap_max  sum(jvm_memory_used_bytes{area="heap"}) is the heap at scrape time, G1 Eden
+    #     included. It saw-tooths between young GCs (0.35..0.53 against 0.35 after GC in a k6 run on -Xmx128m) and the
+    #     young generation may grow to 60 % of the heap (G1MaxNewSizePercent), so a reading above 0.75 proves nothing;
+    #     it is kept for the "힙 사용·최대" CSVs and for comparison with earlier runs.
+    #   jvm_gc_live_data_size_bytes / jvm_gc_max_data_size_bytes  (the Grafana JVM panel) Micrometer sets the live
+    #     size only after a major GC or a GC that shrinks Old Gen, so on G1 it can stay 0 or stale for a whole run
+    #     (it read 0.0 all through a k6 run on the mock jar with G1 and -Xmx1536m), which would read as a pass.
+    # max(): one value per scrape (one backend; with several, the fullest). Checked names on /actuator/prometheus:
+    # jvm_memory_usage_after_gc_percent{area="heap",env="loadtest",pool="long-lived"}.
+    heap_long_lived = s('area="heap",pool="long-lived"')
     return [
         ("http_p95_by_uri", f"histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
         ("http_p99_by_uri", f"histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
@@ -62,6 +83,7 @@ def queries(env: str) -> list:
         ("system_cpu", f"system_cpu_usage{s()}"),
         ("jvm_heap_used", f"sum(jvm_memory_used_bytes{heap})"),
         ("jvm_heap_max", f"sum(jvm_memory_max_bytes{heap})"),
+        ("jvm_heap_after_gc", f"max(jvm_memory_usage_after_gc_percent{heap_long_lived})"),
         ("jvm_gc_pause_rate", f"sum(rate(jvm_gc_pause_seconds_sum{s()}[1m]))"),
         ("tomcat_busy", f"tomcat_threads_busy_threads{s()}"),
         ("hikari_pending", f"hikaricp_connections_pending{s()}"),
@@ -164,14 +186,80 @@ def is_local(url) -> bool:
     return host in ("localhost", "127.0.0.1", "::1")
 
 
+def k6_outcome(summary: dict | None) -> dict:
+    """How the k6 run ended, from its summary's verdict (lib/summary.js verdict.aborted, verdict.guard).
+
+    ended: None without --summary (e.g. F4, window from --start/--end); "unknown" when the summary has no
+    verdict.aborted (written before lib/summary.js reported aborts: an aborted run then read "all passed");
+    "normal" when verdict.aborted is null; "capacityStop" when the abortOnFail error rule ("threshold") or the guard's
+    5xx rule (load_guardAbort 1) stopped the load in the level that broke, the A1 search's usual end on the VM, whose
+    stages and breaking point still hold (buildReport's brokeAt); "aborted" for any other stop (setup, guard disk or
+    unreadable Prometheus, Ctrl+C or REST stop, flows cut off in the drain), which says nothing about capacity.
+    guardFailures: Prometheus answers the guard could not read (verdict.guard.failures; None without PROM_URL)."""
+    if summary is None:
+        return {"ended": None, "abortedBy": None, "reason": None, "guardFailures": None, "guardLastError": None}
+    verdict = summary.get("verdict") or {}
+    guard = verdict.get("guard") or {}
+    out = {"ended": "normal", "abortedBy": None, "reason": None, "guardFailures": guard.get("failures"),
+           "guardLastError": guard.get("lastError")}
+    if "aborted" not in verdict:
+        out["ended"] = "unknown"
+        return out
+    aborted = verdict.get("aborted")
+    if not aborted:
+        return out
+    by = aborted.get("by")
+    out.update(abortedBy=by, reason=aborted.get("reason"))
+    metrics = (summary.get("k6") or {}).get("metrics") or {}
+    code = ((metrics.get("load_guardAbort") or {}).get("values") or {}).get("value")
+    guard_5xx = code == 1 or (code is None and str(aborted.get("reason") or "").startswith("server 5xx ratio"))
+    out["ended"] = "capacityStop" if by == "threshold" or (by == "guard" and guard_5xx) else "aborted"
+    return out
+
+
+CITE = "인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다"
+
+
+def run_status(outcome: dict, local: bool) -> tuple:
+    """(status text, resultCandidate) for run.json: only a run on the VM that ended normally, or by a capacity stop, is a
+    [실험 결과] candidate. A run whose guard could not read Prometheus stays one, with the gap named in the text."""
+    ended, by = outcome["ended"], outcome["abortedBy"]
+    failures = outcome.get("guardFailures") or 0
+    caveat = (f"주의: 가드가 Prometheus 응답 {failures}개를 읽지 못했다(마지막: {outcome.get('guardLastError')}) — 그동안 "
+              "중단 조건(5xx·디스크)을 지켜보지 못했고 prometheus/*.csv 에도 빈 구간이 있을 수 있다") if failures > 0 else ""
+    if ended in ("normal", None, "capacityStop") and not local:
+        # a candidate: the caveat goes before the citing rule, so the label never reads plain when the guard was blind
+        body = ""
+        if ended == "capacityStop":
+            rule = "가드의 5xx 기준" if by == "guard" else "abortOnFail 오류 기준"
+            body = (f"용량 한계에서 멈춘 실행({rule}, k6.verdict.aborted.by = {by}): 중단된 실행이라 thresholdsOk 는 늘 false "
+                    "이고, 판정은 k6.verdict.stages·breakingPoint(·breakingPointNote)로 읽는다. ")
+        return f"[실험 결과] 원시 데이터 — {body}{caveat + '. ' if caveat else ''}{CITE}", True
+    if local:
+        text = "동작 확인용 로컬 실행 — 보고서에 인용하지 않는다"
+        if ended in ("aborted", "capacityStop"):
+            text += f" (중단된 실행, k6.verdict.aborted.by = {by})"
+    elif ended == "unknown":
+        text = ("인용하지 않는다 — k6 요약에 verdict.aborted 가 없다(중단을 알리기 전의 lib/summary.js): 중단된 실행도 "
+                "'all passed' 로 적혔을 수 있으니 지금 스크립트로 다시 돌린다")
+    else:  # aborted for a reason other than capacity
+        reason = f": {outcome['reason']}" if outcome.get("reason") else ""
+        text = (f"인용하지 않는다 — 중단된 실행(k6.verdict.aborted.by = {by}): 용량과 무관한 중단이라 [실험 결과] 가 "
+                f"아니다. 원인을 고쳐 다시 돌린다{reason}")
+    return text + (f" / {caveat}" if caveat else ""), False
+
+
 def build_run_json(args, summary: dict | None, window: dict, tool: dict, photos: list, prom: dict, attachments: list) -> dict:
     meta = (summary or {}).get("meta", {})
     base_url = args.base_url or meta.get("baseUrl")
     local = is_local(base_url)
+    outcome = k6_outcome(summary)
+    status, candidate = run_status(outcome, local)
     return {
         "schema": "beside-load-run/1",
-        "status": ("동작 확인용 로컬 실행 — 보고서에 인용하지 않는다" if local else
-                   "[실험 결과] 원시 데이터 — 인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다"),
+        "status": status,
+        "resultCandidate": candidate,
+        "outcome": outcome,
         "scenario": args.scenario or meta.get("scenario"),
         "tier": args.tier or meta.get("tier") or None,
         "runId": meta.get("runId"),
@@ -190,6 +278,8 @@ def build_run_json(args, summary: dict | None, window: dict, tool: dict, photos:
             "mock 결과는 '생성을 뺀 API 처리량', 스텁 결과는 '큐 동작 검증(생성 시간은 가정 T)'이다.",
             "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 k6.meta.stages[].users(도착률 환산)로 적는다.",
             "'API 계층이 T3 를 통과했다'는 T3 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화일 때만 쓴다.",
+            "resultCandidate 가 false 인 실행(로컬, 용량과 무관하게 중단된 실행, 끝난 방식을 모르는 요약)은 [실험 결과] 로 인용하지 않는다.",
+            "GC 뒤 힙 < 75 % 는 prometheus/jvm_heap_after_gc.csv(0~1)로 본다. jvm_heap_used/max 는 Eden 을 포함한 순간값이다.",
         ],
         "collectedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
@@ -223,6 +313,21 @@ def parse_args(argv=None):
     ap.add_argument("--attach", action="append", default=[], help="file to copy into attachments/ (repeatable)")
     ap.add_argument("--note")
     return ap.parse_args(argv)
+
+
+def prom_line(prom: dict, run_dir: Path) -> str:
+    """One line on the CSVs: how many of the fixed queries were written, which failed and which came back empty."""
+    if "queries" not in prom:
+        return f"prometheus: {prom.get('skipped', 'skipped')}"
+    results = prom["queries"]
+    failed = [r["name"] for r in results if "error" in r]
+    empty = [r["name"] for r in results if "error" not in r and not r.get("points")]
+    line = f"prometheus: {len(results) - len(failed)} of {len(results)} CSV written to {run_dir / 'prometheus'}"
+    if failed:
+        line += f"; failed: {', '.join(failed)}"
+    if empty:
+        line += f"; no data: {', '.join(empty)}"
+    return line
 
 
 def main(argv=None, fetch=http_fetch, tool=None) -> int:
@@ -276,6 +381,8 @@ def main(argv=None, fetch=http_fetch, tool=None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     print(f"run.json written to {run_dir / 'run.json'}" + (" (some Prometheus queries failed)" if failed else ""))
+    print(f"status: {doc['status']}")
+    print(prom_line(prom, run_dir))
     return 1 if failed else 0
 
 
