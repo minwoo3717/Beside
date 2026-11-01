@@ -13,25 +13,43 @@
 //   fake_jpg        image/jpeg part whose bytes are text              400 UNSUPPORTED_IMAGE_TYPE with upload.verify-magic
 //   gif_as_jpeg     image/jpeg part whose bytes are a GIF             (prod profile); 202 without it (VERIFY_MAGIC=0)
 // Each VU sends every case once per iteration (a "round"), F3_REPEATS rounds. A round is counted as a flow
-// (load_flowStarted / load_flowEnded), so a round k6 cut off at the end of gracefulStop makes the run "unfinished"
-// (lib/summary.js), and dropped_iterations count==0 fails a run whose rounds did not all start before maxDuration
-// (F3_BG_S): either way fewer uploads than planned were judged (meta.cases[].checks vs expectedChecks).
+// (load_flowStarted / load_flowEnded), so a round k6 cut off at the end of gracefulStop (GRACEFUL_STOP_S, 180 s = the
+// 120 s request timeout + 60 s, as upload.js) makes the run "unfinished" (lib/summary.js), and dropped_iterations
+// count==0 fails a run whose rounds did not all start before maxDuration (F3_BG_S): either way fewer uploads than
+// planned were judged (meta.cases[].checks vs expectedChecks).
 //
-// The slow 10 kB/s upload of F3 is failure/f3_throttled.py, started next to this script so that it runs while the
-// background poller does (k6 cannot throttle one request body); see that file for the command and its expected result.
+// The slow 10 kB/s upload of F3 is failure/f3_throttled.py (k6 cannot throttle one request body). It must run while
+// this script's background poller does, so start it in the background right before k6, not after:
+//
+//   newrun f3r1
+//   python scripts/load/failure/f3_throttled.py --base-url $BASE_URL --run-id $RUN_ID --k6-summary $RUN/k6-summary.json \
+//       --k6-exit-file $RUN/k6-exit.txt --json-out $RUN/f3-throttled.json & F3T=$!
+//   k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failure/f3_uploads.js; echo $? > $RUN/k6-exit.txt
+//   wait $F3T; echo "f3_throttled exit $?"
+//
+// (BASE_URL and RTT_BASE_MS exported as for the other scripts.) Expected: every case "match 1" with all planned
+// uploads judged (20/20 by default) in the case lines of the summary; the slow upload gets 202 after about 40 s
+// (0.4 MB at 10 kB/s), inside the poll window, f3_throttled exit 0. The exit file lets the helper stop at once when k6
+// refused to start instead of waiting for a summary that never comes.
 //
 // Photo names, so that the server's disk can be checked for leftovers after the run (this script cannot see it):
 //   lt-<RUN_ID>-f3bad-<case>-<n>.<ext>   a case the server must reject: none of these may be stored
 //   lt-<RUN_ID>-f3acc-<case>-<n>.<ext>   a case the server accepts (fake_jpg, gif_as_jpeg with VERIFY_MAGIC=0)
 //   lt-<RUN_ID>-f3bg-<n>.png             the background job of setup() (2 photos; meta.pollJob)
 //   lt-<RUN_ID>-f3throttle-1.png         the throttled upload of failure/f3_throttled.py
-// The server stores a photo as <jobId>_<name>, so a stored file containing "_lt-<RUN_ID>-f3bad-" is a leftover
-// (f3_throttled.py --uploads-dir counts them for a local server).
+// The server stores a photo as <jobId>_<name>, so a stored file containing "_lt-<RUN_ID>-f3bad-" is a leftover, and
+// so is an upload_*.tmp left in Tomcat's multipart dir. After the run (the summary prints both with the run's RUN_ID):
+//   VM (its storage is the beside-loadtest-storage volume; $L and $OUT as in deploy/loadtest/README.md):
+//     $L exec -T backend sh -c 'cd /app/storage/uploads && echo "f3bad stored $(ls | grep -cF -- _lt-<RUN_ID>-f3bad-)";
+//       echo "tomcat dirs $(ls -d /tmp/tomcat.8080.*/work/Tomcat/localhost/ROOT 2>/dev/null | wc -l) upload_tmp
+//       $(ls /tmp/tomcat.8080.*/work/Tomcat/localhost/ROOT 2>/dev/null | grep -c ^upload_)"' | tee "$OUT/f3-leftovers.txt"
+//     expected: "f3bad stored 0" and "tomcat dirs" at least 1 with "upload_tmp 0" (no "f3bad stored" line, or tomcat
+//     dirs 0, means the path is wrong: not clean). /app/storage = the image's WORKDIR + storage.upload.dir, /tmp =
+//     the JRE's java.io.tmpdir, 8080 = server.port (8081 is the management server's own Tomcat).
+//   local server: f3_throttled.py --uploads-dir <storage/uploads> --multipart-tmp '<tmpdir>/tomcat.<port>.*/work/Tomcat/localhost/ROOT'
 //
-//   k6 run -e BASE_URL=https://<domain> -e RUN_ID=f3r1 -e RTT_BASE_MS=23 scripts/load/failure/f3_uploads.js
-//
-// Env: F3_VUS (2), F3_REPEATS (10 rounds per VU), POLL_RPS (20), F3_BG_S (180), VERIFY_MAGIC (1), PROXY_LIMIT_BYTES
-//      (25000000 for an https BASE_URL, else 0 = no proxy), CASES=gif,photos_0 (subset).
+// Env: F3_VUS (2), F3_REPEATS (10 rounds per VU), POLL_RPS (20), F3_BG_S (180), GRACEFUL_STOP_S (180), VERIFY_MAGIC
+//      (1), PROXY_LIMIT_BYTES (25000000 for an https BASE_URL, else 0 = no proxy), CASES=gif,photos_0 (subset).
 import { Counter, Rate } from 'k6/metrics';
 import { CONFIG, ENV, readList, readNum, requireRtt } from '../lib/config.js';
 import { call, makeContext } from '../lib/flow.js';
@@ -85,6 +103,9 @@ function tagFor(c) {
 }
 
 const BG_S = readNum(ENV, 'F3_BG_S', 180);
+const REQUEST_TIMEOUT_S = 120;
+// A round still running when maxDuration ends may finish its current upload: the request timeout + 60 s (upload.js).
+const GRACEFUL_S = readNum(ENV, 'GRACEFUL_STOP_S', REQUEST_TIMEOUT_S + 60);
 const VUS = readNum(ENV, 'F3_VUS', 2);
 const REPEATS = readNum(ENV, 'F3_REPEATS', 10);
 const RTT = requireRtt(CONFIG, 'f3_uploads.js');
@@ -102,6 +123,7 @@ export const options = {
       vus: VUS,
       iterations: REPEATS,
       maxDuration: `${BG_S}s`,
+      gracefulStop: `${GRACEFUL_S}s`,
       startTime: '5s',
     },
     background: {
@@ -120,7 +142,7 @@ export const options = {
     { dropped_iterations: ['count==0'] }),
 };
 
-const ctx = makeContext({ cfg: CONFIG, requestTimeout: '120s' });
+const ctx = makeContext({ cfg: CONFIG, requestTimeout: `${REQUEST_TIMEOUT_S}s` });
 const BODY_CACHE = {};
 
 function bodyFor(c) {
@@ -175,8 +197,22 @@ function caseLines(cases) {
     lines.push(`  ${c.name.padEnd(13)} ${expected.padEnd(27)} match ${String(orDash(c.matchRate)).padEnd(6)} ` +
       `uploads ${orDash(c.checks)}/${c.expectedChecks}${short}`);
   });
-  lines.push(`leftover check after the run: no stored upload may contain "_${NAMES.rejected}" (failure/f3_throttled.py --uploads-dir)`);
+  lines.push('slow upload (10 kB/s): failure/f3_throttled.py, started right before this k6 run; its own report ' +
+    '(expected 202 in about 40 s inside the poll window, exit 0)');
+  lines.push(`leftover check after the run: no stored upload may contain "_${NAMES.rejected}", no Tomcat upload_*.tmp`);
+  lines.push(`  VM:    ${vmLeftoverCommand(RUN)}`);
+  lines.push('         expected "f3bad stored 0", "tomcat dirs" >= 1 and "upload_tmp 0" (a missing line or 0 dirs = wrong path, not clean)');
+  lines.push("  local: failure/f3_throttled.py --uploads-dir <storage/uploads> --multipart-tmp '<tmpdir>/tomcat.<port>.*/work/Tomcat/localhost/ROOT'");
   return lines.join('\n') + '\n';
+}
+
+// The VM step of the header, one line to paste on the VM ($L, $OUT: deploy/loadtest/README.md). RUN_ID holds only
+// [A-Za-z0-9_.-] (lib/config.js), so it needs no quoting inside the single-quoted sh -c.
+function vmLeftoverCommand(run) {
+  const root = '/tmp/tomcat.8080.*/work/Tomcat/localhost/ROOT';
+  return `$L exec -T backend sh -c 'cd /app/storage/uploads && echo "f3bad stored $(ls | grep -cF -- _lt-${run}-f3bad-)"; ` +
+    `echo "tomcat dirs $(ls -d ${root} 2>/dev/null | wc -l) upload_tmp $(ls ${root} 2>/dev/null | grep -c ^upload_)"' ` +
+    '| tee "$OUT/f3-leftovers.txt"';
 }
 
 export function handleSummary(data) {
@@ -202,6 +238,8 @@ export function handleSummary(data) {
       server: (data.setup_data && data.setup_data.server) || null,
       pollJob: (data.setup_data && data.setup_data.pollJob) || null,
       photoNames: NAMES,
+      leftoverCheckVm: vmLeftoverCommand(RUN),
+      gracefulStopS: GRACEFUL_S,
     },
   }, CONFIG);
   out.stdout += caseLines(cases);

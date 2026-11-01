@@ -160,8 +160,8 @@ export function stageSentMbps(metrics, verdicts) {
 }
 
 // Flows whose outcome is missing (load_flowStarted - load_flowEnded, lib/metrics.js): { total, byStage: { "<stage>": n
-// for the holds that have both submetrics } }. total is null when the script does not count flows (poll_saturation.js,
-// f3_uploads.js) or the data predates the counters.
+// for the holds that have both submetrics } }. total is null when the script does not count flows (poll_saturation.js)
+// or the data predates the counters; f3_uploads.js counts a round (every case once) as a flow.
 export function unfinishedFlows(metrics) {
   const counts = { started: {}, ended: {} };
   Object.keys(metrics).forEach((name) => {

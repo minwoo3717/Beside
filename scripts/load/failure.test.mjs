@@ -1,6 +1,7 @@
 // failure/f3_uploads.js: every bad upload gets the documented status and error.code.
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { BASE_ENV, HERE, PHOTO, TMP, fakeServer, lib, load, samples, state } from './testing/harness.mjs';
@@ -90,6 +91,14 @@ test('f3_uploads.js: a round is a flow and dropped rounds fail the run', async (
   assert.match(ok.text, /photos_11 +400 TOO_MANY_PHOTOS +match 1 +uploads 6\/6\n/);
   assert.match(ok.text, /"_lt-unit1-f3bad-"/);
   assert.doesNotMatch(ok.text, /FEWER THAN PLANNED/);
+  // the slow upload and the leftover check are named where the operator reads the run's result
+  assert.match(ok.text, /slow upload \(10 kB\/s\): failure\/f3_throttled\.py, started right before this k6 run/);
+  const vm = ok.text.split('\n').find((l) => l.startsWith('  VM:')).slice('  VM:'.length).trim();
+  assert.equal(vm, ok.doc.meta.leftoverCheckVm);
+  assert.equal(vm, '$L exec -T backend sh -c \'cd /app/storage/uploads && echo "f3bad stored $(ls | grep -cF -- _lt-unit1-f3bad-)"; ' +
+    'echo "tomcat dirs $(ls -d /tmp/tomcat.8080.*/work/Tomcat/localhost/ROOT 2>/dev/null | wc -l) upload_tmp ' +
+    '$(ls /tmp/tomcat.8080.*/work/Tomcat/localhost/ROOT 2>/dev/null | grep -c ^upload_)"\' | tee "$OUT/f3-leftovers.txt"');
+  assert.match(ok.text, /local: failure\/f3_throttled\.py --uploads-dir/);
 
   // maxDuration stopped 4 rounds before they started: the case rates still read 1, dropped_iterations does not
   const cut = summarize(metrics({
@@ -113,4 +122,32 @@ test('f3_uploads.js: a round is a flow and dropped rounds fail the run', async (
   assert.deepEqual(drained.doc.meta.cases.map((c) => [c.name, c.matchRate, c.checks]), [['photos_11', 1, 6], ['gif', null, 0]]);
   assert.match(drained.text, /gif +400 UNSUPPORTED_IMAGE_TYPE +match - +uploads 0\/6  FEWER THAN PLANNED/);
   assert.match(drained.text, /planned uploads per case: F3_VUS 2 x F3_REPEATS 3 = 6/);
+  // the abort reason names GRACEFUL_STOP_S, and F3 reads it
+  assert.match(drained.doc.verdict.aborted.reason, /GRACEFUL_STOP_S/);
+});
+
+test('f3_uploads.js: a round left running at maxDuration may finish its upload (GRACEFUL_STOP_S)', async () => {
+  const dflt = await load('failure/f3_uploads.js', { RTT_BASE_MS: '20' }, { clock: 0, openBase: join(HERE, 'failure') });
+  // the 120 s request timeout + 60 s, as upload.js; k6's default 30 s would cut a 30 MB upload on a slow uplink
+  assert.equal(dflt.options.scenarios.bad.gracefulStop, '180s');
+  const set = await load('failure/f3_uploads.js', { RTT_BASE_MS: '20', GRACEFUL_STOP_S: '400' }, { clock: 0, openBase: join(HERE, 'failure') });
+  assert.equal(set.options.scenarios.bad.gracefulStop, '400s');
+});
+
+test('f3_uploads.js and f3_throttled.py document the same command (helper first, k6 exit file, wait)', () => {
+  const block = (text, prefix) => {
+    const lines = text.split(/\r?\n/);
+    const from = lines.findIndex((l) => l.startsWith(`${prefix}newrun f3r1`));
+    const to = lines.findIndex((l, i) => i > from && l.startsWith(`${prefix}wait $F3T`));
+    assert.ok(from >= 0 && to > from, prefix);
+    return lines.slice(from, to + 1).map((l) => l.slice(prefix.length).replace(/\s+#.*$/, '').replace(/\\\\$/, '\\').trim());
+  };
+  const js = block(readFileSync(join(HERE, 'failure', 'f3_uploads.js'), 'utf8'), '//   ');
+  const py = block(readFileSync(join(HERE, 'failure', 'f3_throttled.py'), 'utf8'), '    ');
+  assert.deepEqual(js, py);
+  assert.equal(js.length, 5);
+  assert.ok(js[1].startsWith('python scripts/load/failure/f3_throttled.py') && js[2].endsWith('& F3T=$!'), 'the helper first');
+  assert.ok(js[3].startsWith('k6 run'), 'then k6');
+  assert.match(js.join('\n'), /--k6-exit-file \$RUN\/k6-exit\.txt/);
+  assert.match(js[3], /; echo \$\? > \$RUN\/k6-exit\.txt$/);
 });

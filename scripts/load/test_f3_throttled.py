@@ -11,6 +11,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 _spec = importlib.util.spec_from_file_location("f3_throttled", HERE / "failure" / "f3_throttled.py")
@@ -176,6 +177,70 @@ class F3ThrottledTest(unittest.TestCase):
         self.assertFalse(report["checks"]["insidePolling"])
         self.assertFalse(report["checks"]["noLeftovers"])  # k6 may still be uploading: not counted
         self.assertIsNone(report["leftovers"])
+
+    def test_k6_that_ended_before_the_upload_gets_no_upload(self):
+        # k6 refused to start (CASES matched nothing: exit 107) while this script waited out --delay-s
+        exit_file = self.dir / "k6-exit.txt"
+        exit_file.write_text("107\n", encoding="utf-8")
+        t0 = time.monotonic()
+        code, out, err = self.run_main("--k6-summary", str(self.dir / "k6-summary.json"), "--k6-exit-file", str(exit_file),
+                                       "--summary-wait-s", "60")
+        self.assertEqual(code, 2, out + err)
+        self.assertLess(time.monotonic() - t0, 10)
+        self.assertEqual(self.server.uploads, [])  # no job made for a run without load
+        self.assertIn("k6 ended (exit 107) before the upload", err)
+
+    def test_exit_file_ends_the_summary_wait(self):
+        # k6 ends without a summary while the upload is under way: stop waiting at once, not after --summary-wait-s
+        exit_file = self.dir / "k6-exit.txt"
+
+        def k6_gone():
+            time.sleep(0.3)
+            exit_file.write_text("107\n", encoding="utf-8")
+
+        threading.Thread(target=k6_gone, daemon=True).start()
+        t0 = time.monotonic()
+        code, out, err = self.run_main("--k6-summary", str(self.dir / "k6-summary.json"), "--k6-exit-file", str(exit_file),
+                                       "--summary-wait-s", "60", "--uploads-dir", str(self.dir), rate="20000")
+        report = json.loads(out)
+        self.assertLess(time.monotonic() - t0, 15)
+        self.assertEqual(code, 1)
+        self.assertEqual(len(self.server.uploads), 1)  # it began before k6 ended
+        polling = report["polling"]
+        self.assertEqual((polling["found"], polling["k6Ended"], polling["k6ExitCode"]), (False, True, 107))
+        self.assertIn("without writing a summary", polling["note"])
+        self.assertFalse(report["checks"]["insidePolling"])
+        self.assertFalse(report["checks"]["noLeftovers"])  # nothing to count against
+
+    def test_exit_file_with_a_summary_and_stale_exit_files(self):
+        path = self.dir / "k6-summary.json"
+        exit_file = self.dir / "k6-exit.txt"
+
+        def k6_ends():  # during the upload: k6 writes its summary, then the shell its exit code
+            time.sleep(0.3)
+            self.write_summary(k6_summary(ready_ms=(time.time() - 5) * 1000))
+            exit_file.write_bytes("0\r\n".encode("utf-16"))  # Windows PowerShell 5.1: $LASTEXITCODE > file
+
+        threading.Thread(target=k6_ends, daemon=True).start()
+        code, out, err = self.run_main("--k6-summary", str(path), "--k6-exit-file", str(exit_file), "--summary-wait-s", "10",
+                                       rate="20000")
+        report = json.loads(out)
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual((report["polling"]["found"], report["polling"]["k6Ended"], report["polling"]["k6ExitCode"]),
+                         (True, True, 0))
+        # an earlier run's exit file (same folder, same minute) neither stops the upload nor the wait
+        exit_file.write_text("99\n", encoding="utf-8")
+        os.utime(exit_file, (time.time() - 3600, time.time() - 3600))
+        os.utime(path, (time.time() + 5, time.time() + 5))  # this run's summary
+        t0 = time.monotonic()
+        with mock.patch.object(f3t, "EXIT_AFTER_SUMMARY_S", 1.0):  # the shell never writes this run's exit code
+            code, out, _ = self.run_main("--k6-summary", str(path), "--k6-exit-file", str(exit_file), "--summary-wait-s", "2")
+        report = json.loads(out)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(len(self.server.uploads), 2)
+        self.assertEqual((report["polling"]["k6Ended"], report["polling"]["k6ExitCode"]), (False, None))
+        self.assertLess(time.monotonic() - t0, 5)
+        self.assertEqual(f3t.k6_exit(None, 0), None)
 
     def test_leftovers_of_rejected_uploads_and_multipart_temp_files(self):
         uploads = self.dir / "uploads"

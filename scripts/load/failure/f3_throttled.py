@@ -2,10 +2,16 @@
 (docs/perf/load/TRAFFIC_MODEL.md §9, F3). k6 cannot throttle a request body, so this runs next to the k6 run. Stdlib only.
 
     newrun f3r1
-    python scripts/load/failure/f3_throttled.py --base-url $BASE_URL --run-id $RUN_ID \\
-        --k6-summary $RUN/k6-summary.json --json-out $RUN/f3-throttled.json & F3T=$!
-    k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failure/f3_uploads.js
-    wait $F3T; echo "f3_throttled exit $?"
+    python scripts/load/failure/f3_throttled.py --base-url $BASE_URL --run-id $RUN_ID --k6-summary $RUN/k6-summary.json \\
+        --k6-exit-file $RUN/k6-exit.txt --json-out $RUN/f3-throttled.json & F3T=$!
+    k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failure/f3_uploads.js; echo $? > $RUN/k6-exit.txt
+    wait $F3T; echo "f3_throttled exit $?"      # expected: 202 in about 40 s, inside the polling window, exit 0
+
+--k6-exit-file is where the shell writes k6's exit code once k6 has ended. With it this script stops waiting for the k6
+summary as soon as k6 is gone (k6 refused to start, e.g. CASES matched nothing or RTT_BASE_MS is missing for a remote
+BASE_URL: no summary will come), and sends no upload at all when k6 ended before the upload began; without it the
+summary wait lasts up to --summary-wait-s (900 s). A file older than this script is ignored. The code goes to
+polling.k6ExitCode (99: a k6 threshold failed, 107: k6 refused to start).
 
 It waits --delay-s (20) so that k6's setup is done and its background poller runs, then sends the photo
 (default scripts/load/out/fixtures/photo-400k.png, 0.4 MB) at --rate bytes/s (10,000), named
@@ -25,7 +31,10 @@ and, for a server whose disk this PC can read (a local server), after k6 has end
   noLeftovers     --uploads-dir (the server's storage/uploads): no stored file contains "_lt-<run-id>-f3bad-" (the
                   uploads f3_uploads.js expects the server to reject); --multipart-tmp (glob of Tomcat's multipart
                   temp dir, <java.io.tmpdir>/tomcat.<port>.*/work/Tomcat/localhost/ROOT): no upload_*.tmp file
-Exit code: 0 all checks passed, 1 a check failed, 2 the run could not start (bad arguments, photo missing, server down).
+For the VM (its disk is in a docker volume) the same count is a shell step in the backend container: see the header of
+failure/f3_uploads.js, which also prints it with the run's RUN_ID at the end of the k6 run.
+Exit code: 0 all checks passed, 1 a check failed, 2 the run could not start (bad arguments, photo missing, server down,
+k6 ended before the upload).
 """
 from __future__ import annotations
 
@@ -47,6 +56,7 @@ CONTENT_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg
 TAG = "f3throttle"
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,40}$")  # lib/config.js validRunId
 MIN_FACTOR, MAX_FACTOR, MAX_SLACK_S = 0.9, 1.5, 10.0
+EXIT_AFTER_SUMMARY_S = 30.0  # how long to wait for k6's exit code once its summary is there
 
 
 class SetupError(Exception):
@@ -130,27 +140,77 @@ def upload_checks(result: dict, expected: dict) -> dict:
     }
 
 
-def read_fresh_summary(path: Path, not_before: float, wait_s: float, every_s: float = 1.0) -> dict | None:
-    """The k6 summary at path, once it exists, was written after not_before and parses; None after wait_s."""
+def k6_exit(path: Path | None, not_before: float) -> dict | None:
+    """None without --k6-exit-file; else {"ended": the shell wrote k6's exit code to path after not_before, "code"}.
+    The code is read from `echo $? > file` (bash) or `$LASTEXITCODE > file` (Windows PowerShell 5.1 writes UTF-16)."""
+    if path is None:
+        return None
+    try:
+        if path.stat().st_mtime < not_before:
+            return {"ended": False, "code": None}  # an earlier run's file
+        raw = path.read_bytes()
+    except OSError:
+        return {"ended": False, "code": None}
+    text = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", "replace")
+    found = re.search(r"-?\d+", text)
+    return {"ended": True, "code": int(found.group()) if found else None}
+
+
+def wait_for_k6_exit(path: Path, not_before: float, wait_s: float, every_s: float = 0.5) -> dict:
+    """k6 exits right after it writes its summary: wait up to wait_s for the shell to write the exit code (99 means a
+    k6 threshold failed), else report it unknown."""
     deadline = time.monotonic() + wait_s
     while True:
+        info = k6_exit(path, not_before)
+        if info["ended"] or time.monotonic() >= deadline:
+            return info
+        time.sleep(every_s)
+
+
+def wait_before_upload(delay_s: float, exit_path: Path | None, not_before: float, every_s: float = 0.5) -> None:
+    """Sleep delay_s; raise SetupError if k6 ends meanwhile (then it ran no poller, and an upload would only add a job)."""
+    deadline = time.monotonic() + delay_s
+    while True:
+        ended = k6_exit(exit_path, not_before)
+        if ended and ended["ended"]:
+            raise SetupError(f"k6 ended (exit {ended['code']}) before the upload, so nothing was uploaded: see k6's output "
+                             "(a refused start, e.g. CASES or RTT_BASE_MS), then run both again")
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return
+        time.sleep(min(every_s, left))
+
+
+def read_fresh_summary(path: Path, not_before: float, wait_s: float, every_s: float = 1.0,
+                       exit_path: Path | None = None) -> dict | None:
+    """The k6 summary at path, once it exists, was written after not_before and parses; None after wait_s, or as soon as
+    exit_path says k6 has ended without one (k6 writes its summary before it exits, so none will come)."""
+    deadline = time.monotonic() + wait_s
+    while True:
+        ended = k6_exit(exit_path, not_before)  # before the summary: a summary there at k6's exit is complete
         try:
             if path.stat().st_mtime >= not_before:
                 return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             pass  # not there yet, or k6 is still writing it
-        if time.monotonic() >= deadline:
+        if (ended and ended["ended"]) or time.monotonic() >= deadline:
             return None
         time.sleep(every_s)
 
 
-def polling_report(summary: dict | None, path: Path, result: dict) -> dict:
-    out = {"summary": str(path), "found": summary is not None, "pollerStartedAt": None, "pollerEndedAt": None,
-           "k6ThresholdsOk": None, "k6Aborted": None, "pollP95Ms": None, "pollSamples": 0, "insidePolling": False,
-           "pollHeld": False, "note": None}
+def polling_report(summary: dict | None, path: Path, result: dict, exit_info: dict | None = None) -> dict:
+    out = {"summary": str(path), "found": summary is not None, "k6Ended": None, "k6ExitCode": None,
+           "pollerStartedAt": None, "pollerEndedAt": None, "k6ThresholdsOk": None, "k6Aborted": None, "pollP95Ms": None,
+           "pollSamples": 0, "insidePolling": False, "pollHeld": False, "note": None}
+    if exit_info is not None:
+        out["k6Ended"], out["k6ExitCode"] = exit_info["ended"], exit_info["code"]
     if summary is None:
-        out["note"] = ("no k6 summary written after this script started (k6 not run, another SUMMARY_PATH, or still running): "
-                       "start this script right before k6 run, with the same SUMMARY_PATH")
+        if exit_info and exit_info["ended"]:
+            out["note"] = (f"k6 ended (exit {exit_info['code']}) without writing a summary after this script started: "
+                           "k6 refused to start (see its output) or SUMMARY_PATH differs from --k6-summary")
+        else:
+            out["note"] = ("no k6 summary written after this script started (k6 not run, another SUMMARY_PATH, or still "
+                           "running): start this script right before k6 run, with the same SUMMARY_PATH")
         return out
     meta, verdict = summary.get("meta") or {}, summary.get("verdict") or {}
     k6data = summary.get("k6") or {}
@@ -222,8 +282,8 @@ def run(args) -> dict:
               "bodyBytes": len(body), "delayS": args.delay_s, "expected": expected, "startedAt": iso(began)}
     print(f"f3_throttled: in {args.delay_s:g} s, {len(body):,} B at {args.rate:,.0f} B/s (about {planned:.0f} s) "
           f"to {report['baseUrl']}/api/v1/jobs as {filename}", file=sys.stderr, flush=True)
-    if args.delay_s > 0:
-        time.sleep(args.delay_s)
+    exit_path = Path(args.k6_exit_file) if args.k6_exit_file else None
+    wait_before_upload(args.delay_s, exit_path, began - 1.0)
     result = throttled_post(args.base_url, body, ctype, key, args.rate, args.timeout)
     report["upload"] = {k: v for k, v in result.items() if k not in ("startedAtS", "endedAtS")}
     report["upload"]["startedAt"], report["upload"]["endedAt"] = iso(result["startedAtS"]), iso(result["endedAtS"])
@@ -235,8 +295,11 @@ def run(args) -> dict:
     report["leftovers"] = None
     if args.k6_summary:
         path = Path(args.k6_summary)
-        summary = read_fresh_summary(path, began - 1.0, args.summary_wait_s)
-        report["polling"] = polling_report(summary, path, result)
+        summary = read_fresh_summary(path, began - 1.0, args.summary_wait_s, exit_path=exit_path)
+        exit_info = k6_exit(exit_path, began - 1.0)
+        if summary is not None and exit_info is not None:
+            exit_info = wait_for_k6_exit(exit_path, began - 1.0, EXIT_AFTER_SUMMARY_S)
+        report["polling"] = polling_report(summary, path, result, exit_info)
         checks["insidePolling"] = report["polling"]["insidePolling"]
         checks["pollHeld"] = report["polling"]["pollHeld"]
         if (args.uploads_dir or args.multipart_tmp) and summary is not None:
@@ -259,7 +322,10 @@ def parse_args(argv=None):
     ap.add_argument("--delay-s", type=float, default=20.0, help="wait before the upload, so k6's poller is running")
     ap.add_argument("--timeout", type=float, default=120.0, help="socket timeout per send/receive")
     ap.add_argument("--k6-summary", help="the k6 run's SUMMARY_PATH: wait for it and check the polling window")
-    ap.add_argument("--summary-wait-s", type=float, default=900.0, help="how long to wait for the k6 summary")
+    ap.add_argument("--k6-exit-file", help="where the shell writes k6's exit code after k6 run (echo $? > file): stop "
+                                           "waiting once k6 has ended, and upload nothing if it ended first")
+    ap.add_argument("--summary-wait-s", type=float, default=900.0,
+                    help="at most this long to wait for the k6 summary (with --k6-exit-file, until k6 has ended)")
     ap.add_argument("--uploads-dir", help="local server's storage/uploads: count stored rejected uploads (needs --k6-summary)")
     ap.add_argument("--multipart-tmp", help="glob of Tomcat's multipart temp dir(s): count upload_*.tmp (needs --k6-summary)")
     ap.add_argument("--json-out", help="also write the report here")
