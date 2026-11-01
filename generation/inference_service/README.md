@@ -14,7 +14,7 @@ pip install -r requirements.txt
 
 # 2. 실행
 uvicorn app:app --host 127.0.0.1 --port 8001          # 모델 미설정이면 /infer 는 501, 모델 로딩 중·로드 실패면 503
-BESIDE_SAMPLE_GLB=/data/sample.glb uvicorn app:app --host 0.0.0.0 --port 8001   # 패스스루: 샘플 GLB 경로를 돌려준다
+BESIDE_SAMPLE_GLB=/data/sample.glb uvicorn app:app --host 127.0.0.1 --port 8001   # 패스스루: 샘플 GLB 경로를 돌려준다
 
 # 3. 확인
 curl -s http://localhost:8001/healthz
@@ -54,7 +54,7 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `jobId` | string | Spring 작업 ID. 출력 파일명·로그에 사용 |
+| `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
 | `options.hair` | bool | true 면 `hair.npz` 로 hair variant 도 생성 |
 
@@ -162,4 +162,4 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 - 경로 모드는 Spring ↔ Python **파일시스템 공유**(같은 호스트 또는 NFS/SMB 볼륨)를 가정한다: 업로드 경로를 그대로 넘기고 GLB 경로를 돌려받는다. 디스크를 공유하지 않는 분리 배포는 업로드 모드(`POST /infer/upload` + `GET /artifacts/…`)로 한다(2026-10-30 결정, REVIEW_CHECKLIST #6 (b)).
 - 동기 호출: Spring 워커 스레드가 응답까지 기다린다(기본 600초). 추론이 더 길어지면 작업 큐·콜백 방식으로 바꾼다.
-- 동시성: GPU 1장 기준 요청 1개씩. Spring 이 `inference.max-concurrency`(기본 1)건만 동시에 보내고 나머지 작업은 Spring 에서 PENDING 으로 기다린다 **[구현됨]**. 그래서 `inference.timeout-ms` 는 그 작업 자신의 추론 시간에만 걸린다.
+- 동시성: GPU 1장 기준 요청 1개씩. Spring 이 `inference.max-concurrency`(기본 1)건만 동시에 보내고 나머지 작업은 Spring 에서 PENDING 으로 기다린다 **[구현됨]**. 그래서 보통은 `inference.timeout-ms` 가 그 작업 자신의 추론 시간에만 걸린다. 예외: Spring 이 시간 초과(또는 재시작)로 포기한 요청도 추론 서비스에서는 끝까지 돌며 `MODEL_LOCK` 을 쥐고 있어(동기 엔드포인트는 연결이 끊겨도 취소되지 않는다), 다음 작업의 `/infer` 는 그만큼 잠금을 기다린 뒤 시작하고 그 시간도 다음 작업의 timeout·`processingMs` 에 들어간다. `timeout-ms` 를 실측 추론 시간보다 넉넉히(약 3배, [backend/README.md](../../backend/README.md)) 둔다.

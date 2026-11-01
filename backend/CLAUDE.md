@@ -30,7 +30,7 @@ cd backend
 - Swagger UI: http://localhost:8080/swagger-ui/index.html · 생성 스펙: http://localhost:8080/v3/api-docs
 - Mock 실패 재현: 업로드 파일명에 `fail`이 들어가면 FAILED(`error.code=INFERENCE_FAILED`). 토큰은 `mock.worker.fail-when-filename-contains`, 빈 값이면 비활성.
 - Mock 지연: `mock.worker.pending-ms`(기본 2000), `mock.worker.processing-ms`(기본 3000).
-- DB 보기: http://localhost:8080/h2-console (mock·real, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `job_runs` 에서 `CALL CSVWRITE(...)` 로 뽑는다([README.md](README.md) '측정 내보내기').
+- DB 보기: http://localhost:8080/h2-console (mock·real, 이 PC 에서 직접 연 요청만. 터널·프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `job_runs` 에서 `CALL CSVWRITE(...)` 로 뽑는다([README.md](README.md) '측정 내보내기').
 - GPU 없이 real 시험: 추론 서비스를 패스스루(`BESIDE_SAMPLE_GLB`)로 띄우고 real 로 bootRun → `e2e_mock.ps1`. 절차는 [README.md](README.md) '프로파일 real'. 업로드 모드는 같은 절차에 `--inference.transfer=upload`(+ 양쪽 같은 토큰), [README.md](README.md) '업로드 모드'.
 
 ## 테스트

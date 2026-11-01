@@ -7,13 +7,13 @@
   준비: Java 17, 추론 서비스 venv(generation/inference_service/.venv, requirements.txt 설치), 방화벽 8080 허용.
   절차 전체는 backend/README.md 'GPU PC 에 real 배치'.
 .EXAMPLE
-  .\scripts\run_real.ps1                                   # 모델이 연결된 추론 서비스 + Spring real
+  .\scripts\run_real.ps1                                   # 추론 서비스(모델 없음: BESIDE_ANIMALLIFT_DIR 이 없으면 /infer 는 501) + Spring real
 .EXAMPLE
   .\scripts\run_real.ps1 -AnimalLiftDir C:\beside\AnimalLift -InferencePython C:\miniconda3\envs\animallift\python.exe   # 실제 모델
 .EXAMPLE
   .\scripts\run_real.ps1 -SampleGlb C:\beside\sample.glb   # 패스스루: 모델 없이 연동만 확인 (측정 아님)
 .EXAMPLE
-  .\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
+  .\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\Beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
 #>
 # NOTE: 이 파일은 UTF-8 **BOM 포함**이어야 한다. Windows PowerShell 5.1 은 BOM 이 없으면 ANSI 로 읽어 한글 주석이 파싱을 깨뜨린다.
 [CmdletBinding()]
@@ -65,10 +65,13 @@ $inferenceCommand = "Set-Location -LiteralPath '$inferenceDir'; "
 if ($SampleGlb -ne "") { $inferenceCommand += "`$env:BESIDE_SAMPLE_GLB = '$SampleGlb'; " }
 if ($AnimalLiftDir -ne "") { $inferenceCommand += "`$env:BESIDE_ANIMALLIFT_DIR = '$AnimalLiftDir'; " }
 $inferenceCommand += "& '$InferencePython' -m uvicorn app:app --host 127.0.0.1 --port $InferencePort"
+if ($SampleGlb -eq "" -and $AnimalLiftDir -eq "" -and -not $env:BESIDE_ANIMALLIFT_DIR -and -not $env:BESIDE_SAMPLE_GLB) {
+    Write-Warning "모델도 샘플 GLB 도 정하지 않았다: 추론 서비스는 뜨지만 모든 /infer 가 501 → 작업은 INFERENCE_UNAVAILABLE. 실제 모델은 -AnimalLiftDir <AnimalLift 폴더>, 연동 확인만은 -SampleGlb <GLB>."
+}
 Start-Window "Beside inference :$InferencePort" $inferenceCommand
 $inferHealth = Wait-Healthz "http://127.0.0.1:$InferencePort/healthz" "추론 서비스"
 Write-Host ("[1/2] inference  status={0} device={1} modelLoaded={2} passthrough={3}" -f $inferHealth.status, $inferHealth.device, $inferHealth.modelLoaded, $inferHealth.passthrough)
-if ($AnimalLiftDir -ne "" -and -not $inferHealth.modelLoaded) { Write-Warning "AnimalLift 를 백그라운드에서 불러오는 중이다(첫 실행은 VAE·DINOv2 다운로드 포함 수 분). 그동안 /infer 는 503 → 작업은 INFERENCE_UNAVAILABLE. 추론 창 로그에 'AnimalLift loaded' 가 뜬 뒤 사진을 올린다." }
+if ($AnimalLiftDir -ne "" -and -not $inferHealth.modelLoaded) { Write-Warning "AnimalLift 를 백그라운드에서 불러오는 중이다(첫 실행은 VAE·DINOv2 다운로드 포함 수 분). 그동안 /infer 는 503 → 작업은 INFERENCE_UNAVAILABLE. 추론 창 로그에 'model loaded in …s on cuda' 가 뜬 뒤 사진을 올린다." }
 if ($inferHealth.passthrough) { Write-Warning "패스스루 모드: 어떤 사진을 올려도 샘플 GLB 가 온다. 연동 확인용이며 측정이 아니다(job_runs.passthrough=true)." }
 
 # 2. Spring real — 작업 폴더는 backend/ (storage/ 상대 경로 기준)

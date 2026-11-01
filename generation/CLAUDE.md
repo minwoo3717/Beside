@@ -18,7 +18,7 @@
 # GPU 서버 (conda 또는 venv 안)
 cd generation/inference_service
 pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8001                        # 모델 미구현: POST /infer 는 501
+uvicorn app:app --host 127.0.0.1 --port 8001                      # 모델 미설정(BESIDE_ANIMALLIFT_DIR 없음)이면 POST /infer 는 501
 BESIDE_SAMPLE_GLB=/path/to/sample.glb uvicorn app:app --port 8001  # 패스스루: 샘플 GLB 경로를 돌려줘 Spring real 워커 연동을 먼저 시험
 BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 8001   # Spring 이 다른 기계(VM): 업로드 모드 + 토큰
 ```
@@ -29,6 +29,7 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 ```bash
 python -m py_compile generation/inference_service/app.py
+python -m unittest discover -s generation/inference_service -p "test_*.py"   # 모델 없이 도는 검사(fastapi·httpx, 사진 검사는 pillow)
 curl -s http://localhost:8001/healthz
 curl -s -X POST http://localhost:8001/infer -H "Content-Type: application/json" \
   -d '{"jobId":"test","imagePaths":["/data/dog1.jpg"],"options":{"hair":false}}'

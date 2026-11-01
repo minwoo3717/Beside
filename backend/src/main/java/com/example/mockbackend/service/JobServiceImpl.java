@@ -15,6 +15,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,6 +24,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -44,6 +47,8 @@ public class JobServiceImpl implements JobService {
     static final int MAX_LIMIT = 100;
     static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
     static final Set<String> ALLOWED_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    /** UTF-8 bytes of the client's name kept in a disk name: {jobId}_ (37) + this + "-N" stays under ext4's 255. */
+    static final int MAX_NAME_BYTES = 180;
 
     private final JobRepository jobRepository;
     private final IdempotencyKeyRepository idempotencyKeys;
@@ -128,11 +133,26 @@ public class JobServiceImpl implements JobService {
         }
         Job job;
         try {
-            job = store(photos);
+            job = saveUploads(photos);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploads", e);
         }
-        return keyed ? linkIdempotencyKey(idempotencyKey, job) : job;
+        // The key is linked before the worker sees the job: the losing request of a same-key race is dropped unrun.
+        if (keyed) {
+            Job linked = linkIdempotencyKey(idempotencyKey, job);
+            if (linked != job) {
+                return linked;
+            }
+        }
+        try {
+            dispatch(job);
+        } catch (TaskRejectedException shuttingDown) {
+            if (keyed) {
+                idempotencyKeys.deleteById(idempotencyKey); // its job is gone: the re-upload after the restart is new
+            }
+            throw shuttingDown;
+        }
+        return job;
     }
 
     @Override
@@ -143,6 +163,7 @@ public class JobServiceImpl implements JobService {
     @Override
     public Job retry(String id) {
         Job job = getJobOrThrow(id);
+        Job found = getJobOrThrow(id); // a second, unchanged copy (no persistence context spans the two reads)
         if (job.getStatus() != JobStatus.FAILED) {
             throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
                     "Only FAILED jobs can be retried; current status is " + job.getStatus());
@@ -160,7 +181,14 @@ public class JobServiceImpl implements JobService {
         job.setUpdatedAt(now);
         job.setStatus(JobStatus.PENDING);
         jobRepository.save(job);
-        jobWorker.dispatch(id);
+        try {
+            jobWorker.dispatch(id);
+        } catch (TaskRejectedException shuttingDown) {
+            // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
+            // attempt, so the job goes back to the FAILED attempt this request found.
+            jobRepository.save(found);
+            throw shuttingDown;
+        }
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
     }
@@ -171,24 +199,19 @@ public class JobServiceImpl implements JobService {
         if (size < 1 || size > MAX_LIMIT) {
             throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "limit must be between 1 and " + MAX_LIMIT);
         }
-        List<Job> all = jobRepository.findAllNewestFirst();
-        int start = 0;
+        // One row more than the page tells whether another page follows. The cursor stays the last item's id.
+        PageRequest window = PageRequest.of(0, size + 1);
+        List<Job> rows;
         if (cursor != null && !cursor.isBlank()) {
-            int index = -1;
-            for (int i = 0; i < all.size(); i++) {
-                if (all.get(i).getId().equals(cursor)) {
-                    index = i;
-                    break;
-                }
-            }
-            if (index < 0) {
-                throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown cursor");
-            }
-            start = index + 1;
+            Job after = jobRepository.findById(cursor)
+                    .orElseThrow(() -> ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown cursor"));
+            rows = jobRepository.findNewestFirstAfter(after.getCreatedAt(), after.getId(), window);
+        } else {
+            rows = jobRepository.findNewestFirst(window);
         }
-        int end = Math.min(all.size(), start + size);
-        List<Job> items = List.copyOf(all.subList(start, end));
-        String nextCursor = end < all.size() && !items.isEmpty() ? items.get(items.size() - 1).getId() : null;
+        boolean more = rows.size() > size;
+        List<Job> items = List.copyOf(more ? rows.subList(0, size) : rows);
+        String nextCursor = more ? items.get(items.size() - 1).getId() : null;
         return new JobPage(items, nextCursor);
     }
 
@@ -221,21 +244,39 @@ public class JobServiceImpl implements JobService {
         return job;
     }
 
-    /** Insert-only: when a concurrent request linked the key first, answer with that request's job. */
-    private Job linkIdempotencyKey(String key, Job job) {
+    /**
+     * Insert-only. When a concurrent request linked the key first, answer with that request's job and drop this one:
+     * it is stored but not yet dispatched, so no worker ever runs it.
+     */
+    Job linkIdempotencyKey(String key, Job job) {
         try {
             idempotencyKeys.saveAndFlush(new IdempotencyKeyEntry(key, job.getId(), Instant.now()));
             return job;
         } catch (DataIntegrityViolationException raced) {
             Optional<Job> first = findJobForKey(key);
-            log.info("Idempotency-Key raced: jobId={} answers instead of {}", first.map(Job::getId).orElse("?"), job.getId());
-            return first.orElse(job);
+            if (first.isEmpty()) {
+                return job;
+            }
+            log.info("Idempotency-Key raced: jobId={} answers instead of {}, which is dropped", first.get().getId(), job.getId());
+            discard(job);
+            return first.get();
         }
     }
 
     // ------------------------------------------------------------------ shared
 
+    /** v0: store and start at once. */
     private Job store(List<MultipartFile> photos) throws IOException {
+        Job job = saveUploads(photos);
+        dispatch(job);
+        return job;
+    }
+
+    /**
+     * Copies the photos and saves the job as PENDING; the caller dispatches it. When a copy or the save fails, the
+     * photos already copied for this request are deleted again (no job owns them).
+     */
+    Job saveUploads(List<MultipartFile> photos) throws IOException {
         Job job = new Job();
         String jobId = UUID.randomUUID().toString();
         Instant now = Instant.now();
@@ -248,21 +289,57 @@ public class JobServiceImpl implements JobService {
         job.setAttempt(1);
 
         List<StoredUpload> uploads = new ArrayList<>();
-        for (MultipartFile file : photos) {
-            String name = safeName(file);
-            Path target = uniqueTarget(Path.of(uploadDir), jobId + "_" + name);
-            Files.copy(file.getInputStream(), target);
-            uploads.add(new StoredUpload(name, file.getSize(), target.toString()));
+        List<Path> written = new ArrayList<>();
+        try {
+            for (MultipartFile file : photos) {
+                String name = safeName(file);
+                Path target = uniqueTarget(Path.of(uploadDir), storedName(jobId, name));
+                written.add(target);
+                try (InputStream in = file.getInputStream()) { // Files.copy leaves its input open
+                    Files.copy(in, target);
+                }
+                uploads.add(new StoredUpload(name, file.getSize(), target.toString()));
+            }
+            job.setUploads(uploads);
+            job.setResultPath(null);
+            job.setUploadMs(RequestStartFilter.elapsedMs());
+            jobRepository.save(job);
+        } catch (IOException | RuntimeException e) {
+            deleteFiles(written);
+            throw e;
         }
-        job.setUploads(uploads);
-        job.setResultPath(null);
-        job.setUploadMs(RequestStartFilter.elapsedMs());
-        jobRepository.save(job);
-
-        // Invoke another Spring bean so @Async runs through its proxy.
-        jobWorker.dispatch(jobId);
-        log.info("Job created: {} status={} worker={}", jobId, job.getStatus(), jobWorker.type());
         return job;
+    }
+
+    /**
+     * Hands the job to the worker. Once shutdown has begun the task executor rejects new work while Tomcat still
+     * answers: the job is then removed again with its photos, so no PENDING job is left that no worker will run.
+     */
+    private void dispatch(Job job) {
+        try {
+            // Invoke another Spring bean so @Async runs through its proxy.
+            jobWorker.dispatch(job.getId());
+        } catch (TaskRejectedException shuttingDown) {
+            discard(job);
+            throw shuttingDown;
+        }
+        log.info("Job created: {} status={} worker={}", job.getId(), job.getStatus(), jobWorker.type());
+    }
+
+    /** A job that never reached a worker: its row and its stored photos go. */
+    private void discard(Job job) {
+        jobRepository.deleteById(job.getId());
+        deleteFiles(job.getUploads().stream().map(upload -> Path.of(upload.path())).toList());
+    }
+
+    private void deleteFiles(List<Path> files) {
+        for (Path file : files) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException e) {
+                log.warn("Could not delete {}: {}", file, e.toString());
+            }
+        }
     }
 
     /** JPEG (FF D8 FF), PNG (89 'PNG' 0D 0A 1A 0A) or WEBP ('RIFF' size 'WEBP'), whatever the declared type says. */
@@ -299,6 +376,40 @@ public class JobServiceImpl implements JobService {
         String normalized = original.replace('\\', '/');
         String base = normalized.substring(normalized.lastIndexOf('/') + 1);
         return base.isBlank() ? "upload" : base;
+    }
+
+    /**
+     * Disk name of an upload: {jobId}_{the client's name}, with characters some file systems refuse (control
+     * characters and {@code < > : " / \ | ? *}) replaced by '_' and the name cut to MAX_NAME_BYTES of UTF-8, keeping
+     * a short extension. StoredUpload.name keeps the name as sent.
+     */
+    static String storedName(String jobId, String name) {
+        String clean = name.replaceAll("[\\p{Cntrl}<>:\"/\\\\|?*]", "_");
+        int dot = clean.lastIndexOf('.');
+        String ext = dot > 0 && clean.length() - dot <= 10 ? clean.substring(dot) : "";
+        String stem = cutUtf8(clean.substring(0, clean.length() - ext.length()), MAX_NAME_BYTES - utf8Length(ext));
+        return jobId + "_" + (stem.isEmpty() ? "upload" : stem) + ext;
+    }
+
+    /** The longest prefix of text (whole code points) that is at most maxBytes in UTF-8. */
+    private static String cutUtf8(String text, int maxBytes) {
+        StringBuilder out = new StringBuilder();
+        int bytes = 0;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            int size = utf8Length(new String(Character.toChars(codePoint)));
+            if (bytes + size > maxBytes) {
+                break;
+            }
+            out.appendCodePoint(codePoint);
+            bytes += size;
+            i += Character.charCount(codePoint);
+        }
+        return out.toString();
+    }
+
+    private static int utf8Length(String text) {
+        return text.getBytes(StandardCharsets.UTF_8).length;
     }
 
     /** Appends -2, -3, ... when two uploads of one job share a filename. */

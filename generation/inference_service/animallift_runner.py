@@ -26,6 +26,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+
+def load_rgb(image_path: str):
+    """The photo upright and on white, as RGB: EXIF Orientation applied (phones store portraits sideways with a tag;
+    PIL does not turn them by itself), then alpha composited on a white background as AnimalLift's test.py does."""
+    from PIL import Image, ImageOps
+
+    img = ImageOps.exif_transpose(Image.open(image_path)).convert("RGBA")
+    bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+    return Image.alpha_composite(bg, img).convert("RGB")
+
 @dataclass
 class Prediction:
     mesh_obj: Path
@@ -91,9 +101,7 @@ class AnimalLiftRunner:
             torch.cuda.reset_peak_memory_stats(self.device)
         started = time.perf_counter()
 
-        img = Image.open(image_path).convert("RGBA")    # alpha -> white background, as test.py does
-        bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
-        img = Image.alpha_composite(bg, img).convert("RGB")
+        img = load_rgb(image_path)
 
         with torch.no_grad():
             ctrl = self.tfm(img).unsqueeze(0).to(self.device)

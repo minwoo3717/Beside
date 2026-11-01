@@ -43,7 +43,7 @@ cd C:\beside\Beside
 .\scripts\run_real.ps1 -AnimalLiftDir C:\beside\AnimalLift -InferencePython C:\miniconda3\envs\animallift\python.exe
 ```
 
-- 추론 창에 `AnimalLift loaded in …s on cuda` 가 뜨면 준비 완료. 그 전 요청은 503 → 작업 `INFERENCE_UNAVAILABLE`(앱에서 다시 시도).
+- 추론 창에 `model loaded in …s on cuda` 가 뜨면 준비 완료. 그 전 요청은 503 → 작업 `INFERENCE_UNAVAILABLE`(앱에서 다시 시도).
 - `http://127.0.0.1:8001/healthz` 의 `modelLoaded: true` 로도 확인한다. 로드 실패 원인은 추론 창 로그에 있다.
 - 단독 실행: `$env:BESIDE_ANIMALLIFT_DIR='C:\beside\AnimalLift'; python -m uvicorn app:app --host 127.0.0.1 --port 8001` (animallift env 의 python).
 
@@ -60,7 +60,7 @@ cd C:\beside\Beside
 
 - 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 PLAN 3단계 개선 후보.
 - 같은 사진은 같은 결과(시드 고정).
-- 결과 GLB 는 정적 메시다(애니메이션 없음). 앱은 동작 버튼을 자동으로 숨긴다. 리깅(SMAL 뼈대·클립)을 붙이려면 리깅 스크립트를 `convert` 다음 단계로 넣는다 — GLB_SPEC rigged 확정 후.
+- 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
 - 털: `hair_length.png`/`hair_flow.png`/`hair_maps.json` 이 GLB 옆에 생기지만 API 로 내려주지는 않는다(계약 미정).
 - 라이선스: AnimalLift 리포에 라이선스 파일이 없다. 학습·연구 목적 사용은 저자 안내를 따르고, 결과물·가중치를 공개 배포하기 전에 확인한다.
 
@@ -83,7 +83,7 @@ Spring·Unity 는 모델을 모른다. 둘이 아는 것은 `/infer` 계약(READ
 
 ## Ubuntu 에서 쓰기
 
-AnimalLift 는 원래 Linux 에서 검증됐으므로 Ubuntu 가 가장 안정적인 선택이다. `/infer` 계약상 **Spring 과 추론 서비스는 같은 파일을 읽어야** 하므로(사진 경로, `glbPath`), 구성은 둘 중 하나다.
+AnimalLift 는 원래 Linux 에서 검증됐으므로 Ubuntu 가 가장 안정적인 선택이다. 같은 PC(경로 모드)면 **Spring 과 추론 서비스가 같은 파일을 읽으므로**(사진 경로, `glbPath`) 아래 A·B 중 하나, 서로 다른 기계면 업로드 모드(맨 아래)다.
 
 ### A. Ubuntu PC 한 대에 전부 (권장)
 
@@ -121,8 +121,8 @@ cd C:\beside\Beside\backend
 .\gradlew.bat bootRun --args="--spring.profiles.active=real --inference.base-url=http://127.0.0.1:8001"
 ```
 
-WSL2 는 기본으로 `localhost` 를 Windows 와 공유하므로 Spring 이 `127.0.0.1:8001` 로 닿는다. 안 되면 WSL 에서 `hostname -I` 로 IP 를 확인해 `inference.base-url` 에 넣고 uvicorn 을 `--host 0.0.0.0` 으로 띄운다.
+WSL2 는 기본으로 `localhost` 를 Windows 와 공유하므로 Spring 이 `127.0.0.1:8001` 로 닿는다. 안 되면 WSL 에서 `hostname -I` 로 IP 를 확인해 `inference.base-url` 에 넣고 uvicorn 을 `--host 0.0.0.0` 으로 띄운다 — 이때는 `BESIDE_INFERENCE_TOKEN` 을 함께 걸고 Spring 의 `inference.token` 에 같은 값을 넣는다(127.0.0.1 밖에 열면 토큰 필수).
 
 ### Ubuntu 와 Spring PC 가 서로 다른 컴퓨터라면
 
-지금 계약(경로 전달)으로는 안 된다. Spring 을 Ubuntu 로 옮기거나(A), 공유 폴더(NFS/SMB)를 양쪽에 같은 경로로 마운트한 뒤 `BESIDE_PATH_MAP` 으로 맞춘다. 사진·GLB 를 HTTP 로 주고받는 방식은 `/infer` 계약 변경이라 Backend 와 합의가 필요하다.
+업로드 모드를 쓴다 **[구현됨]** 2026-10-30: Spring 이 `inference.transfer=upload` 로 사진 파일을 `POST /infer/upload` 로 올리고 결과를 `GET /artifacts/{jobId}/base.glb` 로 받는다([README.md](README.md) '전송 모드'). 추론 서비스는 그 기계의 주소(Tailscale 등)에 `BESIDE_INFERENCE_TOKEN` 과 함께 띄우고, Spring 의 `inference.token` 에 같은 값을 넣는다. 클라우드 VM 구성은 [deploy/README.md](../../deploy/README.md) 'GPU PC 쪽'. 실제 기계 사이 연결은 아직 해 보지 않았다 **[계획]**.

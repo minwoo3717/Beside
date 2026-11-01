@@ -24,7 +24,7 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/swagger-ui/index.html | v1 스펙 브라우저 (springdoc) |
 | http://localhost:8080/v3/api-docs | 생성된 OpenAPI JSON (계약 테스트가 openapi.yaml 과 비교) |
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
-| http://localhost:8080/h2-console | DB 보기 (mock·real 모두, localhost 전용). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
+| http://localhost:8080/h2-console | DB 보기 (mock·real 모두, 이 PC 에서 직접 연 요청만 — 폰용 터널(cloudflared·ngrok)이나 프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
 
@@ -133,7 +133,7 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 
 준비(한 번):
 
-1. Java 17, Git. 리포를 **ASCII·공백 없는 경로**에 클론한다(예 `C:\beside`). OneDrive 의 `바탕 화면` 같은 한글·공백 경로는 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` 가 날 수 있다.
+1. Java 17, Git. 리포를 **ASCII·공백 없는 경로**에 클론한다(예 `C:\beside\Beside`, AnimalLift 는 `C:\beside\AnimalLift` — [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md) 와 같은 배치). OneDrive 의 `바탕 화면` 같은 한글·공백 경로는 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` 가 날 수 있다.
 2. 추론 서비스 환경: `cd generation\inference_service; python -m venv .venv; .\.venv\Scripts\python -m pip install -r requirements.txt`. AnimalLift 를 쓸 때는 추론 서비스를 AnimalLift conda env 안에서 띄운다(같은 프로세스에서 모델을 불러온다 — [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md)).
 3. 방화벽 8080 인바운드 허용(관리자 PowerShell): `netsh advfirewall firewall add rule name="Beside 8080" dir=in action=allow protocol=TCP localport=8080`. 8001 은 열지 않는다(추론 서비스는 127.0.0.1 전용).
 

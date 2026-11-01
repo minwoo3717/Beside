@@ -32,8 +32,10 @@ git --no-pager log --oneline -1
 echo "[2/3] docker compose up -d --build"
 "${COMPOSE[@]}" up -d --build </dev/null
 # Caddyfile is a single-file bind mount: git replaces the file, the running container keeps the old one until restart.
-if ! git diff --quiet "$OLD" HEAD -- deploy/Caddyfile; then
-  echo "      deploy/Caddyfile changed -> restart caddy"
+# Compare with what the running caddy reads, not with this run's pull: an earlier run may have pulled the change and
+# then failed at the build, or someone pulled by hand, and the old rules (Basic auth routes) would stay live.
+if ! "${COMPOSE[@]}" exec -T caddy cat /etc/caddy/Caddyfile </dev/null | cmp -s - deploy/Caddyfile; then
+  echo "      caddy runs another deploy/Caddyfile than the checkout -> restart caddy"
   "${COMPOSE[@]}" restart caddy </dev/null
 fi
 

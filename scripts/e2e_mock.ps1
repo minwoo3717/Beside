@@ -56,9 +56,11 @@ $form = @()
 foreach ($photo in $Photos) { $form += @("-F", "photos=@$photo") }
 $idempotencyKey = "e2e-" + (Get-Date -Format "yyyyMMdd-HHmmss-fff")
 $stopwatch = [Diagnostics.Stopwatch]::StartNew()
-$body = Invoke-Curl (@("-sS", "-D", $uploadHeaders, "-H", "Idempotency-Key: $idempotencyKey") + $form + @("$BaseUrl/api/v1/jobs"))
+# Expect: 100-continue 는 보내지 않는다(curl 은 1 MB 넘는 본문에 붙이고, 그러면 -D 에 Tomcat 의 "HTTP/1.1 100" 이
+# 먼저 적힌다). 결과는 어느 쪽이든 마지막 상태 줄이다.
+$body = Invoke-Curl (@("-sS", "-D", $uploadHeaders, "-H", "Expect:", "-H", "Idempotency-Key: $idempotencyKey") + $form + @("$BaseUrl/api/v1/jobs"))
 $uploadMs = $stopwatch.ElapsedMilliseconds
-$statusLine = Get-Content $uploadHeaders | Select-Object -First 1
+$statusLine = Get-Content $uploadHeaders | Where-Object { $_ -match "^HTTP/" } | Select-Object -Last 1
 if ($statusLine -notmatch " 202 ") { Write-Host "upload failed: $statusLine"; Write-Host $body; exit 1 }
 $location = (Get-Content $uploadHeaders | Where-Object { $_ -match "^Location:" } | Select-Object -First 1) -replace "^Location:\s*", ""
 $jobId = ($body | ConvertFrom-Json).jobId

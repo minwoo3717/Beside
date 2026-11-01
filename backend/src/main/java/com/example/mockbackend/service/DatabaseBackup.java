@@ -22,14 +22,13 @@ import java.util.stream.Stream;
  * Daily online copy of the H2 file database (prod: storage.backup.enabled=true). H2's BACKUP TO writes a consistent
  * zip while the server keeps running, so the VM never has to stop for a backup. Files are
  * {storage.backup.dir}/beside-{time}.zip; only the newest storage.backup.keep stay. A failed backup is logged and
- * retried at the next schedule; it never touches jobs.
+ * retried at the next schedule; it never touches jobs. The schedule and the time in the names are in
+ * storage.backup.zone (default Asia/Seoul): the VM's container runs in UTC, where 04:30 would be 13:30 in Korea.
  */
 @Component
 @ConditionalOnProperty(name = "storage.backup.enabled", havingValue = "true")
 public class DatabaseBackup {
-    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
-            .withZone(ZoneId.systemDefault());
-
+    private final DateTimeFormatter stamp;
     private final JdbcTemplate jdbc;
     private final Path dir;
     private final int keep;
@@ -37,13 +36,15 @@ public class DatabaseBackup {
 
     public DatabaseBackup(JdbcTemplate jdbc,
                           @Value("${storage.backup.dir:storage/backup}") String dir,
-                          @Value("${storage.backup.keep:7}") int keep) {
+                          @Value("${storage.backup.keep:7}") int keep,
+                          @Value("${storage.backup.zone:Asia/Seoul}") String zone) {
+        this.stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS").withZone(ZoneId.of(zone));
         this.jdbc = jdbc;
         this.dir = Path.of(dir);
         this.keep = Math.max(1, keep);
     }
 
-    @Scheduled(cron = "${storage.backup.cron:0 30 4 * * *}")
+    @Scheduled(cron = "${storage.backup.cron:0 30 4 * * *}", zone = "${storage.backup.zone:Asia/Seoul}")
     public void scheduled() {
         try {
             backupNow();
@@ -55,11 +56,11 @@ public class DatabaseBackup {
     /** Writes one backup now and prunes old ones; returns the new file. */
     public Path backupNow() throws IOException {
         Files.createDirectories(dir);
-        Path target = dir.resolve("beside-" + STAMP.format(Instant.now()) + ".zip").toAbsolutePath();
+        Path target = dir.resolve("beside-" + stamp.format(Instant.now()) + ".zip").toAbsolutePath();
         while (Files.exists(target)) {
             // Same millisecond as the previous backup: wait for the next one, so names stay unique and in time order.
             Thread.onSpinWait();
-            target = dir.resolve("beside-" + STAMP.format(Instant.now()) + ".zip").toAbsolutePath();
+            target = dir.resolve("beside-" + stamp.format(Instant.now()) + ".zip").toAbsolutePath();
         }
         jdbc.execute("BACKUP TO '" + target.toString().replace("'", "''") + "'");
         log.info("H2 backup written: {} ({} bytes)", target.getFileName(), Files.size(target));
