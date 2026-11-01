@@ -19,6 +19,9 @@ Run (GPU PC; Spring runs on the same host, so 127.0.0.1 is enough — scripts/ru
     uvicorn app:app --host 127.0.0.1 --port 8001
 Passthrough (no model yet, returns a fixed sample GLB so Spring's real worker can be integrated first):
     BESIDE_SAMPLE_GLB=/path/to/sample.glb uvicorn app:app --host 127.0.0.1 --port 8001
+  load-test knobs (passthrough only, read per request, all unset = the instant answer above; README '패스스루 부하 설정'):
+            BESIDE_PASSTHROUGH_DELAY_MS + _JITTER_MS (simulated generation time), _SLOTS (concurrent generations, default 1),
+            _FAIL_RATE (0..1) / _FAIL_TOKEN (photo name substring) -> 500 INFERENCE_FAILED, _SLOW_TOKEN + _SLOW_MS
 
 Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
   path   POST /infer with absolute paths (Spring on the same PC or a shared volume).
@@ -34,6 +37,7 @@ import json
 import logging
 import os
 import pathlib
+import random
 import re
 import shutil
 import sys
@@ -241,6 +245,118 @@ class _Result:
     model_version: Optional[str]
 
 
+def _inference_failed(message: str) -> HTTPException:
+    """500 {code: INFERENCE_FAILED, message}: the model failure answer. The passthrough failure knobs reuse it so a
+    load test sees exactly what Spring sees when the model fails (Spring records detail.code: README error table)."""
+    return HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "message": message})
+
+
+# --------------------------------------------------------------------------- passthrough load-test knobs
+# Passthrough only (BESIDE_SAMPLE_GLB). They turn the instant sample answer into a simulated GPU: a generation time,
+# a bounded number of concurrent generations, failures and slow jobs (docs: README '패스스루 부하 설정').
+# Read on every request, so a test or a restarted stub can change them; all unset = no sleep and no slot wait, the
+# passthrough answers as fast as before (scripts/perf measures that path).
+
+
+@dataclass
+class _Knobs:
+    delay_ms: int      # BESIDE_PASSTHROUGH_DELAY_MS: simulated generation time
+    jitter_ms: int     # BESIDE_PASSTHROUGH_JITTER_MS: + uniform 0..jitter on top of delay
+    slots: int         # BESIDE_PASSTHROUGH_SLOTS: concurrent simulated generations (1 = one GPU)
+    fail_rate: float   # BESIDE_PASSTHROUGH_FAIL_RATE: chance 0..1 of INFERENCE_FAILED
+    fail_token: str    # BESIDE_PASSTHROUGH_FAIL_TOKEN: first photo name contains it -> INFERENCE_FAILED
+    slow_token: str    # BESIDE_PASSTHROUGH_SLOW_TOKEN: first photo name contains it -> sleep slow_ms instead
+    slow_ms: int       # BESIDE_PASSTHROUGH_SLOW_MS
+
+    @property
+    def active(self) -> bool:
+        """False when nothing would be simulated (SLOTS alone bounds nothing): the plain passthrough answer."""
+        return bool(self.delay_ms or self.jitter_ms or self.fail_rate or self.fail_token
+                    or (self.slow_token and self.slow_ms))
+
+
+def _env_number(name: str, cast, default, low, high=None):
+    """BESIDE_PASSTHROUGH_<name> as cast, clamped to [low, high]; unset or empty = default, unreadable = default + log."""
+    raw = (os.environ.get("BESIDE_PASSTHROUGH_" + name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = cast(raw)
+    except ValueError:
+        log.warning("BESIDE_PASSTHROUGH_%s=%r is not a number, using %s", name, raw, default)
+        return default
+    value = max(low, value)
+    return value if high is None else min(high, value)
+
+
+def _passthrough_knobs() -> _Knobs:
+    return _Knobs(
+        delay_ms=_env_number("DELAY_MS", int, 0, 0),
+        jitter_ms=_env_number("JITTER_MS", int, 0, 0),
+        slots=_env_number("SLOTS", int, 1, 1),
+        fail_rate=_env_number("FAIL_RATE", float, 0.0, 0.0, 1.0),
+        fail_token=os.environ.get("BESIDE_PASSTHROUGH_FAIL_TOKEN") or "",
+        slow_token=os.environ.get("BESIDE_PASSTHROUGH_SLOW_TOKEN") or "",
+        slow_ms=_env_number("SLOW_MS", int, 0, 0),
+    )
+
+
+_SLOTS_GUARD = threading.Lock()
+_SLOTS: Optional[threading.BoundedSemaphore] = None
+_SLOTS_SIZE = 0
+
+
+def _passthrough_slots(size: int) -> threading.BoundedSemaphore:
+    """The semaphore that bounds simulated generations, made on first use and remade when SLOTS changes (a run still
+    holding the old one releases the old one, so for a moment old + new may overlap; the knob is for tests)."""
+    global _SLOTS, _SLOTS_SIZE
+    with _SLOTS_GUARD:
+        if _SLOTS is None or _SLOTS_SIZE != size:
+            _SLOTS, _SLOTS_SIZE = threading.BoundedSemaphore(size), size
+        return _SLOTS
+
+
+def _sleep(seconds: float) -> None:
+    """time.sleep behind a name the tests replace."""
+    time.sleep(seconds)
+
+
+def _simulate_generation(job_id: str, image_paths: List[str]) -> Optional[int]:
+    """The knobs' simulated generation for one passthrough run. None when no knob is set (nothing happens), otherwise
+    the generation time in ms (the time inside a slot, not the wait for one, as inferMs excludes MODEL_LOCK waits).
+    Raises the model failure answer for FAIL_TOKEN / FAIL_RATE, after the generation time like a failing model."""
+    knobs = _passthrough_knobs()
+    if not knobs.active:
+        return None
+    name = re.split(r"[\\/]", image_paths[0])[-1]   # the first photo's file name (upload mode: 00_<sanitized name>)
+    slow = bool(knobs.slow_token and knobs.slow_ms and knobs.slow_token in name)
+    slots = _passthrough_slots(knobs.slots)
+    asked = time.perf_counter()
+    with slots:
+        waited_ms = int((time.perf_counter() - asked) * 1000)
+        if slow:
+            sleep_ms = float(knobs.slow_ms)
+        else:
+            sleep_ms = knobs.delay_ms + (random.uniform(0, knobs.jitter_ms) if knobs.jitter_ms else 0)
+        started = time.perf_counter()
+        if sleep_ms > 0:
+            _sleep(sleep_ms / 1000)
+        if knobs.fail_token and knobs.fail_token in name:
+            failure = "fail token"
+        elif knobs.fail_rate and random.random() < knobs.fail_rate:
+            failure = "fail rate"
+        else:
+            failure = None
+        generation_ms = int((time.perf_counter() - started) * 1000)
+    tags = [tag for tag in (failure, "slow token" if slow else None) if tag]
+    outcome = ("failed" if failure else "ok") + (f" ({', '.join(tags)})" if tags else "")
+    log.warning("job %s: passthrough sim %d ms (planned %.0f), slot wait %d ms of %d slot(s), outcome %s",
+                job_id, generation_ms, sleep_ms, waited_ms, knobs.slots, outcome)
+    if failure:
+        raise _inference_failed(f"passthrough simulated failure (BESIDE_PASSTHROUGH_{failure.replace(' ', '_').upper()})")
+    return generation_ms
+
+
 def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
     """The body of /infer, shared with /infer/upload: local image paths in, the GLB on this machine out.
     Raises HTTPException with the contract's {code, message} detail (README error table)."""
@@ -253,9 +369,11 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
         sample = pathlib.Path(SAMPLE_GLB)
         if not sample.is_file():
             raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": f"BESIDE_SAMPLE_GLB not found: {SAMPLE_GLB}"})
+        simulated_ms = _simulate_generation(job_id, image_paths)   # None unless a BESIDE_PASSTHROUGH_* knob is set
         return _Result(
             glb=sample.resolve(),
-            metrics=InferMetrics(inferMs=int((time.perf_counter() - started) * 1000), convertMs=0),
+            metrics=InferMetrics(inferMs=simulated_ms if simulated_ms is not None else int((time.perf_counter() - started) * 1000),
+                                 convertMs=0),
             passthrough=True,
             model_version=None,
         )
@@ -283,7 +401,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
             pred = MODEL.predict(image, str(raw_dir))
         except Exception as e:  # noqa: BLE001  OOM, unreadable image, model errors
             log.exception("job %s: inference failed", job_id)
-            raise HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "message": f"{type(e).__name__}: {e}"})
+            raise _inference_failed(f"{type(e).__name__}: {e}")
 
     glb = job_dir / "base.glb"
     try:
