@@ -167,13 +167,13 @@ DoD:
 | 조각 | 내용 | 계약 영향 | 상태 |
 |---|---|---|---|
 | B0 | 목표 트래픽 모델, 계약 회의 안건 #19~#21 과 #15 확장, PLAN·CHECKLIST 갱신 | 없음(안건만 추가) | **[구현됨]** 브랜치 `load/socar`, main 미병합 |
-| B1 | Actuator 를 관리 포트 8081 에 둠(공개 8080 에는 `/actuator` 없음), Prometheus 노출 | 없음 | 브랜치 `load/socar` 에서 진행 중(2026-11-01) |
-| B2 | 작업 지표 `beside.jobs.*`·`beside.job.*`(성공률·생성 시간·대기열 길이) | METRICS 추가 | 〃 |
-| B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | 〃 |
-| B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 〃 |
-| B5 | 추론 스텁 패스스루 설정(지연·슬롯·실패율·느린 요청, 기본 꺼짐) — Generation 리뷰 | 없음 | 〃 |
-| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 〃 |
-| B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | 〃 |
+| B1 | Actuator 를 관리 포트 8081 에 둠(공개 8080 에는 `/actuator` 없음), Prometheus 노출 | 없음 | **[구현됨]** 브랜치 `load/socar`, main 미병합 — `ObservabilityEndpointTest`(공개 포트 404·관리 포트 200) |
+| B2 | 작업 지표 `beside.jobs.*`·`beside.job.*`(성공률·생성 시간·대기열 길이) | METRICS 추가 | **[구현됨]** 〃 — `JobMetrics`·`JobQueueGauge` 와 테스트 |
+| B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | **[구현됨]** 〃 — 실제 Tomcat 에서 다운로드 중간 끊기 시험 포함 |
+| B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 파일 **[구현됨]** 〃. 이 PC 에 Docker 가 없어 compose·Caddy·Grafana 실행은 CI 첫 실행과 VM 에서 처음 확인 **[계획]** |
+| B5 | 추론 스텁 패스스루 설정(지연·슬롯·실패율·느린 요청, 기본 꺼짐) — Generation 리뷰 | 없음 | **[구현됨]** 〃 — `test_app.py` 8개 추가, 3D 담당 리뷰 전 |
+| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 **[계획]** |
+| B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 46개, k6 대역으로 돌린 Node 시험 24개. k6 실제 실행 **[계획]**(이 PC 에 k6 없음) |
 | VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | **[계획]** VM 준비 뒤 |
 | R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #19·#20, 결정 전에는 검토 브랜치에만 |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
