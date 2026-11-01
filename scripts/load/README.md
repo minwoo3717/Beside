@@ -61,7 +61,7 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 - **A3** 도 `load_unexpectedCount == 0` 을 전체와 유지 구간마다 건다. 모든 업로드가 유효하므로 202 가 아닌 4xx(Spring·프록시의 413, 400 `INVALID_REQUEST`·`UNSUPPORTED_IMAGE_TYPE`, 프록시 404, `RATE_LIMITED` 코드가 없는 429)는 오류가 아니라 'unexpected' 로만 세어지고, 빠른 거부는 지연 기준도 통과하기 때문이다. 5xx·연결 오류는 `load_errorRatio`, 429 `RATE_LIMITED`·503 `QUEUE_FULL` 은 `load_rejectedCount`(기준 없음, 위)로만 세므로 한 응답을 두 번 세지 않는다. `SIZE=large`(20 MB)의 create 지연은 판정하지 않고 유지 구간마다 `verdict.stages[].latency.create` 와 요약 글의 열에 보고만 한다.
 - 단계가 있는 스크립트(A1~A6)는 같은 기준을 `{stage:N,phase:hold}` 로 단계마다 한 번 더 건다. 요약의 `verdict.stages`(단계마다 `pass | fail | not_run | invalid | incomplete`)와 `verdict.breakingPoint`(마지막 통과 단계, 처음 실패 단계, 운영 상한 = 마지막 통과 사용자 수 × 7 / 10 의 내림)가 여기서 나온다. `not_run` 은 표본이 없는 단계, `invalid` 는 단계에 묶지 못한 drop 때문에 통과로 칠 수 없는 단계, `incomplete` 는 중단된 실행에서 잘린 유지 구간이나 흐름이 잘린 유지 구간이다(아래 "실행이 어떻게 끝났는지"). 표본이 없는 엔드포인트는 지연 항목이 없고(글에서 `-`), 돌지 않은 단계의 `heldS`·`sentMbps`·`assetMbps` 는 0 이 아니라 null 이다.
 - `breakingPoint` 는 단계가 올라가기만 하는 탐색(A1~A4)에 있고, 운영 상한은 사용자 수가 있는 A1 만 낸다. A5(스파이크 1,800 → 5,400 → 1,800)와 A6(소크 한 단계)는 null 이고 `breakingPointNote` 가 "not an increasing search" 라고 적는다. 단계별 판정만 읽는다.
-- **drop 이 있는 단계는 통과가 아니다.** 단계마다 시나리오가 따로인 A2(`rps0`…)·A3·A4(`lvl0`…)는 `dropped_iterations{scenario:…}` 이 그 단계만 `fail` 로 만들고 앞 단계의 판정은 그대로다(`verdict.stages[].dropped`). 한 `ramping-arrival-rate` 시나리오로 모든 단계를 도는 A1·A5·A6(`api_staged.js`)은 k6 가 drop 에 시나리오 이름만 붙여 단계를 알 수 없으므로, drop 이 하나라도 있으면 `pass` 단계를 모두 `invalid` 로 바꾸고 `breakingPoint` 를 null 로 둔다(이유는 `verdict.breakingPointNote`). 다시 돌릴 때는 `PRE_VUS` 를 올린다: k6 v2.3.0 은 미리 만든 VU 가 모자라면 반복을 drop 하고서야 VU 를 하나 더 시작하므로 `MAX_VUS` 만 올려서는 drop 이 없어지지 않는다(메모리는 아래 "디스크와 VU").
+- **drop 이 있는 단계는 통과가 아니다.** 단계마다 시나리오가 따로인 A2(`rps0`…)·A3·A4(`lvl0`…)는 `dropped_iterations{scenario:…}` 이 그 단계만 `fail` 로 만들고 앞 단계의 판정은 그대로다(`verdict.stages[].dropped`). 한 `ramping-arrival-rate` 시나리오로 모든 단계를 도는 A1·A5·A6(`api_staged.js`)은 k6 가 drop 에 시나리오 이름만 붙여 단계를 알 수 없으므로, drop 이 하나라도 있으면 `pass` 단계를 모두 `invalid` 로 바꾸고 `breakingPoint` 를 null 로 둔다(이유는 `verdict.breakingPointNote`). 다시 돌릴 때는 `PRE_VUS` 를 올린다: k6 v2.3.0 은 미리 만든 VU 가 모자라면 반복을 drop 하고서야 VU 를 하나 더 시작하므로 `MAX_VUS` 만 올려서는 drop 이 없어지지 않는다(메모리는 아래 "디스크와 VU"). `api_staged.js` 의 drop 은 healthz 만 하는 browse 시나리오(미리 만든 VU 5개 고정, `BROWSE_MAX_VUS` 200; 9,000명 단계는 20/s 라 healthz 가 250 ms 를 넘으면 모자란다 [파생])에서도 나고, `PRE_VUS` 는 `flows` 시나리오에만 닿는다. 요약에는 시나리오별 drop 수가 없으므로(`api_staged.js` 는 `dropped_iterations` 전체에만 기준을 걸어 `{scenario:…}` 하위 지표가 요약에 남지 않는다) `k6 run --out json=<파일>` 의 `dropped_iterations` 표본의 `scenario` 태그로 가른다. `PRE_VUS` 가 4,000 을 넘으면 `MAX_VUS` 도 같이 준다(기본 `MAX_VUS` 는 4,000 에서 잘려, k6 가 `maxVUs can't be less than preAllocatedVUs` 와 종료 코드 104 로 시작하지 않는다).
 - **업링크**: `verdict.uplinkRatio` = max(가장 바쁜 단계 유지 구간의 업로드 본문 Mbps, 전체 평균 `data_sent` Mbps) / `UPLINK_MBPS`, 0.7 을 넘으면 `uplinkSaturated`. 단계 값은 `load_bytesSent{stage:N,phase:hold}` × 8 / 그 유지 구간이 실제로 돈 초 `heldS`(A1·A3·A5·A6, 단계 항목의 `sentMbps`, `peakStage`·`peakStageSentMbps`)이고, 전체 평균은 `uplinkRatioWholeRun` 으로 따로 남는다. 202 를 받은 본문만 센다: 거부·리셋·타임아웃·잘린 업로드는 본문을 얼마나 보냈는지 몰라 빠지고 헤더·폴링·TLS 몫도 빠지므로, 단계 값은 하한이다.
 - **중단**: `load_errorRatio` 누적 > 5 % 를 첫 1분 뒤부터 `abortOnFail`(A0·F3 제외, k6 종료 코드 99). k6 기준은 누적값이라 "1분 지속"을 정확히 못 본다. `PROM_URL` 을 주면 `lib/guard.js` 가 15초(`GUARD_EVERY_S`)마다 서버의 최근 1분 5xx 비율(> 5 % `GUARD_MAX_ERROR_RATIO` 가 `GUARD_BREACHES` 2번 연속)과 디스크 사용률(> 80 % `GUARD_MAX_DISK_RATIO`)을 보고 `exec.test.abort()` 한다(k6 종료 코드 108; A0·F3 에는 가드가 없다). 무엇이 멈췄는지(가드, `abortOnFail`, Ctrl+C)는 `verdict.aborted` 에 남는다(아래).
   - 가드는 `per-vu-iterations` 의 반복 한 번(VU 1개)이다. 부하의 예정 끝이 지나고 부하 VU 가 모두 끝나면(드레인 포함) 같이 끝나므로, 실행을 gracefulStop 상한까지 붙잡지 않는다. 가드의 Prometheus 요청은 `endpoint=guard` 라 `load_*` 에는 들어가지 않지만 k6 의 `http_reqs`·`data_sent`(요약의 `httpReqs`·`dataSentMbps`)에는 들어간다.
@@ -93,7 +93,7 @@ k6 v2.3.0 은 어떤 끝(정상 0, setup 실패 107, 가드 108, `abortOnFail` 9
 개발 PC 에는 winget 패키지 `GrafanaLabs.k6` 로 설치한 k6 v2.3.0 이 `C:\Program Files\k6\k6.exe` 에 있다. PATH 에 잡히지 않은 셸(설치 전에 연 셸 등)에서는 전체 경로로 부르거나 새 셸에서 `k6 version` 으로 확인한다. 돌려 본 버전은 v2.3.0 하나뿐이고, 끝난 방식의 판정과 아래 "k6 v2.3.0 에서 확인한 것"은 이 버전의 동작이다. 다른 버전은 확인하지 않았다.
 
 ```powershell
-winget install --id GrafanaLabs.k6 --source winget
+winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget   # 확인한 버전으로 고정한다
 k6 version          # Windows 는 "k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)" 처럼 나온다
 ```
 
@@ -106,7 +106,7 @@ python scripts/load/make_fixtures.py          # 사진·GLB 를 scripts/load/out
 python scripts/load/model.py                  # 목표 표 확인 (--json 으로 JSON)
 ```
 
-- 명령은 리포 루트에서 실행한다. k6 는 `open()` 의 상대 경로를 스크립트 위치 기준으로 읽으므로 기본 사진 경로(`./out/fixtures/...`)는 어디서 실행해도 `scripts/load/out/fixtures/` 를 가리킨다. 다른 사진과 `IDS_FILE` 은 절대 경로로 준다(`PHOTOS=a.png,b.png` 또는 `PHOTO_1`/`PHOTO_2`). A2 `SEED_ONLY` 의 `IDS_OUT` 도 절대 경로다(시드 전에 그 폴더를 확인한다).
+- 명령은 리포 루트에서 실행한다. k6 는 `open()` 의 상대 경로를 스크립트 위치 기준으로 읽으므로 기본 사진 경로(`./out/fixtures/...`)는 어디서 실행해도 `scripts/load/out/fixtures/` 를 가리킨다. 다른 사진과 `IDS_FILE` 은 절대 경로로 준다(`PHOTOS=a.png,b.png` 또는 `PHOTO_1`/`PHOTO_2`; Git Bash 에서 쉼표로 이을 때는 아래 VM 절처럼 `cygpath -m`). A2 `SEED_ONLY` 의 `IDS_OUT` 도 절대 경로다(시드 전에 그 폴더를 확인한다).
 - `SUMMARY_PATH`(와 `IDS_OUT`)는 현재 폴더 기준으로 쓰이고, 그 폴더는 미리 만든다. k6 v2.3.0 은 폴더를 만들지 않는다: 없으면 `failed to handle the end-of-test summary … could not open` 만 남기고 종료 코드는 그대로 끝난다. 기본값은 `scripts/load/out/k6-summary-<RUN_ID>.json`.
 - `RUN_ID` 는 1~40자 `A-Z a-z 0-9 _ . -`, 실행마다 바꾼다(예: `a1r1`, `g1rho07`). 파일명과 Idempotency-Key 에 들어가 부하 작업을 `lt-` 로 찾고 지울 수 있다. 결과 폴더 이름에도 들어간다.
 
@@ -132,13 +132,14 @@ k6 run -e BASE_URL=http://localhost:18080 -e RUN_ID=local1 -e SMOKE_VUS=5 -e MIN
 
 **결과 폴더 규칙**: k6 실행 하나에 폴더 하나, `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`. 그 안에 그 실행의 k6 요약(`k6-summary.json`)과 `collect.py` 가 쓰는 `run.json` 이 있고, 그 실행의 VM 쪽 파일(events.jsonl, docker stats, glb.sha256 등 — deploy/loadtest/README.md 5번)은 하위 폴더 `vm/` 에 둔다. VM 파일은 `collect.py --attach` 로만 run.json 에 들어간다. 그래서 `RUN` 은 k6 명령마다 다시 정하고(G1 은 ρ 마다 폴더 하나), `collect.py` 는 폴더마다 한 번 돌린다. 한 폴더에 여러 실행을 쓰면 `k6-summary.json` 과 `run.json` 이 덮어써진다.
 
-아래는 bash 다. 개발 PC 에서는 Git Bash 로 돌린다. Git Bash 는 `-e NAME=/c/…` 값의 맨 앞 경로만 Windows 경로로 바꿔 k6 에 넘기고 쉼표 뒤 경로는 `/c/…` 그대로 두므로, A2 의 절대 경로는 `cygpath -m` 으로 만든다(Linux 에는 `cygpath` 가 없어 `$PWD` 를 그대로 쓴다). 리포 경로에 공백이 있으면 그 경로가 든 값은 따옴표로 감싼다.
+아래는 bash 다. 개발 PC 에서는 Git Bash 로 돌린다. Git Bash 는 `-e NAME=/c/…` 값의 맨 앞 경로만 Windows 경로로 바꿔 k6 에 넘기고 쉼표 뒤 경로는 `/c/…` 그대로 두므로, 쉼표로 잇는 절대 경로(A2 의 `IDS_FILE`, `PHOTOS`)는 `cygpath -m` 으로 만든다(Linux 에는 `cygpath` 가 없어 `$PWD` 를 그대로 쓴다). 리포 경로에 공백이 있으면 그 경로가 든 값은 따옴표로 감싼다.
 
 ```bash
 # Prometheus 는 VM 의 127.0.0.1:9090 에만 게시된다 → 다른 터미널에서 터널: ssh -N -L 9090:127.0.0.1:9090 <user@VM>
 export BASE_URL=https://<domain> UPLINK_MBPS=<측정값> PROM_URL=http://localhost:9090
-# k6 명령마다 먼저 부른다: RUN_ID 와 그 실행의 결과 폴더 RUN 을 새로 정한다(vm/ 은 VM 파일을 가져올 때 scp 가 만든다)
-newrun() { RUN_ID=$1; RUN=docs/perf/load/data/$(date +%Y-%m-%d_%H%M)-$1; mkdir -p "$RUN"; echo "$RUN"; }
+# k6 명령마다 먼저 부른다: RUN_ID(= deploy/loadtest/README.md 5번의 RID, 그 scp 가 쓴다)와 그 실행의 결과 폴더 RUN 을 새로
+# 정한다(vm/ 은 VM 파일을 가져올 때 scp 가 만든다)
+newrun() { RUN_ID=$1; RID=$1; RUN=docs/perf/load/data/$(date +%Y-%m-%d_%H%M)-$1; mkdir -p "$RUN"; echo "$RUN"; }
 
 # A0 — RTT_base
 newrun a0r1; k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/smoke.js
@@ -152,6 +153,8 @@ newrun a6r1; k6 run -e RUN_ID=$RUN_ID -e SCENARIO=soak  -e SUMMARY_PATH=$RUN/k6-
 # A2 — 같은 부하 볼륨에서 세 번, 이 순서로(poll_saturation.js 머리 주석). mock 은 한 설정으로 COMPLETED 와 PENDING 을 함께
 #      만들지 못한다: COMPLETED 시드는 pending-ms 0, PENDING 시드는 긴 pending-ms 가 필요하고, backend 재시작은 PENDING 작업을
 #      모두 FAILED 로 닫는다(InterruptedJobRecovery). SEED_ONLY=1 은 시드해 IDS_OUT 만 쓰고 부하는 걸지 않는다(RTT_BASE_MS 불필요).
+#      (a)~(c) 는 같은 셸에서 돌린다: SEEDC·SEEDP 는 셸 변수이고, 비어 있으면 (c) 의 IDS_FILE 이 /ids.json,/ids.json 이 되어(Git
+#      Bash 는 앞 경로를 Git 설치 폴더 안의 경로로 바꾼다) 읽을 수 없다며 107 로 멈춘다.
 #  (a) 지금 backend(MOCK_WORKER_PENDINGMS=0)에서 COMPLETED 1,000건
 newrun a2seedc; SEEDC=$(cygpath -m "$PWD/$RUN" 2>/dev/null || echo "$PWD/$RUN"); k6 run -e RUN_ID=$RUN_ID -e SEED_ONLY=1 -e SEED_COMPLETED=1000 -e IDS_OUT="$SEEDC/ids.json" \
   -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/poll_saturation.js
@@ -163,8 +166,10 @@ newrun a2seedp; SEEDP=$(cygpath -m "$PWD/$RUN" 2>/dev/null || echo "$PWD/$RUN");
 newrun a2r1; k6 run -e RUN_ID=$RUN_ID -e IDS_FILE="$SEEDC/ids.json,$SEEDP/ids.json" -e SUMMARY_PATH=$RUN/k6-summary.json \
   scripts/load/poll_saturation.js
 #  (d) VM: 기본값으로 되돌린다(MOCK_WORKER_PENDINGMS 없이 $L up -d backend), 예를 들어 A2 뒤 부하 볼륨을 비울 때.
-#  기대: (a)·(b) 는 종료 코드 0 과 'SEED ONLY: …' 줄. (c) 가 setup 에서 107 로 멈추면 메시지의 원인(재시작, pending-ms 0 에서 한
-#  PENDING 시드, 다른 서버·비운 볼륨)을 고쳐 (b) 부터, 99 와 load_pendingLeft 면 pending-ms 를 늘려 (b) 부터 다시 한다.
+#  기대: (a)·(b) 는 종료 코드 0 과 'SEED ONLY: …' 줄. (b) 가 107 이면 backend 가 아직 pending-ms 0 이거나(시드 1초 뒤 확인에서
+#  'pending -> 200 PROCESSING' 같은 줄) 다시 뜨기 전에 시작한 것('healthz returned …')이다. (c) 가 setup 에서 107 로 멈추면 메시지대로:
+#  pending 쪽(pending -> FAILED 는 PENDING 시드 뒤 재시작, PROCESSING·COMPLETED 는 pending-ms 만료)이면 (b) 부터, completed 쪽이나
+#  404(다른 서버·비운 볼륨)면 (d) 로 되돌린 backend 에서 (a) 부터 다시 한다. 99 와 load_pendingLeft 면 pending-ms 를 늘려 (b) 부터.
 #  시드 폴더(ids.json + 시드 전용 k6-summary.json)는 결과가 아니다: collect.py 를 돌리지 않는다.
 
 # A3, A4 — 단계마다 시나리오 하나. drop 이 난 단계만 fail 이고, 느린 단계를 drop 없이 재려면 PRE_VUS 를 올린다(아래 표)
@@ -207,7 +212,9 @@ k6 run -e RUN_ID=$RUN_ID -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/failu
 wait $F3T; echo "f3_throttled exit $?"
 # 기대: 사례마다 match 1·업로드 수 계획대로(기본 20/20), 느린 업로드 202 약 40초(0.4 MB at 10 kB/s)·폴링 구간 안, f3_throttled 종료
 #   코드 0. k6-exit.txt 가 있어야 k6 가 시작을 거부했을 때 도우미가 바로 끝난다.
-#   VM 에서 곧바로(부하 볼륨을 비우거나 backend 를 다시 띄우기 전에) k6 출력 끝의 'VM:' 줄(= 요약 meta.leftoverCheckVm)을 그대로 돌린다:
+#   VM 에서 곧바로(부하 볼륨을 비우거나 backend 를 다시 띄우기 전에), deploy/loadtest/README.md 5번의 VM 블록을 RID=f3r1 로 돌린
+#   그 셸($L 은 1번, OUT=~/lt-$TS/f3r1)에서 k6 출력 끝의 'VM:' 줄(= 요약 meta.leftoverCheckVm)을 그대로 돌리고, 그다음 5번의 scp 로
+#   $RUN/vm 에 가져온다($OUT 이 비었거나 앞 실행의 것이면 파일이 $RUN/vm 에 오지 않고 아래 collect.py 의 --attach 가 실패한다).
 #   $OUT/f3-leftovers.txt 에 "f3bad stored 0", "tomcat dirs" 1 이상, "upload_tmp 0" 이어야 한다(줄이 없거나 dirs 0 이면 경로가 틀린 것).
 
 # F4 다운로드 1,000회 중단 (COMPLETED 작업 하나, 1.5 MB GLB)
@@ -225,9 +232,9 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
 | 공통(`lib/config.js`) | `BASE_URL`(`http://localhost:18080`), `RUN_ID`(`local`), `RTT_BASE_MS`, `SUMMARY_PATH`, `UPLINK_MBPS`, `TIER`, `FAIL_TOKEN`(`fail`), `POLL_INTERVAL_S`(2), `MAX_WAIT_S`(600), `RETRY_WAIT_S`(3), `MIN_ASSET_BYTES`(0), `HEALTHZ_PER_FLOW`(1), `PHOTOS=a.png,b.png` 또는 `PHOTO_1`/`PHOTO_2`; 가드 `PROM_URL`, `PROM_ENV`(`loadtest`), `GUARD_EVERY_S`(15), `GUARD_BREACHES`(2), `GUARD_MAX_ERROR_RATIO`(0.05), `GUARD_MAX_DISK_RATIO`(0.8), `GUARD_BLIND_ABORT`(3, 0 이면 끔) |
 | `smoke.js` | `SMOKE_EVERY_S`(10), `SMOKE_DURATION_S`(180), `SMOKE_VUS`(5), `SMOKE_MAX_VUS`(20), `FAIL_RATIO`(0) |
 | `api_staged.js` | `SCENARIO`(`staged`·`spike`·`soak`), `USERS`(A1 단계 일부), `RAMP_S`/`HOLD_S`, `SOAK_HOLD_S`, `CONVERSION_TIER`(T3), `BROWSE`(1; 0 이면 healthz 만 하는 세션 끔), `BROWSE_MAX_VUS`(200), `FAIL_RATIO`(0.05), `EXPECTED_FLOW_S`(75), `PRE_VUS`(최고 λ × `EXPECTED_FLOW_S` × 1.2, 최소 5: A1 450, A5 270, A6 90), `MAX_VUS`(최고 λ × (`MAX_WAIT_S` + 60초), 4,000 이하: A1 3,300, A5 1,980, A6 660), `GRACEFUL_STOP_S`(1,323) |
-| `poll_saturation.js` | `RPS`(단계 일부), `HOLD_S`(300), `GAP_S`(30), `IDS_FILE`(절대 경로, 쉼표로 여럿 — 한 id 가 두 목록에 다 있으면 거부), `IDS_OUT`, `SEED_ONLY`(1: 시드하고 `IDS_OUT` 만 쓴다; `IDS_FILE` 과 함께, `IDS_OUT` 없음·상대 경로·없는 폴더·폴더 자체, 시드 0건이면 시작 거부), `SEED_COMPLETED`(1000, `SEED_PENDING` 이 있으면 0), `SEED_PENDING`(0), `SEED_WAIT_S`(900), `PENDING_SHARE`(pending id 가 있으면 0.5; `SEED_ONLY` 없이 `SEED_PENDING` 만 시드하는 부하 실행은 `PENDING_SHARE=1` 일 때만 받는다), `EXPECTED_LATENCY_MS`(100, VU 크기), `MAX_VUS`(단계마다 상한 2,000) |
-| `upload.js` | `SIZE`(`small`), `RATES`(/s, 단계 일부), `RAMP_S`/`HOLD_S`, `LARGE_PHOTO`(`./out/fixtures/photo-5mb.png`), `DISK_BUDGET_GB`(8)·`ALLOW_DISK`, `REQUEST_TIMEOUT`(120s), `PRE_VUS`(최고 단계의 미리 만든 VU = 최고 도착률 × create p99 한도: small 3초 → 60, large 10초 → 20; 아래 단계는 도착률에 비례), `MAX_VUS`(모든 단계 합의 상한, 600 과 `meta.vus.peakPreAllocated` 중 큰 값; 그보다 작게 주면 시작 거부) |
-| `asset.js` | `RATES`, `RAMP_S`/`HOLD_S`, `ASSET_JOBS`(10), `MIN_ASSET_BYTES`(1000000), `SEED_WAIT_S`(900), `PRE_VUS`(최고 도착률 × 6초 → 240), `MAX_VUS`(800 과 peak 중 큰 값) |
+| `poll_saturation.js` | `RPS`(단계 일부), `HOLD_S`(300), `GAP_S`(30), `IDS_FILE`(절대 경로, 쉼표로 여럿 — 한 id 가 두 목록에 다 있으면 거부), `IDS_OUT`, `SEED_ONLY`(1: 시드하고 `IDS_OUT` 만 쓴다; `IDS_FILE` 과 함께, `IDS_OUT` 없음·상대 경로·없는 폴더·폴더 자체, 시드 0건이면 시작 거부), `SEED_COMPLETED`(1000, `SEED_PENDING` 이 있으면 0), `SEED_PENDING`(0), `SEED_WAIT_S`(900), `PENDING_SHARE`(pending id 가 있으면 0.5; `SEED_ONLY` 없이 `SEED_PENDING` 만 시드하는 부하 실행은 `PENDING_SHARE` 를 줄 때만 받는다 — completed id 가 없어 값과 상관없이 모두 pending 을 폴링하고, 오류 글은 `PENDING_SHARE=1` 을 권한다), `EXPECTED_LATENCY_MS`(100, VU 크기), `MAX_VUS`(단계마다 상한 2,000) |
+| `upload.js` | `SIZE`(`small`), `RATES`(/s, 단계 일부), `RAMP_S`/`HOLD_S`, `LARGE_PHOTO`(`./out/fixtures/photo-5mb.png`), `DISK_BUDGET_GB`(8)·`ALLOW_DISK`, `REQUEST_TIMEOUT`(120s), `PRE_VUS`(최고 단계의 미리 만든 VU = 최고 도착률 × create p99 한도: small 3초 → 60, large 10초 → 20; 아래 단계는 도착률에 비례), `MAX_VUS`(모든 단계를 합한 상한; 기본은 600 과 `meta.vus.peakPreAllocated`(small 135, large 50) 중 큰 값, peak 보다 작게 주면 시작 거부) |
+| `asset.js` | `RATES`, `RAMP_S`/`HOLD_S`, `ASSET_JOBS`(10), `MIN_ASSET_BYTES`(1000000), `SEED_WAIT_S`(900), `PRE_VUS`(최고 도착률 × 6초 → 240), `MAX_VUS`(모든 단계를 합한 상한; 800 과 peak(420) 중 큰 값, peak 보다 작게 주면 시작 거부) |
 | `gpu_queue.js` | `RHO`(0.7), `SLOTS`(1), `T_SEC`(10), `DURATION_S`(1800), `ARRIVAL_THIN`(20, 1 이면 같은 간격 도착), `FAIL_RATIO`(0)·`FAIL_TOKEN`, `SCENARIO`(G1·G2·G3·F1a·F1b·F2, 대소문자 무관; 없으면 `FAIL_RATIO` > 0 일 때 `slow` 토큰은 F1b·다른 토큰은 F1a, 아니면 ρ ≥ 1.5 G3·`SLOTS` > 1 G2·G1. G 에 `FAIL_RATIO` > 0, `FAIL_RATIO` 없는 F1b, 모르는 이름은 시작 거부), `MAX_VUS`(1 이상 정수; 미리 만드는 VU 도 이 값으로 자른다) |
 | `failure/f3_uploads.js` | `F3_VUS`(2), `F3_REPEATS`(VU 당 라운드 10), `POLL_RPS`(20), `F3_BG_S`(180), `GRACEFUL_STOP_S`(180), `VERIFY_MAGIC`(1), `PROXY_LIMIT_BYTES`(https 면 25000000, 아니면 0), `CASES`(사례 일부) |
 
@@ -240,7 +247,7 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
 - **예측은 측정한 두 값으로 다시 계산해서** `measuredQueuedMs` 와 비교한다. 요약의 `meta.recompute` 가 그 명령이다:
   `python scripts/load/model.py --queue-rate-per-h <meta.measuredJobsPerHour> --queue-service-s <meta.measuredProcessingMs.mean / 1000> --queue-slots <SLOTS>` (`--json` 도 된다). 출력: ρ, M/M/c Wq, c = 1 이면 M/D/1 Wq.
 - `meta.recompute` 가 null 인 경우: F1a·F1b·F2(retry 가 도착을 늘리고 실패·타임아웃이 슬롯 시간에 섞인다), retry 가 하나라도 있는 G 실행(`meta.measuredRetries` > 0: 이름 없이 돈 F1a·F2 이거나 실패가 났다), 만든 작업이 없거나 `processingMs` 가 없을 때, setup 이 실패했을 때(측정 필드도 null).
-- 요약 글은 공통 보고 아래에 `queue <label>: <n> jobs created in <w> s = <r>/h (requested <q>/h), <k> retries; mean slot (server processingMs) <x> ms, mean queuedMs <y> ms` 를 적고, G 실행이면 `  recompute: python scripts/load/model.py …`(만들 수 없으면 `  recompute: - (no job created or no processingMs)`, retry 가 있으면 `  <k> retries: failures were injected or occurred (an F1a/F2 run without SCENARIO?), so no recompute`)를 붙인다. F 실행은 그 한 줄이 `; fault run, so no queue prediction or recompute` 로 끝난다.
+- 요약 글은 공통 보고 아래에 `queue <label>: <n> jobs created in <w> s = <r>/h (requested <q>/h), <k> retries; mean slot (server processingMs) <x> ms, mean queuedMs <y> ms` 를 적고, G 실행이면 `  recompute: python scripts/load/model.py …`(만들 수 없으면 `  recompute: - (no job created or no processingMs)`, retry 가 있으면 `  <k> retries: failures were injected or occurred (an F1a/F2 run without SCENARIO?), so no recompute`)를 붙인다. F 실행은 `queue <label>: <n> jobs created in <w> s = <r>/h (requested <q>/h), <k> retries; fault run, so no queue prediction or recompute` 한 줄만 적는다(평균 슬롯·queuedMs 는 G 실행에만). setup 이 실패하면 `<n> jobs …` 자리가 `no load ran` 이다.
 - 서버 쪽 성공률 주의: 실패한 실행은 항상 `passthrough="false"` 로 붙는다(backend 는 스텁의 주입 실패와 모델 실패를 구분하지 못한다). 그래서 `passthrough="false"` 로 거른 성공률은 추론 서비스가 실제 모델을 돌릴 때만 맞다. G·F 스텁 실행에서는 거르지 않은 성공률(`beside_jobs_finished_total` 의 result 비율, `collect.py` 의 `jobs_finished_rate` CSV)이나 k6 의 `load_flowOkRatio` 를 쓴다.
 
 ## 결과 수집
@@ -255,7 +262,7 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
 # F3 은 --scenario F3 에 도우미 보고와 VM 의 남은 파일 확인을 붙인다: --attach $RUN/f3-throttled.json --attach $RUN/vm/f3-leftovers.txt
 ```
 
-`collect.py` 는 `run.json written to <run>/run.json`, `status: <run.json 의 status>`, `prometheus: N of 18 CSV written to <run>/prometheus`(실패한 질의는 `; failed: …`, 머리줄만 온 CSV 는 `; no data: …`; `--prom-url` 이 없으면 `prometheus: no --prom-url`)를 출력한다. `no data` 는 `PROM_ENV` 가 서버의 `METRICS_ENV` 와 다르면 전부, 5xx 가 하나도 없으면 `http_5xx_ratio`(빈 합), Windows 서버면 `process_open_files` 에 나온다. 종료 코드는 0 완료, 1 썼지만 질의 일부 실패, 2 run.json 을 쓰지 않음(잘못된 인자, 읽을 수 없는 요약, 모르는 구간)이다.
+`collect.py` 는 `run.json written to <run>/run.json`, `status: <run.json 의 status>`, `prometheus: N of 18 CSV written to <run>/prometheus`(실패한 질의는 `; failed: …`, 머리줄만 온 CSV 는 `; no data: …`; `--prom-url` 이 없으면 `prometheus: no --prom-url`)를 출력한다. `no data` 는 `--prom-env`(기본 `loadtest`; k6 가드의 `PROM_ENV` 는 읽지 않으므로 바꿨으면 같은 값을 준다)가 서버의 `METRICS_ENV` 와 다르면 전부, 5xx 가 하나도 없으면 `http_5xx_ratio`(빈 합), Windows 서버면 `process_open_files` 에 나온다. 종료 코드는 0 완료, 1 썼지만 질의 일부 실패, 2 run.json 을 쓰지 않음(잘못된 인자, 읽을 수 없는 요약, 모르는 구간)이다. `--photo`·`--attach` 로 준 파일이 없으면 Python 오류(`FileNotFoundError`)와 종료 코드 1 로 끝나고 run.json 은 쓰지 않는다(`--attach` 쪽이면 `prometheus/*.csv` 는 이미 쓴 뒤다): VM 쪽 파일을 먼저 `vm/` 에 가져온 뒤 돌린다.
 
 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 남는 것:
 
@@ -286,9 +293,9 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
 
 - 업로드는 서버 디스크에 남는다. 기본 단계의 예상 업로드량: A1 약 6.7 GB(작업 약 8,300건 × 0.8 MB), A3 small 약 6.1 GB, A3 large 약 7.2 GB. `upload.js` 는 예상량이 `DISK_BUDGET_GB`(8)를 넘으면 시작을 거부하고, 요약 `meta.expectedUploadGB` 에 적는다. 시험이 끝나면 부하용 볼륨을 비운다(deploy/loadtest 절차).
 - A1 은 최대 단계(λ = 5/s)에서 흐름이 600초까지 길어지면 동시에 도는 흐름이 약 3,300개다: `MAX_VUS` 기본값 = 최고 λ × (`MAX_WAIT_S` + 60초) = 3,300(4,000 을 넘지 않게 자른다). 미리 만드는 VU 는 `PRE_VUS` 기본 450(최고 λ × 75초 × 1.2)이라, 최고 단계에서 흐름이 평균 약 90초를 넘으면 k6 가 VU 를 더 시작하며 drop 이 생기고 요약은 그 실행의 `pass` 를 모두 `invalid` 로 바꾼다 [파생]. 과부하 단계까지 drop 없이 보려면 `PRE_VUS` 를 올린다.
-- A3·A4 는 최고 단계의 `PRE_VUS`(A3 small 60, A3 large 20, A4 240)를 아래 단계에 도착률 비례로 나누고, 단계마다 드레인(A3 `REQUEST_TIMEOUT` + 60초, A4 120초) 동안 VU 를 쥐고 있어 겹치는 단계의 VU 를 k6 가 함께 처음에 만든다: `meta.vus.peakPreAllocated` 는 기본값에서 A3 small 135, A3 large 50, A4 420 이다. `MAX_VUS` 는 모든 단계 합의 상한을 단계마다 나눈 값이다(`meta.vus.maxByLevel`, 기본값에서 최고 단계 A3 small 266, A3 large 240, A4 457). p99 한도보다 느린 단계를 drop 없이 재려면 `PRE_VUS` = 최고 도착률 × 필요한 초(요청 타임아웃 이하)로 준다.
-- A2 는 단계마다 미리 만드는 VU = max(20, 초당 요청 × `EXPECTED_LATENCY_MS` × 2), 최대 그 4배(최소 50)이고 둘 다 `MAX_VUS`(2,000) 이하다: 1,800 RPS 단계는 360 / 1,440.
-- 클라이언트 메모리: 개발 PC 의 k6 v2.3.0 에서 초기화한 VU 하나가 약 1.1 MB 였다(`api_staged.js` 를 `PRE_VUS` = `MAX_VUS` = 20 과 300 으로 돌린 k6 의 최대 working set 83.9 MB·393.2 MB 의 차이 ÷ 280; init 에서 연 0.4 MB 사진은 들어 있고 흐름이 만드는 0.8 MB 본문은 따로다 — 로컬 동작 확인). 이 값으로 계산하면 [파생]: A1 은 VU 3,300개에 약 3.6 GB 와 흐름을 돈 VU 마다 본문 0.8 MB, A4 는 처음에 만드는 420 VU 에 약 0.46 GB 다. A3 large 는 VU 마다 init 의 `open(p, 'b')` 로 5 MB 사진 사본을 쥐고 첫 업로드에서 20 MB multipart 본문을 만들어(`lazyBodies`), 업로드한 VU 하나가 약 25 MB 다: 기본 peak 50 VU 가 모두 업로드하면 최악 약 1.25 GB(측정하지 않음). 실행 전에 부하 PC 의 남은 메모리를 본다.
+- A3·A4 는 최고 단계의 `PRE_VUS`(A3 small 60, A3 large 20, A4 240)를 아래 단계에 도착률 비례로 나누고, 단계마다 드레인(A3 `REQUEST_TIMEOUT` + 60초, A4 120초) 동안 VU 를 쥐고 있어 겹치는 단계의 VU 를 k6 가 함께 처음에 만든다: `meta.vus.peakPreAllocated` 는 기본값에서 A3 small 135, A3 large 50, A4 420 이다. `MAX_VUS` 는 모든 단계를 합한 상한이고, 단계마다 미리 만든 VU 에 비례한 몫(`meta.vus.maxByLevel`, 기본값에서 최고 단계 A3 small 266, A3 large 240, A4 457)까지 VU 를 늘린다(`k6 inspect --execution-requirements` 의 maxVUs 는 기본값에서 A3 small 599, A3 large 600, A4 799, 가드 VU 제외). p99 한도보다 느린 단계를 drop 없이 재려면 `PRE_VUS` = 최고 도착률 × 필요한 초(요청 타임아웃 이하)로 준다(A3 large 는 그만큼 클라이언트 메모리가 는다, 아래).
+- A2 는 단계마다 미리 만드는 VU = max(20, 초당 요청 × `EXPECTED_LATENCY_MS`/1000 초 × 2), 최대 그 4배(최소 50)이고 둘 다 `MAX_VUS`(2,000) 이하다: 1,800 RPS 단계는 360 / 1,440.
+- 클라이언트 메모리: 개발 PC 의 k6 v2.3.0 에서 초기화한 VU 하나가 약 1.1 MB 였다(`api_staged.js` 를 `PRE_VUS` = `MAX_VUS` = 20 과 300 으로 돌린 k6 의 최대 working set 83.9 MB·393.2 MB 의 차이 ÷ 280; init 에서 연 0.4 MB 사진은 들어 있고 흐름이 만드는 0.8 MB 본문은 따로다 — 로컬 동작 확인). 이 값으로 계산하면 [파생, 측정하지 않음]: A1 은 VU 최대 3,500개(흐름 3,300 + browse 200)에 약 3.9 GB 이고, 흐름을 돈 VU 는 본문 0.8 MB, 실패 주입 흐름을 돈 VU 는 실패용 본문 0.8 MB(`failBodyCache`)를 더 쥐어 최악 약 9 GB 다. A4 는 처음에 만드는 420 VU 에 약 0.46 GB, `MAX_VUS` 800 까지 늘면 약 0.9 GB 다. A3 large 는 VU 마다 init 의 `open(p, 'b')` 로 5 MB 사진 사본을 쥐고 첫 업로드에서 20 MB multipart 본문을 만들어(`lazyBodies`), 업로드한 VU 하나가 약 25 MB 다: 기본 peak 50 VU 면 약 1.25 GB 지만, 업로드가 10초보다 느려(2/s × 20 MB = 320 Mbps 보다 작은 업링크) k6 가 drop 마다 VU 를 하나씩 더 시작하면 `MAX_VUS` 600(`meta.vus.maxByLevel` 60·120·180·240)까지 약 15 GB 이고, `PRE_VUS=120` 이면 처음부터 300 VU(업로드하면 약 7.5 GB)를 쥔다. 실행 전에 부하 PC 의 남은 메모리를 보고, 모자라면 `MAX_VUS` 를 남은 메모리 ÷ VU 당 크기 이하로 낮춘다(A3·A4 는 peak 이상, A1 은 `PRE_VUS` 이상이어야 시작한다; 그 뒤의 drop 은 A3·A4 는 그 단계의 `fail`, A1 은 위 규칙대로 `invalid` 로 남는다).
 - `gpu_queue.js` 의 VU: 진행 중 흐름이 대략 푸아송(m), m = λ × 예상 흐름 시간 × 1.5 이므로 m + 3√m, 그리고 솎아낸 반복(바로 끝남) 몫으로 2개를 더 둔다. `MAX_VUS` 를 주면 미리 만드는 VU 도 그 값으로 자르고(`meta.preAllocatedVUs`·`maxVUs`), 모자라서 drop 이 나면 `dropped_iterations count==0` 이 실패한다.
 
 ## 테스트
@@ -320,7 +327,7 @@ node --test "scripts/load/*.test.mjs"                             # k6 스크립
 - Caddy·TLS 경로: 원격 `RTT_BASE_MS` 기준, F3 의 30 MB 본문에 프록시가 413 을 주는지(로컬 Spring 은 21·30 MB 를 `Content-Length` 만 보고 바로 413 으로 끊었다), 느린 업로드가 Caddy 를 지나 202 인지, F4 의 끊김이 backend 에 `client_abort` 로 닿는지.
 - 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다).
 - 컨테이너 경로: F3 남은 파일 확인 명령의 `/app/storage/uploads`·`/tmp/tomcat.8080.*`(Dockerfile·설정에서 추론했고 컨테이너에서 돌리지 않았다).
-- 전체 길이와 기본 VU: A1 의 3,300 VU 까지의 클라이언트 메모리·CPU, 1,323초 드레인, 업링크 포화, 전체 길이 G1 의 도착 간격(`k6 run --out json=<파일>` 로 `endpoint=create` 요청 시각을 본다)과 `dropped_iterations`.
+- 전체 길이와 기본 VU: A1 의 3,500 VU(흐름 3,300 + browse 200)·A3 large 의 600 VU 까지의 클라이언트 메모리·CPU, 1,323초 드레인, 업링크 포화, 전체 길이 G1 의 도착 간격(`k6 run --out json=<파일>` 로 `endpoint=create` 요청 시각을 본다)과 `dropped_iterations`.
 
 ## 트래픽 모델 메모
 
