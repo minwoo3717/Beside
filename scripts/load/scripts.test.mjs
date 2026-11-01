@@ -53,12 +53,51 @@ test('upload.js A3: rates per minute and the disk budget guard', async () => {
 });
 
 test('gpu_queue.js: lambda = rho x c / T and no flow criteria in overload', async () => {
+  // The scenario runs lambda x ARRIVAL_THIN iterations (default 20); one in 20 becomes a flow on average.
   const g1 = await load('gpu_queue.js', { RTT_BASE_MS: '20', RHO: '0.7', SLOTS: '1', T_SEC: '10' });
-  assert.equal(g1.options.scenarios.queue.rate, 252);
+  assert.equal(g1.options.scenarios.queue.rate, 252 * 20);
   assert.deepEqual(g1.options.thresholds.load_flowTimeoutRatio, ['rate==0']);
   const g3 = await load('gpu_queue.js', { RTT_BASE_MS: '20', RHO: '1.5', SLOTS: '1', T_SEC: '10' });
-  assert.equal(g3.options.scenarios.queue.rate, 540);
+  assert.equal(g3.options.scenarios.queue.rate, 540 * 20);
   assert.equal(g3.options.thresholds.load_flowTimeoutRatio, undefined);
+});
+
+test('gpu_queue.js: Poisson arrivals by thinning, VUs for bursts, prediction recompute in the summary', async () => {
+  const g1 = await load('gpu_queue.js', { RTT_BASE_MS: '20', RHO: '0.7', SLOTS: '1', T_SEC: '10' });
+  const q = g1.options.scenarios.queue;
+  // flows in progress ~ Poisson(m), m = lambda x FLOW_S = 0.07 x (10 + 23.33 + 15): ceil(1.5m + 3 sqrt(1.5m)) + 2
+  assert.equal(q.preAllocatedVUs, 14);
+  assert.equal(q.maxVUs, 58); // ceil(0.07 x 660 x 1.2) + 2
+  const plain = await load('gpu_queue.js', { RTT_BASE_MS: '20', RHO: '0.7', SLOTS: '1', T_SEC: '10', ARRIVAL_THIN: '1' });
+  assert.equal(plain.options.scenarios.queue.rate, 252);
+  await assert.rejects(load('gpu_queue.js', { RTT_BASE_MS: '20', ARRIVAL_THIN: '2.5' }), /ARRIVAL_THIN/);
+  await assert.rejects(load('gpu_queue.js', { RTT_BASE_MS: '20', ARRIVAL_THIN: '0' }), /ARRIVAL_THIN/);
+
+  const again = await load('gpu_queue.js', { RTT_BASE_MS: '20', RHO: '0.7', SLOTS: '1', T_SEC: '10' });
+  state.handler = fakeServer({ completeAfterPolls: 0 });
+  const realRandom = Math.random;
+  try {
+    Math.random = () => 0.5; // >= 1/20: this iteration is thinned away
+    again.flow();
+    assert.equal(state.requests.length, 0);
+    Math.random = () => 0.01; // < 1/20: a flow
+    again.flow();
+  } finally {
+    Math.random = realRandom;
+  }
+  assert.deepEqual(state.requests.map((r) => r.tags.endpoint), ['healthz', 'create', 'poll', 'asset']);
+
+  const out = again.handleSummary({ metrics: { load_serverProcessingMs: { values: { avg: 11800, med: 11700, 'p(95)': 12500, count: 20 } } },
+    setup_data: {}, state: {} });
+  const doc = JSON.parse(out[BASE_ENV.SUMMARY_PATH]);
+  assert.equal(doc.meta.arrivalProcess, 'poisson (thinned x20)');
+  assert.equal(doc.meta.arrivalThin, 20);
+  assert.equal(doc.meta.iterationsPerHour, 5040);
+  assert.deepEqual(doc.meta.measuredProcessingMs, { mean: 11800, med: 11700, p95: 12500, count: 20 });
+  assert.equal(doc.meta.recompute, 'python scripts/load/model.py --queue-rate-per-h 252 --queue-service-s 11.8 --queue-slots 1');
+  const plainOut = JSON.parse(plain.handleSummary({ metrics: {}, setup_data: {}, state: {} })[BASE_ENV.SUMMARY_PATH]);
+  assert.match(plainOut.meta.arrivalProcess, /^deterministic/);
+  assert.equal(plainOut.meta.recompute, null);
 });
 
 test('api_staged.js: stage tags follow the clock since the scenario start', async () => {
