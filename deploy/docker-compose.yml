@@ -59,6 +59,10 @@ services:
     #            deploy/.env 에 BACKEND_UPSTREAM=127.0.0.1:8080 을 넣는다.
     #   prometheus·grafana 를 쓰면 이 둘도 network_mode: host 로 옮기고, monitoring/prometheus.yml 의 대상을
     #            127.0.0.1:8081, grafana 데이터소스를 127.0.0.1:9090, GRAFANA_UPSTREAM=127.0.0.1:3000 으로 바꾼다.
+    #            호스트 모드에서는 ports: 게시가 적용되지 않고, 둘 다 기본값으로 VM 의 모든 주소에서 듣는다
+    #            (Prometheus 0.0.0.0:9090, Grafana 3000). 8080·8081 처럼 루프백에만 두려면:
+    #            prometheus: ports: 를 지우고 command 에 --web.listen-address=127.0.0.1:9090 을 더한다.
+    #            grafana:    environment 에 GF_SERVER_HTTP_ADDR: 127.0.0.1 을 넣는다.
 
   caddy:
     image: caddy:2.11.7
