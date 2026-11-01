@@ -99,6 +99,7 @@ nano deploy/.env
 | `INFERENCE_BASE_URL` | `http://<GPU PC 의 Tailscale IP>:8001` |
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU PC 의 `BESIDE_INFERENCE_TOKEN` 과 같게 |
 | `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
+| `GRAFANA_ADMIN_USER` · `GRAFANA_ADMIN_PASSWORD` | (monitoring 프로필을 쓸 때만) Grafana 관리자 계정. 비밀번호는 `openssl rand -base64 24`. 견본에는 일부러 비어 있고, 비어 있으면 grafana 컨테이너가 뜨지 않는다(아래 '모니터링') |
 
 **해시의 `$` 처리**: docker compose v2 는 `.env` 의 따옴표 없는 값과 큰따옴표 값에서 `$이름`·`${이름}` 을 변수로 바꾸고, **작은따옴표 값은 글자 그대로** 쓴다(Docker 문서 'Interpolation — .env file syntax'). bcrypt 해시(`$2a$14$...`)를 따옴표 없이 넣으면 `$14...` 같은 부분이 빈 값으로 바뀌어 로그인이 영영 안 된다. `$$` 는 compose **YAML 파일 안**에서 `$` 를 쓰는 방법이고 `.env` 에서는 쓰지 않는다. 들어간 값은 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec caddy printenv BASIC_AUTH_HASH` 로 확인한다(CI 도 견본 파일로 같은 확인을 한다).
 
@@ -164,7 +165,7 @@ free -h                                   # Swap: 2.0Gi
 
 ### 띄우기 · 확인
 
-`deploy/.env` 에 `GRAFANA_ADMIN_PASSWORD`(`openssl rand -base64 24`)를 먼저 넣는다. 비어 있으면 grafana 컨테이너는 이유를 로그에 남기고 뜨지 않는다.
+`deploy/.env` 에 `GRAFANA_ADMIN_PASSWORD`(`openssl rand -base64 24`)를 먼저 넣는다. 견본(`.env.example`)에서는 일부러 비워 두었다. 비어 있으면 grafana 컨테이너는 이유를 로그에 남기고 뜨지 않는다.
 
 ```bash
 cd ~/Beside
