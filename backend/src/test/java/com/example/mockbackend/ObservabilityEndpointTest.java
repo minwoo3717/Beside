@@ -75,6 +75,17 @@ class ObservabilityEndpointTest {
         });
     }
 
+    @Test
+    void prometheusScrapeHasTheJobMeters() throws Exception {
+        String scrape = get(managementPort, "/actuator/prometheus").body();
+        // Registered at startup, so dashboards show 0 instead of "no data" before the first job.
+        assertThat(scrape)
+                .contains("beside_jobs_created_total{env=\"local\",}")
+                .contains("beside_jobs_retried_total{")
+                .contains("beside_jobs_queue{env=\"local\",state=\"pending\",}")
+                .contains("beside_jobs_queue{env=\"local\",state=\"processing\",}");
+    }
+
     private HttpResponse<String> get(int onPort, String path) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + onPort + path))
                 .timeout(Duration.ofSeconds(10)).GET().build();
