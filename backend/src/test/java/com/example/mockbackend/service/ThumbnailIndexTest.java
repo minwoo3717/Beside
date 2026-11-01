@@ -61,6 +61,17 @@ class ThumbnailIndexTest {
         service.stop();
     }
 
+    @Test
+    void aFileThatAppearedAfterStartIsKnownOnceItIsServed() throws Exception {
+        ThumbnailService service = service();
+        Files.write(folder.resolve("thumbs").resolve("copied-in.jpg"), new byte[]{1}); // e.g. restored from a backup
+
+        assertThat(service.exists("copied-in")).isFalse();
+        assertThat(service.find("copied-in")).isPresent();
+        assertThat(service.exists("copied-in")).isTrue();
+        service.stop();
+    }
+
     private ThumbnailService service() throws IOException {
         ThumbnailService service = new ThumbnailService(folder.resolve("thumbs").toString(), 10_000, 64);
         service.init();

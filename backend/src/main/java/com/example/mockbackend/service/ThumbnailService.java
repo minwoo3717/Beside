@@ -77,9 +77,10 @@ public class ThumbnailService {
     private final long decodeLimitMs;
     /**
      * Job ids whose thumbnail file exists, so exists() (JobResponse.thumbnailUrl: every response, every list item) needs
-     * no file check, which costs about 0.1 ms on Windows with real-time antivirus (docs/perf/notes). Filled from the
-     * folder at start and kept by create and delete; find(), which serves the file, corrects it when a file went
-     * missing behind the server's back. One server per storage folder, as for the DB file.
+     * no file check, which costs about 0.1 ms on Windows with real-time antivirus (measured on the dev PC: 97–106 µs per
+     * check, 0.5 µs per set lookup). Filled from the folder at start and kept by create and delete; find(), which
+     * serves the file, corrects it when a file went missing behind the server's back. One server per storage folder,
+     * as for the DB file.
      */
     private final Set<String> known = ConcurrentHashMap.newKeySet();
     /**
@@ -206,7 +207,13 @@ public class ThumbnailService {
             known.add(jobId);
             return Optional.of(file);
         }
+        // Remove, then look once more: create() adds only after its move, so a thumbnail finished between the two
+        // checks is either seen here or added again by create() after this remove.
         known.remove(jobId);
+        if (Files.isRegularFile(file)) {
+            known.add(jobId);
+            return Optional.of(file);
+        }
         return Optional.empty();
     }
 

@@ -24,9 +24,9 @@ import java.util.ArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * A PENDING job's place in the queue is read as one snapshot: one read-only transaction (one session, one connection)
- * with its two statements, instead of a session and a connection per statement. Runs outside the test transaction,
- * as a poll does, and counts with Hibernate's statistics.
+ * A PENDING job's place in the queue is read in one read-only transaction (one session, one connection) with its two
+ * statements, instead of a session and a connection per statement. Runs outside the test transaction, as a poll does,
+ * and counts with Hibernate's statistics.
  */
 @DataJpaTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 class QueueSnapshotTest {

@@ -7,7 +7,8 @@ import java.util.List;
  * The two reads behind JobResponse.queue of a PENDING job (QueueEstimator, on every poll), as one read-only
  * transaction: one session and one connection instead of one of each per statement, and through the EntityManager,
  * whose query plans Hibernate caches by their text, instead of @Query methods, which Spring Data JPA 3.2 parses again
- * (ANTLR) on every call. Both values come from the same snapshot.
+ * (ANTLR) on every call. Each statement still reads the latest commits (H2's READ COMMITTED), as the two separate calls
+ * did: it is one transaction, not one snapshot.
  */
 public interface JobQueueQueries {
 
