@@ -11,8 +11,8 @@
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a3s1 -e RTT_BASE_MS=23 -e SIZE=small scripts/load/upload.js
 //
 // Env: SIZE, RATES=1,2,5 (per second, subset), RAMP_S, HOLD_S, LARGE_PHOTO (./out/fixtures/photo-5mb.png),
-//      PHOTOS/PHOTO_n (small), DISK_BUDGET_GB, ALLOW_DISK, MAX_VUS (600), REQUEST_TIMEOUT (120s; the drain is 60 s
-//      longer), PROM_URL.
+//      PHOTOS/PHOTO_n (small), DISK_BUDGET_GB, ALLOW_DISK, PRE_VUS (top rate x 3 s small, x 10 s large),
+//      MAX_VUS (600, at least PRE_VUS), REQUEST_TIMEOUT (120s; the drain is 60 s longer), PROM_URL.
 import exec from 'k6/execution';
 import { CONFIG, durationS, ENV, photoPaths, readList, readNum, readStr, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce, totalBytes } from './lib/bodies.js';
@@ -49,8 +49,17 @@ if (EXPECTED_GB > BUDGET_GB && readNum(ENV, 'ALLOW_DISK', 0) <= 0) {
 }
 const RTT = requireRtt(CONFIG, 'upload.js');
 const MAX_PER_S = maxTarget(LEVELS.stages) / 60;
-const MAX_VUS = readNum(ENV, 'MAX_VUS', 600);
-const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 'small' ? 2 : 10))));
+// k6 (v2.3.0) ramping-arrival-rate drops an iteration whenever no pre-allocated VU is free and only then starts one more
+// VU, so every VU started mid-test costs a dropped iteration and maxVUs only caps them: PRE_VUS, not MAX_VUS, is the
+// knob against drops (a run with drops has no breaking point, lib/summary.js). The default covers uploads up to the
+// create p99 limit (3 s) at the top rate, so a stage drops only once it is past that limit; a 20 MB upload gets 10 s.
+// An explicit PRE_VUS is used as given and lifts the default MAX_VUS; one above an explicit MAX_VUS is refused.
+const PRE_VUS_SET = readNum(ENV, 'PRE_VUS', null);
+const MAX_VUS = readNum(ENV, 'MAX_VUS', Math.max(600, PRE_VUS_SET || 0));
+const PRE_VUS = PRE_VUS_SET !== null ? PRE_VUS_SET : Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 'small' ? 3 : 10))));
+if (!(Number.isInteger(PRE_VUS) && PRE_VUS >= 1 && PRE_VUS <= MAX_VUS)) {
+  throw new Error(`upload.js: PRE_VUS ${PRE_VUS} must be a whole number from 1 to MAX_VUS ${MAX_VUS}`);
+}
 // The 1.5 s / 3 s criteria are for the 0.8 MB upload (docs/perf/load/TRAFFIC_MODEL.md §8). A 20 MB upload is reported
 // per hold (verdict.stages[].latency.create, kept in the summary by a no-op threshold), not judged.
 const LATENCY_EPS = SIZE === 'small' ? ['create'] : [];
@@ -118,6 +127,7 @@ export function handleSummary(data) {
       bodyPhotoBytes: BYTES,
       expectedUploads: Math.round(EXPECTED),
       expectedUploadGB: Math.round(EXPECTED_GB * 100) / 100,
+      vus: { preAllocated: PRE_VUS, max: MAX_VUS },
       server: (data.setup_data && data.setup_data.server) || null,
     },
   }, CONFIG);

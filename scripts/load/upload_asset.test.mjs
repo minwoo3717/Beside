@@ -1,5 +1,5 @@
-// A3 (upload.js): refused uploads fail the run and the hold, upload bytes count only accepted bodies, and A3-large
-// reports its create latency per hold.
+// A3 (upload.js) and A4 (asset.js): refused uploads fail the run and the hold, upload bytes count only accepted bodies,
+// A3-large reports its create latency per hold, and PRE_VUS sizes the pre-allocated VUs.
 //   node --test "scripts/load/*.test.mjs"
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
@@ -104,6 +104,48 @@ test('upload.js SIZE=large: create latency is kept per hold (reported, not judge
   // small keeps the judged limits and gets no report-only threshold
   const small = await load('upload.js', SHORT);
   assert.deepEqual(small.options.thresholds['http_req_duration{endpoint:create,stage:0,phase:hold}'], ['p(95)<1500', 'p(99)<3000']);
+});
+
+test('upload.js: PRE_VUS is read (default: top rate x 3 s small, x 10 s large) and lifts the default MAX_VUS', async () => {
+  const vus = (mod) => [mod.options.scenarios.uploads.preAllocatedVUs, mod.options.scenarios.uploads.maxVUs];
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20' })), [60, 600]); // 20/s x 3 s
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20', SIZE: 'large', LARGE_PHOTO: PHOTO })), [20, 600]); // 2/s x 10 s
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20', PRE_VUS: '50' })), [50, 600]);
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20', SIZE: 'large', LARGE_PHOTO: PHOTO, PRE_VUS: '50', MAX_VUS: '2000' })), [50, 2000]);
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20', PRE_VUS: '1000' })), [1000, 1000]);
+  assert.deepEqual(vus(await load('upload.js', { RTT_BASE_MS: '20', MAX_VUS: '10' })), [10, 10]); // the default stays under MAX_VUS
+  assert.deepEqual(vus(await load('upload.js', SHORT)), [6, 600]);
+  await assert.rejects(load('upload.js', { RTT_BASE_MS: '20', PRE_VUS: '50', MAX_VUS: '10' }), /PRE_VUS 50 must be a whole number from 1 to MAX_VUS 10/);
+  await assert.rejects(load('upload.js', { RTT_BASE_MS: '20', PRE_VUS: '2.5' }), /PRE_VUS 2\.5/);
+  await assert.rejects(load('upload.js', { RTT_BASE_MS: '20', PRE_VUS: '0' }), /PRE_VUS 0/);
+  const mod = await load('upload.js', Object.assign({ PRE_VUS: '7' }, SHORT));
+  const doc = JSON.parse(mod.handleSummary({ metrics: {}, setup_data: {}, state: {} })[BASE_ENV.SUMMARY_PATH]);
+  assert.deepEqual(doc.meta.vus, { preAllocated: 7, max: 600 });
+});
+
+test('asset.js: PRE_VUS is read (default: top rate x the 6 s p99 limit) and lifts the default MAX_VUS', async () => {
+  const vus = (mod) => [mod.options.scenarios.downloads.preAllocatedVUs, mod.options.scenarios.downloads.maxVUs];
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20' })), [240, 800]); // 40/s x 6 s
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20', RATES: '1,5' })), [30, 800]);
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20', RATES: '1,3' })), [18, 800]);
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20', PRE_VUS: '40' })), [40, 800]);
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20', PRE_VUS: '2000' })), [2000, 2000]);
+  assert.deepEqual(vus(await load('asset.js', { RTT_BASE_MS: '20', MAX_VUS: '100' })), [100, 100]);
+  await assert.rejects(load('asset.js', { RTT_BASE_MS: '20', PRE_VUS: '900', MAX_VUS: '800' }), /PRE_VUS 900 must be a whole number from 1 to MAX_VUS 800/);
+  const mod = await load('asset.js', { RTT_BASE_MS: '20', RATES: '1,3', PRE_VUS: '12' });
+  const doc = JSON.parse(mod.handleSummary({ metrics: {}, setup_data: {}, state: {} })[BASE_ENV.SUMMARY_PATH]);
+  assert.deepEqual(doc.meta.vus, { preAllocated: 12, max: 800 });
+});
+
+test('summary: the drop note names PRE_VUS as the fix and says MAX_VUS alone does not help', async () => {
+  const s = await lib('summary.js');
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<3000': { ok: true } } };
+  const metrics = { 'http_req_duration{endpoint:asset,stage:0,phase:hold}': pass, dropped_iterations: { values: { count: 7 }, thresholds: { 'count==0': { ok: false } } } };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'asset.js', scenario: 'A4', stages: [{ index: 0, holdS: 20 }] },
+    { runId: 'r', baseUrl: 'b', rttBaseMs: 0, uplinkMbps: null }, 'T1');
+  assert.equal(report.verdict.stages[0].status, 'invalid');
+  assert.match(report.verdict.breakingPointNote, /raise PRE_VUS \(k6 drops an iteration for every VU it starts mid-test, so MAX_VUS alone does not help\)/);
+  assert.doesNotMatch(report.verdict.breakingPointNote, /PRE_VUS\/MAX_VUS/);
 });
 
 test('thresholds: report-only latency and "not one" counters', async () => {

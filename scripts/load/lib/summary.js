@@ -114,7 +114,8 @@ function unattributedDrops(verdicts, dropped) {
   if (dropped <= attributed) return null;
   verdicts.forEach((v) => { if (v.status === 'pass') v.status = 'invalid'; });
   return `dropped_iterations ${dropped} > 0 and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as ` +
-    'passed and there is no breaking point; raise PRE_VUS/MAX_VUS (or check the load PC) and run again';
+    'passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so MAX_VUS ' +
+    'alone does not help) or check the load PC, and run again';
 }
 
 // A1's capacity search (TRAFFIC_MODEL.md §8): the levels only go up, the operating limit is 70 % of the users of the

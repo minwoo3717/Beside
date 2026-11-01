@@ -7,7 +7,7 @@
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a4r1 -e RTT_BASE_MS=23 scripts/load/asset.js
 //
 // Env: RATES=1,5 (subset), RAMP_S, HOLD_S, ASSET_JOBS (10), MIN_ASSET_BYTES (1000000; 0 for a local jar),
-//      MAX_VUS (800), PROM_URL.
+//      PRE_VUS (top rate x 6 s), MAX_VUS (800, at least PRE_VUS), PROM_URL.
 import exec from 'k6/execution';
 import { CONFIG, ENV, photoPaths, readList, readNum, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
@@ -32,8 +32,17 @@ const ASSET_JOBS = readNum(ENV, 'ASSET_JOBS', 10);
 const MIN_ASSET = readNum(ENV, 'MIN_ASSET_BYTES', 1000000);
 const CFG = Object.assign({}, CONFIG, { minAssetBytes: MIN_ASSET });
 const RTT = requireRtt(CONFIG, 'asset.js');
-const MAX_VUS = readNum(ENV, 'MAX_VUS', 800);
-const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil((maxTarget(LEVELS.stages) / 60) * 3)));
+// k6 (v2.3.0) ramping-arrival-rate drops an iteration whenever no pre-allocated VU is free and only then starts one more
+// VU, so every VU started mid-test costs a dropped iteration and maxVUs only caps them: PRE_VUS, not MAX_VUS, is the
+// knob against drops (a run with drops has no breaking point, lib/summary.js). The default covers downloads up to the
+// asset p99 limit (6 s) at the top rate, so a stage drops only once it is past that limit. An explicit PRE_VUS is used
+// as given and lifts the default MAX_VUS; one above an explicit MAX_VUS is refused.
+const PRE_VUS_SET = readNum(ENV, 'PRE_VUS', null);
+const MAX_VUS = readNum(ENV, 'MAX_VUS', Math.max(800, PRE_VUS_SET || 0));
+const PRE_VUS = PRE_VUS_SET !== null ? PRE_VUS_SET : Math.min(MAX_VUS, Math.max(5, Math.ceil((maxTarget(LEVELS.stages) / 60) * 6)));
+if (!(Number.isInteger(PRE_VUS) && PRE_VUS >= 1 && PRE_VUS <= MAX_VUS)) {
+  throw new Error(`asset.js: PRE_VUS ${PRE_VUS} must be a whole number from 1 to MAX_VUS ${MAX_VUS}`);
+}
 
 const scopes = holdScopes(LEVELS.segments);
 const bandwidth = {};
@@ -95,6 +104,7 @@ export function handleSummary(data) {
     extra: {
       ratesPerS: RATES,
       assetJobs: ASSET_JOBS,
+      vus: { preAllocated: PRE_VUS, max: MAX_VUS },
       assetBytes: data.setup_data && data.setup_data.jobs ? data.setup_data.jobs[0].asset.bytes : null,
       server: (data.setup_data && data.setup_data.server) || null,
     },
