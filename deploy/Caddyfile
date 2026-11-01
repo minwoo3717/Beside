@@ -1,5 +1,5 @@
 # Beside VM 앞단 프록시 (Caddy 2.11). deploy/docker-compose.yml 이 /etc/caddy/Caddyfile 로 넣는다.
-# 환경변수는 compose 가 deploy/.env 에서 넘긴다: BESIDE_DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH, (선택) BACKEND_UPSTREAM.
+# 환경변수는 compose 가 deploy/.env 에서 넘긴다: BESIDE_DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH, (선택) BACKEND_UPSTREAM, GRAFANA_UPSTREAM.
 # 경로 규칙 표는 deploy/README.md '경로 규칙'. 규칙을 바꾸면 deploy/test_caddy_routes.sh 의 기대값도 같이 고친다.
 #
 # Caddy 매처 문법:
@@ -15,16 +15,18 @@
 		max_size 25MB
 	}
 
-	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서.
+	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서, Actuator.
+	#    Actuator 는 관리 포트 8081(compose 내부망, Prometheus 만 읽음)에 있어 공개 8080 에는 없다. 여기서 한 겹 더 막는다.
 	#    경로에 ; 가 있으면 함께 막는다. Tomcat 은 /api/jobs;x 나 /api;x/v1/jobs 를 ; 뒤를 뺀 경로로 처리하므로
 	#    ; 를 열어 두면 아래 인증 규칙과 이 404 규칙을 비켜 갈 수 있다. 앱과 웹은 ; 를 쓰지 않는다.
-	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* *;*
+	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* /actuator* *;*
 	respond @blocked 404
 
 	# 2) Basic 인증(팀 계정 하나).
-	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지.
+	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지,
+	#    Grafana(/grafana, monitoring 프로필 — 이 인증 다음에 Grafana 자체 로그인이 한 번 더 있다).
 	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
-	@web path / /index.html /app.js /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet
+	@web path / /index.html /app.js /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
@@ -51,6 +53,13 @@
 	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry), /api/v1/healthz,
 	#    공유 링크(/s/*, /share.*, /api/v1/shares/*), styles.css 같은 정적 파일.
 	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 붙인다(prod 프로파일의 forward-headers 가 읽는다).
+	#    /grafana* 만 Grafana 로 간다(위 @web 의 Basic 인증을 통과한 뒤). 경로 매처가 있는 reverse_proxy 가
+	#    매처 없는 것보다 먼저 정렬되므로 적은 순서와 상관없이 이 규칙이 먼저다. 접두사 /grafana 는 떼지 않는다
+	#    (GF_SERVER_SERVE_FROM_SUB_PATH=true). Basic 인증의 Authorization 헤더는 지운다: 남아 있으면 Grafana 가 그
+	#    팀 계정을 자기 사용자로 검사해 401 을 준다.
+	reverse_proxy /grafana* {$GRAFANA_UPSTREAM:grafana:3000} {
+		header_up -Authorization
+	}
 	reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
 
 	# 접근 로그 → docker compose logs caddy. Authorization 헤더는 Caddy 가 기본으로 가린다.

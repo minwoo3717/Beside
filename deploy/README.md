@@ -21,13 +21,14 @@
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 설정도 H2 콘솔·Swagger·v0 를 404 로 막는다(설정 **[구현됨]**, 실제 동작 확인은 CI 첫 실행·VM 배포 **[계획]**). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). 같은 PC 에서 패스스루 서비스와 Spring real 을 띄워 e2e 로 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌린 적은 없다 — **[계획]** |
+| 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · 실행 **[계획]**: compose 검증·경로 시험은 CI 에 넣었지만 아직 돌지 않았고, Prometheus·Grafana 를 실제로 띄워 본 적은 없다(이 PC 에 Docker 없음). 아래 '모니터링' |
 
 ## 경로 규칙 (Caddyfile)
 
 | 처리 | 경로 |
 |---|---|
-| **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, 경로에 `;` 가 든 모든 요청 |
-| **Basic 인증** | `/`, `/index.html`, `/app.js`(Mock 업로드 UI), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `GET`·`HEAD /api/v1/jobs`(목록), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*` |
+| **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `/actuator*`(Actuator 는 관리 포트 8081 에만 있다 — 두 겹), 경로에 `;` 가 든 모든 요청 |
+| **Basic 인증** | `/`, `/index.html`, `/app.js`(Mock 업로드 UI), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `/grafana*`(→ Grafana, 그다음 Grafana 로그인), `GET`·`HEAD /api/v1/jobs`(목록), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*` |
 | **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET /api/v1/jobs/{id}`·`/asset`, `POST /retry`), `/api/v1/healthz`, 공유 링크(`/s/*`, `/share.*`, `/api/v1/shares/*`), `styles.css` 같은 정적 파일 |
 | **413** | 요청 본문 25MB 초과(Caddy). 20MB·장당 5MB 초과는 Spring 이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)로 413 |
 
@@ -118,7 +119,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps     # back
 ```bash
 D=https://beside-team.duckdns.org
 curl $D/api/v1/healthz                                          # 200 {"status":"ok","profile":"real,prod","workerType":"real"}
-for p in /h2-console /swagger-ui.html /v3/api-docs /api/jobs '/api/v1/jobs;x=1'; do
+for p in /h2-console /swagger-ui.html /v3/api-docs /api/jobs '/api/v1/jobs;x=1' /actuator /actuator/prometheus; do
   curl -s -o /dev/null -w "%{http_code} $p\n" "$D$p"            # 모두 404
 done
 curl -s -o /dev/null -w "%{http_code}\n" $D/api/v1/jobs           # 401
@@ -127,6 +128,69 @@ TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름
 ```
 
 브라우저로 `https://<도메인>/` 을 열면 Basic 인증 창이 뜨고, 로그인하면 Mock 업로드 UI 가 보인다.
+
+## 모니터링 (Prometheus + Grafana, 선택)
+
+설정 파일 **[구현됨]** · VM 에서 띄우기 **[계획]**. 멘토 지표 5종(생성 성공률, 생성 시간 평균·p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)과 서버 자원을 한 화면에서 본다. 지표 이름은 [docs/METRICS.md](../docs/METRICS.md) §5(`beside.*` → Prometheus `beside_*`).
+
+```text
+backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (내부망 전용, 14일 또는 1GB 보존)
+                                                        ▲
+브라우저 ── https://<도메인>/grafana/ ── caddy(Basic 인증) ── grafana:3000 (Grafana 로그인) ┘
+```
+
+- **Actuator 는 관리 포트 8081** 에만 있다. compose 내부망에서만 닿고(`ports:` 없음), 공개 8080 에는 `/actuator` 가 없으며, Caddy 도 `/actuator*` 를 404 로 막는다. Prometheus(9090)도 게시하지 않는다.
+- 대시보드: Grafana 의 **Beside** 폴더 → **Beside 운영**. 변수 `env`(`prod` 운영 / `loadtest` 부하 시험 / `local`), `worker`(mock·real), `창`(드문 작업 지표를 묶는 시간 창). 원본은 [monitoring/grafana/dashboards/beside-ops.json](monitoring/grafana/dashboards/beside-ops.json) 이고 화면에서 고친 것은 저장되지 않는다(JSON 을 고쳐 커밋하면 1분 안에 다시 읽는다).
+- `beside_*` 지표는 backend 의 Actuator·Micrometer 코드(같은 W1 의 B1~B3)가 있어야 나온다. 그 전 이미지로는 Prometheus 대상이 DOWN 이고 패널이 비어 있다.
+
+### 메모리 (4GB VM)
+
+| 컨테이너 | 한도 |
+|---|---|
+| backend | 2g (`mem_limit`, 힙은 그 75 %) |
+| prometheus | 384m |
+| grafana | 256m |
+| caddy · Docker · OS | 한도 없음, 약 0.5GB |
+| **합계** | **약 3.2 / 4GB** |
+
+여유가 적으므로 **swap 2GB 를 권장**한다(한 번):
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -h                                   # Swap: 2.0Gi
+```
+
+### 띄우기 · 확인
+
+`deploy/.env` 에 `GRAFANA_ADMIN_PASSWORD`(`openssl rand -base64 24`)를 먼저 넣는다. 비어 있으면 grafana 컨테이너는 이유를 로그에 남기고 뜨지 않는다.
+
+```bash
+cd ~/Beside
+M="docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring"
+$M up -d                                  # prometheus·grafana 가 새로 뜬다(backend·caddy 는 설정이 같으면 그대로)
+$M ps
+# Prometheus 가 backend 를 읽는지: beside-backend 의 value 가 "1" 이면 UP
+$M exec prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=up'
+# 관리 포트(내부망)에서 지표가 나오는지
+$M exec backend curl -fsS http://localhost:8081/actuator/prometheus | grep -m5 '^beside_'
+```
+
+밖(개발 PC)에서:
+
+```bash
+D=https://beside-team.duckdns.org
+curl -s -o /dev/null -w "%{http_code}\n" $D/grafana/                         # 401 (Caddy Basic 인증)
+curl -s -o /dev/null -w "%{http_code}\n" -u 'team:팀 비밀번호' $D/grafana/   # 302 (Grafana 로그인 화면으로)
+curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 404
+```
+
+브라우저: `https://<도메인>/grafana/` → Basic 인증(팀 계정) → Grafana 로그인(`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`).
+
+- **monitoring 을 쓰기 시작하면 compose 명령에 늘 `--profile monitoring` 을 붙인다**(`$M`). 붙이지 않은 `up -d` 는 prometheus·grafana 를 멈추지도 고치지도 않는다. [scripts/deploy_vm.sh](../scripts/deploy_vm.sh) 도 프로필을 붙이지 않으므로, `monitoring/prometheus.yml` 이 바뀐 배포 뒤에는 `$M restart prometheus` 를 따로 한다(파일 하나 마운트라 재시작해야 읽는다). 대시보드·데이터소스 폴더는 폴더 마운트라 git pull 만으로 반영된다.
+- Grafana 관리자 비밀번호는 **처음 뜰 때(빈 `grafana_data`)만** `.env` 에서 읽는다. 나중에 바꾸려면 `$M exec grafana grafana cli admin reset-admin-password '<새 비밀번호>'`.
+- 끄기: `$M stop prometheus grafana`(데이터는 볼륨 `beside_prometheus_data`·`beside_grafana_data` 에 남는다). 지표는 백업 대상이 아니다.
+- Prometheus 화면이 필요하면 Grafana 의 **Explore** 에서 같은 PromQL 을 쓴다. 원시 응답은 위처럼 `$M exec prometheus wget -qO- 'http://localhost:9090/api/v1/...'`.
 
 ## 운영
 
@@ -137,6 +201,8 @@ cd ~/Beside
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tail 100 backend   # Spring
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tail 100 caddy     # 접근 로그·인증서
 ```
+
+컨테이너 로그는 서비스마다 10MB × 5개에서 돈다(compose 의 `x-logging`, json-file `max-size`·`max-file`). 그보다 오래된 로그가 필요하면 그때그때 파일로 꺼내 둔다(`... logs --no-color backend > backend-$(date +%F).log`).
 
 측정 로그는 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backend:/app/storage/events.jsonl ./events.jsonl` 로 꺼낸다(prod 는 H2 콘솔이 꺼져 있다. `job_runs` CSV 내보내기 API 는 S5 — 계약 추가라 검토 브랜치에 있다. 그 전에는 H2 백업 zip 을 개발 PC 로 가져와 h2-console 로 연다).
 
@@ -194,3 +260,7 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 작업이 `INFERENCE_UNAVAILABLE` | GPU PC 가 켜져 있는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU PC 100.x>:8001/healthz` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
+| grafana 가 계속 재시작, 로그에 `GRAFANA_ADMIN_PASSWORD 를 넣는다` | `deploy/.env` 의 `GRAFANA_ADMIN_PASSWORD` | 값을 넣고 `$M up -d grafana` |
+| `/grafana/` 가 Basic 인증 뒤 502 | `$M ps` 에 grafana 가 있는지 | monitoring 프로필을 안 띄웠다: `$M up -d`. 쓰지 않을 거면 그대로 둬도 다른 경로에는 영향 없다 |
+| Basic 인증은 통과했는데 Grafana 가 401 · 'invalid username or password' | Caddyfile 의 `/grafana*` reverse_proxy 에 `header_up -Authorization` 이 있는지 | Caddy 가 팀 계정 헤더를 넘기면 Grafana 가 그것을 자기 계정으로 검사한다. 헤더를 지우고 `... restart caddy` |
+| 대시보드가 비어 있음 · Prometheus `up` 이 0 | `$M exec backend curl -fsS http://localhost:8081/actuator/prometheus \| head` | 응답이 없으면 그 이미지에 Actuator(관리 포트 8081)가 없다 — 최신 main 으로 다시 빌드. 응답은 있는데 패널만 비면 대시보드 상단 `env` 가 `prod` 인지 |
