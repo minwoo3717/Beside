@@ -115,7 +115,9 @@
 
 - 방법·버전 비교·다음 버전 측정 절차: [perf/README.md](perf/README.md). 보고서 PDF: [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf).
 - **[실험 결과]** 개발 PC 루프백에서 버전 5개 × 3회(2026-10-31, `perf/data/2026-10-31_1434`): 이전 → 현재 회귀 없음, 현재의 개선(P1 키셋 목록)으로 목록 첫 페이지 −72 %, 다음 버전(v1.1)의 업로드 비용은 P4(썸네일을 202 뒤로)로 v1 수준. 사례와 남은 비용: [perf/notes/10-improvements.md](perf/notes/10-improvements.md).
-- [ ] 다음 버전에 남은 비용 확인 [계획]: 폴링 처리량 −25 %, PENDING 조회 +79 %, 목록 중간 페이지 +14~58 % 등 — JFR 로 GET 한 번의 시간 분해, 썸네일 없는 사진으로 분리 측정. (BE)
+- [x] 다음 버전에 남은 비용 확인 **[실험 결과]** (2026-11-01): 응답마다 하던 썸네일 파일 확인(P6)과 PENDING 조회의 `@Query` 재파싱(P7)이 원인. `review/api-v1.1` 에 고쳐 폴링 처리량·단건 조회·목록은 v1 과 차이 없음, PENDING −24 %. [perf/notes/10-improvements.md](perf/notes/10-improvements.md).
+- [ ] 아직 남은 v1.1 비용 [계획]: PENDING 조회 +74 %(조회 두 개를 문장 하나로, pending_poll 워밍업 늘려 정상 상태 측정), 썸네일 일과 CPU 공유(작은 업로드 +38 %, 동시 E2E −26 %: EXIF 읽기 생략·writer 재사용, 가짜 사진 대조 측정), 결과 GLB 크기 저장(항목당 `File.length` 약 0.1 ms, v1 부터 있던 비용). (BE)
+- [ ] 2026-11-01 실행에서 다른 작업과 겹친 반복(v2p 2회차 등 13:30~13:46)을 다시 잴지 결정 — 결론은 바뀌지 않았다. (BE)
 - [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — VM 준비 뒤. (BE)
 - [ ] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. (BE+GEN)
 - [ ] v1.1 을 병합하거나 다음 버전이 생기면 `versions.json` 에 한 줄 더해 같은 명령으로 재측정([perf/notes/20-next-version.md](perf/notes/20-next-version.md)). (BE)

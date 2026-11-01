@@ -11,7 +11,8 @@
 | 파일 | 내용 |
 |---|---|
 | `versions.json` | 비교할 버전(라벨 → 커밋 SHA, 제목, 설명, 기능), 판정 기준 `baseline`, 두 버전을 맞대는 `pairs` |
-| `data/<YYYY-MM-DD_HHMM>/` | `run.json`(환경, 명령, 버전 SHA, 반복별 순서) + `<라벨>-r<반복>.json`(스위트 하나의 원시 표본, 0.01 ms 단위). 이 보고서는 `data/2026-10-31_1434/`(버전 5개 × 3회, 14:34~15:30) |
+| `versions-ablation.json` | P6·P7 의 원인 분리(A/B) 측정용 버전: 개선 전 v1.1, P6 만, 트랜잭션만(실험 커밋), P6+P7 |
+| `data/<YYYY-MM-DD_HHMM>/` | `run.json`(환경, 명령, 버전 SHA, 반복별 순서) + `<라벨>-r<반복>.json`(스위트 하나의 원시 표본, 0.01 ms 단위). 이 보고서는 `data/2026-11-01_1257/`(버전 6개 × 3회, 12:57~14:02). A/B 는 `data/2026-11-01_1239_ablation/`, 하루 앞의 실행(v0~v2p)은 `data/2026-10-31_1434/` |
 | `notes/*.md` | 보고서 3장 뒤에 들어가는 서술(파일 이름 순): 개선 사례, 다음 버전 절차 |
 | `backend-perf-report.pdf` | 위 셋으로 만든 보고서 |
 
@@ -24,30 +25,36 @@
 | v1p | `033f3f3` | 현재 + 개선 P1 (perf/backend-report) |
 | v2 | `6a3959f` | 다음 버전 후보 v1.1 (review/api-v1.1 의 rebase 전, 계약 회의 전) |
 | v2p | `ecc5fb5` | 다음 버전 + 개선 P1·P4·P5 (review/api-v1.1) |
+| v2q | `87e3c75` | 다음 버전 + 개선 2: 본선 위로 rebase + 코드 리뷰 수정 + P6·P7 (review/api-v1.1) |
 
-쌍 비교: v0 → v1(이전 → 현재), v1 → v1p(현재의 개선), v1 → v2(다음 버전 기능의 비용), v2 → v2p(다음 버전의 개선).
+쌍 비교: v0 → v1(이전 → 현재), v1 → v1p(현재의 개선), v1 → v2(다음 버전 기능의 비용), v2 → v2p(다음 버전의 개선), v2p → v2q(다음 버전의 개선 2).
 
-v1p·v2·v2p 커밋은 아직 push 하지 않은 로컬 브랜치에만 있다(`perf/backend-report`, 백업 브랜치 `backup/review-api-v1.1-6a3959f`·`-ecc5fb5`). 다른 PC 에서 다시 재려면 이 커밋들을 먼저 올려야 하고, 백업 브랜치를 지우면 v2·v2p 는 다시 잴 수 없다.
+A/B(`versions-ablation.json`): v1, v2r(`c50e770`, 개선 전 v1.1), v2f1(`e19cb55`, P6 만), v2tx(`b09fa29`, P6 + `outlook` 에 트랜잭션만, 병합하지 않는 실험 커밋 — 브랜치 `ablation/f2-tx-only`), v2q.
+
+v1p·v2·v2p·v2q 와 A/B 의 커밋은 아직 push 하지 않은 로컬 브랜치에만 있다(`perf/backend-report`, 백업 브랜치 `backup/review-api-v1.1-6a3959f`·`-ecc5fb5`·`-87e3c75`, `ablation/f2-tx-only`). 다른 PC 에서 다시 재려면 이 커밋들을 먼저 올려야 하고, 백업 브랜치를 지우면 v2·v2p 는 다시 잴 수 없다.
 
 ## 다시 만들기
 
 ```powershell
-# 측정 (버전 5개 × 3회, 약 2시간. 결과는 docs/perf/data/<측정 시각>/)
-python scripts/perf/run.py --versions v0,v1,v1p,v2,v2p --reps 3 --versions-file docs/perf/versions.json --stub-python <fastapi·uvicorn 이 깔린 python>
+# 측정 (버전 6개 × 3회, 약 65분. 결과는 docs/perf/data/<측정 시각>/)
+python scripts/perf/run.py --versions v0,v1,v1p,v2,v2p,v2q --reps 3 --versions-file docs/perf/versions.json --stub-python <fastapi·uvicorn 이 깔린 python>
+# P6·P7 원인 분리 (버전 5개 × 3회, mock 시나리오 다섯 개, 약 18분)
+python scripts/perf/run.py --versions v1,v2r,v2f1,v2tx,v2q --reps 3 --versions-file docs/perf/versions-ablation.json --only e2e_mock,concurrent_e2e,poll_load,scale,pending_poll --out docs/perf/data/<측정 시각>_ablation
 # 보고서
-python scripts/perf/report.py --data docs/perf/data/2026-10-31_1434 --versions-file docs/perf/versions.json --notes docs/perf/notes --out docs/perf/backend-perf-report.pdf
+python scripts/perf/report.py --data docs/perf/data/2026-11-01_1257 --versions-file docs/perf/versions.json --notes docs/perf/notes --out docs/perf/backend-perf-report.pdf
 ```
 
 새 버전을 더하는 절차는 [notes/20-next-version.md](notes/20-next-version.md).
 
-## 결과 요약 [실험 결과] (2026-10-31, 이 PC)
+## 결과 요약 [실험 결과] (2026-11-01, 이 PC)
 
 - 이전 → 현재(v0 → v1): 측정한 경로에 회귀 없음.
-- 현재의 개선(v1 → v1p, P1 키셋 목록): 목록 첫 페이지 N=2000 에서 13.1 → 3.6 ms(−72 %), 최대 RSS −10 %.
-- 다음 버전의 비용(v1 → v2): 업로드 +50~+560 %(요청 안에서 만드는 썸네일 — P4 로 옮기자 큰 사진·12 MP 는 v1 수준), 폴링 처리량 −26 %, PENDING 조회 +88 %(이 둘의 원인은 아직 가설).
-- 다음 버전의 개선(v2 → v2p, P1·P4·P5): 큰 사진·12 MP·real 업로드 요청 −62~−85 %(v1 수준), 목록 첫 페이지 −38~−54 %. P5 는 PENDING 조회에 효과 없음(차이 없음).
-- 다음 버전에 남은 비용(v1 → v2p): 폴링 처리량 −25 %, PENDING 조회 +79 %, 단건 조회 +26~30 %, 목록 중간 페이지 +14~58 %, 작은 사진 업로드 +28 %, 기동 +12 % 등 — 전체 목록과 가설·다음 확인은 [notes/10-improvements.md](notes/10-improvements.md).
-- 조건: 서버를 논리 CPU 2개(물리 코어 1개)에 고정, 스위트 직전 배경 CPU 17~33 %, 실시간 백신이 갓 쓴 4.5 MB 파일 첫 열기에 216 ms.
+- 현재의 개선(v1 → v1p, P1 키셋 목록): 목록 첫 페이지 N=2000 에서 10.5 → 3.6 ms(−66 %), 최대 RSS −12 %.
+- 다음 버전의 비용(v1 → v2): 업로드 +39~+607 %(요청 안에서 만드는 썸네일 — P4 로 옮기자 큰 사진·12 MP 는 v1 수준), 폴링 처리량 −24 %, PENDING 조회 +122 %.
+- 다음 버전의 개선(v2 → v2p, P1·P4·P5): 큰 사진·12 MP·real 업로드 요청 −63~−85 %(v1 수준), 목록 첫 페이지 −34~−55 %. P5 는 PENDING 조회에 효과 없음(차이 없음).
+- 다음 버전의 개선 2(v2p → v2q, P6·P7): 폴링 처리량 +23 %, 단건 조회 −23~−27 %, 목록 −32~−47 %, PENDING 조회 −24 %. 원인은 응답마다 하던 썸네일 파일 확인(한 번 약 0.1 ms)과 Spring Data 가 `@Query` 를 호출마다 다시 파싱하는 것이었다(A/B 로 확인, 트랜잭션만으로는 효과 없음).
+- 다음 버전에 남은 비용(v1 → v2q): 폴링 처리량·단건 조회·목록 중간 페이지는 차이 없음. PENDING 조회 +74 %(대기 순번 계산의 조회, 재기동 직후 측정), 작은 사진 업로드 +38 %·동시 E2E 처리량 −26 %(202 뒤 썸네일 일과 CPU 공유, 가설), 재기동 +11 % — 전체 목록과 다음 확인은 [notes/10-improvements.md](notes/10-improvements.md).
+- 조건: 서버를 논리 CPU 2개(물리 코어 1개)에 고정, 스위트 직전 배경 CPU 4.7~52 %(중앙 9 %, 13:30~13:46 다른 작업이 겹친 반복은 노트에 적음), 실시간 백신이 갓 쓴 4.5 MB 파일 첫 열기에 206 ms.
 
 ## 읽는 법
 
