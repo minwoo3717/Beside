@@ -25,3 +25,7 @@ export const flowOkRatio = new Rate('load_flowOkRatio');
 export const unexpectedCount = new Counter('load_unexpectedCount');
 export const rejectedCount = new Counter('load_rejectedCount');
 export const assetBytes = new Counter('load_assetBytes');
+// Upload body bytes of POST /api/v1/jobs, tagged like the request, so the uplink use of each stage's hold can be
+// computed (data_sent is only a whole-run average). Staged scripts keep the per-stage submetric in the summary with a
+// no-op threshold (lib/thresholds.js bytesSentThresholds).
+export const bytesSent = new Counter('load_bytesSent');

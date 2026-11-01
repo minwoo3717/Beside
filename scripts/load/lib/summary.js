@@ -72,13 +72,39 @@ export function breakingPoint(verdicts) {
     lastPassingUsers: lastPass ? lastPass.users : null, operatingLimitUsers: lastPass && lastPass.users ? Math.floor(lastPass.users * 0.7) : null };
 }
 
+// Upload Mbps of each stage's hold: load_bytesSent{stage:N,phase:hold} (bytes, kept in the summary by a no-op
+// threshold) x 8 / 1e6 / that stage's holdS. Returns { "<stage>": Mbps } for the stages that have both.
+export function stageSentMbps(metrics, stages) {
+  const hold = {};
+  (stages || []).forEach((s) => { if (s.holdS > 0) hold[String(s.index)] = s.holdS; });
+  const out = {};
+  Object.keys(metrics).forEach((name) => {
+    const parsed = parseMetricName(name);
+    if (parsed.metric !== 'load_bytesSent' || parsed.tags.phase !== 'hold' || parsed.tags.stage === undefined) return;
+    const holdS = hold[parsed.tags.stage];
+    const count = metrics[name].values ? metrics[name].values.count : null;
+    if (!holdS || typeof count !== 'number') return;
+    out[parsed.tags.stage] = (count * 8) / 1e6 / holdS;
+  });
+  return out;
+}
+
 export function buildReport(data, info, cfg, endedAt) {
   const metrics = data.metrics || {};
   const failed = failedThresholds(metrics);
   const verdicts = stageVerdicts(metrics, info.stages || []);
   const sentMbps = value(metrics, 'data_sent', 'rate') === null ? null : (value(metrics, 'data_sent', 'rate') * 8) / 1e6;
   const recvMbps = value(metrics, 'data_received', 'rate') === null ? null : (value(metrics, 'data_received', 'rate') * 8) / 1e6;
-  const uplinkRatio = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
+  // data_sent.rate is total bytes / whole test time, which understates a staged script's busiest hold. The uplink
+  // ratio uses the larger of the busiest stage's upload Mbps and the whole-run average; the latter is kept apart.
+  const perStage = stageSentMbps(metrics, info.stages || []);
+  let peakStage = null;
+  Object.keys(perStage).forEach((k) => { if (peakStage === null || perStage[k] > perStage[peakStage]) peakStage = k; });
+  verdicts.forEach((v) => { v.sentMbps = perStage[String(v.stage)] === undefined ? null : round(perStage[String(v.stage)], 3); });
+  const peakSent = peakStage === null ? null : perStage[peakStage];
+  const highest = [peakSent, sentMbps].filter((x) => x !== null);
+  const uplinkRatio = cfg.uplinkMbps && highest.length ? Math.max.apply(null, highest) / cfg.uplinkMbps : null;
+  const uplinkRatioWholeRun = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
   const setup = data.setup_data || {};
   const meta = Object.assign({
     script: info.script,
@@ -106,7 +132,10 @@ export function buildReport(data, info, cfg, endedAt) {
     vusMax: value(metrics, 'vus_max', 'max') || value(metrics, 'vus_max', 'value'),
     dataSentMbps: round(sentMbps, 3),
     dataReceivedMbps: round(recvMbps, 3),
+    peakStage: peakStage === null ? null : Number(peakStage),
+    peakStageSentMbps: round(peakSent, 3),
     uplinkRatio: round(uplinkRatio, 3),
+    uplinkRatioWholeRun: round(uplinkRatioWholeRun, 3),
     uplinkSaturated: uplinkRatio === null ? null : uplinkRatio > 0.7,
     honesty: [
       'k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 stages[].users(도착률 환산)로 적는다.',
@@ -127,8 +156,11 @@ export function textReport(report) {
   const lines = [];
   lines.push(`== beside load: ${m.script} (${m.scenario}) run=${m.runId} base=${m.baseUrl}`);
   lines.push(`requests ${v.httpReqs} (${v.httpReqRate}/s), dropped_iterations ${v.droppedIterations}, vus_max ${v.vusMax}`);
-  lines.push(`data sent ${v.dataSentMbps} Mbps, received ${v.dataReceivedMbps} Mbps` +
-    (v.uplinkRatio === null ? ' (UPLINK_MBPS not set)' : `, uplink ratio ${v.uplinkRatio}${v.uplinkSaturated ? ' SATURATED (> 0.7)' : ''}`));
+  lines.push(`data sent ${v.dataSentMbps} Mbps (whole-run average)` +
+    (v.peakStageSentMbps === null ? '' : `, peak stage ${v.peakStage} upload ${v.peakStageSentMbps} Mbps`) +
+    `, received ${v.dataReceivedMbps} Mbps` +
+    (v.uplinkRatio === null ? ' (UPLINK_MBPS not set)'
+      : `, uplink ratio ${v.uplinkRatio} (whole run ${v.uplinkRatioWholeRun})${v.uplinkSaturated ? ' SATURATED (> 0.7)' : ''}`));
   if (m.rttBaseMsMeasured !== null) lines.push(`healthz p50 (RTT_base candidate) ${m.rttBaseMsMeasured} ms`);
   if (v.stages.length) {
     lines.push('stage  users     target   status   latency p95 (ms)');

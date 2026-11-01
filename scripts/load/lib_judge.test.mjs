@@ -54,3 +54,34 @@ test('summary: stage verdicts and breaking point', async () => {
   assert.equal(report.verdict.thresholdsOk, false);
   assert.match(s.textReport(report), /first failing stage 2/);
 });
+
+test('summary: uplink ratio from the busiest stage, whole-run value kept apart', async () => {
+  const s = await lib('summary.js');
+  const metrics = {
+    'http_req_duration{endpoint:create,stage:0,phase:hold}': { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<1500': { ok: true } } },
+    'http_req_duration{endpoint:create,stage:1,phase:hold}': { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<1500': { ok: true } } },
+    // 48 MB in a 480 s hold = 0.8 Mbps; 480 MB = 8 Mbps
+    'load_bytesSent{stage:0,phase:hold}': { values: { count: 48e6, rate: 1 }, thresholds: { 'count>=0': { ok: true } } },
+    'load_bytesSent{stage:1,phase:hold}': { values: { count: 480e6, rate: 1 }, thresholds: { 'count>=0': { ok: true } } },
+    'data_sent': { values: { rate: 125000 } }, // 1 Mbps averaged over the whole run
+  };
+  const stages = [0, 1].map((i) => ({ index: i, users: null, target: i, holdS: 480, label: '' }));
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'upload.js', scenario: 'A3-small', stages },
+    { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: 10, tier: '' }, 'T1');
+  const v = report.verdict;
+  assert.equal(v.dataSentMbps, 1);
+  assert.equal(v.uplinkRatioWholeRun, 0.1);
+  assert.equal(v.peakStageSentMbps, 8);
+  assert.equal(v.peakStage, 1);
+  assert.equal(v.uplinkRatio, 0.8);
+  assert.equal(v.uplinkSaturated, true); // judged on the busiest stage, not on the 0.1 run average
+  assert.deepEqual(v.stages.map((x) => x.sentMbps), [0.8, 8]);
+  assert.deepEqual(v.stages.map((x) => x.status), ['pass', 'pass']);
+  assert.match(s.textReport(report), /peak stage 1 upload 8 Mbps/);
+  // no per-stage bytes (e.g. poll_saturation.js): the whole-run value decides
+  const flat = s.buildReport({ metrics: { data_sent: { values: { rate: 125000 } } }, setup_data: {}, state: {} },
+    { script: 'x.js', scenario: 'A2', stages: [] }, { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: 10, tier: '' }, 'T1');
+  assert.equal(flat.verdict.uplinkRatio, 0.1);
+  assert.equal(flat.verdict.peakStageSentMbps, null);
+  assert.equal(flat.verdict.uplinkSaturated, false);
+});

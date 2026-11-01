@@ -65,6 +65,8 @@ export function createJob(ctx, multipart) {
   const r = call(ctx, 'create', '/api/v1/jobs', 'POST', `${ctx.cfg.baseUrl}/api/v1/jobs`, multipart.body,
     { expected: [202], responseType: 'text', headers });
   m.postMs.add(r.res.timings.duration, r.tags);
+  const body = multipart.body;
+  m.bytesSent.add(typeof multipart.bytes === 'number' ? multipart.bytes : (body.byteLength === undefined ? body.length : body.byteLength), r.tags);
   if (r.kind !== 'ok') return { kind: r.kind, jobId: null };
   let jobId = null;
   try { jobId = r.res.json('jobId'); } catch (e) { jobId = null; }

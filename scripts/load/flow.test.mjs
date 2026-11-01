@@ -21,6 +21,11 @@ test('flow: healthz -> create -> poll every 2 s -> asset, tagged, prefixed', asy
   assert.equal(samples('load_flowTimeoutRatio')[0].value, 0);
   assert.ok(samples('load_errorRatio').every((s) => s.value === 0));
   assert.equal(samples('load_assetBytes')[0].value, 1500000);
+  // upload body bytes per request, tagged like the request (stage/phase in staged scripts) for per-stage uplink
+  const sent = samples('load_bytesSent');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].value, Buffer.from(create.body).length);
+  assert.equal(sent[0].tags.endpoint, 'create');
   assert.equal(samples('load_serverQueuedMs')[0].value, 100);
   // two sleeps of 2 s between three polls, plus 5 ms per request
   assert.equal(samples('load_flowMs')[0].value, 4000 + 6 * 5);
