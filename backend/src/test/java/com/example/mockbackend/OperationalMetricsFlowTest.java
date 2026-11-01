@@ -31,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Operational meters (docs/METRICS.md §5) through the real job flow of the mock profile: created / retried counted
- * after the dispatch (Idempotency-Key replays not), every finished run in beside.jobs.finished with its timers, and the
- * queue gauge following the jobs.
+ * after the dispatch (Idempotency-Key replays not), every finished run in beside.jobs.finished with its timers, the
+ * queue gauge following the jobs, and asset downloads by outcome.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -101,6 +101,38 @@ class OperationalMetricsFlowTest {
         queueGauge.refresh();
         assertThat(queue("pending")).isEqualTo(0.0);
         assertThat(queue("processing")).isEqualTo(0.0);
+    }
+
+    @Test
+    void assetDownloadsAreCountedByOutcome() throws Exception {
+        double ok = downloads("ok");
+        double notCompleted = downloads("not_completed");
+        double notFound = downloads("not_found");
+        double all = allDownloads();
+
+        String jobId = create("dog.jpg", null);
+        mvc.perform(get("/api/v1/jobs/{id}/asset", jobId)).andExpect(status().isConflict());
+        mvc.perform(get("/api/v1/jobs/{id}/asset", "no-such-job")).andExpect(status().isNotFound());
+        awaitStatus(jobId, "COMPLETED");
+        byte[] glb = mvc.perform(get("/api/v1/jobs/{id}/asset", jobId)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(glb).hasSize(2048);
+        mvc.perform(get("/api/v1/jobs/{id}/asset", jobId).param("variant", "hair")).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/jobs/{id}", jobId)).andExpect(status().isOk()); // polling is not a download
+
+        assertThat(downloads("not_completed") - notCompleted).isEqualTo(1.0);
+        assertThat(downloads("not_found") - notFound).as("unknown job and missing hair variant").isEqualTo(2.0);
+        assertThat(downloads("ok") - ok).isEqualTo(1.0);
+        assertThat(allDownloads() - all).isEqualTo(4.0);
+        assertThat(registry.get("beside.asset.download").tag("outcome", "ok").timer().count()).isGreaterThanOrEqualTo(1);
+    }
+
+    private double downloads(String outcome) {
+        return registry.get("beside.asset.downloads").tag("outcome", outcome).counter().count();
+    }
+
+    private double allDownloads() {
+        return registry.find("beside.asset.downloads").counters().stream().mapToDouble(Counter::count).sum();
     }
 
     private String create(String filename, String idempotencyKey) throws Exception {
