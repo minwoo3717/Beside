@@ -5,10 +5,13 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.repository.JobRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
@@ -40,6 +43,7 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureObservability(tracing = false) // tests switch metric export off unless asked; the endpoint needs it
+@ExtendWith(OutputCaptureExtension.class)
 class ObservabilityEndpointTest {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
@@ -112,7 +116,7 @@ class ObservabilityEndpointTest {
     }
 
     @Test
-    void aDownloadTheClientAbandonsIsCountedAsClientAbort() throws Exception {
+    void aDownloadTheClientAbandonsIsCountedAsClientAbort(CapturedOutput output) throws Exception {
         // A GLB far larger than the socket buffers, so the server is still writing when the client resets the connection.
         Path big = storage.resolve("big.glb");
         try (RandomAccessFile file = new RandomAccessFile(big.toFile(), "rw")) {
@@ -150,6 +154,8 @@ class ObservabilityEndpointTest {
                 meters.get("beside.asset.downloads").tag("outcome", "client_abort").counter().count() - aborted)
                 .isEqualTo(1.0));
         assertThat(meters.get("beside.asset.downloads").tag("outcome", "ok").counter().count()).isZero();
+        // Nobody to answer and nothing broken on the server: no ERROR stack (GlobalExceptionHandler logs it at DEBUG).
+        assertThat(output.getOut()).doesNotContain("Internal error").doesNotContain("ClientAbortException");
     }
 
     private HttpResponse<String> get(int onPort, String path) throws IOException, InterruptedException {

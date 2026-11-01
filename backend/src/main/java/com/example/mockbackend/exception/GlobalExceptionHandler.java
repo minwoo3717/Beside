@@ -17,7 +17,9 @@ import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -99,6 +101,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> handleAny(Exception ex, HttpServletRequest request) {
+        // The client left while the response was being written (a phone leaving the GLB download): the response is
+        // committed and nobody is listening, so there is nothing to answer and no server fault to log as an ERROR.
+        // AssetDownloadMetricsFilter counts these downloads as client_abort. Null = write nothing more.
+        if (isClientGone(ex)) {
+            log.debug("{} {}: the client went away ({})", request == null ? null : request.getMethod(),
+                    request == null ? null : forLog(request.getRequestURI()), ex.getClass().getSimpleName());
+            return null;
+        }
         // Preserve framework HTTP errors (e.g. wrong method / media type), not 500.
         if (ex instanceof org.springframework.web.ErrorResponse error) {
             HttpStatusCode status = error.getStatusCode();
@@ -145,6 +155,29 @@ public class GlobalExceptionHandler {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Whether {@code ex} (or a cause) says the peer closed the connection: Tomcat's ClientAbortException, an
+     * EOFException, Spring's AsyncRequestNotUsableException (newer Spring versions), or an IOException whose message is
+     * the OS's "broken pipe" / "connection reset by peer" — the same signals as Spring's DisconnectedClientHelper.
+     */
+    static boolean isClientGone(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            String type = t.getClass().getSimpleName();
+            if (type.equals("ClientAbortException") || type.equals("EOFException") || type.equals("EofException")
+                    || type.equals("AsyncRequestNotUsableException")) {
+                return true;
+            }
+            String message = t.getMessage();
+            if (t instanceof IOException && message != null) {
+                String text = message.toLowerCase(Locale.ROOT);
+                if (text.contains("broken pipe") || text.contains("connection reset by peer")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static boolean isV1(HttpServletRequest request) {
