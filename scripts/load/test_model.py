@@ -166,6 +166,15 @@ class QueuePredictionTest(unittest.TestCase):
         self.assertAlmostEqual(p["wqMMcSec"], 0.84 * 12 / 0.16, places=9)
         self.assertAlmostEqual(p["wqMD1Sec"], 0.84 * 12 / 0.16 / 2, places=9)
 
+    def test_measured_arrival_rate_changes_the_prediction(self):
+        # gpu_queue.js meta.recompute takes the jobs the run created: a 120 s G1 at T_SEC = 2 asked for 1,260/h (42 jobs)
+        # and created 40, i.e. 1,200/h; with the measured slot of 2.089 s that is rho 0.696, not 0.731 at 1,260/h.
+        measured = model.queue_prediction(1200, 2.089, 1)
+        requested = model.queue_prediction(1260, 2.089, 1)
+        self.assertAlmostEqual(measured["rho"], 1200 * 2.089 / 3600, places=12)
+        self.assertAlmostEqual(requested["rho"], 1260 * 2.089 / 3600, places=12)
+        self.assertLess(measured["wqMD1Sec"], requested["wqMD1Sec"])
+
     def test_overload_has_no_steady_state(self):
         p = model.queue_prediction(432, 10, 1)
         self.assertAlmostEqual(p["rho"], 1.2, places=12)

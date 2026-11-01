@@ -3,8 +3,9 @@
     python scripts/load/model.py            # Markdown tables (docs/perf/load/TRAFFIC_MODEL.md §3, §5)
     python scripts/load/model.py --json     # the same numbers as JSON
     python scripts/load/model.py --tiers other.json --t 30
-    python scripts/load/model.py --queue-rate-per-h 252 --queue-service-s 11.8 --queue-slots 1 [--json]
-        # G series: rho, M/M/c Wq and (c = 1) M/D/1 Wq from the measured mean slot time of a gpu_queue.js run
+    python scripts/load/model.py --queue-rate-per-h 280 --queue-service-s 11.8 --queue-slots 1 [--json]
+        # G series: rho, M/M/c Wq and (c = 1) M/D/1 Wq from the measured arrival rate and mean slot time of a
+        # gpu_queue.js run (its summary's meta.recompute is this command)
 
 Assumptions are TRAFFIC_MODEL.md §2 (tiers.json), formulas §4:
   DAU = MAU x DAU/MAU; peak concurrent users = DAU x peak-hour share x session minutes / 60;
@@ -73,11 +74,15 @@ def wq_mdc_approx(c: int, rho: float, t_sec: float):
 
 
 def queue_prediction(rate_per_h: float, service_s: float, slots: int) -> dict:
-    """G series prediction recomputed from a measured mean slot time (docs/perf/load/TRAFFIC_MODEL.md §4, §9).
+    """G series prediction recomputed from a run's measured arrival rate and mean slot time (TRAFFIC_MODEL.md §4, §9).
 
-    rate_per_h  the Poisson arrival rate of the k6 run (gpu_queue.js meta.prediction.jobsPerHour)
-    service_s   the measured mean time a job holds an inference slot: the mean of the server's processingMs / 1000
-                (upload to the inference service, stub sleep, GLB download, cleanup), not the stub delay T_SEC
+    rate_per_h  the arrival rate the k6 run really had: jobs it created per hour (gpu_queue.js meta.measuredJobsPerHour,
+                load_postMs count / arrival window x 3600), not the requested meta.prediction.jobsPerHour, which a
+                finite Poisson run misses by about the square root of its job count
+    service_s   the measured mean slot time: the mean of the server's processingMs / 1000 (upload to the inference
+                service, stub sleep, GLB download), not the stub delay T_SEC. It is a little short of the time a job
+                holds the slot: prod's /healthz call before it and the job_runs write and cleanup DELETE after it are
+                not in processingMs (about two stub round trips plus the writes per job)
     slots       c, the backend's inference.max-concurrency (= the stub's BESIDE_PASSTHROUGH_SLOTS)
     M/M/c and M/D/1 assume Poisson arrivals, which gpu_queue.js produces by thinning (ARRIVAL_THIN).
     """
@@ -92,7 +97,7 @@ def queue_prediction(rate_per_h: float, service_s: float, slots: int) -> dict:
     rho = lam * service_s / slots
     return {
         "schema": "beside-queue-prediction/1",
-        "status": "[파생] 측정한 평균 슬롯 시간으로 다시 계산한 예측 (푸아송 도착 가정)",
+        "status": "[파생] 측정한 도착률과 평균 슬롯 시간으로 다시 계산한 예측 (푸아송 도착 가정)",
         "lambdaPerHour": rate_per_h,
         "lambdaPerS": lam,
         "serviceSec": service_s,
@@ -105,7 +110,7 @@ def queue_prediction(rate_per_h: float, service_s: float, slots: int) -> dict:
 
 
 def queue_text(p: dict) -> str:
-    lines = ["# G 시리즈 큐 예측 [파생] — 측정한 평균 슬롯 시간으로 다시 계산", "",
+    lines = ["# G 시리즈 큐 예측 [파생] — 측정한 도착률과 평균 슬롯 시간으로 다시 계산", "",
              f"λ = {p['lambdaPerHour']:g} 건/h ({p['lambdaPerS']:.4f}/s), 평균 슬롯 시간 S = {p['serviceSec']:g} s, "
              f"슬롯 c = {p['slots']}",
              f"ρ = λ·S/c = {p['rho']:.3f}"]
@@ -304,7 +309,7 @@ def main(argv=None) -> int:
     ap.add_argument("--json", action="store_true", help="print JSON instead of Markdown")
     ap.add_argument("--t", type=float, action="append", help="generation time T in seconds (repeatable)")
     ap.add_argument("--queue-rate-per-h", type=float,
-                    help="G series: arrival rate of the run in jobs per hour (gpu_queue.js meta.prediction.jobsPerHour)")
+                    help="G series: jobs the run created per hour (gpu_queue.js meta.measuredJobsPerHour)")
     ap.add_argument("--queue-service-s", type=float,
                     help="G series: measured mean slot time in seconds (mean server processingMs / 1000)")
     ap.add_argument("--queue-slots", type=int, default=1, help="G series: slots c (inference.max-concurrency), default 1")
