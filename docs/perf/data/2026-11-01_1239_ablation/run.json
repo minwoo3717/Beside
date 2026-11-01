@@ -1,0 +1,422 @@
+{
+ "schema": "beside-perf-run/1",
+ "status": "ok",
+ "startedAt": "2026-11-01T12:39:26+09:00",
+ "finishedAt": "2026-11-01T12:57:45+09:00",
+ "quick": false,
+ "reps": 3,
+ "labels": [
+  "v1",
+  "v2r",
+  "v2f1",
+  "v2tx",
+  "v2q"
+ ],
+ "order": [
+  [
+   "v1",
+   "v2r",
+   "v2f1",
+   "v2tx",
+   "v2q"
+  ],
+  [
+   "v2r",
+   "v2f1",
+   "v2tx",
+   "v2q",
+   "v1"
+  ],
+  [
+   "v2f1",
+   "v2tx",
+   "v2q",
+   "v1",
+   "v2r"
+  ]
+ ],
+ "baseline": "v1",
+ "versionOrder": [
+  "v1",
+  "v2r",
+  "v2f1",
+  "v2tx",
+  "v2q"
+ ],
+ "versionsFile": "C:\\Users\\minwo\\OneDrive\\바탕 화면\\capstone\\Beside\\docs\\perf\\versions-ablation.json",
+ "versions": {
+  "v1": {
+   "ref": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503",
+   "sha": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503",
+   "title": "현재 (4b 배포 기반)",
+   "description": "main = deploy/vm-4b. prod 프로파일, /infer 업로드 전송, GPU 감시·오프라인 대기, Discord 알림, H2 백업.",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2r": {
+   "ref": "c50e77011a87effb88abab669e922a020ef91ef7",
+   "sha": "c50e77011a87effb88abab669e922a020ef91ef7",
+   "title": "v1.1 개선 전 (리뷰 수정까지)",
+   "description": "review/api-v1.1 c50e770 = v2p 를 본선 위로 rebase + 코드 리뷰 수정. P6·P7 전.",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2f1": {
+   "ref": "e19cb550a8f2925913d13561b11e32857171638d",
+   "sha": "e19cb550a8f2925913d13561b11e32857171638d",
+   "title": "+ P6",
+   "description": "c50e770 + P6(썸네일 유무를 메모리에서, bd06de6) + AdminApiTest 시각 수정(테스트만, e19cb55).",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2tx": {
+   "ref": "b09fa294d986a6c3a10b4f4f93c1bea443406c08",
+   "sha": "b09fa294d986a6c3a10b4f4f93c1bea443406c08",
+   "title": "+ P6 + 트랜잭션만 (실험)",
+   "description": "e19cb55 + QueueEstimator.outlook 에 @Transactional(readOnly) 만(@Query 경로는 그대로). 병합하지 않는 실험 커밋, 브랜치 ablation/f2-tx-only.",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  },
+  "v2q": {
+   "ref": "87e3c75ce1be65a4a7eacd692b4ab115298a422e",
+   "sha": "87e3c75ce1be65a4a7eacd692b4ab115298a422e",
+   "title": "다음 버전 + 개선 2",
+   "description": "review/api-v1.1 87e3c75. v2p 를 본선(perf/backend-report) 위로 rebase + 코드 리뷰 수정 + P6(썸네일 유무를 메모리에서) + P7(PENDING 대기 순번의 두 조회를 읽기 전용 트랜잭션 하나로).",
+   "capabilities": [
+    "mock",
+    "real_path",
+    "real_upload",
+    "prod"
+   ]
+  }
+ },
+ "selected": [
+  "e2e_mock",
+  "concurrent_e2e",
+  "poll_load",
+  "scale",
+  "pending_poll"
+ ],
+ "tool": {
+  "commit": "ce80e472b0d0a065c5929e8b8e5a46bb9514cf32",
+  "dirty": false
+ },
+ "command": "python scripts/perf/run.py --versions v1,v2r,v2f1,v2tx,v2q --reps 3 --versions-file docs/perf/versions-ablation.json --only e2e_mock,concurrent_e2e,poll_load,scale,pending_poll --out docs/perf/data/2026-11-01_1239_ablation",
+ "argv": [
+  "--versions",
+  "v1,v2r,v2f1,v2tx,v2q",
+  "--reps",
+  "3",
+  "--versions-file",
+  "docs/perf/versions-ablation.json",
+  "--only",
+  "e2e_mock,concurrent_e2e,poll_load,scale,pending_poll",
+  "--out",
+  "docs/perf/data/2026-11-01_1239_ablation"
+ ],
+ "workDir": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf",
+ "runDir": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\runs\\2026-11-01_1239_ablation-p6396",
+ "fixtures": {
+  "png_small": {
+   "bytes": 12420,
+   "sha256": "e64c6412269f8c23238cf300ce614bf91bb7274ce17968edd50c6af5b1ae53c9",
+   "generator": "png_noise",
+   "args": {
+    "width": 64,
+    "height": 64,
+    "seed": 11
+   }
+  },
+  "png_large": {
+   "bytes": 4542211,
+   "sha256": "ffc4e5ae0581af0bdc337a5d5423734b4018fd5eb62333e174da03bb409a2928",
+   "generator": "png_noise",
+   "args": {
+    "width": 1230,
+    "height": 1230,
+    "seed": 12
+   }
+  },
+  "png_12mp": {
+   "bytes": 1085700,
+   "sha256": "d320abfbfe6076c473871f5509303761b80e0724fb00e48ef1278541ca27fbfa",
+   "generator": "png_gradient",
+   "args": {
+    "width": 4000,
+    "height": 3000,
+    "seed": 13
+   }
+  },
+  "glb_sample": {
+   "bytes": 1500000,
+   "sha256": "03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9",
+   "generator": "glb_synthetic",
+   "args": {
+    "total_bytes": 1500000,
+    "seed": 14
+   }
+  }
+ },
+ "counts": {
+  "healthz.warmup": 100,
+  "healthz.n": 500,
+  "upload_small.warmup": 10,
+  "upload_small.n": 100,
+  "upload_large.warmup": 2,
+  "upload_large.n": 20,
+  "upload_12mp.warmup": 2,
+  "upload_12mp.n": 20,
+  "upload_12mp.concurrentPerThread": 5,
+  "e2e_mock.warmup": 5,
+  "e2e_mock.n": 50,
+  "concurrent_e2e.perThread": 10,
+  "poll_load.warmupPerThread": 5,
+  "poll_load.perThread": 250,
+  "scale.warmup": 5,
+  "scale.listFirst": 100,
+  "scale.listDeep": 50,
+  "scale.get": 200,
+  "scale.post": 30,
+  "pending_poll.jobs": 5,
+  "pending_poll.warmup": 20,
+  "pending_poll.n": 200,
+  "real.warmup": 3,
+  "real.n": 20,
+  "real.batch": 5,
+  "upload_large.files": 4,
+  "upload_12mp.threads": 4,
+  "concurrent_e2e.threads": 16,
+  "poll_load.processes": 4,
+  "poll_load.threads": 4,
+  "scale.seedThreads": 8,
+  "e2e_mock.pollMs": 10,
+  "concurrent_e2e.pollMs": 50,
+  "real.pollMs": 20,
+  "scale.targets": [
+   200,
+   1000,
+   2000
+  ],
+  "scale.settleMs": 1000,
+  "pending_poll.pendingMs": 600000,
+  "startup.idleWaitMs": 3000
+ },
+ "stub": {
+  "python": null,
+  "available": false,
+  "reason": "no --stub-python"
+ },
+ "env": {
+  "os": "Windows-11-10.0.26300-SP0",
+  "system": "Windows",
+  "release": "11",
+  "machine": "AMD64",
+  "cpuModel": "AMD Ryzen 5 5600X 6-Core Processor",
+  "logicalCpus": 12,
+  "ramGB": 31.9,
+  "python": "3.14.0",
+  "pythonImplementation": "CPython",
+  "java": "openjdk version \"17.0.20.1\" 2026-08-18 LTS\r\nOpenJDK Runtime Environment (Red_Hat-17.0.20.1+1-1) (build 17.0.20.1+1-LTS)\r\nOpenJDK 64-Bit Server VM (Red_Hat-17.0.20.1+1-1) (build 17.0.20.1+1-LTS, mixed mode, sharing)",
+  "javaPath": "C:\\Program Files\\RedHat\\java-17-openjdk-17.0.20.1.1-1\\bin\\java.exe",
+  "jvmArgs": [
+   "-Xms256m",
+   "-Xmx1536m",
+   "-XX:ActiveProcessorCount=2",
+   "-XX:+UseG1GC"
+  ],
+  "serverCpus": 2,
+  "pinnedCpus": [
+   10,
+   11
+  ],
+  "pinnedCores": 1,
+  "loadGeneratorPinned": false,
+  "power": {
+   "source": "ac",
+   "battery": "none",
+   "plan": "고성능 (8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c)"
+  },
+  "envRemovedForServers": [],
+  "priority": {
+   "loadGenerator": "above_normal",
+   "servers": "above_normal"
+  },
+  "freshFileOpen": {
+   "file": "png_large-02e64f761c89df05.png",
+   "bytes": 4542211,
+   "firstMs": 198.37,
+   "secondMs": 1.13,
+   "tries": 3
+  }
+ },
+ "suites": [
+  {
+   "file": "v1-r1.json",
+   "label": "v1",
+   "rep": 1,
+   "position": 1,
+   "status": "ok",
+   "durationS": 67.879
+  },
+  {
+   "file": "v2r-r1.json",
+   "label": "v2r",
+   "rep": 1,
+   "position": 2,
+   "status": "ok",
+   "durationS": 74.587
+  },
+  {
+   "file": "v2f1-r1.json",
+   "label": "v2f1",
+   "rep": 1,
+   "position": 3,
+   "status": "ok",
+   "durationS": 72.796
+  },
+  {
+   "file": "v2tx-r1.json",
+   "label": "v2tx",
+   "rep": 1,
+   "position": 4,
+   "status": "ok",
+   "durationS": 70.897
+  },
+  {
+   "file": "v2q-r1.json",
+   "label": "v2q",
+   "rep": 1,
+   "position": 5,
+   "status": "ok",
+   "durationS": 69.13
+  },
+  {
+   "file": "v2r-r2.json",
+   "label": "v2r",
+   "rep": 2,
+   "position": 1,
+   "status": "ok",
+   "durationS": 74.417
+  },
+  {
+   "file": "v2f1-r2.json",
+   "label": "v2f1",
+   "rep": 2,
+   "position": 2,
+   "status": "ok",
+   "durationS": 70.987
+  },
+  {
+   "file": "v2tx-r2.json",
+   "label": "v2tx",
+   "rep": 2,
+   "position": 3,
+   "status": "ok",
+   "durationS": 73.951
+  },
+  {
+   "file": "v2q-r2.json",
+   "label": "v2q",
+   "rep": 2,
+   "position": 4,
+   "status": "ok",
+   "durationS": 70.849
+  },
+  {
+   "file": "v1-r2.json",
+   "label": "v1",
+   "rep": 2,
+   "position": 5,
+   "status": "ok",
+   "durationS": 62.886
+  },
+  {
+   "file": "v2f1-r3.json",
+   "label": "v2f1",
+   "rep": 3,
+   "position": 1,
+   "status": "ok",
+   "durationS": 69.177
+  },
+  {
+   "file": "v2tx-r3.json",
+   "label": "v2tx",
+   "rep": 3,
+   "position": 2,
+   "status": "ok",
+   "durationS": 72.588
+  },
+  {
+   "file": "v2q-r3.json",
+   "label": "v2q",
+   "rep": 3,
+   "position": 3,
+   "status": "ok",
+   "durationS": 68.892
+  },
+  {
+   "file": "v1-r3.json",
+   "label": "v1",
+   "rep": 3,
+   "position": 4,
+   "status": "ok",
+   "durationS": 62.666
+  },
+  {
+   "file": "v2r-r3.json",
+   "label": "v2r",
+   "rep": 3,
+   "position": 5,
+   "status": "ok",
+   "durationS": 73.634
+  }
+ ],
+ "jars": {
+  "af4a747b1c36f2380d1ff69a523b5a9dbaca7503": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\af4a747b1c36f2380d1ff69a523b5a9dbaca7503.jar",
+   "bytes": 55542636,
+   "sha256": "05e16e8bfbf05008e353e67b17fb5e31be29a76b929606cbc8b28aa7a7c0eb35",
+   "origin": "cache (no build record: not built by this tool)"
+  },
+  "c50e77011a87effb88abab669e922a020ef91ef7": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\c50e77011a87effb88abab669e922a020ef91ef7.jar",
+   "bytes": 56373762,
+   "sha256": "3794903beb0567bd322fc4b1da8fb54a76e868985bdfff83b1d7621ae9da5270",
+   "origin": "cache"
+  },
+  "e19cb550a8f2925913d13561b11e32857171638d": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\e19cb550a8f2925913d13561b11e32857171638d.jar",
+   "bytes": 56374289,
+   "sha256": "0b1ce0fb862ef75f8f66331ae6a90da2f3ec9af8ab22b4743947d459aef4f5c0",
+   "origin": "cache"
+  },
+  "b09fa294d986a6c3a10b4f4f93c1bea443406c08": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\b09fa294d986a6c3a10b4f4f93c1bea443406c08.jar",
+   "bytes": 56374331,
+   "sha256": "6fdad002a490bf7efb98d0e0d210b248f01acfdba45c46d1db6e69b07b711cbe",
+   "origin": "cache"
+  },
+  "87e3c75ce1be65a4a7eacd692b4ab115298a422e": {
+   "path": "C:\\Users\\minwo\\AppData\\Local\\Temp\\beside-perf\\jars\\87e3c75ce1be65a4a7eacd692b4ab115298a422e.jar",
+   "bytes": 56377155,
+   "sha256": "da5bef8c3a47da3c3d2f855d64453ce16512c1ce55b7cdb958df117c0fa420da",
+   "origin": "cache"
+  }
+ }
+}

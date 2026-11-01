@@ -1,0 +1,17 @@
+{
+  "baseline": "v1",
+  "order": ["v1", "v2r", "v2f1", "v2tx", "v2q"],
+  "pairs": [
+    {"from": "v1", "to": "v2r", "title": "개선 전 v1.1 의 비용"},
+    {"from": "v2r", "to": "v2f1", "title": "P6 썸네일 유무를 메모리에서"},
+    {"from": "v2f1", "to": "v2tx", "title": "P7 가운데 트랜잭션 몫 (실험)"},
+    {"from": "v2tx", "to": "v2q", "title": "P7 가운데 ANTLR 재파싱 몫"}
+  ],
+  "versions": {
+    "v1":   {"ref": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503", "title": "현재 (4b 배포 기반)", "description": "main = deploy/vm-4b. prod 프로파일, /infer 업로드 전송, GPU 감시·오프라인 대기, Discord 알림, H2 백업.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2r":  {"ref": "c50e77011a87effb88abab669e922a020ef91ef7", "title": "v1.1 개선 전 (리뷰 수정까지)", "description": "review/api-v1.1 c50e770 = v2p 를 본선 위로 rebase + 코드 리뷰 수정. P6·P7 전.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2f1": {"ref": "e19cb550a8f2925913d13561b11e32857171638d", "title": "+ P6", "description": "c50e770 + P6(썸네일 유무를 메모리에서, bd06de6) + AdminApiTest 시각 수정(테스트만, e19cb55).", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2tx": {"ref": "b09fa294d986a6c3a10b4f4f93c1bea443406c08", "title": "+ P6 + 트랜잭션만 (실험)", "description": "e19cb55 + QueueEstimator.outlook 에 @Transactional(readOnly) 만(@Query 경로는 그대로). 병합하지 않는 실험 커밋, 브랜치 ablation/f2-tx-only.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2q":  {"ref": "87e3c75ce1be65a4a7eacd692b4ab115298a422e", "title": "다음 버전 + 개선 2", "description": "review/api-v1.1 87e3c75. v2p 를 본선(perf/backend-report) 위로 rebase + 코드 리뷰 수정 + P6(썸네일 유무를 메모리에서) + P7(PENDING 대기 순번의 두 조회를 읽기 전용 트랜잭션 하나로).", "capabilities": ["mock", "real_path", "real_upload", "prod"]}
+  }
+}

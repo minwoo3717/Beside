@@ -1,17 +1,19 @@
 {
   "baseline": "v1",
-  "order": ["v0", "v1", "v1p", "v2", "v2p"],
+  "order": ["v0", "v1", "v1p", "v2", "v2p", "v2q"],
   "pairs": [
     {"from": "v0", "to": "v1", "title": "이전 → 현재"},
     {"from": "v1", "to": "v1p", "title": "현재의 개선 (P1)"},
     {"from": "v1", "to": "v2", "title": "다음 버전 기능의 비용"},
-    {"from": "v2", "to": "v2p", "title": "다음 버전의 개선 (P1·P4·P5)"}
+    {"from": "v2", "to": "v2p", "title": "다음 버전의 개선 (P1·P4·P5)"},
+    {"from": "v2p", "to": "v2q", "title": "다음 버전의 개선 2 (리뷰 수정·P6·P7)"}
   ],
   "versions": {
     "v0":  {"ref": "e0e1c2b34b1b94669d824fd0fd4afeea9fb800f1", "title": "이전 (10-14, #1 머지)", "description": "origin/main. Unity 앱·AnimalLift 연동 직후. 업로드 전송·prod 프로파일 없음.", "capabilities": ["mock", "real_path"]},
     "v1":  {"ref": "af4a747b1c36f2380d1ff69a523b5a9dbaca7503", "title": "현재 (4b 배포 기반)", "description": "main = deploy/vm-4b. prod 프로파일, /infer 업로드 전송, GPU 감시·오프라인 대기, Discord 알림, H2 백업.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
     "v1p": {"ref": "033f3f3719745e3d4776c5ea6e4e2e7db536f027", "title": "현재 + 개선", "description": "perf/backend-report. v1 + P1(작업 목록 키셋 페이지, jobs(created_at, id) 인덱스).", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
     "v2":  {"ref": "6a3959f60380947ad2f430be24f5d50661a57c95", "title": "다음 버전 후보 (v1.1)", "description": "review/api-v1.1 의 rebase 전(백업 ref backup/review-api-v1.1-6a3959f). v1 + 관리 화면·대기 순번·취소·공유·평가·보관함·썸네일. 계약 회의 전.", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
-    "v2p": {"ref": "ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2", "title": "다음 버전 + 개선", "description": "v2 를 v1p 위로 rebase + P4(썸네일을 202 뒤 백그라운드로) + P5(jobs·job_runs 인덱스, 대기 순번 범위 쿼리).", "capabilities": ["mock", "real_path", "real_upload", "prod"]}
+    "v2p": {"ref": "ecc5fb5f9ba0bee443137ce8c59a5223174e7dc2", "title": "다음 버전 + 개선", "description": "v2 를 v1p 위로 rebase + P4(썸네일을 202 뒤 백그라운드로) + P5(jobs·job_runs 인덱스, 대기 순번 범위 쿼리).", "capabilities": ["mock", "real_path", "real_upload", "prod"]},
+    "v2q": {"ref": "87e3c75ce1be65a4a7eacd692b4ab115298a422e", "title": "다음 버전 + 개선 2", "description": "review/api-v1.1 87e3c75. v2p 를 본선(perf/backend-report) 위로 rebase + 코드 리뷰 수정 + P6(썸네일 유무를 메모리에서) + P7(PENDING 대기 순번의 두 조회를 읽기 전용 트랜잭션 하나로).", "capabilities": ["mock", "real_path", "real_upload", "prod"]}
   }
 }
