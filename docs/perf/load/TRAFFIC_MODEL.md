@@ -137,15 +137,20 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 
 공통 기준:
 - 5xx·연결 오류 < 0.5 %. 의도한 4xx·429·503 은 따로 센다.
-- 600초를 넘긴 흐름 0건, 완료 처리량 ≥ 들어온 양의 95 %.
-- VM CPU 단계 평균 < 85 %, GC 뒤 힙 < 75 %.
+- 600초를 넘긴 흐름 0건, 완료 처리량 ≥ 들어온 양의 95 %. k6 가 끝까지 기다리지 못해 결과를 모르는 흐름(드레인에서 잘린 흐름)이 하나라도 있으면 통과가 아니다. 가장 느린 흐름이기 때문이다.
+- 정한 도착률을 다 걸지 못한 단계(k6 `dropped_iterations` > 0)는 통과가 아니다. 단계마다 시나리오가 따로인 A2·A3·A4 는 그 단계만 실패다. 한 시나리오로 모든 단계를 거는 A1·A5·A6 은 drop 을 단계에 묶지 못하므로 어느 단계도 통과로 치지 않고 깨지는 지점도 내지 않는다.
+- VM CPU 단계 평균 < 85 %, GC 뒤 힙 < 75 %. GC 뒤 힙은 마지막 GC 뒤 long-lived 풀(G1 Old Gen, 최대 = `-Xmx`)의 사용/최대, `max(jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"})`(0~1, `collect.py` 의 `jvm_heap_after_gc`)로 본다. 힙 사용/최대(`jvm_memory_used_bytes`)는 Eden 을 포함한 순간값이라 GC 사이에 톱니처럼 오르내려 판정에 쓰지 않는다.
 
-- **깨지는 지점**: 유지 구간에서 위 기준을 처음 넘는 단계다. 보고하는 용량은 마지막으로 통과한 단계, 운영 상한은 그 70 %로 둔다.
+시험별 기준:
+- **A2**: 폴링하는 id 는 모두 있는 작업이므로 200 이 아닌 응답(404 등)은 전체와 단계마다 0건이다(`load_unexpectedCount == 0`). 빠른 404 는 오류로 세어지지 않고 지연 기준도 통과하기 때문이다. PENDING 쪽 id 는 실행 끝까지 PENDING 이어야 한다. 부하가 끝난 뒤 최대 20개를 다시 GET 해 다른 상태나 404 가 하나라도 있으면(`load_pendingLeft == 0` 실패) 그 실행의 PENDING 폴링 일부는 PENDING 작업이 아니었으므로 A2 가 아니다.
+- **A3**: 업로드는 모두 유효하므로 202 가 아닌 4xx(413·400, 프록시의 404·413, `RATE_LIMITED` 코드가 없는 429)는 전체와 유지 구간마다 0건이다(`load_unexpectedCount == 0`). 빠른 거절은 지연 기준도 통과하기 때문이다. 429 `RATE_LIMITED`·503 `QUEUE_FULL`(아직 계약에 없는 코드)은 `load_rejectedCount` 로 따로 세고 기준이 없다. 이 거절이 A3 유지 구간을 실패로 만드는지는 정하지 않았다(안건 #19·#20). 위 표의 1.5·3초는 0.8 MB 업로드의 기준이라, 20 MB 업로드의 지연은 유지 구간마다 기록만 하고 판정하지 않는다.
+
+- **깨지는 지점**: 유지 구간에서 위 기준을 처음 넘는 단계다. 아래 중단 조건의 오류 기준(k6 누적 오류 비율, 가드의 5xx 비율)이 멈춘 단계도 깨진 단계로 친다. 통과는 유지 구간을 끝까지 돌고 그 구간에 시작한 흐름이 모두 끝난 단계뿐이다. 보고하는 용량은 마지막으로 통과한 단계, 운영 상한은 그 70 %로 둔다. 단계가 올라가기만 하는 탐색(A1)에만 쓰고, A5(스파이크·회복)와 A6(소크 한 단계)는 단계별 판정만 본다.
 - **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 그 자리에서 멈추고 기본 스택으로 복구한다.
 
 ## 9. 시험 구성 [계획]
 
-보고용 수치는 배포 VM(2 vCPU·4 GB·30 GB)에서 잰다. 이 PC 에는 Docker·k6 가 없고, 로컬 실행은 스크립트가 동작하는지만 보며 결과로 쓰지 않는다.
+보고용 수치는 배포 VM(2 vCPU·4 GB·30 GB)에서 잰다. 이 PC 에는 Docker 가 없고 k6 는 v2.3.0 만 있다(`C:\Program Files\k6\k6.exe`, PATH 밖). 이 PC 의 k6 실행(루프백의 로컬 mock jar, 대역 스텁·Prometheus, 줄인 단계)은 스크립트가 동작하는지만 본 것이며 결과로 쓰지 않는다.
 
 - **격리**: `deploy/docker-compose.loadtest.yml` 덮어쓰기 파일로 backend 서비스만 바꾼다(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `METRICS_ENV=loadtest`). Caddy 와 `caddy_data`(인증서)는 그대로 둔다. 4 GB 에 backend 두 개는 못 띄우므로 시험 시간에는 운영 backend 를 내린다(팀 공지, 전후 H2 백업 복사, 끝나면 healthz 와 Caddy 경로 확인). 절차는 `deploy/loadtest/README.md`(같은 브랜치의 다른 조각).
 - **A 시리즈(API 계층)**: `mock,prod`, PENDING 0초·PROCESSING 60초, @Async 풀 400. 기본 풀은 8스레드라 늘리지 않으면 mock 이 "GPU 8대"처럼 동작한다. 합성 GLB 1.5 MB 를 볼륨에 미리 넣는다(리포의 `sample-dog.glb` 는 0 B). 합성 GLB 는 하나다: `scripts/perf/fixtures.py` 의 `glb_synthetic(1_500_000, seed=14)`, sha256 `03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9`. G 시리즈 스텁의 `BESIDE_SAMPLE_GLB` 도 같은 파일을 스텁 PC 에서 만들어 쓴다.
@@ -158,23 +163,26 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 |---|---|---|---|
 | A0 | 연기 시험, RTT_base | 3분 | [계획] |
 | A1 | 혼합 흐름(healthz → POST → 2초 폴링 → asset, 실패 시 retry), `ramping-arrival-rate` | 동시 25(T2) → 200 → 1,000 → **1,800(T3)** → 3,600 → 5,400 → … 깨질 때까지. 단계마다 증가 1분 + 유지 8분 | [계획] |
-| A2 | 폴링 포화(COMPLETED·PENDING 작업 각 1,000건 미리 생성) | 100 → **300** → 600 → **900** → 1,200 → 1,800 RPS, 각 5분 | [계획] |
+| A2 | 폴링 포화(COMPLETED·PENDING 작업 각 1,000건 미리 생성). mock 은 COMPLETED 를 PENDING 0초에서, PENDING 을 긴 PENDING 시간에서만 만들고 backend 재시작은 PENDING 을 모두 FAILED 로 닫으므로, 시드만 하는 실행 두 번(`SEED_ONLY=1`: COMPLETED 를 만든 뒤 긴 `MOCK_WORKER_PENDINGMS` 로 한 번만 재시작하고 PENDING 을 만든다) 뒤 재시작 없이 바로 잰다 | 100 → **300** → 600 → **900** → 1,200 → 1,800 RPS, 각 5분 | [계획] |
 | A3 | 업로드 | 0.8 MB 를 1 → 20/s, 20 MB 를 0.5 → 2/s | [계획] |
 | A4 | 에셋 송신 상한 | 1 → 40/s | [계획] |
 | A5 | 스파이크 | 동시 1,800 → 5,400 을 30초 만에, 10분 유지 후 10분 회복 | [계획] |
 | A6 | 소크 | T3 피크 2시간 | [계획] |
-| G1 | 큐 이론 검증(c=1, 스텁 T=10초, 포아송 도착) | ρ = 0.5 / 0.7 / 0.9 / 1.2. 측정한 `queuedMs` 를 예측과 비교한다. 예측은 실행 뒤 잰 평균 슬롯 시간으로 다시 계산한다(아래 'G 시리즈의 도착과 예측'). 참고 값(포아송 도착, 슬롯 시간 = T_SEC 10초를 가정): Wq M/D/1 5 / 11.7 / 45초, M/M/1 10 / 23.3 / 90초, ρ=1.2 는 발산 | [계획] |
-| G2 | GPU 증설(ρ=0.7, 포아송 도착) | c = 1, 2, 4. 처리량이 c 에 비례하는지 본다. 대기 예측(M/M/c)도 G1 처럼 잰 평균 슬롯 시간으로 다시 계산한다 | [계획] |
+| G1 | 큐 이론 검증(c=1, 스텁 T=10초, 포아송 도착) | ρ = 0.5 / 0.7 / 0.9 / 1.2. 측정한 `queuedMs` 를 예측과 비교한다. 예측은 실행 뒤 잰 도착률과 평균 슬롯 시간으로 다시 계산한다(아래 'G 시리즈의 도착과 예측'). 참고 값(포아송 도착, 슬롯 시간 = T_SEC 10초를 가정): Wq M/D/1 5 / 11.7 / 45초, M/M/1 10 / 23.3 / 90초, ρ=1.2 는 발산 | [계획] |
+| G2 | GPU 증설(ρ=0.7, 포아송 도착) | c = 1, 2, 4. 처리량이 c 에 비례하는지 본다. 대기 예측(M/M/c)도 G1 처럼 잰 도착률과 평균 슬롯 시간으로 다시 계산한다 | [계획] |
 | G3 | 과부하(ρ=1.5) | 큐 증가 기울기, 클라이언트가 떠난 뒤 완료된 비율. 큐 상한 적용 전후를 비교한다 | [계획] |
 
 **G 시리즈의 도착과 예측** [계획]:
 
 - **도착은 포아송이어야 한다.** M/D/1·M/M/1 은 도착 간격이 지수분포(포아송 도착)라고 놓은 식이다. k6 의 `constant-arrival-rate` 는 반복을 일정한 간격으로 시작하므로, 그대로 쓰면 도착이 D/D/1 에 가깝고 ρ < 1 에서 대기가 거의 0 이 되어 위 식과 비교할 수 없다. 그래서 `gpu_queue.js` 는 솎아내기(thinning)로 포아송 도착을 만든다. 반복을 λ·K 의 속도로 시작하고, 각 반복은 1/K 확률로만 흐름을 진행한다(K = `ARRIVAL_THIN`, 기본 20). 도착 간격은 기하분포이고 K 가 크면 지수분포에 가깝다. 쓴 방식은 요약의 `meta.arrivalProcess` 에 남는다.
-- **서비스 시간은 T_SEC 보다 길다.** backend 는 추론 슬롯을 `/infer` 한 번 동안 잡는다. 그 안에 Tailscale 너머 사진 업로드, 스텁의 지연(T_SEC), GLB 내려받기·저장이 모두 들어가고, 끝난 뒤 정리(DELETE)도 슬롯 안에서 한다. 그래서 위 표의 참고 값(슬롯 시간 = T_SEC)보다 실제 ρ 와 Wq 가 크다.
-- **예측은 실행 뒤 잰 값으로 다시 계산한다.** 평균 슬롯 시간은 그 실행 구간에 끝난 COMPLETED 실행의 서버 `processingMs` 평균이다(`events.jsonl`, 또는 Prometheus `beside_job_processing_seconds_sum / _count`). 끝난 뒤 정리 몇 ms 는 여기에 들어가지 않는다. 도착률은 실제로 만든 작업 수(요약의 `load_postMs` count) ÷ 실행 시간(`DURATION_S`) × 3600 건/h 다(솎아내기라 실행마다 조금씩 다르다). 두 값을 넣어 ρ 와 Wq 를 낸다.
+- **서비스 시간은 T_SEC 보다 길다.** backend 는 추론 슬롯을 작업 하나 동안 잡는다. 슬롯 안에서 차례로 스텁의 `/healthz` 를 새로 부르고(prod 의 `inference.offline-wait-ms` > 0), Tailscale 너머로 사진을 올리고, 스텁의 지연(T_SEC)을 기다려 GLB 를 내려받아 저장하고, `job_runs`·`events.jsonl` 을 쓰고, 정리(`DELETE /artifacts/{jobId}`)를 보낸다. 그래서 위 표의 참고 값(슬롯 시간 = T_SEC)보다 실제 ρ 와 Wq 가 크다.
+- **예측은 실행 뒤 잰 값으로 다시 계산한다.** `gpu_queue.js` 가 두 값과 그 값을 넣은 명령(`meta.recompute`)을 요약에 남긴다.
+  - 도착률: 실제로 만든 작업 수(생성 요청 수, `load_postMs` count = `meta.measuredCreates`) × 3600 ÷ 도착 구간(`meta.measuredArrivalWindowS`: `DURATION_S`, 부하가 일찍 멈췄으면 setup 이 끝난 뒤 멈출 때까지의 초) = `meta.measuredJobsPerHour` 건/h. 솎아내기라 작업 수가 실행마다 다르므로(포아송, 표준편차 ≈ √건수) 요청한 λ 대신 이 값을 쓴다.
+  - 평균 슬롯 시간: k6 가 COMPLETED 응답에서 읽은 서버 `processingMs` 의 평균(`meta.measuredProcessingMs.mean`, 서버 쪽은 `events.jsonl` 또는 Prometheus `beside_job_processing_seconds_sum / _count`). `processingMs` 는 업로드·스텁 지연·GLB 내려받기·저장뿐이라 슬롯보다 조금 짧다(작업마다 스텁 왕복 두 번 남짓과 기록). 앞의 `/healthz` 는 그 작업의 `queuedMs` 에 들어가므로 큐가 비어도 `queuedMs` 에 스텁 왕복 한 번쯤이 남는다.
+  - F 실행(F1a·F1b·F2)과 retry 가 한 번이라도 있는 G 실행은 다시 계산하지 않는다(`meta.recompute` null). retry 는 도착을 늘리고 실패한 시도가 슬롯 시간에 섞이기 때문이다.
 
   ```
-  python scripts/load/model.py --queue-rate-per-h <λ, 건/h> --queue-service-s <평균 슬롯 시간, 초> --queue-slots <c>
+  python scripts/load/model.py --queue-rate-per-h <meta.measuredJobsPerHour> --queue-service-s <meta.measuredProcessingMs.mean / 1000> --queue-slots <c>
   # ρ, M/M/c Wq, c=1 이면 M/D/1 Wq. --json 을 붙이면 같은 값을 JSON 으로
   ```
 
@@ -184,10 +192,10 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 
 | # | 주입 방법 | 기대 동작 / 합격 | 상태 |
 |---|---|---|---|
-| F1a | 스텁 실패율 0.2 | `INFERENCE_FAILED` → retry 성공, API 5xx 0 | [계획] |
-| F1b | 타임아웃 20초 < 스텁 지연 30초. 흐름의 20 %만 사진 이름에 `slow` 가 들어가 30초가 걸리고, 나머지는 G1 처럼 10초다(k6 `FAIL_TOKEN=slow FAIL_RATIO=0.2`, 명령은 `deploy/loadtest/README.md` 'F1b 명령'). 끝난 뒤 보통 G1 을 한 번 더 돌린다 | 20±1초에 `INFERENCE_TIMEOUT`, 다음 작업이 연쇄 실패하지 않음. MODEL_LOCK 문제로 **실패가 예상되며, 실패하면 그대로 기록**한다 | [계획] |
-| F2 | T2 부하 중 스텁 종료, Tailscale 차단, backend 재시작 | `INFERENCE_UNAVAILABLE` / PENDING 30분 대기 → 복구 뒤 처리. 잃어버린 작업 0, 알림 발생 | [계획] |
-| F3 | 6·21·30 MB, 11장, 0장, 가짜 jpg, gif, 10 kB/s 느린 업로드 | 413/400 코드 100 % 일치, 남는 파일 없음, 그동안 폴링 p95 유지 | [계획] |
+| F1a | 스텁 실패율 0.2(k6 는 G1 값에 `SCENARIO=F1a` 를 붙인다. 없으면 G1 로 적힌다) | `INFERENCE_FAILED` → retry 성공, API 5xx 0. 판정은 이 기준 그대로 본다: 실패 코드와 retry 뒤 결과는 `vm/events.jsonl`(실행마다 한 줄)·`jobs_finished_rate`(`result`, `code`), retry 요청은 `retry 202` check·`load_retryMs`, 5xx 는 `load_errorRatio`·`http_5xx_ratio`. 실패율은 retry 에도 시도마다 걸려 흐름의 약 4 %(0.2²)는 두 번 실패한다 [파생]. 그래서 k6 공통 기준 `load_flowOkRatio ≥ 0.95`(기대값 약 0.96)는 우연히 통과·실패하므로 F1a 판정이 아니다. 이 기준 하나로 k6 가 종료 코드 99 로 끝나도 F1a 의 실패로 읽지 않는다 | [계획] |
+| F1b | 타임아웃 20초 < 스텁 지연 30초. 흐름의 20 %만 사진 이름에 `slow` 가 들어가 30초가 걸리고, 나머지는 G1 처럼 10초다(k6 `RHO=0.3 FAIL_TOKEN=slow FAIL_RATIO=0.2`, 명령은 `deploy/loadtest/README.md` 'F1b 명령'). ρ 를 G1 의 0.5 보다 낮춘 것은 slow 흐름이 retry 까지 두 번 스텁 슬롯을 30초씩 잡기 때문이다: 스텁 이용률 0.03/s × (0.8 × 10초 + 0.2 × 2 × 30초) = 0.6 [파생]. 0.5 면 1.0 이 되어 타임아웃이 아니라 과부하로 실패가 이어진다. 끝난 뒤 보통 G1 을 한 번 더 돌린다 | 20±1초에 `INFERENCE_TIMEOUT`, 다음 작업이 연쇄 실패하지 않음. MODEL_LOCK 문제로 **실패가 예상되며, 실패하면 그대로 기록**한다 | [계획] |
+| F2 | T2 부하 중 스텁 종료, Tailscale 차단, backend 재시작(k6 는 G1 값에 `SCENARIO=F2` 를 붙인다. 실패한 작업이 없으면 retry 도 없어 이름 없이는 G1 로 적히고 큐 예측까지 다시 계산된다) | `INFERENCE_UNAVAILABLE` / PENDING 30분 대기 → 복구 뒤 처리. 잃어버린 작업 0, 알림 발생 | [계획] |
+| F3 | 잘못된 업로드 9종(6·21·30 MB, 11장, 0장, 0바이트 파일, gif, jpeg 로 보낸 텍스트·gif, `failure/f3_uploads.js`)과 0.4 MB 를 10 kB/s 로 보내는 느린 업로드(`failure/f3_throttled.py`, k6 실행과 함께 띄워 k6 의 폴링 중에 보낸다) | (a) 잘못된 업로드: 기대한 413/400 과 `error.code` 100 % 일치, 계획한 업로드를 모두 판정(`dropped_iterations` 0, 잘린 라운드 0). (b) 느린 업로드: 약 40초 뒤 202(도우미의 범위는 본문 ÷ 속도의 0.9배 이상, 1.5배 + 10초 이하, 약 36~70초), k6 폴링 구간 안, 그동안 폴링 p95 유지. (c) 남는 파일 없음: VM 확인 단계의 `f3bad stored 0`·`upload_tmp 0` | [계획] |
 | F4 | 다운로드 1,000회 중단(curl `--max-time`) | 작업은 COMPLETED 유지, 바쁜 스레드·열린 파일이 30초 안에 기준선 복귀, 다시 받으면 해시 일치 | [계획] |
 | F5 | A5 + 한 IP 에서 POST 50/s | 지금: 5xx·OOM 0, 2분 안에 회복. 보호 장치(안건 #19·#20) 뒤: 초과분 ≥ 95 %가 503/429 | [계획] |
 
@@ -197,16 +205,17 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 - k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 도착률로 환산해 적는다.
 - "API 계층이 T3를 통과했다"는 다음을 모두 만족할 때만 쓴다: T3 요청률 10분 유지, `dropped_iterations` 0, 8절 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화. 못 넘으면 "최대 지속 처리량 Y RPS(T3의 k %)"로 쓴다.
 - 결과는 [실험 결과]로 적고 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)을 붙인다.
+- [실험 결과] 후보는 `collect.py` 가 run.json 에 `resultCandidate` true 로 적은 실행뿐이다. 로컬 실행, 용량과 무관하게 멈춘 실행(setup 실패, 가드의 디스크 기준·Prometheus 를 못 읽음, Ctrl+C·REST 정지, 드레인에서 잘린 흐름), 끝난 방식을 모르는 요약(`outcome.ended` = `unknown`)은 false 이고 `status` 가 "인용하지 않는다"로 시작한다(로컬은 "동작 확인용"). k6 오류 기준(abortOnFail)이나 가드의 5xx 기준이 멈춘 실행(`outcome.ended` = `ruleStop`)은 후보로 남지만 이 이름은 멈춘 규칙만 말한다. 그 시각에 서버 재시작·재배포·네트워크 끊김이 없었음을 VM 쪽 기록(`vm/backend.log`)과 k6 출력으로 확인한 뒤에만 `breakingPoint` 를 용량 한계로 쓴다. 가드가 Prometheus 를 못 읽은 실행은 후보로 남되 `status` 에 "주의"가 붙는다.
 - VM·k6·Docker 에서 실제로 돌리기 전에는 이 문서의 어떤 값도 측정값처럼 쓰지 않는다.
 
 ## 11. 이름
 
 - k6 쪽 값은 `load.` 접두사를 쓴다(k6 는 이름에 점을 못 써서 `load_postMs` 처럼 밑줄로 적는다). `bench.*` 처럼 `docs/perf` 전용이고 [METRICS.md](../../METRICS.md) 에 등록하지 않는다(안건 [#15](../../api/REVIEW_CHECKLIST.md)).
-- 서버 운영 지표 `beside.*`(Micrometer, Prometheus 이름은 `beside_jobs_finished_total` 등)는 METRICS 에 추가로 적는다(같은 브랜치의 Java 조각).
+- 서버 운영 지표 `beside.*`(Micrometer, Prometheus 이름은 `beside_jobs_finished_total` 등)는 METRICS 에 추가로 적는다(같은 브랜치의 Java 조각). 8절 기준에 쓰는 Spring 내장 지표(`process_cpu_usage`, `system_cpu_usage`, `jvm_memory_usage_after_gc_percent`)는 METRICS §5.2 의 이름 그대로다.
 - 서버 값 `uploadMs`·`queuedMs`·`processingMs`·`totalMs` 는 METRICS §1 의 뜻 그대로 쓴다.
 
 ## 12. 데이터 위치와 다시 계산
 
-- 원시 결과: k6 실행마다 한 폴더 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 그 실행의 k6 summary, `collect.py` 가 쓰는 `run.json`·Prometheus 구간 CSV, 그 실행의 VM 쪽 파일(`vm/`, run.json 에는 `collect.py --attach` 로만 들어감)이 모인다. 절차는 `deploy/loadtest/README.md` 5번. k6 스크립트와 수집 도구는 [scripts/load/](../../../scripts/load/).
+- 원시 결과: k6 실행마다 한 폴더 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 그 실행의 k6 summary, `collect.py` 가 쓰는 `run.json`·Prometheus 구간 CSV 18개(8절 'GC 뒤 힙' 의 `jvm_heap_after_gc` 포함), 그 실행의 VM 쪽 파일(`vm/`, run.json 에는 `collect.py --attach` 로만 들어감)이 모인다. 절차는 `deploy/loadtest/README.md` 5번. k6 스크립트와 수집 도구는 [scripts/load/](../../../scripts/load/).
 - 부하 문서는 `docs/perf/notes/` 에 넣지 않는다. `scripts/perf/report.py` 가 그 폴더의 모든 `.md` 를 루프백 보고서 PDF 에 넣기 때문이다.
 - exp-01 의 T 가 나오면: `scripts/load/model.py` 에 그 T 를 넣는다 → 3·5절 표와 Q_max 를 다시 계산한다 → 안건 #19 의 상한 제안값을 고친다 → G 시리즈 스텁 지연을 그 T 로 바꿔 다시 잰다.

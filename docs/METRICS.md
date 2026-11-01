@@ -153,7 +153,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | Prometheus 이름 | 보는 것 |
 |---|---|
 | `http_server_requests_seconds_{bucket,sum,count,max}` (`uri`, `method`, `status`, `outcome`, `exception`) | API 응답 시간. `uri` 는 경로 템플릿(예 `/api/v1/jobs/{jobId}`)이라 jobId 마다 시계열이 생기지 않는다. 에셋 경로의 시간에는 본문 전송 시간도 들어간다 |
-| `jvm_memory_used_bytes`, `jvm_gc_pause_seconds_*`, `jvm_gc_memory_allocated_bytes_total` | 힙, GC(합격 기준 'GC 뒤 힙 < 75 %') |
+| `jvm_memory_used_bytes`, `jvm_memory_usage_after_gc_percent`(`area="heap"`, `pool="long-lived"`), `jvm_gc_pause_seconds_*`, `jvm_gc_memory_allocated_bytes_total` | 힙, GC. `jvm_memory_usage_after_gc_percent` 는 마지막 GC 뒤 long-lived 풀(G1 Old Gen) 사용/최대이고 이름과 달리 0~1 이다. 부하 합격 기준 'GC 뒤 힙 < 75 %' 는 이 값이다. `jvm_memory_used_bytes` 는 Eden 을 포함한 순간값이라 그 기준에 쓰지 않는다 |
 | `process_cpu_usage`, `system_cpu_usage` | CPU |
 | `tomcat_threads_busy_threads`, `tomcat_threads_config_max_threads` | 요청 스레드 포화(`server.tomcat.mbeanregistry.enabled=true` 가 필요해 켜 둠) |
 | `hikaricp_connections_active`, `hikaricp_connections_pending`, `hikaricp_connections_acquire_seconds_*` | DB 커넥션 풀 |
