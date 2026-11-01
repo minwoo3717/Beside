@@ -79,10 +79,12 @@ test('poll_saturation.js: IDS_FILE ids are checked in setup', async () => {
 });
 
 test('upload.js A3: rates per minute and the disk budget guard', async () => {
+  // one scenario per level (lvl0, lvl1, ...: ramp, hold), upload_asset.test.mjs checks their schedule
+  const holdTargets = (mod) => Object.keys(mod.options.scenarios).filter((n) => /^lvl\d+$/.test(n)).map((n) => mod.options.scenarios[n].stages[1].target);
   const small = await load('upload.js', { RTT_BASE_MS: '20' });
-  assert.deepEqual(small.options.scenarios.uploads.stages.filter((s, i) => i % 2 === 1).map((s) => s.target), [60, 120, 300, 600, 900, 1200]);
+  assert.deepEqual(holdTargets(small), [60, 120, 300, 600, 900, 1200]);
   const large = await load('upload.js', { RTT_BASE_MS: '20', SIZE: 'large', LARGE_PHOTO: PHOTO });
-  assert.deepEqual(large.options.scenarios.uploads.stages.filter((s, i) => i % 2 === 1).map((s) => s.target), [30, 60, 90, 120]);
+  assert.deepEqual(holdTargets(large), [30, 60, 90, 120]);
   assert.equal(large.options.thresholds['http_req_duration{endpoint:create}'], undefined);
   assert.deepEqual(small.options.thresholds['load_bytesSent{stage:5,phase:hold}'], ['count>=0']);
   assert.deepEqual(large.options.thresholds['load_bytesSent{stage:3,phase:hold}'], ['count>=0']);

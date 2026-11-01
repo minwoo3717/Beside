@@ -386,18 +386,18 @@ test('scripts: flows, uploads and downloads are counted at start and end, per ho
 
   // upload.js: one upload is one flow; the drain is the request timeout + 60 s
   const up = await load('upload.js', { RTT_BASE_MS: '20', RATES: '1', RAMP_S: '5', HOLD_S: '10' }, { clock: 7000, scenarioStartTime: 0 });
-  assert.equal(up.options.scenarios.uploads.gracefulStop, '180s');
+  assert.equal(up.options.scenarios.lvl0.gracefulStop, '180s'); // each level is a scenario with this drain
   assert.deepEqual(up.options.thresholds['load_flowEnded{stage:0,phase:hold}'], ['count>=0']);
   state.handler = fakeServer();
   up.upload();
   assert.deepEqual(samples('load_flowStarted').map((x) => x.tags.stage), ['0']);
   assert.deepEqual(samples('load_flowEnded').map((x) => x.tags.stage), ['0']);
   const slow = await load('upload.js', { RTT_BASE_MS: '20', REQUEST_TIMEOUT: '5m' });
-  assert.equal(slow.options.scenarios.uploads.gracefulStop, '360s');
+  assert.equal(slow.options.scenarios.lvl5.gracefulStop, '360s');
 
   // asset.js: one download is one flow; the drain is the 60 s request timeout + 60 s
   const as = await load('asset.js', { RTT_BASE_MS: '20', RATES: '1', RAMP_S: '5', HOLD_S: '10' }, { clock: 7000, scenarioStartTime: 0 });
-  assert.equal(as.options.scenarios.downloads.gracefulStop, '2m');
+  assert.equal(as.options.scenarios.lvl0.gracefulStop, '120s');
   assert.deepEqual(as.options.thresholds['load_flowStarted{stage:0,phase:hold}'], ['count>=0']);
   const server = fakeServer({ completeAfterPolls: 0 });
   state.handler = server;
