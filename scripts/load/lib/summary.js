@@ -119,10 +119,11 @@ function unattributedDrops(verdicts, dropped) {
 
 // A1's capacity search (TRAFFIC_MODEL.md §8): the levels only go up, the operating limit is 70 % of the users of the
 // last level that passed before the first failure. (users x 7) / 10, not users x 0.7: 0.7 is not exact in binary and
-// Math.floor(5400 x 0.7) is 3779.
+// Math.floor(5400 x 0.7) is 3779. An "incomplete" level (only in a run stopped by the error rule, see buildReport) is
+// the level the stop cut: it counts as the first failure, never as passed.
 export function breakingPoint(verdicts) {
   const run = verdicts.filter((v) => v.status !== 'not_run');
-  const firstFail = run.find((v) => v.status === 'fail');
+  const firstFail = run.find((v) => v.status === 'fail' || v.status === 'incomplete');
   let lastPass = null;
   for (let i = 0; i < run.length; i++) {
     if (firstFail && run[i].stage >= firstFail.stage) break;
@@ -310,12 +311,16 @@ export function buildReport(data, info, cfg, endedAt) {
   const uplinkRatio = cfg.uplinkMbps && highest.length ? Math.max.apply(null, highest) / cfg.uplinkMbps : null;
   const uplinkRatioWholeRun = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
   const dropped = value(metrics, 'dropped_iterations', 'count') || 0;
+  // On the VM an A1 search normally ends this way: the abortOnFail error rule (or the guard's 5xx rule) stops the run in
+  // the level that broke, so the breaking point still holds. Any other stop (setup, disk, unreadable Prometheus, Ctrl+C,
+  // flows cut off in the drain) says nothing about capacity.
+  const brokeAt = aborted !== null && (aborted.by === 'threshold' || (aborted.by === 'guard' && value(metrics, 'load_guardAbort', 'value') === 1));
   const notes = [];
   if (aborted && aborted.by === 'setup') notes.push('setup() failed and no load ran: no breaking point');
   else if (aborted && aborted.by === 'unfinished') {
     notes.push(`${aborted.unfinishedFlows} flow(s) have no outcome (verdict.aborted "unfinished"): no breaking point is computed; ` +
       'read verdict.stages (a hold whose flows were cut off reads "incomplete", never "pass")');
-  } else if (aborted) {
+  } else if (aborted && !brokeAt) {
     notes.push(`the run was aborted (${aborted.by}): no breaking point is computed for an aborted run; read verdict.stages ` +
       '(a hold cut short, or whose flows were cut off, reads "incomplete", never "pass")');
   }
@@ -352,7 +357,10 @@ export function buildReport(data, info, cfg, endedAt) {
     failedThresholds: failed,
     stages: verdicts,
     breakingPoint: notes.length === 0 ? breakingPoint(verdicts) : null,
-    breakingPointNote: notes.length === 0 ? null : notes.join('; '),
+    breakingPointNote: notes.length > 0 ? notes.join('; ')
+      : brokeAt ? `the ${aborted.by === 'guard' ? "guard's 5xx rule" : 'abortOnFail error rule'} stopped the run: the first ` +
+        '"fail" or "incomplete" stage is the first failing stage; the last passing stage ran to its end with every flow ended'
+        : null,
     guard: guardReport(metrics, cfg),
     httpReqs: value(metrics, 'http_reqs', 'count'),
     httpReqRate: round(value(metrics, 'http_reqs', 'rate')),
@@ -431,7 +439,8 @@ export function textReport(report) {
       const label = v.stages.some((s) => s.status === 'invalid') ? 'invalid' : 'none';
       lines.push(`breaking point: ${label} — ${v.breakingPointNote}`);
     } else {
-      lines.push(`last passing stage ${orDash(bp.lastPassingStage)}, first failing stage ${orDash(bp.firstFailingStage)}`);
+      lines.push(`last passing stage ${orDash(bp.lastPassingStage)}, first failing stage ${orDash(bp.firstFailingStage)}` +
+        (v.breakingPointNote ? ` (${v.breakingPointNote})` : ''));
     }
   }
   if (v.aborted && v.aborted.by === 'setup') lines.push('thresholds: not judged (setup failed, no load ran)');

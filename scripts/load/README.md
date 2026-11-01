@@ -79,7 +79,8 @@ k6 v2.3.0 은 어떤 끝(정상 0, setup 실패 107, 가드 108, `abortOnFail` 9
 - 부하 길이(`atS`, `meta.loadRanS`)는 요약 시각 − `setup_data.readyAtMs`(setup 끝)다. `testRunDurationMs` 는 setup(asset.js·poll_saturation.js 는 수 분의 시드)을 포함해서 쓰지 않는다. 예정 길이 `plannedS`(`meta.loadPlannedS`)는 단계형은 마지막 유지 구간의 끝, smoke·gpu_queue 는 `DURATION_S`, F3 은 `F3_BG_S + 10` 이다.
 - **잘린 흐름**: k6 는 중간에 끊은 반복에 아무 표본도 남기지 않는다. 그래서 흐름(user flow, upload.js 의 업로드 하나, asset.js 의 다운로드 하나)마다 시작할 때 `load_flowStarted`, 끝날 때 `load_flowEnded` 를 더하고, 그 차이(`verdict.unfinishedFlows`, 세지 않는 A2·F3 은 null)가 결과를 모르는 흐름 수다. 잘린 흐름은 가장 느린 흐름(과부하 단계의 타임아웃)이라 하나라도 있으면 통과가 아니다. 그래서 흐름 스크립트의 gracefulStop 기본값은 가장 긴 흐름(FAILED 로 끝난 대기 `MAX_WAIT_S` + `RETRY_WAIT_S` + retry 뒤 대기 `MAX_WAIT_S`) + 120초 = 1,323초이고(A1·A5·A6 은 `GRACEFUL_STOP_S` 로 바꿀 수 있다), upload.js 는 `REQUEST_TIMEOUT` + 60초, asset.js 는 2분이다. 정상 끝에서는 모든 흐름이 끝난다.
 - 잘린 유지 구간(`cutStages`): 예정 끝이 멈춘 시각보다 뒤인 구간(`heldS` 는 실제로 돈 초), 그리고 자기 흐름이 잘린 구간(A1 의 흐름은 유지 구간보다 길 수 있다; `heldS` 는 `holdS` 그대로). 그때까지 통과였으면 `incomplete`, 이미 실패였으면 `fail` 로 남는다. `sentMbps`·`assetMbps` 는 `heldS` 로 나눈다.
-- 중단된 실행은 `thresholdsOk` false, `breakingPoint` null(이유는 `breakingPointNote`)이고, 요약 글 첫머리에 `SETUP FAILED`·`ABORTED by …`·`STOPPED EARLY …`·`FLOWS CUT OFF …` 줄이 나오며 "thresholds: all passed" 는 나오지 않는다.
+- 중단된 실행은 `thresholdsOk` false 이고, 요약 글 첫머리에 `SETUP FAILED`·`ABORTED by …`·`STOPPED EARLY …`·`FLOWS CUT OFF …` 줄이 나오며 "thresholds: all passed" 는 나오지 않는다.
+- `breakingPoint`: abortOnFail 오류 기준(`threshold`)이나 가드의 5xx 기준(`guard`, 5xx 비율)이 멈춘 실행은 그대로 계산한다. VM 의 A1 은 보통 이렇게 끝나기 때문이다. 처음 `fail` 또는 `incomplete` 단계가 첫 실패 단계이고, 마지막 통과 단계는 끝까지 돌고 흐름도 모두 끝난 단계다(`breakingPointNote` 에 이유). 그 밖의 중단(setup, 디스크, Prometheus 를 못 읽음, Ctrl+C, 드레인에서 잘린 흐름)은 용량과 무관하므로 null 이다.
 - VM CPU < 85 %, GC 뒤 힙 < 75 % 는 k6 가 아니라 `collect.py` 의 Prometheus CSV(`process_cpu`, `system_cpu`, `jvm_heap_used/max`)로 판정한다.
 
 ## k6 설치 (지금 하지 않는다)

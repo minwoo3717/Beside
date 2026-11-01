@@ -74,15 +74,25 @@ test('summary: a guard abort cuts the running hold: "incomplete", never the last
   assert.deepEqual(v.stages.map((x) => x.status), ['pass', 'incomplete']);
   assert.deepEqual(v.stages.map((x) => x.heldS), [30, 10]);
   assert.equal(v.thresholdsOk, false);
-  assert.equal(v.breakingPoint, null);
-  assert.match(v.breakingPointNote, /aborted \(guard\)/);
+  // the guard's 5xx rule stopped the level that broke: the cut level is the first failure, the one before it held
+  assert.deepEqual(v.breakingPoint, { firstFailingStage: 1, lastPassingStage: 0, lastPassingUsers: 200, operatingLimitUsers: 140 });
+  assert.match(v.breakingPointNote, /guard's 5xx rule stopped the run/);
   assert.equal(report.meta.loadRanS, 60);
   assert.equal(report.meta.loadPlannedS, 80);
   const text = s.textReport(report);
   assert.match(text, /ABORTED by the Prometheus guard after 60 s of the 80 s planned: .*; stage 1 incomplete \(hold cut short/);
-  assert.match(text, /breaking point: none — the run was aborted/);
+  assert.match(text, /^last passing stage 0, first failing stage 1 \(the guard's 5xx rule stopped the run/m);
   assert.match(text, /thresholds: none failed before the stop, but the run was cut short: NOT a pass/);
-  assert.doesNotMatch(text, /all passed|last passing stage/);
+  assert.doesNotMatch(text, /all passed/);
+  // a stop by the disk rule says nothing about capacity: no breaking point
+  const disk = Object.assign({}, metrics, { load_guardAbort: { values: { value: 2, min: 2, max: 2 } },
+    load_guardDiskRatio: { values: { value: 0.9, min: 0.5, max: 0.9 } } });
+  const d = s.buildReport({ metrics: disk, setup_data: ranFor(60), state: {} },
+    { script: 'api_staged.js', scenario: 'A1', stages: STAGES, plannedS: 80 }, Object.assign({}, CFG, { promUrl: 'http://p:9090' }), ENDED);
+  assert.equal(d.verdict.breakingPoint, null);
+  assert.match(d.verdict.breakingPointNote, /aborted \(guard\)/);
+  assert.match(s.textReport(d), /breaking point: none — the run was aborted/);
+  assert.doesNotMatch(s.textReport(d), /last passing stage/);
 });
 
 test('summary: an abort during the next ramp leaves the finished hold "pass"', async () => {
@@ -113,8 +123,17 @@ test('summary: an abortOnFail threshold that stopped the load early is "threshol
   assert.match(early.aborted.reason, /load_errorRatio rate<0\.05/);
   assert.deepEqual(early.stages.map((x) => x.status), ['pass', 'fail']); // a hold that already failed stays "fail"
   assert.deepEqual(early.aborted.cutStages, [1]);
-  assert.equal(early.breakingPoint, null);
-  const full = s.buildReport({ metrics, setup_data: ranFor(95), state: {} }, info, CFG, ENDED).verdict;
+  // the usual end of an A1 search on the VM: the breaking point still holds
+  assert.deepEqual(early.breakingPoint, { firstFailingStage: 1, lastPassingStage: 0, lastPassingUsers: 200, operatingLimitUsers: 140 });
+  assert.match(early.breakingPointNote, /abortOnFail error rule stopped the run/);
+  // the whole-run error ratio crossed while the cut level's own hold still looked fine: that level is "incomplete", and
+  // still the first failure
+  const quiet = Object.assign(twoStages(PASS(4)), { load_errorRatio: metrics.load_errorRatio });
+  const q = s.buildReport({ metrics: quiet, setup_data: ranFor(70), state: {} }, info, CFG, ENDED).verdict;
+  assert.deepEqual(q.stages.map((x) => x.status), ['pass', 'incomplete']);
+  assert.equal(q.breakingPoint.firstFailingStage, 1);
+  assert.equal(q.breakingPoint.lastPassingStage, 0);
+  const full =s.buildReport({ metrics, setup_data: ranFor(95), state: {} }, info, CFG, ENDED).verdict;
   assert.equal(full.aborted, null);
   assert.equal(full.thresholdsOk, false);
   assert.deepEqual(full.breakingPoint, { firstFailingStage: 1, lastPassingStage: 0, lastPassingUsers: 200, operatingLimitUsers: 140 });
