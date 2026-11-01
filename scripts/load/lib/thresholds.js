@@ -36,6 +36,23 @@ export function latencyThresholds(rttMs, endpoints, scope) {
   return out;
 }
 
+// No-op thresholds whose only job is to keep http_req_duration{endpoint:<ep>,<scope>} in the summary for an endpoint
+// that is reported but not judged (A3's 20 MB upload): k6 keeps a tag-filtered submetric only when a threshold names
+// it, and lib/summary.js reads verdict.stages[].latency from these. "max>=0" holds for any sample and for none.
+export function latencyReportThresholds(endpoints, scope) {
+  const out = {};
+  (endpoints || []).forEach((ep) => { out[key('http_req_duration', ep, scope)] = ['max>=0']; });
+  return out;
+}
+
+// "Not one" thresholds on Counters, e.g. load_unexpectedCount and load_rejectedCount where every request is valid and
+// any refusal is a failure (A3), optionally restricted by a scope such as "stage:3,phase:hold".
+export function zeroCountThresholds(metrics, scope) {
+  const out = {};
+  (metrics || []).forEach((name) => { out[key(name, null, scope)] = ['count==0']; });
+  return out;
+}
+
 // Error budget and the abort rule. k6 thresholds are cumulative, so "errors > 5 % for one minute" is approximated
 // by the cumulative rate evaluated only after the first minute; lib/guard.js adds the real one-minute window from
 // Prometheus when PROM_URL is set.

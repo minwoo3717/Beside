@@ -65,9 +65,12 @@ export function createJob(ctx, multipart) {
   const r = call(ctx, 'create', '/api/v1/jobs', 'POST', `${ctx.cfg.baseUrl}/api/v1/jobs`, multipart.body,
     { expected: [202], responseType: 'text', headers });
   m.postMs.add(r.res.timings.duration, r.tags);
+  if (r.kind !== 'ok') return { kind: r.kind, jobId: null };
+  // load_bytesSent counts only bodies the server read in full (202). A refused, reset, timed-out or early-closed upload
+  // (status 0, 5xx, a proxy 413) sent part of its body or none, and k6 has no per-request bytes-sent, so it is left out:
+  // the per-stage upload Mbps stays a lower bound and a failing stage cannot fake a saturated uplink.
   const body = multipart.body;
   m.bytesSent.add(typeof multipart.bytes === 'number' ? multipart.bytes : (body.byteLength === undefined ? body.length : body.byteLength), r.tags);
-  if (r.kind !== 'ok') return { kind: r.kind, jobId: null };
   let jobId = null;
   try { jobId = r.res.json('jobId'); } catch (e) { jobId = null; }
   if (typeof jobId !== 'string' || jobId.length === 0) {

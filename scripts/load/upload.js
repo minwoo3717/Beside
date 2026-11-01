@@ -3,6 +3,10 @@
 //   SIZE=large  4 x ~5 MB photos (~20 MB, under the 20 MiB limit), 0.5 -> 2 uploads/s   (load.a3Large)
 // Every upload creates a real job and stays on the server's disk until the load-test volume is wiped, so the script
 // refuses to start when the expected upload volume exceeds DISK_BUDGET_GB (8) unless ALLOW_DISK=1.
+// Every upload is valid, so any answer but 202 is a failed upload. lib/classify.js counts a 4xx (413/400 from Spring or
+// the proxy, a proxy 404) only in load_unexpectedCount and a 429/503 rejection only in load_rejectedCount, neither in
+// load_errorRatio, and a fast refusal even passes the latency limit: both counts must stay 0 overall and in every hold.
+// 5xx and connection errors (status 0) stay in load_errorRatio with the §8 budget, so no answer is counted twice.
 //
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=a3s1 -e RTT_BASE_MS=23 -e SIZE=small scripts/load/upload.js
 //
@@ -16,7 +20,8 @@ import { countedFlow, createJob, makeContext } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
-import { bytesSentThresholds, errorThresholds, flowCountThresholds, latencyThresholds, merge } from './lib/thresholds.js';
+import { bytesSentThresholds, errorThresholds, flowCountThresholds, latencyReportThresholds, latencyThresholds, merge,
+  zeroCountThresholds } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
@@ -46,9 +51,12 @@ const RTT = requireRtt(CONFIG, 'upload.js');
 const MAX_PER_S = maxTarget(LEVELS.stages) / 60;
 const MAX_VUS = readNum(ENV, 'MAX_VUS', 600);
 const PRE_VUS = Math.min(MAX_VUS, Math.max(5, Math.ceil(MAX_PER_S * (SIZE === 'small' ? 2 : 10))));
-// The 1.5 s / 3 s criteria are for the 0.8 MB upload (docs/perf/load/TRAFFIC_MODEL.md §8); a 20 MB upload is
-// reported, not judged.
+// The 1.5 s / 3 s criteria are for the 0.8 MB upload (docs/perf/load/TRAFFIC_MODEL.md §8). A 20 MB upload is reported
+// per hold (verdict.stages[].latency.create, kept in the summary by a no-op threshold), not judged.
 const LATENCY_EPS = SIZE === 'small' ? ['create'] : [];
+const REPORT_EPS = SIZE === 'small' ? [] : ['create'];
+// Refused uploads (see the header): not one, overall and in every hold.
+const REFUSED = ['load_unexpectedCount', 'load_rejectedCount'];
 const SCOPES = holdScopes(LEVELS.segments);
 const REQUEST_TIMEOUT = readStr(ENV, 'REQUEST_TIMEOUT', '120s');
 // The request timeout + 60 s: a normal end cuts off no upload (one still running would make the summary "unfinished").
@@ -72,8 +80,9 @@ export const options = {
   }, guardScenario(CONFIG, LEVELS.totalS, LEVELS.totalS + DRAIN_S)), // the guard returns when the uploads are done
   // bytesSentThresholds: per-stage upload bytes for the uplink ratio of the busiest stage (lib/summary.js)
   thresholds: merge.apply(null, [latencyThresholds(RTT, LATENCY_EPS, null), errorThresholds(null, true),
-    { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES), flowCountThresholds(SCOPES)].concat(SCOPES.map((s) =>
-    merge(latencyThresholds(RTT, LATENCY_EPS, s.scope), errorThresholds(s.scope, false))))),
+    zeroCountThresholds(REFUSED, null), { dropped_iterations: ['count==0'] }, bytesSentThresholds(SCOPES),
+    flowCountThresholds(SCOPES)].concat(SCOPES.map((s) => merge(latencyThresholds(RTT, LATENCY_EPS, s.scope),
+    latencyReportThresholds(REPORT_EPS, s.scope), errorThresholds(s.scope, false), zeroCountThresholds(REFUSED, s.scope))))),
 };
 
 const ctx = makeContext({
