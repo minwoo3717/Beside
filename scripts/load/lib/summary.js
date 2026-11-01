@@ -2,7 +2,8 @@
 // SUMMARY_PATH, and a short plain-text report on stdout. Pure module (no k6 imports, no remote jslib).
 //
 // How the run ended. k6 (checked on v2.3.0) calls handleSummary after every kind of end: a normal one, setup()
-// throwing (exit code 107), exec.test.abort() from lib/guard.js (108), an abortOnFail threshold (99) and Ctrl+C (105).
+// throwing (exit code 107) or running past setupTimeout (100), exec.test.abort() from lib/guard.js (108), an abortOnFail
+// threshold (99) and Ctrl+C (105).
 // The data says nothing about which: data.state is only { testRunDurationMs, isStdOutTTY, isStdErrTTY }, and every
 // threshold on a metric that got no sample reads ok. So the end is reconstructed here (verdict.aborted):
 //   setup        data.setup_data is missing (every script's setup() returns an object)
@@ -224,7 +225,7 @@ function detectAbort(data, metrics, info, cfg, times, open) {
   const ended = (by, reason) => ({ by, reason, atS: by === 'setup' ? null : round(times.ranS, 1), plannedS: times.plannedS, cutStages: [],
     unfinishedFlows: by === 'setup' ? null : open.total });
   if (data.setup_data === undefined || data.setup_data === null) {
-    return ended('setup', 'setup() did not finish (it threw, timed out or was interrupted; the error is on k6 stderr, exit code 107): no load ran');
+    return ended('setup', 'setup() did not finish (it threw, timed out or was interrupted; the error is on k6 stderr, exit code 107, or 100 when setupTimeout ran out): no load ran');
   }
   const code = value(metrics, 'load_guardAbort', 'value');
   if (code !== null) return ended('guard', `${guardAbortReason(metrics, cfg, code)} (k6 exit code 108)${still}`);
@@ -324,7 +325,8 @@ export function buildReport(data, info, cfg, endedAt) {
     notes.push(`${aborted.unfinishedFlows} flow(s) have no outcome (verdict.aborted "unfinished"): no breaking point is computed; ` +
       'read verdict.stages (a hold whose flows were cut off reads "incomplete", never "pass")');
   } else if (aborted && !brokeAt) {
-    notes.push(`the run was aborted (${aborted.by}): no breaking point is computed for an aborted run; read verdict.stages ` +
+    notes.push(`the run was aborted (${aborted.by}): no breaking point is computed for this kind of stop (only the ` +
+      "abortOnFail error rule and the guard's 5xx rule give one); read verdict.stages " +
       '(a hold cut short, or whose flows were cut off, reads "incomplete", never "pass")');
   }
   const dropNote = unattributedDrops(verdicts, dropped);
