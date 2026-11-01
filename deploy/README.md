@@ -22,6 +22,7 @@
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). 같은 PC 에서 패스스루 서비스와 Spring real 을 띄워 e2e 로 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌린 적은 없다 — **[계획]** |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · 실행 **[계획]**: compose 검증·경로 시험은 CI 에 넣었지만 아직 돌지 않았고, Prometheus·Grafana 를 실제로 띄워 본 적은 없다(이 PC 에 Docker 없음). 아래 '모니터링' |
+| 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · 실행 **[계획]** — [loadtest/README.md](loadtest/README.md) |
 
 ## 경로 규칙 (Caddyfile)
 
@@ -232,6 +233,10 @@ $C start backend
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
 - **[구현됨]** prod 는 서버를 멈추지 않고 매일 04:30(한국 시각, `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 7개를 남긴다(`storage.backup.*`). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
+
+### 부하 시험
+
+VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.loadtest.yml](docker-compose.loadtest.yml) 로 부하용 backend(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `env=loadtest`)를 대신 띄운 뒤, 끝나면 운영으로 되돌린다. 팀 공지 → 운영 백업 → 띄우기 → 합성 GLB → k6 → 수집 → 복구 → 확인 순서와 중단 조건은 [loadtest/README.md](loadtest/README.md) **[계획]**. 다른 측정 중에는 하지 않는다.
 
 ## GPU PC 쪽
 
