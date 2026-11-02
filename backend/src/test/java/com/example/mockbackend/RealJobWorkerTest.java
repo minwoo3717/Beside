@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -145,6 +147,9 @@ class RealJobWorkerTest {
     @Autowired
     JobRunRepository jobRuns;
 
+    @Autowired
+    MeterRegistry meters;
+
     @Test
     void processingCallsInferAndServesTheReturnedGlb() throws Exception {
         mvc.perform(get("/api/v1/healthz")).andExpect(jsonPath("$.workerType").value("real"));
@@ -206,6 +211,7 @@ class RealJobWorkerTest {
     @Test
     void passthroughRunIsFlaggedSoMeasurementsCanExcludeIt() throws Exception {
         answerOk(writeGlb("base-passthrough.glb"), true);
+        double passthroughRuns = passthroughCompletedRuns();
 
         String jobId = create("dog.png");
         awaitStatus(jobId, "COMPLETED");
@@ -215,6 +221,15 @@ class RealJobWorkerTest {
         assertThat(run.getModelVersion()).isNull();
         assertThat(run.getGlbBytes()).isEqualTo((long) GLB.length);
         assertThat(awaitEvents(jobId, 1).get(0).path("passthrough").asBoolean()).isTrue();
+        // Operational metrics (docs/METRICS.md §5) carry the same flag, so dashboards can leave the sample out too.
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
+                assertThat(passthroughCompletedRuns() - passthroughRuns).isEqualTo(1.0));
+    }
+
+    private double passthroughCompletedRuns() {
+        Counter counter = meters.find("beside.jobs.finished")
+                .tags("result", "COMPLETED", "code", "none", "worker", "real", "passthrough", "true").counter();
+        return counter == null ? 0 : counter.count();
     }
 
     @Test

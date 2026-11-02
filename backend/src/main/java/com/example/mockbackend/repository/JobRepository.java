@@ -30,4 +30,7 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /** Jobs in any of the given states (startup recovery of jobs interrupted by a restart). */
     List<Job> findByStatusIn(Collection<JobStatus> statuses);
+
+    /** How many jobs are in the given state (JobQueueGauge, every few seconds — not per request). */
+    long countByStatus(JobStatus status);
 }

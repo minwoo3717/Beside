@@ -3,8 +3,10 @@ package com.example.mockbackend.exception;
 import com.example.mockbackend.api.v1.dto.ErrorDetail;
 import com.example.mockbackend.api.v1.dto.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -18,7 +20,9 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One handler, two response shapes:
@@ -33,6 +37,8 @@ import java.util.Map;
 public class GlobalExceptionHandler {
     static final String V1_PREFIX = "/api/v1/";
     private static final String UPLOAD_TOO_LARGE = "Upload too large: maximum 5 MB per photo and 20 MB per request";
+    private static final Set<String> DISCONNECT_TYPE_NAMES =
+            Set.of("ClientAbortException", "EOFException", "EofException", "AsyncRequestNotUsableException");
 
     private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
@@ -98,7 +104,16 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<?> handleAny(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<?> handleAny(Exception ex, HttpServletRequest request, HttpServletResponse response) {
+        // The client left while the response was being written (a phone leaving the GLB download): the response is
+        // committed and nobody is listening, so there is nothing to answer and no server fault to log as an ERROR.
+        // AssetDownloadMetricsFilter counts these downloads as client_abort. Null = write nothing more. Only when
+        // something was committed: on an uncommitted response null would leave an empty 200, so it gets the 500 below.
+        if (isClientGone(ex) && response != null && response.isCommitted()) {
+            log.debug("{} {}: the client went away ({})", request == null ? null : request.getMethod(),
+                    request == null ? null : forLog(request.getRequestURI()), ex.getClass().getSimpleName());
+            return null;
+        }
         // Preserve framework HTTP errors (e.g. wrong method / media type), not 500.
         if (ex instanceof org.springframework.web.ErrorResponse error) {
             HttpStatusCode status = error.getStatusCode();
@@ -145,6 +160,26 @@ public class GlobalExceptionHandler {
             }
         }
         return out.toString();
+    }
+
+    /**
+     * Whether {@code ex} says the peer closed the connection, by Spring's DisconnectedClientHelper rule: the exception
+     * itself (not a cause) is Tomcat's ClientAbortException, an EOFException / Jetty EofException or Spring's
+     * AsyncRequestNotUsableException (newer Spring versions), or the most specific cause's message is the OS's
+     * "broken pipe" / "connection reset by peer". An EOF deeper in the chain is not enough: a server-side read that
+     * hit the end of a file is a fault, not a phone that left.
+     */
+    static boolean isClientGone(Throwable ex) {
+        String type = ex.getClass().getSimpleName();
+        if (DISCONNECT_TYPE_NAMES.contains(type)) {
+            return true;
+        }
+        String message = NestedExceptionUtils.getMostSpecificCause(ex).getMessage();
+        if (message == null) {
+            return false;
+        }
+        String text = message.toLowerCase(Locale.ROOT);
+        return text.contains("broken pipe") || text.contains("connection reset by peer");
     }
 
     private static boolean isV1(HttpServletRequest request) {

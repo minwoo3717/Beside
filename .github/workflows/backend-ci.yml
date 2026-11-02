@@ -46,6 +46,11 @@ jobs:
       - name: node test (browser Mock UI, API v1)
         run: node --test backend/src/test/js/mock-mvp.test.cjs
 
+      - name: load-test tools (traffic model, collector, k6 scripts against stand-ins)
+        run: |
+          python3 -I -m unittest discover -s scripts/load -p "test_*.py"
+          node --test scripts/load/*.test.mjs
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
@@ -82,6 +87,61 @@ jobs:
           echo "got =$got"
           test -n "$want"
           test "$got" = "$want"
+
+      - name: compose monitoring profile + load-test overlay (config, services, published ports, overlay values)
+        run: |
+          compose=(docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example)
+          loadtest=(-f deploy/docker-compose.loadtest.yml)
+          "${compose[@]}" --profile monitoring config -q
+          "${compose[@]}" "${loadtest[@]}" config -q
+          "${compose[@]}" --profile monitoring "${loadtest[@]}" config -q
+          # prometheus and grafana start only with --profile monitoring
+          test "$("${compose[@]}" config --services | sort | xargs)" = "backend caddy"
+          test "$("${compose[@]}" --profile monitoring config --services | sort | xargs)" = "backend caddy grafana prometheus"
+          "${compose[@]}" config --format json > compose-base.json
+          "${compose[@]}" --profile monitoring config --format json > compose-monitoring.json
+          "${compose[@]}" "${loadtest[@]}" config --format json > compose-loadtest.json
+          python3 - compose-base.json compose-monitoring.json compose-loadtest.json <<'PY'
+          import json
+          import sys
+
+          base, mon, lt = (json.load(open(path)) for path in sys.argv[1:4])
+          # only caddy publishes to the network: backend 8080/8081 (Actuator) and grafana 3000 stay internal,
+          # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py)
+          for name, svc in mon["services"].items():
+              ports = svc.get("ports") or []
+              if name == "caddy":
+                  continue
+              if name == "prometheus":
+                  assert ports and all(p.get("host_ip") == "127.0.0.1" for p in ports), f"prometheus publishes {ports}"
+                  continue
+              assert not ports, f"{name} publishes {ports}"
+          assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
+          for name, svc in mon["services"].items():
+              assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
+          # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token
+          be = lt["services"]["backend"]
+          env = be["environment"]
+          mounts = [(v.get("source"), v.get("target")) for v in be["volumes"]]
+          assert mounts == [("beside-loadtest-storage", "/app/storage")], mounts
+          want = {
+              "SPRING_PROFILES_ACTIVE": "mock,prod",
+              "METRICS_ENV": "loadtest",
+              "STORAGE_BACKUP_ENABLED": "false",
+              "MOCK_WORKER_PENDINGMS": "0",
+              "MOCK_WORKER_PROCESSINGMS": "60000",
+              "SPRING_TASK_EXECUTION_POOL_CORESIZE": "400",
+              "INFERENCE_BASEURL": "http://127.0.0.1:9",
+              "INFERENCE_TRANSFER": "upload",
+          }
+          for key, value in want.items():
+              assert env.get(key) == value, f"{key}={env.get(key)!r}, want {value!r}"
+          for key in ("NOTIFY_WEBHOOKURL", "INFERENCE_TOKEN"):
+              assert env.get(key) in ("", None), f"{key} must be empty in the load-test overlay"
+          assert lt["services"]["caddy"] == base["services"]["caddy"], "overlay changed caddy"
+          assert set(lt["services"]) == set(base["services"]), sorted(lt["services"])
+          print("monitoring profile and load-test overlay ok")
+          PY
 
       - name: caddy validate deploy/Caddyfile
         run: |

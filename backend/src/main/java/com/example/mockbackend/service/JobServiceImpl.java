@@ -53,6 +53,7 @@ public class JobServiceImpl implements JobService {
     private final JobRepository jobRepository;
     private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
+    private final JobMetrics jobMetrics;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -189,6 +190,7 @@ public class JobServiceImpl implements JobService {
             jobRepository.save(found);
             throw shuttingDown;
         }
+        jobMetrics.jobRetried();
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
     }
@@ -323,6 +325,7 @@ public class JobServiceImpl implements JobService {
             discard(job);
             throw shuttingDown;
         }
+        jobMetrics.jobCreated();
         log.info("Job created: {} status={} worker={}", job.getId(), job.getStatus(), jobWorker.type());
     }
 

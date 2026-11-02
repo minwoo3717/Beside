@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # deploy/Caddyfile 의 경로 규칙 시험: 가짜 백엔드(모든 요청에 200) 앞에 같은 Caddyfile 을 HTTP 로 띄우고
 # 경로마다 상태 코드를 본다. 404 = Caddy 가 막음, 401 = Basic 인증 요구, 200 = 백엔드까지 갔음, 413 = 본문 상한.
+# /grafana* 도 같은 가짜 백엔드로 보낸다(GRAFANA_UPSTREAM). 가짜 백엔드는 /grafana 요청에 Authorization 헤더가
+# 남아 있으면 400 을 준다 — Caddy 가 Basic 인증 헤더를 지우지 않으면 진짜 Grafana 가 401 을 주기 때문이다.
 # Spring·도메인·인증서는 필요 없다. 필요: Linux, docker, python3, curl. CI(.github/workflows/backend-ci.yml)가 돌린다.
 #   bash deploy/test_caddy_routes.sh
 # 포트: CADDY_PORT(기본 18088), UPSTREAM_PORT(기본 18089). Caddy 이미지는 docker-compose.yml 의 태그를 쓴다.
@@ -25,6 +27,7 @@ cleanup() {
 trap cleanup EXIT
 
 # 가짜 백엔드: 본문을 끝까지 읽고(그래야 큰 업로드가 Caddy 의 상한에 걸린다) 200 을 준다.
+# 단 /grafana 로 Authorization 헤더가 들어오면 400(Caddy 의 header_up -Authorization 이 빠졌다는 뜻).
 cat > "$WORK/upstream.py" <<'PY'
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,7 +41,8 @@ class Upstream(BaseHTTPRequestHandler):
             if not chunk:
                 break
             left -= len(chunk)
-        self.send_response(200)
+        leaked = self.path.startswith("/grafana") and self.headers.get("Authorization")
+        self.send_response(400 if leaked else 200)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -61,6 +65,7 @@ docker run -d --name "$NAME" --network host \
   -e BASIC_AUTH_USER="$AUTH_USER" \
   -e BASIC_AUTH_HASH="$HASH" \
   -e BACKEND_UPSTREAM="127.0.0.1:$UPSTREAM_PORT" \
+  -e GRAFANA_UPSTREAM="127.0.0.1:$UPSTREAM_PORT" \
   -v "$ROOT/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
   "$CADDY_IMAGE" >/dev/null
 
@@ -85,7 +90,7 @@ check() { # check <기대 코드> <메서드> <경로> [curl 추가 인자...]
 }
 AUTH=(-u "$AUTH_USER:$AUTH_PASSWORD")
 
-echo "-- 404: v0 /api/jobs, H2 console, Swagger, OpenAPI, ';' paths"
+echo "-- 404: v0 /api/jobs, H2 console, Swagger, OpenAPI, Actuator, ';' paths"
 check 404 GET  /api/jobs
 check 404 POST /api/jobs
 check 404 GET  "/api/jobs/$JOB"
@@ -96,6 +101,11 @@ check 404 GET  /swagger-ui.html
 check 404 GET  /swagger-ui/index.html
 check 404 GET  /v3/api-docs
 check 404 GET  /v3/api-docs/swagger-config
+check 404 GET  /actuator
+check 404 GET  /actuator/prometheus
+check 404 GET  /actuator/health
+check 404 GET  /ACTUATOR/prometheus
+check 404 GET  /%61ctuator/prometheus
 check 404 GET  /API/JOBS
 check 404 GET  /%61pi/jobs
 check 404 GET  //api//jobs
@@ -125,6 +135,10 @@ check 401 GET  "/api/v1/admin/runs?format=csv"
 check 401 GET  /api/v1/pets
 check 401 POST /api/v1/pets
 check 401 GET  /api/v1/pets/abc
+check 401 GET  /grafana
+check 401 GET  /grafana/
+check 401 GET  /grafana/api/health
+check 401 GET  /grafana/d/beside-ops
 check 401 GET  /api/v1/jobs -u "$AUTH_USER:wrong-password"
 
 echo "-- 200 with credentials"
@@ -132,6 +146,8 @@ check 200 GET  / "${AUTH[@]}"
 check 200 GET  /api/v1/jobs "${AUTH[@]}"
 check 200 DELETE "/api/v1/jobs/$JOB" "${AUTH[@]}"
 check 200 GET  /api/v1/admin/overview "${AUTH[@]}"
+check 200 GET  /grafana/ "${AUTH[@]}"
+check 200 GET  /grafana/api/health "${AUTH[@]}"
 
 echo "-- 200 public: app API, healthz, share links, static files"
 check 200 GET  /api/v1/healthz

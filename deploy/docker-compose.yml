@@ -1,9 +1,18 @@
-# Beside 클라우드 VM 구성: Spring 백엔드(real,prod) + Caddy(자동 HTTPS · Basic 인증 · v0/H2/Swagger 차단).
+# Beside 클라우드 VM 구성: Spring 백엔드(real,prod) + Caddy(자동 HTTPS · Basic 인증 · v0/H2/Swagger/Actuator 차단).
 # GPU 추론 서비스는 VM 이 아니라 팀원 GPU PC 에 있고 Tailscale 사설망(100.x)으로 부른다.
 # 리포 루트에서:
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# 모니터링(Prometheus + Grafana)까지 띄우려면 --profile monitoring 을 붙인다(README '모니터링').
+# 부하 시험은 deploy/docker-compose.loadtest.yml 을 덧붙인다(deploy/loadtest/README.md).
 # 절차·확인·백업은 deploy/README.md.
 name: beside
+
+# 모든 서비스의 컨테이너 로그(docker compose logs)를 10MB × 5개로 돌린다. 기본 json-file 은 끝없이 커져 디스크를 채운다.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
 
 services:
   backend:
@@ -23,14 +32,20 @@ services:
       # (선택) Discord 웹훅: notify.webhook-url ↔ NOTIFY_WEBHOOKURL. 비면 알림 끔. 메시지의 관리 페이지 링크는 도메인 기준.
       NOTIFY_WEBHOOKURL: ${NOTIFY_WEBHOOK_URL:-}
       NOTIFY_PUBLICBASEURL: https://${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}
+      # Prometheus 지표의 공통 태그 env. 부하 시험 덮어쓰기는 loadtest 로 바꿔 운영 지표와 섞이지 않게 한다.
+      METRICS_ENV: prod
     volumes:
       # H2 DB · uploads · results · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
     # 8080 은 compose 내부망에만 연다. 밖에서는 Caddy(80/443)로만 들어온다.
+    # 8081 은 Actuator 관리 포트(/actuator/health, /actuator/prometheus): Prometheus 만 내부망에서 읽는다.
+    # 둘 다 ports: 로 게시하지 않는다. Caddy 도 /actuator* 를 404 로 막는다(두 겹).
     expose:
       - "8080"
+      - "8081"
     # 힙은 Dockerfile 의 -XX:MaxRAMPercentage=75 → 이 한도의 75%. 4GB VM 기준.
     mem_limit: 2g
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/api/v1/healthz"]
       interval: 30s
@@ -38,9 +53,16 @@ services:
       start_period: 60s
       retries: 3
     # 컨테이너에서 Tailscale(100.x) 주소가 안 닿으면(README '문제 해결') backend 를 호스트 네트워크로 옮긴다.
-    #   backend: network_mode: host 를 넣고 expose 를 지운다. 환경변수 SERVER_ADDRESS: 127.0.0.1 (8080 을 VM 밖에 열지 않게).
+    #   backend: network_mode: host 를 넣고 expose 를 지운다. 환경변수 SERVER_ADDRESS: 127.0.0.1 과
+    #            MANAGEMENT_SERVER_ADDRESS: 127.0.0.1 (8080·8081 을 VM 밖에 열지 않게).
     #   caddy:   backend:8080 이라는 이름이 더는 안 보이므로 caddy 도 network_mode: host 로 바꾸고 ports 를 지운 뒤,
     #            deploy/.env 에 BACKEND_UPSTREAM=127.0.0.1:8080 을 넣는다.
+    #   prometheus·grafana 를 쓰면 이 둘도 network_mode: host 로 옮기고, monitoring/prometheus.yml 의 대상을
+    #            127.0.0.1:8081, grafana 데이터소스를 127.0.0.1:9090, GRAFANA_UPSTREAM=127.0.0.1:3000 으로 바꾼다.
+    #            호스트 모드에서는 ports: 게시가 적용되지 않고, 둘 다 기본값으로 VM 의 모든 주소에서 듣는다
+    #            (Prometheus 0.0.0.0:9090, Grafana 3000). 8080·8081 처럼 루프백에만 두려면:
+    #            prometheus: ports: 를 지우고 command 에 --web.listen-address=127.0.0.1:9090 을 더한다.
+    #            grafana:    environment 에 GF_SERVER_HTTP_ADDR: 127.0.0.1 을 넣는다.
 
   caddy:
     image: caddy:2.11.7
@@ -58,11 +80,79 @@ services:
       # bcrypt 해시의 $ 는 deploy/.env 에서 작은따옴표로 감싸야 그대로 들어온다(README '.env 채우기').
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:?deploy/.env 에 BASIC_AUTH_HASH 를 넣는다}
       BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-backend:8080}
+      # /grafana* 의 대상. monitoring 프로필을 안 띄웠으면 인증 뒤 502 가 난다(다른 경로에는 영향 없음).
+      GRAFANA_UPSTREAM: ${GRAFANA_UPSTREAM:-grafana:3000}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # 인증서·ACME 계정. 지우면 인증서를 다시 받는다(Let's Encrypt 발급 횟수 제한 주의).
       - caddy_data:/data
       - caddy_config:/config
+    logging: *default-logging
+
+  # ---- 모니터링 (선택): docker compose ... --profile monitoring up -d ----
+  # 메모리 예산(4GB VM): backend 2g + prometheus 384m + grafana 256m + caddy·OS ≈ 3.2GB. swap 2GB 권장(README).
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: [monitoring]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 14일 또는 1GB 중 먼저 닿는 쪽에서 오래된 블록부터 지운다.
+      - --storage.tsdb.retention.time=14d
+      - --storage.tsdb.retention.size=1GB
+    volumes:
+      # 파일 하나를 마운트하므로 git pull 로 바뀌면 restart prometheus 로 다시 읽힌다(Caddyfile 과 같다).
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    # 9090 은 VM 의 루프백에만 게시한다(인터넷에는 열지 않는다). 사람이 보는 곳은 Grafana(/grafana, Basic 인증 +
+    # Grafana 로그인)이고, 부하 시험의 수집기(scripts/load/collect.py)와 중단 감시(lib/guard.js)는 개발 PC 에서
+    # `ssh -L 9090:127.0.0.1:9090 <user@VM>` 터널로 http://localhost:9090 을 읽는다.
+    ports:
+      - "127.0.0.1:9090:9090"
+    mem_limit: 384m
+    logging: *default-logging
+
+  grafana:
+    image: grafana/grafana-oss:11.2.0
+    profiles: [monitoring]
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    # 관리자 비밀번호가 비면 Grafana 는 admin/admin 으로 뜬다. 그 대신 이유를 로그에 남기고 멈춘다.
+    # (나머지는 이미지 원래 진입점 /run.sh 그대로.)
+    entrypoint:
+      - sh
+      - -c
+      - 'if [ -z "$$GF_SECURITY_ADMIN_PASSWORD" ]; then echo "deploy/.env 에 GRAFANA_ADMIN_PASSWORD 를 넣는다" >&2; exit 1; fi; exec /run.sh'
+    environment:
+      # Caddy 가 https://<도메인>/grafana/ 를 접두사 그대로 넘긴다.
+      GF_SERVER_ROOT_URL: https://${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      # 처음 뜰 때(빈 grafana_data) 만드는 관리자 계정. 나중에 .env 를 바꿔도 이미 만든 계정은 그대로다(README).
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      # Caddy Basic 인증의 Authorization 헤더를 Grafana 가 자기 계정으로 검사하지 않게(Caddy 도 헤더를 지운다).
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # 밖으로 나가는 사용 통계·업데이트 확인을 끈다.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+    volumes:
+      # 데이터소스(Prometheus)와 대시보드 'Beside 운영'을 파일로 넣는다. 폴더 마운트라 git pull 이 바로 보인다.
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      # 사용자·세션·직접 만든 대시보드(SQLite).
+      - grafana_data:/var/lib/grafana
+    expose:
+      - "3000"
+    mem_limit: 256m
+    logging: *default-logging
 
 volumes:
   beside-storage:
@@ -70,3 +160,5 @@ volumes:
     name: beside-storage
   caddy_data:
   caddy_config:
+  prometheus_data:
+  grafana_data:

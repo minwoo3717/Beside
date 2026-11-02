@@ -20,6 +20,9 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     // API v1 스펙 생성 (/v3/api-docs, /swagger-ui). 계약 테스트가 docs/api/openapi.yaml 과 비교한다.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+    // 운영 지표 (docs/METRICS.md §5): Actuator 는 관리 포트(management.server.port, 기본 8081)에만, Prometheus 형식으로.
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     implementation("org.projectlombok:lombok:1.18.34")
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")

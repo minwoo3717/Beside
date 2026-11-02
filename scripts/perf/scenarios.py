@@ -290,7 +290,8 @@ class SuiteContext:
             port = procs.free_port(avoid=self.used_ports)
             self.used_ports.add(port)
             cmd = ([self.java] + self.jvm_args + ["-jar", self.jar, f"--server.port={port}",
-                   f"--spring.profiles.active={profiles}", "--notify.webhook-url=", "--inference.token="]
+                   f"--spring.profiles.active={profiles}", "--notify.webhook-url=", "--inference.token=",
+                   "--management.server.port=-1"]
                    + storage_props(storage) + list(extra))
             log_path = self.run_dir / "logs" / f"{name}{'-retry' if attempt else ''}.log"
             proc = procs.start(name, cmd, cwd=storage, log_path=log_path, env=self.env, cpus=self.cpus,
