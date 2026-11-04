@@ -72,6 +72,7 @@
 - [ ] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인([deploy/README.md](../deploy/README.md)).
 - [ ] 남은 낮은 위험(10-30 검토): retry 를 동시에 두 번 누르는 경합, GPU 오프라인 대기가 N건이면 N×30분, V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
+- [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
 - [ ] 전체 코드 리뷰(2026-10-31)의 [계획] 항목: real 로 쓸 때 Mock UI 의 60초·15초 제한, 측정 중 한 번 본 'COMPLETED 직후 에셋 409'(재현부터) — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md).
 
 ### Unity (UN)
@@ -89,7 +90,7 @@
 ### 3D Generation (GEN)
 - [ ] GPU PC: AnimalLift·체크포인트 설치, ASCII 경로, WSL 이면 그 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`([deploy/README.md](../deploy/README.md)).
 - [ ] exp-01(1건 시간·VRAM) → exp-02(우리 사진 3마리 이상, 실제 E2E 10건 이상, `job_runs` CSV) → exp-03·04(개선 2건 이상).
-- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교, 털 맵을 GLB 안에 넣기.
+- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교(Spring 이 크롭·배경 제거를 한다 [구현됨] 2026-11-05, 3D 비교 실험 틀 `experiments/2026-11-05_exp-03_input-preprocess.md` 를 GPU PC 에서 실행 [계획]), 털 맵을 GLB 안에 넣기.
 - [ ] gltf-validator·glTFast 로드 결과 기록, 변환기 테스트.
 - [ ] `/infer/upload` 리뷰(업로드 모드, DELETE 범위).
 - [ ] 끊긴 `/infer` 가 MODEL_LOCK 을 쥔 채 다음 작업의 시간 제한을 깎는 문제: busy 신호 또는 끊긴 요청 건너뛰기 중 설계 결정(GEN·BE, 코드 리뷰 보고서).

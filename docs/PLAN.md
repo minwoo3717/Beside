@@ -108,7 +108,7 @@ DoD:
 | 10-06 ~ 10-12 | 환경 구축(GPU PC), 공식 코드 실행, 샘플 1건 생성. **출력 파일 형식·1건 소요 시간·VRAM 을 기록**한다 — 문서의 `mesh.obj + uv.png (+ hair.npz)` 가정을 여기서 확인하고, 1건 시간은 `inference.timeout-ms`(제안: 3배) 와 Unity 최대 대기의 근거가 된다 | exp-01 |
 | 10-13 ~ 10-19 | (앞당김) `convert_asset.py` 투입 → exp-01 출력으로 GLB_SPEC §8 통과 GLB 1개(0바이트 `sample-dog.glb` 교체) → `app.py` 의 501 TODO 를 실제 경로로(모델이 별도 conda env 면 subprocess), `modelVersion` 채움 → 우리 사진 3마리 이상으로 베이스라인 수치·품질 채점 | exp-02 |
 | 10-20 ~ 10-26 | (앞당김, 4단계 선행) **실제 E2E**: GPU PC 에 `run_real.ps1` 로 Spring real + 추론 서비스 → PC 에서 `e2e_mock.ps1 -Photos <실제 사진> -TimeoutSeconds 600` → 폰(Unity)에서 실제 모델 AR 배치 → 10건 이상 → `job_runs` CSV 내보내기(METRICS §1.1) | exp-02 완성 (첫 [실험 결과]) |
-| 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
+| 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭 — Spring 쪽 [구현됨] 2026-11-05 브랜치 `feat/preprocess`, 3D 비교는 [generation/experiments/2026-11-05_exp-03_input-preprocess.md](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) [계획]), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
 
 DoD:
 - [ ] exp-01 ~ exp-04 기록, 표 채움 **[실험 결과]** (실제 E2E 의 `job_runs` CSV 와 `events.jsonl` 사본을 exp 폴더에)
