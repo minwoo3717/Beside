@@ -10,6 +10,7 @@ import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.IdempotencyKeyEntry;
 import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
+import com.example.mockbackend.service.preprocess.UploadCheck;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +54,8 @@ public class JobServiceImpl implements JobService {
     private final JobRepository jobRepository;
     private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
+    /** First-photo check before the 202 (off unless preprocess.check.enabled). */
+    private final UploadCheck uploadCheck;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -131,9 +134,16 @@ public class JobServiceImpl implements JobService {
                 return replay.get();
             }
         }
+        // The first photo is the one the 3D model is made from. Checked before anything is stored: a refused request
+        // leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
+        UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
+        if (check.isRefused()) {
+            throw ApiException.badRequest(ErrorCode.valueOf(check.refused().name()),
+                    "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
+        }
         Job job;
         try {
-            job = saveUploads(photos);
+            job = saveUploads(photos, check);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to store uploads", e);
         }
@@ -277,6 +287,14 @@ public class JobServiceImpl implements JobService {
      * photos already copied for this request are deleted again (no job owns them).
      */
     Job saveUploads(List<MultipartFile> photos) throws IOException {
+        return saveUploads(photos, UploadCheck.Outcome.OFF);
+    }
+
+    /**
+     * Same, recording the first-photo check: checkMs and checkResult, and uploadMs without the check's time so that
+     * uploadMs keeps its meaning (receive + parse + store, docs/METRICS.md §1).
+     */
+    Job saveUploads(List<MultipartFile> photos, UploadCheck.Outcome check) throws IOException {
         Job job = new Job();
         String jobId = UUID.randomUUID().toString();
         Instant now = Instant.now();
@@ -302,7 +320,13 @@ public class JobServiceImpl implements JobService {
             }
             job.setUploads(uploads);
             job.setResultPath(null);
-            job.setUploadMs(RequestStartFilter.elapsedMs());
+            Long uploadMs = RequestStartFilter.elapsedMs(); // null outside an HTTP request
+            if (uploadMs != null && check.checkMs() != null) {
+                uploadMs = Math.max(0L, uploadMs - check.checkMs());
+            }
+            job.setUploadMs(uploadMs);
+            job.setCheckMs(check.checkMs());
+            job.setCheckResult(check.checkResult());
             jobRepository.save(job);
         } catch (IOException | RuntimeException e) {
             deleteFiles(written);
