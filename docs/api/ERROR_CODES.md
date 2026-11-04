@@ -10,6 +10,13 @@
 | `NO_PHOTOS` | 400 | POST /jobs | `photos` 파트가 없거나 비어 있음 | 사진을 1장 이상 선택해 주세요. | 사진 선택 후 |
 | `TOO_MANY_PHOTOS` | 400 | POST /jobs | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. | 장수 줄인 후 |
 | `UNSUPPORTED_IMAGE_TYPE` | 400 | POST /jobs | image/jpeg · png · webp 외 Content-Type | JPG, PNG, WEBP 사진만 사용할 수 있어요. | 다른 사진으로 |
+| `UNREADABLE_IMAGE` | 400 | POST /jobs (대표 사진 검사) | 대표 사진(첫 장)을 이미지로 읽을 수 없음: 디코딩 실패, 화소 수 초과(64 MP, WEBP 16 MP), 읽기 5초 초과. 선언된 형식이 jpeg·png·webp 가 아니면 이 코드가 아니라 `UNSUPPORTED_IMAGE_TYPE` | 대표 사진을 읽을 수 없어요. 다른 사진을 골라 주세요. | 다른 사진으로 |
+| `IMAGE_TOO_SMALL` | 400 | POST /jobs (대표 사진 검사) | 대표 사진의 짧은 변이 기준(제안 320 px)보다 짧음 | 대표 사진의 해상도가 너무 낮아요. 더 큰 사진을 골라 주세요. | 다른 사진으로 |
+| `NO_ANIMAL_DETECTED` | 400 | POST /jobs (대표 사진 검사) | 대표 사진에서 개·고양이를 찾지 못함(감지 점수가 기준 제안 0.40 이상인 것이 없음) | 대표 사진에서 강아지나 고양이를 찾지 못했어요. 반려동물이 잘 보이는 사진을 골라 주세요. | 다른 사진으로 |
+| `TOO_MANY_ANIMALS` | 400 | POST /jobs (대표 사진 검사) | 대표 사진에 개·고양이가 2마리 이상(둘째의 점수가 제안 0.50 이상이고 넓이가 첫째 박스의 제안 15% 이상) | 대표 사진에 반려동물이 여러 마리 있어요. 한 마리만 나온 사진을 골라 주세요. | 다른 사진으로 |
+| `ANIMAL_TOO_SMALL` | 400 | POST /jobs (대표 사진 검사) | 감지된 동물 박스의 긴 변이 원본 화소로 기준(제안 224 px)보다 짧음 | 반려동물이 너무 작게 나왔어요. 더 가까이에서 찍은 사진을 골라 주세요. | 다른 사진으로 |
+| `IMAGE_TOO_DARK` | 400 | POST /jobs (대표 사진 검사) | 동물 박스 안 밝기의 90백분위가 기준(제안 50/255)보다 낮음. 평균이 아니라 밝은 쪽을 봐서 검은 털은 걸리지 않게 함 | 대표 사진이 너무 어두워요. 밝은 곳에서 찍은 사진을 골라 주세요. | 다른 사진으로 |
+| `IMAGE_TOO_BLURRY` | 400 | POST /jobs (대표 사진 검사) | 동물 박스(긴 변 512 px 이하로 줄임)의 라플라시안 분산이 기준(제안 50)보다 작음 | 대표 사진이 흔들렸어요. 선명한 사진을 골라 주세요. | 다른 사진으로 |
 | `PAYLOAD_TOO_LARGE` | 413 | POST /jobs | 장당 5 MB 또는 요청 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
 | `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
 | `ASSET_NOT_FOUND` | 404 | /asset | 작업은 완료됐지만 요청한 `variant` 파일이 없음(Mock 은 `hair` 없음) | 요청한 모델 파일이 없어요. | base 로 |
@@ -17,6 +24,14 @@
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
 | `JOB_NOT_FAILED` | 409 | /retry | FAILED 가 아닌 작업에 재시도 요청 | 실패한 작업만 다시 시도할 수 있어요. | 무의미 |
 | `INTERNAL_ERROR` | 500 | 모든 엔드포인트 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
+
+### 대표 사진 검사 (`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)
+
+- `POST /jobs` 는 202 를 돌려주기 전에 **첫 장(대표 사진)만** 위 표의 순서대로 검사하고, 처음 걸린 이유 하나로 400 을 돌려준다. 3D 생성이 첫 장만 쓰기 때문에 나머지 사진은 기존 검사(개수·타입·용량)만 한다. 거절된 요청은 사진·작업·`Idempotency-Key` 를 남기지 않는다.
+- 동물은 **개·고양이만** 센다. 기준값은 모두 **제안값**이며 서버 설정 `preprocess.check.*` 로 바꾼다(계약 회의에서 확정).
+- 서버 설정 `preprocess.check.enabled` 로 켠다. real·prod 프로파일은 기본으로 켜고, mock 은 기본으로 끈다(앱의 Mock 개발 흐름이 동물이 없는 화면 캡처를 올리기 때문). 그래서 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #19).
+- 서버가 검사를 돌리지 못하면(동시 검사 대기 초과·모델 오류) 거절하지 않고 접수한다. 이 경우는 측정 기록에만 남는다.
+- 구현 상태: **[계획]** (브랜치 `feat/preprocess`).
 
 ## Job 실패 코드 (`JobResponse.error.code`, `status=FAILED` 일 때)
 
