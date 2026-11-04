@@ -5,6 +5,9 @@
   둘 다 같은 PC 에서 돌므로(공유 파일시스템) 추론 서비스는 127.0.0.1 에만 묶고, Spring 만 8080 을 LAN 에 연다.
   두 healthz 가 응답하면 폰에서 쓸 IPv4 와 다음 명령을 출력한다. 종료는 각 창에서 Ctrl+C.
   준비: Java 17, 추론 서비스 venv(generation/inference_service/.venv, requirements.txt 설치), 방화벽 8080 허용.
+  real 은 대표 사진 검사·전처리가 기본으로 켜져 있어 모델(약 210 MB)을 먼저 받는다(scripts/fetch_models.ps1, 이미 있으면
+  그대로). Windows 에서는 msvcp140.dll 14.40 이상을 가진 JDK(예: Microsoft Build of OpenJDK 17)가 필요하다 — Red Hat
+  JDK 17 은 Spring 이 '오래된 msvcp140' 오류로 시작하지 않는다. 끄려면 -NoPreprocess.
   절차 전체는 backend/README.md 'GPU PC 에 real 배치'.
 .EXAMPLE
   .\scripts\run_real.ps1                                   # 추론 서비스(모델 없음: BESIDE_ANIMALLIFT_DIR 이 없으면 /infer 는 501) + Spring real
@@ -12,6 +15,8 @@
   .\scripts\run_real.ps1 -AnimalLiftDir C:\beside\AnimalLift -InferencePython C:\miniconda3\envs\animallift\python.exe   # 실제 모델
 .EXAMPLE
   .\scripts\run_real.ps1 -SampleGlb C:\beside\sample.glb   # 패스스루: 모델 없이 연동만 확인 (측정 아님)
+.EXAMPLE
+  .\scripts\run_real.ps1 -SampleGlb C:\beside\sample.glb -NoPreprocess   # 대표 사진 검사·전처리 끔 (e2e 의 작은 시험 사진도 통과)
 .EXAMPLE
   .\scripts\run_real.ps1 -InferencePython C:\miniconda3\envs\beside-infer\python.exe -Jar C:\beside\Beside\backend\build\libs\mock-backend-0.0.1-SNAPSHOT.jar
 #>
@@ -24,7 +29,8 @@ param(
     [string]$Jar = "",
     [int]$Port = 8080,
     [int]$InferencePort = 8001,
-    [int]$StartupTimeoutSeconds = 240
+    [int]$StartupTimeoutSeconds = 240,
+    [switch]$NoPreprocess
 )
 
 $ErrorActionPreference = "Stop"
@@ -76,6 +82,14 @@ if ($inferHealth.passthrough) { Write-Warning "패스스루 모드: 어떤 사�
 
 # 2. Spring real — 작업 폴더는 backend/ (storage/ 상대 경로 기준)
 $springArgs = "--spring.profiles.active=real --server.port=$Port --inference.base-url=http://127.0.0.1:$InferencePort"
+# 대표 사진 검사·전처리 모델(real 기본 켬): 없으면 받는다(SHA-256 확인, 이미 있으면 그대로). Spring 창은 이 환경변수를 물려받는다.
+if ($NoPreprocess) {
+    $springArgs += " --preprocess.check.enabled=false --preprocess.cutout.enabled=false"
+} else {
+    $modelsDir = if ($env:PREPROCESS_MODELSDIR) { $env:PREPROCESS_MODELSDIR } else { Join-Path $backendDir "models" }
+    & (Join-Path $PSScriptRoot "fetch_models.ps1") -Target $modelsDir
+    $env:PREPROCESS_MODELSDIR = $modelsDir
+}
 if ($Jar -ne "") {
     $springCommand = "Set-Location -LiteralPath '$backendDir'; java -jar '$Jar' $springArgs"
 } else {

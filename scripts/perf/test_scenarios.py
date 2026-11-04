@@ -15,6 +15,21 @@ import procs
 import scenarios
 
 
+class ServerArgsTest(unittest.TestCase):
+    def test_every_server_runs_without_preprocessing_and_its_folder_is_per_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ctx = scenarios.SuiteContext("v", 1, Path(tmp) / "app.jar", "java", [], None, {}, {}, Path(tmp), print)
+            with mock.patch.object(scenarios.procs, "free_port", return_value=18999), \
+                    mock.patch.object(scenarios.procs, "start", side_effect=RuntimeError("stop here")) as start:
+                with self.assertRaises(RuntimeError):
+                    ctx.start_server("mock", Path(tmp) / "storage", "mock", [])
+            cmd = start.call_args.args[1]
+        self.assertIn("--preprocess.check.enabled=false", cmd)
+        self.assertIn("--preprocess.cutout.enabled=false", cmd)
+        storage = (Path(tmp) / "storage").resolve().as_posix()
+        self.assertIn(f"--storage.preprocessed.dir={storage}/preprocessed", cmd)
+
+
 class RunThreadsTest(unittest.TestCase):
     def test_one_deadline_for_the_whole_group(self):
         release = threading.Event()

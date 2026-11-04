@@ -245,7 +245,12 @@ def storage_props(storage: Path) -> list:
     return [f"--storage.db.path={d}/db/beside", f"--storage.upload.dir={d}/uploads",
             f"--storage.events.path={d}/events.jsonl", f"--storage.result.dir={d}/results",
             f"--storage.tmp.dir={d}/tmp", f"--storage.thumb.dir={d}/thumbs", f"--storage.backup.dir={d}/backup",
-            f"--storage.root.dir={d}"]
+            f"--storage.root.dir={d}", f"--storage.preprocessed.dir={d}/preprocessed"]
+
+
+# The first-photo check and the cutout (2026-11) are off in every measured server: the fixtures are not pet photos,
+# the measured versions stay comparable, and older jars ignore the unknown keys.
+PREPROCESS_OFF = ["--preprocess.check.enabled=false", "--preprocess.cutout.enabled=false"]
 
 
 def mock_props(sample_glb: str, pending_ms: int = 0) -> list:
@@ -291,7 +296,7 @@ class SuiteContext:
             self.used_ports.add(port)
             cmd = ([self.java] + self.jvm_args + ["-jar", self.jar, f"--server.port={port}",
                    f"--spring.profiles.active={profiles}", "--notify.webhook-url=", "--inference.token="]
-                   + storage_props(storage) + list(extra))
+                   + PREPROCESS_OFF + storage_props(storage) + list(extra))
             log_path = self.run_dir / "logs" / f"{name}{'-retry' if attempt else ''}.log"
             proc = procs.start(name, cmd, cwd=storage, log_path=log_path, env=self.env, cpus=self.cpus,
                                raise_priority=True)
