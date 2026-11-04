@@ -79,6 +79,19 @@ public class JobRun implements Persistable<String> {
     @Column(length = 128)
     private String modelVersion;
 
+    // docs/METRICS.md §1 — first-photo check (copied from the job, like uploadMs) and preprocessing (2026-11)
+    private Long checkMs;
+    /** PASSED | SKIPPED:BUSY | SKIPPED:ERROR; null when the check is off. */
+    @Column(length = 32)
+    private String checkResult;
+    private Long preprocessMs;
+    /** APPLIED | REUSED | FALLBACK:&lt;reason&gt; | OFF; null for the mock worker. */
+    @Column(length = 48)
+    private String preprocessResult;
+    /** Method, model hashes and settings of the preprocessing that ran, to tell the 3D comparison's variants apart. */
+    @Column(length = 128)
+    private String preprocessVersion;
+
     @Transient
     @Getter(AccessLevel.NONE)
     private boolean persisted;
@@ -109,6 +122,11 @@ public class JobRun implements Persistable<String> {
         run.glbBytes = d.glbBytes();
         run.passthrough = d.passthrough();
         run.modelVersion = d.modelVersion();
+        run.checkMs = job.getCheckMs();
+        run.checkResult = job.getCheckResult();
+        run.preprocessMs = d.preprocessMs();
+        run.preprocessResult = d.preprocessResult();
+        run.preprocessVersion = d.preprocessVersion();
         return run;
     }
 

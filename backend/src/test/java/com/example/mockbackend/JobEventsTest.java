@@ -83,11 +83,13 @@ class JobEventsTest {
         JsonNode ok = eventsOf(completed).get(0);
         List<String> names = new ArrayList<>();
         ok.fieldNames().forEachRemaining(names::add);
-        // The ten original fields keep their order; the inference numbers (METRICS §2) and run facts follow them.
+        // The ten original fields keep their order; the inference numbers (METRICS §2) and run facts follow them,
+        // then the photo check and preprocessing (2026-11).
         assertThat(names).containsExactly("jobId", "attempt", "finishedAt", "uploadBytes", "uploadMs",
                 "queuedMs", "processingMs", "totalMs", "workerType", "result",
                 "inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles", "convertMs",
-                "glbBytes", "passthrough", "modelVersion");
+                "glbBytes", "passthrough", "modelVersion",
+                "checkMs", "checkResult", "preprocessMs", "preprocessResult", "preprocessVersion");
         assertThat(ok.path("attempt").asInt()).isEqualTo(1);
         assertThat(Instant.parse(ok.path("finishedAt").asText())).isBeforeOrEqualTo(Instant.now());
         assertThat(ok.path("uploadBytes").asLong()).isEqualTo(8);
@@ -100,7 +102,9 @@ class JobEventsTest {
         assertThat(ok.path("workerType").asText()).isEqualTo("mock");
         assertThat(ok.path("result").asText()).isEqualTo("COMPLETED");
         for (String inference : List.of("inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles",
-                "convertMs", "glbBytes", "passthrough", "modelVersion")) {
+                "convertMs", "glbBytes", "passthrough", "modelVersion",
+                "checkMs", "checkResult", "preprocessMs", "preprocessResult", "preprocessVersion")) {
+            // mock: no /infer answer, and the photo check and preprocessing are off
             assertThat(ok.get(inference)).as("%s is present (as null): the mock worker gets no /infer answer", inference).isNotNull();
             assertThat(ok.get(inference).isNull()).as(inference).isTrue();
         }
