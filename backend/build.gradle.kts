@@ -20,6 +20,9 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     // API v1 스펙 생성 (/v3/api-docs, /swagger-ui). 계약 테스트가 docs/api/openapi.yaml 과 비교한다.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+    // 대표 사진 검사·전처리(preprocess): ImageIO 가 WEBP 사진도 읽도록 하는 플러그인 (ImageIO 서비스로 자동 등록).
+    // 검토 브랜치 review/api-v1.1 의 썸네일과 같은 버전.
+    implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.3")
     implementation("org.projectlombok:lombok:1.18.34")
     compileOnly("org.projectlombok:lombok:1.18.34")
     annotationProcessor("org.projectlombok:lombok:1.18.34")
