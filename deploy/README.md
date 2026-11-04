@@ -40,7 +40,7 @@
 
 ### 1. VM 만들기
 
-- Ubuntu 24.04 LTS, **2 vCPU · 4GB RAM · 30GB 디스크** 권장(backend 컨테이너 한도 2GB + Caddy + 첫 Gradle 빌드). 공인 IP 는 고정(예약) IP 로 받는다 — 도메인이 이 IP 를 가리킨다.
+- Ubuntu 24.04 LTS, **2 vCPU · 4GB RAM · 30GB 디스크** 권장(backend 컨테이너 한도 3GB — 전처리 모델 포함 — + Caddy + 첫 Gradle 빌드, 스왑 2GB 권장). 공인 IP 는 고정(예약) IP 로 받는다 — 도메인이 이 IP 를 가리킨다.
 - 클라우드 방화벽(보안 그룹)은 인바운드 **TCP 80, TCP 443** 만 연다(UDP 443 은 HTTP/3 용, 선택). SSH 22 는 가능하면 내 IP 로만. **8080 은 열지 않는다.**
 - Docker 가 게시한 포트(80/443)는 ufw 규칙을 거치지 않는다. 그래서 막는 일은 클라우드 방화벽과 "8080 을 게시하지 않는 compose"(`expose` 만)가 맡는다. ufw 를 쓴다면 `sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable`.
 
@@ -101,6 +101,14 @@ nano deploy/.env
 **해시의 `$` 처리**: docker compose v2 는 `.env` 의 따옴표 없는 값과 큰따옴표 값에서 `$이름`·`${이름}` 을 변수로 바꾸고, **작은따옴표 값은 글자 그대로** 쓴다(Docker 문서 'Interpolation — .env file syntax'). bcrypt 해시(`$2a$14$...`)를 따옴표 없이 넣으면 `$14...` 같은 부분이 빈 값으로 바뀌어 로그인이 영영 안 된다. `$$` 는 compose **YAML 파일 안**에서 `$` 를 쓰는 방법이고 `.env` 에서는 쓰지 않는다. 들어간 값은 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec caddy printenv BASIC_AUTH_HASH` 로 확인한다(CI 도 견본 파일로 같은 확인을 한다).
 
 ## 띄우기
+
+전처리 모델(대표 사진 검사·크롭/배경 제거, 약 210 MB)을 먼저 받는다. `deploy_vm.sh` 는 이 단계를 스스로 한다. `deploy/.env` 의 `BESIDE_MODELS_DIR` 를 비우면 리포의 `backend/models` 를 쓴다.
+
+```bash
+scripts/fetch_models.sh backend/models        # 또는 BESIDE_MODELS_DIR 에 적은 절대 경로. 해시가 맞으면 다시 받지 않는다
+```
+
+backend 컨테이너는 이 모델 때문에 메모리 한도가 3 GB 다(힙 40% + ONNX Runtime). 4 GB VM 에서 이미지를 다시 빌드하는 동안 메모리가 모자랄 수 있으니 스왑 2 GB 를 만들어 둔다(`sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`, 재부팅 뒤에도 쓰려면 `/etc/fstab` 에 `/swapfile none swap sw 0 0`). 실제 사용량(`docker stats`)은 **[계획]** 이다. 전처리를 끄려면 `deploy/.env` 에 `PREPROCESS_CHECK_ENABLED=false`·`PREPROCESS_CUTOUT_ENABLED=false`.
 
 리포 루트에서(compose 파일 기준 상대 경로와 `--env-file` 경로가 맞도록):
 

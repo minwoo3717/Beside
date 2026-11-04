@@ -58,7 +58,7 @@ cd C:\beside\Beside
 
 ## 알아 둘 것
 
-- 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 PLAN 3단계 개선 후보.
+- 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 2026-11 부터 Spring(real·prod)이 한다: 첫 사진 자리에 개를 가운데 둔 정사각 RGBA PNG(`*-cutout.png`, 투명한 곳은 `load_rgb` 가 흰색으로)가 온다. 끄는 법과 비교 실험은 [backend/README.md](../../backend/README.md) '대표 사진 검사·전처리'.
 - 같은 사진은 같은 결과(시드 고정).
 - 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
 - 털: `hair_length.png`/`hair_flow.png`/`hair_maps.json` 이 GLB 옆에 생기지만 API 로 내려주지는 않는다(계약 미정).
