@@ -48,3 +48,9 @@ generation/inference_service/work/
 logs/
 backend/storage/results/*.glb
 !backend/storage/results/sample-dog.glb
+
+# 전처리 모델(ONNX, 수백 MB)은 scripts/fetch_models.* 로 받는다. 출처·해시는 backend/models/README.md·SHA256SUMS
+*.onnx
+*.onnx.part
+# 전처리 결과(크롭·배경 제거 PNG)
+backend/storage/preprocessed/

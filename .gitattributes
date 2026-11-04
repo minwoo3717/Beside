@@ -3,6 +3,8 @@
 gradlew   text eol=lf
 *.bat     text eol=crlf
 *.ps1     text eol=crlf
+# fetch_models.sh 가 Linux 에서 읽는다
+SHA256SUMS text eol=lf
 *.glb     binary
 *.png     binary
 *.jpg     binary
