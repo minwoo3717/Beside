@@ -31,7 +31,7 @@
 - 동물은 **개·고양이만** 센다. 기준값은 모두 **제안값**이며 서버 설정 `preprocess.check.*` 로 바꾼다(계약 회의에서 확정).
 - 서버 설정 `preprocess.check.enabled` 로 켠다. real·prod 프로파일은 기본으로 켜고, mock 은 기본으로 끈다(앱의 Mock 개발 흐름이 동물이 없는 화면 캡처를 올리기 때문). 그래서 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #19).
 - 서버가 검사를 돌리지 못하면(동시 검사 대기 초과·모델 오류) 거절하지 않고 접수한다. 이 경우는 측정 기록에만 남는다.
-- 구현 상태: **[계획]** (브랜치 `feat/preprocess`).
+- 구현 상태: **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`: 코드·테스트). VM 에서의 시간·메모리는 **[계획]**. 실제 사진 판정 기록은 [docs/preprocess/2026-11-05_photo-check.md](../preprocess/2026-11-05_photo-check.md).
 
 ## Job 실패 코드 (`JobResponse.error.code`, `status=FAILED` 일 때)
 

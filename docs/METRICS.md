@@ -2,7 +2,7 @@
 
 세 트랙이 **같은 이름**으로 측정값을 남긴다. 이름은 여기서만 정의하고, 보고서·발표·실험 기록은 이 이름을 그대로 쓴다. 단위는 시간 ms(정수), 크기 bytes 또는 MB(정수), 비율 0~1. 측정 시점이 다른 값(예: 서버가 잰 `processingMs` 와 앱이 잰 `waitMs`)은 이름이 다르므로 섞지 않는다.
 
-상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)는 **[계획]**(브랜치 `feat/preprocess`).
+상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록은 **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`). 첫 측정은 개발 PC 의 [실험 결과]([preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md))뿐이고 VM 측정은 [계획].
 
 ## 1. 서버 `events.jsonl` (Backend, [구현됨] PLAN 0단계)
 
