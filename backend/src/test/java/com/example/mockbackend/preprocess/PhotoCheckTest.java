@@ -59,7 +59,7 @@ class PhotoCheckTest {
     @Test
     void aSmallOrUnsureSecondAnimalDoesNotCount() throws Exception {
         Detection tiny = cat(new Box(700, 50, 760, 100), 0.95f);       // 3000 px^2 = 2.5 % of the dog: a picture on the wall
-        Detection unsure = cat(new Box(620, 300, 780, 450), 0.45f);    // big enough but below 0.50
+        Detection unsure = cat(new Box(620, 300, 780, 450), 0.35f);    // big enough but below 0.40
         PhotoCheck.Result result = check(tiny, dog(SUBJECT, 0.9f), unsure).check(Pictures.decoded(GOOD));
 
         assertThat(result.accepted()).isTrue();

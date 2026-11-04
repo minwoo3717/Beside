@@ -43,7 +43,8 @@ public class PreprocessProperties {
         private int decodeLongSide = 1600;
         private int minImageSide = 320;
         private float minAnimalScore = 0.40f;
-        private float secondAnimalScore = 0.50f;
+        /** The same as minAnimalScore since 2026-11-05: 0.50 let a real second dog (0.48) through. */
+        private float secondAnimalScore = 0.40f;
         private float secondAnimalMinArea = 0.15f;
         private int minAnimalPx = 224;
         private int minBrightness = 50;

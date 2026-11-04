@@ -39,7 +39,7 @@ class PreprocessPropertiesTest {
         // ERROR_CODES.md "대표 사진 검사" and REVIEW_CHECKLIST #19 quote these numbers
         assertThat(p.checkRules().minImageSide()).isEqualTo(320);
         assertThat(p.checkRules().minAnimalScore()).isEqualTo(0.40f);
-        assertThat(p.checkRules().secondAnimalScore()).isEqualTo(0.50f);
+        assertThat(p.checkRules().secondAnimalScore()).isEqualTo(0.40f);
         assertThat(p.checkRules().secondAnimalMinArea()).isEqualTo(0.15f);
         assertThat(p.checkRules().minAnimalPx()).isEqualTo(224);
         assertThat(p.checkRules().minBrightness()).isEqualTo(50);

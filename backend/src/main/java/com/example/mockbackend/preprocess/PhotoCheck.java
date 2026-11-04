@@ -34,7 +34,8 @@ public final class PhotoCheck {
     public record Rules(int minImageSide, float minAnimalScore, float secondAnimalScore, float secondAnimalMinArea,
                         int minAnimalPx, int minBrightness, double brightnessPercentile, double minSharpness,
                         int sharpnessPx) {
-        public static final Rules DEFAULT = new Rules(320, 0.40f, 0.50f, 0.15f, 224, 50, 0.90, 50.0, 512);
+        /** secondAnimalScore equals minAnimalScore since 2026-11-05 (0.50 missed a real second dog at 0.48). */
+        public static final Rules DEFAULT = new Rules(320, 0.40f, 0.40f, 0.15f, 224, 50, 0.90, 50.0, 512);
     }
 
     /**
