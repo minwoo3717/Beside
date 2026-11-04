@@ -7,6 +7,8 @@ out/
 # Server data (H2 files, uploads, results, events.jsonl) lives in the /app/storage volume, never in the image
 storage/
 logs/
+# Preprocessing models (about 210 MB) are mounted at run time (deploy/docker-compose.yml), not built into the image
+models/
 # Tests run in CI, not in the image build
 src/test/
 # Editors and docs

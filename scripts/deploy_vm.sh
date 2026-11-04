@@ -25,11 +25,23 @@ COMPOSE=(docker compose -f deploy/docker-compose.yml --env-file deploy/.env)
 [[ -f deploy/.env ]] || { echo "deploy/.env is missing on the VM (cp deploy/.env.example deploy/.env, see deploy/README.md)" >&2; exit 1; }
 
 OLD="$(git rev-parse HEAD)"
-echo "[1/3] git pull --ff-only   (was $(git rev-parse --short HEAD))"
+echo "[1/4] git pull --ff-only   (was $(git rev-parse --short HEAD))"
 git pull --ff-only </dev/null
 git --no-pager log --oneline -1
 
-echo "[2/3] docker compose up -d --build"
+# The first-photo check and the cutout (on in real,prod) need their models in the folder compose mounts at
+# /app/models; the server refuses to start without them. fetch_models.sh only downloads what is missing or wrong.
+env_value() { sed -n "s/^$1=//p" deploy/.env | tail -n1 | tr -d "\"' \r"; }
+if [[ "$(env_value PREPROCESS_CHECK_ENABLED)" == false && "$(env_value PREPROCESS_CUTOUT_ENABLED)" == false ]]; then
+  echo "[2/4] preprocessing off in deploy/.env: no models needed"
+else
+  MODELS="$(env_value BESIDE_MODELS_DIR)"
+  MODELS="${MODELS:-backend/models}"   # compose's default ../backend/models, seen from deploy/
+  echo "[2/4] preprocessing models in $MODELS"
+  bash scripts/fetch_models.sh "$MODELS" </dev/null
+fi
+
+echo "[3/4] docker compose up -d --build"
 "${COMPOSE[@]}" up -d --build </dev/null
 # Caddyfile is a single-file bind mount: git replaces the file, the running container keeps the old one until restart.
 # Compare with what the running caddy reads, not with this run's pull: an earlier run may have pulled the change and
@@ -41,7 +53,7 @@ fi
 
 # Through Caddy on this VM (TLS + proxy + backend), without depending on hairpin routing to the public IP.
 DOMAIN="$(sed -n 's/^BESIDE_DOMAIN=//p' deploy/.env | tr -d "\"' \r")"
-echo "[3/3] https://$DOMAIN/api/v1/healthz"
+echo "[4/4] https://$DOMAIN/api/v1/healthz"
 for _ in $(seq 1 60); do
   if out="$(curl -fsS --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/v1/healthz" 2>/dev/null)"; then
     echo "$out"

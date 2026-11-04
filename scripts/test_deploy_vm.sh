@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Test of scripts/deploy_vm.sh without a VM: fake ssh (runs the remote part here), docker and curl on PATH, a bare repo
 # as the remote. Checks that caddy is restarted whenever the running container reads another Caddyfile than the
-# checkout, also when this run's pull changed nothing (an earlier run pulled the change and failed at the build).
+# checkout, also when this run's pull changed nothing (an earlier run pulled the change and failed at the build), and
+# that the preprocessing models are fetched into the folder compose mounts unless deploy/.env turns preprocessing off.
 #   bash scripts/test_deploy_vm.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -39,7 +40,9 @@ git init -q --bare "$WORK/origin.git"
 git clone -q "$WORK/origin.git" "$WORK/dev" 2>/dev/null
 cd "$WORK/dev"
 git config user.email t@example.com && git config user.name test
-mkdir deploy && echo "rules v1" > deploy/Caddyfile && echo "BESIDE_DOMAIN=example.test" > deploy/.env.example
+mkdir deploy scripts && echo "rules v1" > deploy/Caddyfile && echo "BESIDE_DOMAIN=example.test" > deploy/.env.example
+# fake fetch_models.sh: records the folder it was asked to fill
+printf '#!/usr/bin/env bash\necho "$1" >> "$FAKE_STATE/fetched"\n' > scripts/fetch_models.sh && chmod +x scripts/fetch_models.sh
 git add -A && git commit -qm v1 && git push -q origin HEAD:main 2>/dev/null
 git clone -q -b main "$WORK/origin.git" "$WORK/vm" 2>/dev/null
 cp "$WORK/vm/deploy/.env.example" "$WORK/vm/deploy/.env"
@@ -63,4 +66,15 @@ cmp -s "$WORK/state/live-Caddyfile" "$WORK/vm/deploy/Caddyfile" || fail "caddy s
 
 deploy || fail "second deploy"
 [[ "$(restarts)" == 1 ]] || fail "caddy restarted again with nothing to change"
-echo "deploy_vm.sh: caddy restart checks ok"
+
+# models: every deploy asks fetch_models.sh (it skips what is already there) for compose's folder
+[[ "$(sort -u "$WORK/state/fetched")" == "backend/models" ]] || fail "models not fetched into backend/models"
+echo "BESIDE_MODELS_DIR=/opt/beside/models" >> "$WORK/vm/deploy/.env"
+rm "$WORK/state/fetched"
+deploy || fail "deploy with BESIDE_MODELS_DIR"
+[[ "$(cat "$WORK/state/fetched")" == "/opt/beside/models" ]] || fail "models not fetched into BESIDE_MODELS_DIR"
+printf 'PREPROCESS_CHECK_ENABLED=false\nPREPROCESS_CUTOUT_ENABLED=false\n' >> "$WORK/vm/deploy/.env"
+rm "$WORK/state/fetched"
+deploy || fail "deploy with preprocessing off"
+[[ ! -f "$WORK/state/fetched" ]] || fail "models fetched although preprocessing is off"
+echo "deploy_vm.sh: caddy restart and model checks ok"
