@@ -79,6 +79,13 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `NO_PHOTOS` | 400 | `photos` 파트 없음 | 사진을 1장 이상 선택해 주세요. |
 | `TOO_MANY_PHOTOS` | 400 | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. |
 | `UNSUPPORTED_IMAGE_TYPE` | 400 | jpeg/png/webp 외 | JPG, PNG, WEBP 사진만 사용할 수 있어요. |
+| `UNREADABLE_IMAGE` | 400 | 대표 사진 검사: 이미지로 읽을 수 없음(디코딩 실패·화소 수 초과·5초 초과) | 대표 사진을 읽을 수 없어요. 다른 사진을 골라 주세요. |
+| `IMAGE_TOO_SMALL` | 400 | 대표 사진 검사: 짧은 변 < 320 px (제안) | 대표 사진의 해상도가 너무 낮아요. 더 큰 사진을 골라 주세요. |
+| `NO_ANIMAL_DETECTED` | 400 | 대표 사진 검사: 개·고양이 없음 | 대표 사진에서 강아지나 고양이를 찾지 못했어요. 반려동물이 잘 보이는 사진을 골라 주세요. |
+| `TOO_MANY_ANIMALS` | 400 | 대표 사진 검사: 개·고양이 2마리 이상 | 대표 사진에 반려동물이 여러 마리 있어요. 한 마리만 나온 사진을 골라 주세요. |
+| `ANIMAL_TOO_SMALL` | 400 | 대표 사진 검사: 동물 박스 긴 변 < 224 px (제안) | 반려동물이 너무 작게 나왔어요. 더 가까이에서 찍은 사진을 골라 주세요. |
+| `IMAGE_TOO_DARK` | 400 | 대표 사진 검사: 동물 박스 밝기 90백분위 < 50 (제안) | 대표 사진이 너무 어두워요. 밝은 곳에서 찍은 사진을 골라 주세요. |
+| `IMAGE_TOO_BLURRY` | 400 | 대표 사진 검사: 동물 박스 라플라시안 분산 < 50 (제안) | 대표 사진이 흔들렸어요. 선명한 사진을 골라 주세요. |
 | `PAYLOAD_TOO_LARGE` | 413 | 장당 5 MB 또는 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. |
 | `JOB_NOT_FOUND` | 404 | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. |
 | `ASSET_NOT_FOUND` | 404 | 완료됐지만 해당 variant 파일 없음 | 요청한 모델 파일이 없어요. |
@@ -86,6 +93,8 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
+
+대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔, 기준값은 제안값이다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[계획]**(브랜치 `feat/preprocess`).
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
 

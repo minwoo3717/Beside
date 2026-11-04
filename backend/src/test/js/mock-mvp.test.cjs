@@ -155,6 +155,26 @@ test("v1 error envelope shows the ERROR_CODES copy, not the developer message", 
   } finally { await app.clear(); }
 });
 
+test("first-photo check rejections show their ERROR_CODES copy", async () => {
+  const copy = {
+    UNREADABLE_IMAGE: "대표 사진을 읽을 수 없어요. 다른 사진을 골라 주세요.",
+    IMAGE_TOO_SMALL: "대표 사진의 해상도가 너무 낮아요. 더 큰 사진을 골라 주세요.",
+    NO_ANIMAL_DETECTED: "대표 사진에서 강아지나 고양이를 찾지 못했어요. 반려동물이 잘 보이는 사진을 골라 주세요.",
+    TOO_MANY_ANIMALS: "대표 사진에 반려동물이 여러 마리 있어요. 한 마리만 나온 사진을 골라 주세요.",
+    ANIMAL_TOO_SMALL: "반려동물이 너무 작게 나왔어요. 더 가까이에서 찍은 사진을 골라 주세요.",
+    IMAGE_TOO_DARK: "대표 사진이 너무 어두워요. 밝은 곳에서 찍은 사진을 골라 주세요.",
+    IMAGE_TOO_BLURRY: "대표 사진이 흔들렸어요. 선명한 사진을 골라 주세요."
+  };
+  for (const [code, text] of Object.entries(copy)) {
+    const app = setup(async () => apiError(400, code));
+    try {
+      await app.select(); await app.submit();
+      assert.equal(app.element("#status-badge").textContent, "FAILED", code);
+      assert.equal(app.element("#error-message").textContent, text, code);
+    } finally { await app.clear(); }
+  }
+});
+
 test("failed job shows the copy for its error.code", async () => {
   const app = setup(async (_url, options) => options.method === "POST" ? accepted()
     : job("FAILED", id, { error: { code: "INFERENCE_FAILED", message: "developer text" } }));
