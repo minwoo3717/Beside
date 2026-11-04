@@ -96,6 +96,51 @@ final class Pictures {
         return c.getRed() > 235 && c.getGreen() > 235 && c.getBlue() > 235;
     }
 
+    /**
+     * A light grey photo (TYPE_3BYTE_BGR) with a subject in {@code subject}: a fine black-and-white checkerboard
+     * (sharp) or a smooth horizontal gradient (blurry), every pixel multiplied by {@code light} (1 = as drawn).
+     */
+    static BufferedImage scene(int width, int height, Box subject, boolean sharp, double light) {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR);
+        int x0 = (int) subject.x1();
+        int y0 = (int) subject.y1();
+        int x1 = (int) subject.x2();
+        int y1 = (int) subject.y2();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int v;
+                if (x >= x0 && x < x1 && y >= y0 && y < y1) {
+                    v = sharp ? (((x - x0) / 3 + (y - y0) / 3) % 2 == 0 ? 20 : 235)
+                            : 60 + (int) (120.0 * (x - x0) / Math.max(1, x1 - x0));
+                } else {
+                    v = 200;
+                }
+                int lit = (int) Math.min(255, Math.round(v * light));
+                image.setRGB(x, y, new Color(lit, lit, lit).getRGB());
+            }
+        }
+        return image;
+    }
+
+    /** {@code scene} with a black subject (a black cat) that covers {@code dark} of its box, the rest light grey. */
+    static BufferedImage blackSubject(int width, int height, Box subject, double dark) {
+        BufferedImage image = scene(width, height, subject, true, 1.0);
+        int x0 = (int) subject.x1();
+        int y0 = (int) subject.y1();
+        int darkRows = (int) Math.round((subject.y2() - subject.y1()) * dark);
+        for (int y = y0; y < y0 + darkRows; y++) {
+            for (int x = x0; x < (int) subject.x2(); x++) {
+                int v = ((x - x0) / 3 + (y - y0) / 3) % 2 == 0 ? 5 : 40; // black fur with a little texture
+                image.setRGB(x, y, new Color(v, v, v).getRGB());
+            }
+        }
+        return image;
+    }
+
+    static DecodedPhoto decoded(BufferedImage image) {
+        return new DecodedPhoto(image, image.getWidth(), image.getHeight(), 1.0, 1, "png", 0);
+    }
+
     static byte[] encode(BufferedImage image, String format) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
