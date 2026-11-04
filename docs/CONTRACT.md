@@ -136,7 +136,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 주체 | 파일 | 필드 | 상태 |
 |---|---|---|---|
-| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` + (2026-10-06 추가) `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion` | [구현됨] (측정값은 아직 없음) |
+| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` + (2026-10-06 추가) `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion` + (2026-11-04 추가, [계획]) `checkMs, checkResult, preprocessMs, preprocessResult, preprocessVersion` | [구현됨] (측정값은 아직 없음) |
 | 서버 | H2 테이블 `job_runs` (`beside-{mock,real}.mv.db`, 실행마다 한 행, PK `jobId:attempt`) | 위 줄과 같은 필드를 snake_case 로 + `status, error_code`. 측정표는 SQL 로 뽑는다(METRICS §1.1) | [구현됨] 2026-10-06 |
 | 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` (+ 선택 `modelVersion`) — Spring 저장은 [구현됨], 서비스가 채우는 것은 [계획] | [계획] |
 | 앱 | `persistentDataPath/metrics/metrics.csv` 헤더 순서 고정 | `jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device` | [계획] |

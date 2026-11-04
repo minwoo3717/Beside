@@ -43,14 +43,15 @@ sequenceDiagram
     participant W as JobWorker (mock | real)
     participant Py as FastAPI /infer
     App->>API: POST /jobs (photos 1~10, Idempotency-Key)
-    API->>API: 검증(개수·타입·크기) → 저장 → Job PENDING
+    API->>API: 검증(개수·타입·크기) → (real·prod) 대표 사진 검사 [계획] → 저장 → Job PENDING
+    Note over API: 대표 사진 검사: 디코딩·해상도·개/고양이 1마리·크기·밝기·선명도, 걸리면 400 (ERROR_CODES)
     API-->>App: 202 Location + { jobId }
     API->>W: dispatch(jobId)
     loop 1~2초 폴링
         App->>API: GET /jobs/{id}
         API-->>App: JobResponse (status, progress, timings, asset|null, error|null)
     end
-    W->>W: (real: 추론 슬롯 대기) → PROCESSING (processingStartedAt)
+    W->>W: (real: 전처리 [계획] — 크롭·배경 제거·정사각 PNG, 실패하면 원본) → (real: 추론 슬롯 대기) → PROCESSING (processingStartedAt)
     alt profile real [구현됨, 모델 연결 #1 — 실측 전]
         W->>Py: POST /infer { jobId, imagePaths, options }
         Py-->>W: { glbPath, metrics } 또는 4xx/5xx
@@ -110,6 +111,7 @@ backend/storage/
 ├─ results/{jobId}/base.glb           # real 결과 [구현됨] — /infer 의 glbPath 를 복사 (gitignore)
 ├─ results/{jobId}/hair.glb           # real 결과, options.hair [계획]
 ├─ results/{jobId}/*.metrics.json     # 변환기 출력 [계획]
+├─ preprocessed/{jobId}-{설정해시}.png # real 전처리 결과(정사각 RGBA, /infer 의 첫 사진) [계획] (gitignore)
 └─ events.jsonl                       # 측정 로그, 실행이 끝날 때마다 한 줄 (METRICS §1, gitignore)
 ```
 
