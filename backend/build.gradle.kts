@@ -54,3 +54,21 @@ tasks.test {
 tasks.named("jar") {
     enabled = true
 }
+
+// The batch tool below has a main() too: name the server's for bootJar/bootRun.
+springBoot {
+    mainClass.set("com.example.mockbackend.MockBackendApplication")
+}
+
+// 대표 사진 검사·전처리를 사진 폴더에 일괄로 돌려 전/후 이미지·report.csv·index.html 을 만든다(backend/README.md).
+//   .\gradlew.bat preprocessBatch --args="--in <폴더> --out <폴더> [--models <dir>] [--set key=value]"
+// 모델 폴더: --models 또는 PREPROCESS_MODELSDIR. Windows 는 msvcp140 14.40+ JDK 필요(backend/models/README.md).
+tasks.register<JavaExec>("preprocessBatch") {
+    group = "application"
+    description = "Runs the first-photo check and both cutouts on a folder of photos (before/after, report.csv)."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.example.mockbackend.tool.PreprocessBatch")
+    workingDir = projectDir
+    maxHeapSize = "2g"
+    System.getenv("PREPROCESS_MODELSDIR")?.let { environment("PREPROCESS_MODELSDIR", it) }
+}
