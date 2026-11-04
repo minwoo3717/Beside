@@ -19,6 +19,13 @@
 - 서버가 시작될 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다(`InterruptedJobRecovery`). 워커 스레드는 재시작을 넘지 못하기 때문이다.
 - 테스트는 `src/test/resources/config/application.properties` 덕분에 컨텍스트마다 인메모리 H2 를 쓴다. `spring.datasource.url` 을 프로파일 파일(application-mock.properties)에 두지 않는다: 프로파일 파일이 이 오버라이드를 이긴다.
 
+- 대표 사진 검사·전처리(2026-11): 코어는 `preprocess/`(JDK 와 ONNX Runtime 만, Spring import 금지 — `CorePurityTest`), Spring 연결은 `service/preprocess/`. 폴더 도구(`tool/PreprocessBatch`)가 코어와 설정을 그대로 쓴다.
+  - 플래그 `preprocess.check.enabled`·`preprocess.cutout.enabled`: `application.properties` 는 false, `application-real.properties` 는 true(prod 는 물려받음), mock 은 끔. 테스트는 `src/test/resources/config/application-{real,mock,prod}.properties` 로 끈다(프로파일 파일이 `config/application.properties` 를 이기므로, `PreprocessFlagsTest` 가 지킨다). 켜야 하는 테스트는 `@SpringBootTest(properties=...)` + `@MockBean PreprocessModels`.
+  - 검사는 `JobServiceImpl.submitJobV1` 의 Idempotency 재생 확인 뒤·`saveUploads` 앞에서 첫 장만 한다. 거절하면 사진·작업·키를 남기지 않고, `uploadMs` 는 검사 시간을 뺀 값, 검사 시간은 `checkMs`. 서버 사정(대기 초과·모델 오류)으로 못 돌리면 받고 `checkResult=SKIPPED:*` (사용자 결정).
+  - 크롭·배경 제거는 `RealJobWorker.dispatch` 에서 추론 슬롯을 잡기 전(PENDING)에 `CutoutStage` 가 한다. 작업을 실패시키지 않는다(실패하면 원본 + `preprocessResult=FALLBACK:*`). 실패한 실행도 `JobFinisher.fail(..., RunDetails)` 로 전처리 기록을 남긴다.
+  - 모델은 시작 때 `PreprocessModels` 가 켠 단계에 필요한 것만 로드하고, 없으면 받는 법·끄는 법을 적고 시작하지 않는다. Windows 는 msvcp140.dll 14.40 이상 JDK 가 필요하다(Red Hat JDK 17 은 14.29 → `OnnxModel.checkWindowsRuntime` 이 크래시 대신 오류).
+  - 기준값(제안값)을 바꾸는 순서: `docs/api/ERROR_CODES.md`·`REVIEW_CHECKLIST.md` #19 → `PhotoCheck.Rules.DEFAULT`·`PreprocessProperties`·`application.properties`(셋이 같아야 한다, `PreprocessPropertiesTest`) → 폴더 도구와 `PhotoCheckModelTest` 로 실제 사진 확인.
+
 ## 실행
 
 ```powershell
@@ -44,6 +51,9 @@ $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 �
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL
 ..\scripts\e2e_mock.ps1                                          # 실행 중 서버에 v1 전체 흐름
+$env:JAVA_HOME = 'C:\Users\<you>\.jdks\ms-17.0.17'; $env:PREPROCESS_MODELSDIR = 'C:\beside\models'
+.\gradlew.bat test                                               # 모델 테스트(@Tag("models"))까지: 실제 YOLOX·U2Net 과 CC0 시험 사진. 모델이 없으면 건너뛴다
+.\gradlew.bat preprocessBatch --args="--in src/test/resources/photos --out C:\beside\pre-out"   # 폴더 일괄 도구(전/후 이미지·report.csv·index.html)
 ```
 
 ## 직접 할 일 (코드로 해결되지 않음)
