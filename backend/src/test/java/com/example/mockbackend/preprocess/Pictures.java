@@ -56,7 +56,11 @@ final class Pictures {
 
     /** Same, with the TIFF byte order of the EXIF block ("II" little-endian or "MM" big-endian). */
     static byte[] jpegWithOrientation(int width, int height, int orientation, ByteOrder order) {
-        byte[] plain = jpeg(width, height);
+        return withOrientation(jpeg(width, height), orientation, order);
+    }
+
+    /** {@code plain} (a JPEG) with an EXIF APP1 holding only Orientation inserted right after SOI. */
+    static byte[] withOrientation(byte[] plain, int orientation, ByteOrder order) {
         ByteBuffer tiff = ByteBuffer.allocate(26).order(order); // header 8 + count 2 + one entry 12 + next IFD 4
         boolean little = order == ByteOrder.LITTLE_ENDIAN;
         tiff.put(little ? (byte) 'I' : (byte) 'M').put(little ? (byte) 'I' : (byte) 'M').putShort((short) 42).putInt(8)
