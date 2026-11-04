@@ -15,7 +15,7 @@
 | `dog-blurry.jpg` | 1200×800 | 움직이다 흔들린 치와와 얼굴 클로즈업(실내, 어두운 조명) | `IMAGE_TOO_BLURRY` | [- moving dog in low light. Kind of like a paintin (2995566101).jpg](https://commons.wikimedia.org/wiki/File:-_moving_dog_in_low_light._Kind_of_like_a_paintin_(2995566101).jpg) | cogdogblog | CC0 1.0 |
 | `no-animal-room.jpg` | 1200×800 | 가죽 소파·의자·화분이 있는 실내, 동물·사람 없음 | `NO_ANIMAL_DETECTED` | [Take a seat (Unsplash).jpg](https://commons.wikimedia.org/wiki/File:Take_a_seat_(Unsplash).jpg) | Sabri Tuzcu | CC0 1.0 |
 
-"기대 판정"은 사람이 사진을 보고 적은 기대다. 모델 테스트로 고정하는 것은 조각 C4(`PhotoCheckModelTest`)에서 한다.
+"기대 판정"은 사람이 사진을 보고 적은 기대다. 모델 테스트 `PhotoCheckModelTest`(C4, 2026-11-05)가 이 기대를 고정했다(모델이 있는 PC 에서만 돈다).
 
 ## 첫 확인 (2026-11-04, 개발 PC, 일회성 실행) [실험 결과]
 
@@ -30,4 +30,4 @@
 | `no-animal-room.jpg` | `NO_ANIMAL_DETECTED` | 없음 | - | - | 같음 |
 | `dogs-two-swimming.jpg` | **통과** | dog 0.71, dog 0.48 | 151 | 1055.0 | **다름**: 둘째 개 점수 0.48 이 "다른 동물" 기준 0.50 에 못 미쳐 한 마리로 셈 |
 
-두 마리 사진이 통과한 것은 제안값의 잘못 통과 사례다. 조정 여부는 조각 G2(임계값 조정)에서 정한다.
+두 마리 사진이 통과한 것은 제안값의 잘못 통과 사례다. 조정 여부는 조각 G2(임계값 조정)에서 정한다. → 2026-11-05 사용자 결정으로 둘째 동물 기준을 0.40 으로 낮췄고, 이 사진은 이제 `TOO_MANY_ANIMALS` 다([docs/preprocess/2026-11-05_photo-check.md](../../../../../docs/preprocess/2026-11-05_photo-check.md)).
