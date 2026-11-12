@@ -40,7 +40,7 @@
 - 밖에서: `healthz` 200(`real,prod`), `http://` → 308, 404(`/h2-console`, `/swagger-ui.html`, `/v3/api-docs`, `/api/jobs`, `;` 경로, 대소문자·퍼센트 인코딩 변형), 401(웹 화면, 목록 GET·HEAD, 삭제, 관리·보관함), 26MB 본문 413, 8080·8001 닫힘.
 - 대표 사진 검사: `dogs-two-swimming.jpg` → 400 `TOO_MANY_ANIMALS`, `no-animal-room.jpg` → 400 `NO_ANIMAL_DETECTED`(202 전).
 - 스텁: 토큰 없이 `/infer/upload` 401.
-- 팀 비밀번호: 01:09(16:09Z)에 개발 PC 쪽 SSH 세션에서 `beside-set-password` 로 설정됐다(`.env` 의 bcrypt 해시 = 실행 중 Caddy 의 해시). 로그인 200 은 비밀번호를 아는 사람이 브라우저로 확인한다 **[계획]**.
+- 팀 비밀번호: 01:09(16:09Z)에 사용자가 `beside-set-password` 로 설정했다(`.env` 의 bcrypt 해시 = 실행 중 Caddy 의 해시). 사용자가 브라우저에서 `https://beside-team.duckdns.org/` 에 `team` 으로 로그인해 Mock UI 가 열리는 것을 확인했다.
 
 ## 보안 감사
 
