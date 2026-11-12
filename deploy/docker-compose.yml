@@ -1,5 +1,5 @@
 # Beside 클라우드 VM 구성: Spring 백엔드(real,prod) + Caddy(자동 HTTPS · Basic 인증 · v0/H2/Swagger 차단).
-# GPU 추론 서비스는 VM 이 아니라 팀원 GPU PC 에 있고 Tailscale 사설망(100.x)으로 부른다.
+# GPU 추론 서비스는 VM 이 아니라 Runpod Pod(대안: 팀원 GPU PC)에 있고 Tailscale 사설망(100.x)으로 부른다.
 # 리포 루트에서:
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 # 절차·확인·백업은 deploy/README.md.
@@ -15,7 +15,7 @@ services:
       # prod 가 마지막이어야 real 의 설정(H2 콘솔 등)을 덮어쓴다.
       SPRING_PROFILES_ACTIVE: real,prod
       # Spring 은 환경변수 이름을 점 → _, 대시 삭제, 대문자로 읽는다: inference.base-url ↔ INFERENCE_BASEURL.
-      INFERENCE_BASEURL: ${INFERENCE_BASE_URL:?deploy/.env 에 INFERENCE_BASE_URL 을 넣는다 (GPU PC 의 Tailscale 주소)}
+      INFERENCE_BASEURL: ${INFERENCE_BASE_URL:?deploy/.env 에 INFERENCE_BASE_URL 을 넣는다 (Runpod Pod 또는 GPU PC 의 Tailscale 주소)}
       # 사진을 /infer/upload 로 올리고 GLB 를 받아 온다(디스크를 공유하지 않으므로 경로 모드가 아니다).
       INFERENCE_TRANSFER: upload
       # X-Inference-Token 헤더. GPU PC 의 BESIDE_INFERENCE_TOKEN 과 같은 값.
