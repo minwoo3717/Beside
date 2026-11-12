@@ -83,7 +83,10 @@ else
     --boot-disk-size="${DISK_GB}GB" --boot-disk-type=pd-balanced \
     --address="$IP" --tags="$TAG" --labels=app=beside \
     --metadata=enable-oslogin=FALSE --metadata-from-file=ssh-keys="$KEYS" \
+    --no-service-account --no-scopes \
     --deletion-protection
+  # No service account: nothing on the VM calls Google APIs, and with the default one any container could take a token
+  # from the metadata server (2026-11-13 audit). SSH keys still come from metadata, which needs no service account.
 fi
 
 echo "[5/5] status: $("${G[@]}" compute instances describe "$VM" --zone="$ZONE" --format='value(status)')"
