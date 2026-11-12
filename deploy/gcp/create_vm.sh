@@ -45,8 +45,17 @@ fi
 "${G[@]}" services enable compute.googleapis.com
 
 echo "[2/5] network and firewall"
+# A new project gets its default network (with default-allow-ssh) from Google a few seconds after the Compute Engine
+# API is enabled, so wait for it instead of racing it. First real run, 2026-11-12: the describe still failed, then our
+# create hit "networks/default already exists" and the script stopped.
+for _ in 1 2 3 4 5 6; do
+  "${G[@]}" compute networks describe default >/dev/null 2>&1 && break
+  sleep 10
+done
 if ! "${G[@]}" compute networks describe default >/dev/null 2>&1; then
   "${G[@]}" compute networks create default --subnet-mode=auto
+fi
+if ! "${G[@]}" compute firewall-rules describe default-allow-ssh >/dev/null 2>&1; then
   "${G[@]}" compute firewall-rules create default-allow-ssh --network=default --direction=INGRESS \
     --allow=tcp:22 --source-ranges=0.0.0.0/0
 fi
