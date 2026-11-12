@@ -126,3 +126,5 @@ WSL2 는 기본으로 `localhost` 를 Windows 와 공유하므로 Spring 이 `12
 ### Ubuntu 와 Spring PC 가 서로 다른 컴퓨터라면
 
 업로드 모드를 쓴다 **[구현됨]** 2026-10-30: Spring 이 `inference.transfer=upload` 로 사진 파일을 `POST /infer/upload` 로 올리고 결과를 `GET /artifacts/{jobId}/base.glb` 로 받는다([README.md](README.md) '전송 모드'). 추론 서비스는 그 기계의 주소(Tailscale 등)에 `BESIDE_INFERENCE_TOKEN` 과 함께 띄우고, Spring 의 `inference.token` 에 같은 값을 넣는다. 클라우드 VM 구성은 [deploy/README.md](../../deploy/README.md) 'GPU PC 쪽'. 실제 기계 사이 연결은 아직 해 보지 않았다 **[계획]**.
+
+Runpod Pod 에 둘 때(2026-11-13 결정): Pod 는 정지하면 컨테이너 디스크가 지워지므로 conda(`/workspace/miniconda3`, env `animallift`), AnimalLift(`/workspace/AnimalLift`), 체크포인트, 리깅 템플릿(`/workspace/beside-rig/template-rigged.glb`)을 모두 `/workspace` 아래에 설치한다. 실행은 `deploy/runpod/start_pod.sh` 하나로 한다. 이 스크립트가 Pod 안에 Tailscale 을 띄우고 이 서비스를 `127.0.0.1:8001` 에 연다([deploy/README.md](../../deploy/README.md) 'Runpod Pod 쪽'). 경로가 다르면 `ANIMALLIFT_DIR`·`CONDA_HOME`·`CONDA_ENV` 로 바꾼다. Pod 에서 실제로 해 보지는 않았다 **[계획]**.

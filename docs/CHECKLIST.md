@@ -23,9 +23,9 @@
 막는 범위가 큰 것부터.
 
 1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 18개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. (BE 주관, 전원)
-2. [ ] **GPU PC 세팅 + exp-01** — 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
+2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [x] **`deploy/vm-4b` → main PR 열기** — CI 가 main push(`af4a747`)와 PR #4 에서 Docker 이미지 빌드·Caddy 경로 시험까지 통과했다. (BE)
-4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). 남은 것: Tailscale(VM·GPU PC) → 폰 → VM → GPU PC 1건이 4b 의 첫 증빙이다. (BE+GEN, 직접 할 일)
+4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13), Pod 쪽 스크립트 `deploy/runpod/start_pod.sh` 준비됨(WSL 시험만). 남은 것: Runpod 크레딧 → Tailscale(VM·Pod 로그인 승인) → 폰 → VM → Pod 1건이 4b 의 첫 증빙이다. (BE+GEN, 직접 할 일)
 5. [ ] **Unity 1단계 DoD 증빙** — 실기기 Mock 전체 흐름(영상 + `adb logcat`), `fail` 사진 → FAILED → retry, `metrics.csv` 10회. (UN)
 6. [ ] **Unity 재시도 버그** — 업로드 단계에서 네트워크 오류가 나면 `Fail()` 이 `CurrentJobId` 를 갱신하기 전에 불려(`unity/Assets/Beside/Job/JobManager.cs:204-207`), 화면의 "다시 시도"가 아무것도 하지 않거나(첫 작업) **이전 작업을 다시 폴링**한다(`JobManager.cs:131-133`). 업로드 실패 때는 같은 사진으로 업로드를 다시 하도록 고친다. (UN)
 7. [ ] **발표·보고서 제출일 확인** → 5단계 일정 확정. (전원)
@@ -90,7 +90,7 @@
 - [ ] 대표 사진 검사 문구 7개(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 2026-11-04 백엔드가 `ErrorMessages.cs` 에 넣었다(재시도 대상 아님). 실기기에서 real 서버에 두 마리 사진과 동물이 없는 사진을 올려 문구가 나오는지 확인한다. real·prod 서버에 '캡처로 테스트'를 하면 이제 400(`NO_ANIMAL_DETECTED`)이다(mock 은 그대로).
 
 ### 3D Generation (GEN)
-- [ ] GPU PC: AnimalLift·체크포인트 설치, ASCII 경로, WSL 이면 그 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`([deploy/README.md](../deploy/README.md)).
+- [ ] Runpod Pod: AnimalLift·conda·체크포인트·리깅 템플릿을 `/workspace` 아래에 설치(컨테이너 디스크는 정지 때 지워짐), 실행은 `deploy/runpod/start_pod.sh`([deploy/README.md](../deploy/README.md) 'Runpod Pod 쪽'). 대안으로 GPU PC 면 ASCII 경로, WSL 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`.
 - [ ] exp-01(1건 시간·VRAM) → exp-02(우리 사진 3마리 이상, 실제 E2E 10건 이상, `job_runs` CSV) → exp-03·04(개선 2건 이상).
 - [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교(Spring 이 크롭·배경 제거를 한다 [구현됨] 2026-11-05, 3D 비교 실험 틀 `experiments/2026-11-05_exp-03_input-preprocess.md` 를 GPU PC 에서 실행 [계획]), 털 맵을 GLB 안에 넣기.
 - [ ] gltf-validator·glTFast 로드 결과 기록, 변환기 테스트.
