@@ -15,26 +15,76 @@
 
 | 항목 | 상태 |
 |---|---|
-| `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | 파일 **[구현됨]** · 실행 **[계획]**: 이미지 빌드·Caddyfile 검증·경로 시험은 CI(main 대상 push·PR)에서 돌도록 작성했지만 아직 한 번도 돌지 않았다(첫 실행은 deploy/vm-4b → main PR. 작성한 PC 에 Docker 가 없어 로컬에서도 돌려 보지 않았다) |
+| `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** CI(backend-ci)가 main push(`af4a747`, 2026-11-01)와 PR #4(`ad0c3f6`)에서 이미지 빌드·compose/Caddy 검증·경로 시험까지 통과했다. GCP VM 에서 빌드·기동·`deploy_vm.sh`·재부팅 복구를 확인했다(2026-11-13) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
-| 실제 VM·도메인·Tailscale 준비, 폰 → VM → GPU PC 1건 | **[계획]** 아래 '직접 할 일' |
-| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 설정도 H2 콘솔·Swagger·v0 를 404 로 막는다(설정 **[구현됨]**, 실제 동작 확인은 CI 첫 실행·VM 배포 **[계획]**). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
-| `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). 같은 PC 에서 패스스루 서비스와 Spring real 을 띄워 e2e 로 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌린 적은 없다 — **[계획]** |
+| 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
+| Tailscale, 폰 → VM → GPU PC 1건 | **[계획]** 지금 VM 의 추론은 VM 안 패스스루 스텁이다 |
+| prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
+| `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰)으로 공개 주소에서 전체 흐름 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌았는지는 아직 보지 않았다 — **[계획]** |
+
+## GCP 메인 서버 (2026-11-13)
+
+2026-11-12 결정으로 팀 메인 서버는 GCP 무료 체험 크레딧($300, 90일)으로 돌린다([docs/budget/2026-11_purchase-plan.md](../docs/budget/2026-11_purchase-plan.md) §3). **업그레이드(전체 계정 활성화)를 누르지 않으면 청구되지 않는다.** 체험 중에는 GPU 를 붙일 수 없으므로 추론은 지금처럼 GPU PC(나중에 Runpod)에 두고 Tailscale 로 잇는다.
+
+| 항목 | 값 |
+|---|---|
+| 프로젝트 | `beside-514511`(무료 체험 결제 계정에 연결) |
+| VM | `beside-vm` — `asia-northeast3-a`(서울), e2-standard-2(2 vCPU · 8GB), Ubuntu 24.04 LTS, 균형 디스크 50GB, 삭제 방지 켬 |
+| 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
+| 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
+| SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
+| 코드 | VM 의 `~/Beside` 는 `feat/preprocess`(PR #4). 병합 뒤 `main` 으로 바꾼다 |
+
+**만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
+
+**VM 첫 설정**(2026-11-13 에 한 순서):
+
+1. 아래 '1. VM 만들기' 의 Docker 설치. 컨테이너를 만들기 전에 `/etc/docker/daemon.json` 에 로그 회전 `{"log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "5"}}` 를 넣는다(기본은 무제한이라 접근 로그가 디스크를 채운다).
+2. 스왑 2GB(fstab 포함, '띄우기' 절).
+3. `git clone https://github.com/minwoo3717/Beside.git ~/Beside` → `git checkout feat/preprocess` → `scripts/fetch_models.sh backend/models`.
+4. `deploy/.env`: `cp deploy/.env.example deploy/.env && chmod 600 deploy/.env`, 도메인, `INFERENCE_TOKEN` 은 VM 에서 `openssl rand -hex 32` 로 만들어 바로 파일에 넣는다(화면에 찍지 않는다).
+5. 팀 비밀번호: 개발 PC 에서 `ssh -t beside-gcp 'bash ~/Beside/deploy/set_basic_auth.sh'`([set_basic_auth.sh](set_basic_auth.sh) — 두 번 묻고 해시만 `.env` 에 넣는다. 비밀번호를 바꿀 때도 같다). 이 파일이 VM 의 체크아웃에 들어오기 전에는 같은 일을 하는 VM 의 `~/bin/beside-set-password` 를 쓴다(`ssh -t beside-gcp '~/bin/beside-set-password'`).
+6. `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build` → 밖에서 '확인' 절.
+
+**지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다(그 커밋이 원격에 올라가면 `git checkout deploy/Caddyfile` 뒤 pull). Tailscale·GPU PC 연결은 **[계획]**.
+
+**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다(`create_vm.sh` 는 이제 서비스 계정 없이 만든다). 바꾸려면 VM 을 잠깐 멈춰야 한다(약 1분 중단, 컨테이너는 스스로 다시 뜬다). 기본 네트워크가 만든 RDP 규칙도 필요 없다.
+
+```bash
+gcloud compute instances stop beside-vm --zone=asia-northeast3-a
+gcloud compute instances set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes
+gcloud compute instances start beside-vm --zone=asia-northeast3-a
+gcloud compute firewall-rules delete default-allow-rdp
+```
+
+**GPU 없이 먼저 전체 흐름 확인(스텁)**: 리포의 추론 서비스를 패스스루 모드로 VM 안에 띄우고 `INFERENCE_BASE_URL=http://beside-stub:8001` 로 둔다. 이미지는 `python:3.12-slim` + `generation/inference_service/requirements.txt`, 앱 코드는 읽기 전용 마운트, 샘플 GLB 는 **유효한 GLB** 여야 한다(리포의 `backend/storage/results/sample-dog.glb` 는 0바이트라 쓸 수 없다). `--network beside_default`, 포트는 게시하지 않고, `BESIDE_INFERENCE_TOKEN` 은 `.env` 의 `INFERENCE_TOKEN` 과 같게(권한 600 인 env 파일로 넘긴다). GPU PC 를 연결하면 `INFERENCE_BASE_URL` 을 바꾸고 `docker rm -f beside-stub`.
+
+**주의 — compose 프로젝트 이름이 `beside` 로 고정돼 있다.** 그래서 compose 파일을 다른 폴더(예: `/tmp`)에 복사해 `docker compose -f <복사본> ...` 을 실행해도 지금 떠 있는 서버 컨테이너를 그 설정으로 다시 만든다. 2026-11-13 에 시험용 복사본으로 이렇게 해서 서버가 약 1분 내려갔다(복구: `~/Beside` 에서 `up -d`). 서버를 건드리는 명령은 `~/Beside` 에서만 하고, VM 에서 무언가를 시험할 때는 `name:` 을 바꾼 별도 프로젝트로 한다.
+
+**비용과 끝내기**: 결제 → 예산 및 알림에서 30·60·90% 알림을 받는다. 추정은 하루 약 $2.4(VM + 디스크 + 고정 IP, 12/21 까지 약 $100 / $300)이고 실제 청구는 결제 → 보고서에서 확인한다 **[계획]**. 최종 보고 뒤(12/21 무렵) '백업' 절대로 묶어 개발 PC 로 옮기고 Cloud Shell 에서:
+
+```bash
+gcloud compute instances update beside-vm --zone=asia-northeast3-a --no-deletion-protection
+gcloud compute instances delete beside-vm --zone=asia-northeast3-a
+gcloud compute addresses delete beside-ip --region=asia-northeast3   # VM 만 지우고 IP 를 남기면 IP 요금이 계속 붙는다
+```
 
 ## 경로 규칙 (Caddyfile)
 
 | 처리 | 경로 |
 |---|---|
-| **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, 경로에 `;` 가 든 모든 요청 |
-| **Basic 인증** | `/`, `/index.html`, `/app.js`(Mock 업로드 UI), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `GET`·`HEAD /api/v1/jobs`(목록), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*` |
-| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET /api/v1/jobs/{id}`·`/asset`, `POST /retry`), `/api/v1/healthz`, 공유 링크(`/s/*`, `/share.*`, `/api/v1/shares/*`), `styles.css` 같은 정적 파일 |
+| **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `/webjars*`(prod 에서도 Swagger UI 묶음이 나간다), 경로에 `;` 가 든 모든 요청 |
+| **Basic 인증** | `/`, `/index.html*`, `/app.js*`(Mock 업로드 UI — 끝에 `/` 를 붙인 경로도), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `/api/v1/jobs`·`/api/v1/jobs/` 의 **POST 가 아닌** 모든 method(목록 등), `/api/v1/jobs/*` 의 **GET·HEAD·POST 가 아닌** 모든 method(삭제 등), `/api/v1/jobs/*/pet*`, `/api/v1/admin*`, `/api/v1/pets*` |
+| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET`·`HEAD /api/v1/jobs/{id}`·`/asset`, `POST /retry`), `/api/v1/healthz`, 공유 링크(`/s/*`, `/share.*`, `/api/v1/shares/*`), `styles.css` 같은 정적 파일 |
 | **413** | 요청 본문 25MB 초과(Caddy). 20MB·장당 5MB 초과는 Spring 이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)로 413 |
+| **모든 응답** | `Strict-Transport-Security: max-age=15552000`(180일, 하위 도메인 없이), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. 손님이 보낸 `Forwarded`·`X-Forwarded-Prefix`·`-Port`·`-Ssl` 은 Spring 에 넘기기 전에 지운다(`X-Forwarded-For`·`-Proto`·`-Host` 는 Caddy 가 새로 쓴다) |
 
 - `;` 를 막는 이유: Tomcat 은 `/api/v1/jobs;x=1`, `/api;x/v1/jobs`, `/api/jobs/{id};x` 를 `;` 뒤를 뗀 경로로 처리한다(로컬 real 서버에서 셋 다 200 을 확인). 열어 두면 인증·404 규칙을 비켜 간다.
 - Caddy 의 path 비교는 대소문자를 가리지 않고, 퍼센트 인코딩을 풀고 `//`·`..` 를 정리한 뒤에 한다. `caddy:2.11.1` 미만은 이 정리에 우회 취약점(CVE-2026-27587)이 있으므로 이미지를 내리지 않는다.
 - 규칙을 바꾸면 [test_caddy_routes.sh](test_caddy_routes.sh) 의 기대값도 고친다. Linux + Docker 에서 `bash deploy/test_caddy_routes.sh` 로 가짜 백엔드 앞에 같은 Caddyfile 을 띄워 경로마다 상태 코드를 확인한다(CI 도 같은 명령).
 - 공개 경로의 작업은 UUID 를 아는 사람만 볼 수 있다는 가정이다(계정 없음). 목록 API 를 막는 이유가 이것이다.
+- 파일 이름도 접두사(`/index.html*`)로 맞추는 이유: Caddy 는 `//` 와 `.` 조각은 정리하지만 끝의 `/` 는 남기고, Spring 은 `/index.html/` 을 그 파일로 내준다. 2026-11-13 첫 배포 감사에서 예전 규칙(정확히 맞추기)으로 Mock UI 가 인증 없이 200 이었다. method 도 "GET 이면 인증" 이 아니라 "POST 가 아니면 인증" 으로 쓴다(method 비교는 대소문자를 가린다).
 
 ## 직접 할 일 (한 번)
 

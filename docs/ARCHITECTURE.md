@@ -123,14 +123,15 @@ backend/storage/
 
 | 배치 | 용도 | 상태 |
 |---|---|---|
-| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://<도메인>` | 배포 파일 **[구현됨]**(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`, CI `.github/workflows/backend-ci.yml`) — 이미지 빌드·Caddy 시험을 도는 CI 는 아직 한 번도 실행되지 않았다(main 대상 PR 전) **[계획]**. VM·도메인·Tailscale 준비와 실제 배포 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
+| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://beside-team.duckdns.org` | **[구현됨]** 배포 파일(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`), CI(이미지 빌드·Caddy 경로 시험, main push·PR #4 통과), GCP VM 실제 배포(2026-11-13: e2-standard-2 서울, HTTPS·Basic 인증·전체 흐름·재부팅 복구, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 추론은 아직 VM 안 패스스루 스텁이고 Tailscale·GPU PC 연결은 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
 | GPU PC 한 대에 Spring + 추론 서비스 | 실제 모델 개발·측정, VM 을 쓸 수 없을 때의 대안 | **[구현됨]** `scripts/run_real.ps1`, 경로 모드 |
 | 각자 PC, profile mock | Unity·브라우저 개발, 계약 테스트 | **[구현됨]** |
 
 - VM([deploy/README.md](../deploy/README.md)):
   - 밖에서는 Caddy 의 80/443 만 열린다. 자동 HTTPS(Let's Encrypt), 요청 본문 25MB. Spring 8080 은 compose 내부망에만 연다.
-  - Caddy 설정이 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `;` 가 든 경로를 404 로 막는다(실행 확인은 CI 첫 실행 **[계획]**)(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
-  - Basic 인증: 웹 화면(`/`, Mock UI, 관리·보관함·작업 상세), `GET /api/v1/jobs`(목록, #9 안건), `DELETE /api/v1/jobs/*`, `/api/v1/jobs/*/pet`, `/api/v1/admin*`, `/api/v1/pets*`.
+  - VM 은 GCP Compute Engine `beside-vm`(asia-northeast3-a, e2-standard-2 = 2 vCPU·8GB, 무료 체험 크레딧, 2026-11-12 결정). 체험 계정은 GPU 를 붙일 수 없어 추론은 GCP 밖에 둔다.
+  - Caddy 설정이 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `/webjars*`, `;` 가 든 경로를 404 로 막는다 **[구현됨]**(CI 와 공개 주소에서 확인)(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
+  - Basic 인증: 웹 화면(`/`, Mock UI 파일 — 끝에 `/` 를 붙인 경로도, 관리·보관함·작업 상세), `/api/v1/jobs` 의 POST 가 아닌 method(목록, #9 안건), `/api/v1/jobs/*` 의 GET·HEAD·POST 가 아닌 method(삭제 등), `/api/v1/jobs/*/pet*`, `/api/v1/admin*`, `/api/v1/pets*`. 응답에 HSTS 를 붙이고, 손님이 보낸 `Forwarded`·`X-Forwarded-Prefix` 는 Spring 에 넘기지 않는다(2026-11-13 첫 배포 감사 뒤).
   - 공개: 앱 API(업로드·상태·에셋·retry), `/api/v1/healthz`, 공유 링크. 작업은 id(UUID)를 아는 사람만 볼 수 있다는 가정이다.
   - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU PC `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[구현됨]**(같은 PC 패스스루 e2e 로 확인, REVIEW_CHECKLIST #6 (b) 제안). 추론 서비스는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에만 바인드한다.
   - 데이터: H2 파일·업로드·결과 GLB·`events.jsonl` 은 볼륨 `beside-storage`(컨테이너 `/app/storage`)에 있다. prod 는 매일 H2 온라인 백업(`BACKUP TO` → `storage/backup/`, 최신 7개) **[구현됨]**. 볼륨 전체는 backend 를 멈추고 tar 로 묶는다(문서).
@@ -138,7 +139,7 @@ backend/storage/
 - 개발: 폰과 PC 는 같은 Wi-Fi, `http://<PC IP>:8080`, 방화벽 8080 허용, 앱은 개발용 cleartext 허용. 절차는 [unity/README.md](../unity/README.md).
 - GPU PC 한 대 배치(결정 2026-10-05, 이제 개발·대안): Spring 과 추론 서비스를 **팀원 GPU PC 한 대**에 함께 띄운다(`scripts/run_real.ps1`, [backend/README.md](../backend/README.md) 'GPU PC 에 real 배치'). 추론 서비스는 127.0.0.1:8001 에만 묶고 Spring 의 8080 만 LAN 에 연다. 폰은 그 PC 의 IP 로 붙는다(Mock 과 같은 절차). H2 파일·업로드·결과 GLB 도 그 PC 에 있다. 리포는 ASCII·공백 없는 경로에 둔다(한글·공백 경로는 모델 쪽 이미지 로더가 못 읽을 수 있다).
 - Spring ↔ Python: 같은 호스트면 경로 모드 **[구현됨]**(`/infer` 가 업로드 경로를 읽고 GLB 경로를 돌려준다). 분리 배포(VM)는 업로드 모드 **[구현됨]**(`inference.transfer=upload`, `InferenceClient`).
-- 보안: 계정·로그인 없음(팀 내부 테스트). VM 에서는 HTTPS 와 Basic 인증(위 경로)을 Caddy 가 맡는다 — 설정 파일 **[구현됨]**, 실제 배포 **[계획]**. 업로드 바이러스 검사·요청 수 제한은 범위 밖.
+- 보안: 계정·로그인 없음(팀 내부 테스트). VM 에서는 HTTPS 와 Basic 인증(위 경로)을 Caddy 가 맡는다 — **[구현됨]**(GCP VM, 2026-11-13). 업로드 바이러스 검사·요청 수 제한은 범위 밖(첫 배포 감사에서도 "요청 수 제한 없음" 이 나왔다 — 부하 시험 때 다시 본다).
 - 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 `inference.max-concurrency`(기본 1 = GPU 1장)건만 `/infer` 를 부르고 나머지는 PENDING 으로 기다린다 **[구현됨]**.
 - DB: 서버 하나가 H2 파일 하나를 연다(AUTO_SERVER 없음). 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 다른 인스턴스는 `--storage.db.path` 로 다른 파일을 쓴다.
 
