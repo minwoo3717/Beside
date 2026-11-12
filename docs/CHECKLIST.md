@@ -24,8 +24,8 @@
 
 1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 18개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. (BE 주관, 전원)
 2. [ ] **GPU PC 세팅 + exp-01** — 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
-3. [ ] **`deploy/vm-4b` → main PR 열기** — CI(`.github/workflows/backend-ci.yml`)는 main push·main 대상 PR 에서만 돈다. Docker 이미지 빌드와 Caddy 경로 시험이 이때 처음 실행된다. (BE)
-4. [ ] **VM·도메인·Tailscale 준비** — [deploy/README.md](../deploy/README.md) 순서대로. 폰 → VM → GPU PC 1건이 4b 의 첫 증빙이다. (BE, 직접 할 일)
+3. [x] **`deploy/vm-4b` → main PR 열기** — CI 가 main push(`af4a747`)와 PR #4 에서 Docker 이미지 빌드·Caddy 경로 시험까지 통과했다. (BE)
+4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). 남은 것: Tailscale(VM·GPU PC) → 폰 → VM → GPU PC 1건이 4b 의 첫 증빙이다. (BE+GEN, 직접 할 일)
 5. [ ] **Unity 1단계 DoD 증빙** — 실기기 Mock 전체 흐름(영상 + `adb logcat`), `fail` 사진 → FAILED → retry, `metrics.csv` 10회. (UN)
 6. [ ] **Unity 재시도 버그** — 업로드 단계에서 네트워크 오류가 나면 `Fail()` 이 `CurrentJobId` 를 갱신하기 전에 불려(`unity/Assets/Beside/Job/JobManager.cs:204-207`), 화면의 "다시 시도"가 아무것도 하지 않거나(첫 작업) **이전 작업을 다시 폴링**한다(`JobManager.cs:131-133`). 업로드 실패 때는 같은 사진으로 업로드를 다시 하도록 고친다. (UN)
 7. [ ] **발표·보고서 제출일 확인** → 5단계 일정 확정. (전원)
@@ -54,8 +54,8 @@
 | 4 | 실패 경로 4종 | [x] | — | — |
 | 4 | 실기기 실제 모델 AR(영상) | [ ] | — | UN · GPU PC |
 | 4 | `events.jsonl` 10건 이상 [실험 결과] | [ ] | 실측 0건 | BE+GEN |
-| 4b | S1~S3 | [구현됨] | VM·GPU PC 연결에서 실행한 적 없음 | BE |
-| 4b | S4 Docker·Caddy·CI | 파일만 | 이미지 빌드·Caddy 시험 미실행(위 3번) | BE |
+| 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). GPU PC 연결에서는 아직 | BE |
+| 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치(push 전, VM 에는 로컬 수정으로 적용) | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
 | 4b | 실측 10건 이상 | [ ] | VM·GPU PC 준비 뒤 | BE+GEN |
 | 5 | 측정표 3종 + 환경 | [ ] | 서버·추론·앱 측정 모두 0건(VM·GPU·기기). 백엔드 단독 성능(개발 PC 루프백)만 [실험 결과] [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
@@ -69,7 +69,9 @@
 - [ ] 계약 회의 주관(위 2-1). 회의 뒤 `openapi.yaml` → `JobV1ContractTest` → CHANGELOG → 태그 순서.
 - [ ] `review/api-v1.1`(S5~S9) 병합 방식 결정: 전부 / 앞 조각부터 일부 / 보류. 결정 자료는 리포 루트 `OVERNIGHT_REVIEW_2026-10-31.md`(커밋 안 됨).
 - [ ] 0 B `sample-dog.glb` 교체(GEN 과 함께, 라이선스 문제없는 모델).
-- [ ] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인([deploy/README.md](../deploy/README.md)).
+- [x] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인 — 2026-11-13 GCP, 감사에서 나온 우회 4가지도 막음([deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)).
+- [ ] GCP 첫 배포 감사의 남은 것 [계획]: 지금 VM 의 기본 서비스 계정 떼기·`default-allow-rdp` 지우기(사용자, Cloud Shell — deploy/README 'GCP 메인 서버'), 공개 400 메시지의 Java 예외 클래스 이름 지우기, prod 이미지에서 springdoc UI 빼기(지금은 Caddy 가 `/webjars` 를 막음), `Idempotency-Key` 가 같은 작업 id 를 돌려주는 범위(키 만료·내용 무시 — 계약 안건), Docker 수동 업데이트, 백업을 같은 디스크 밖으로(개발 PC 복사·스냅샷 일정), Caddy 정지 10초 초과(SIGKILL), 컨테이너 pids 제한. 공개 업로드 요청 수 제한은 범위 밖으로 두고 부하 시험 때 다시 본다.
+- [ ] `deploy/gcp` 브랜치(create_vm.sh, Caddy 강화, set_basic_auth.sh, 문서) push 와 PR 결정 — VM 의 `deploy/Caddyfile` 로컬 수정은 그 뒤 정리. (BE)
 - [ ] 남은 낮은 위험(10-30 검토): retry 를 동시에 두 번 누르는 경합, GPU 오프라인 대기가 N건이면 N×30분, V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
 - [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
@@ -77,7 +79,7 @@
 
 ### Unity (UN)
 - [ ] 재시도 버그(위 2-6).
-- [ ] 빌드 기본 서버 주소: 코드 `http://192.168.0.10:8080`(`JobManager.cs:25`), 씬 `http://localhost:8080` → VM 이 생기면 `https://<도메인>`.
+- [ ] 빌드 기본 서버 주소: 코드 `http://192.168.0.10:8080`(`JobManager.cs:25`), 씬 `http://localhost:8080` → VM 이 생겼다: `https://beside-team.duckdns.org`(2026-11-13, 추론은 아직 샘플 GLB 를 돌려주는 스텁). 앱의 서버 설정 화면에서 먼저 시험.
 - [ ] HTTP 허용 설정 정리: `insecureHttpOption` 이 Always allowed(`ProjectSettings.asset`), README 는 "릴리스 전 Not allowed". VM HTTPS 뒤 정리.
 - [ ] minSdk 34 가 의도인지 확인(README 는 24).
 - [ ] 커밋 안 된 `unity/ProjectSettings` 변경 정리(URP 전역 설정 목록이 비워짐, 나머지는 줄바꿈만 다름) — 담당자가 판단.
@@ -120,7 +122,7 @@
 - [x] 다음 버전에 남은 비용 확인 **[실험 결과]** (2026-11-01): 응답마다 하던 썸네일 파일 확인(P6)과 PENDING 조회의 `@Query` 재파싱(P7)이 원인. `review/api-v1.1` 에 고쳐 폴링 처리량·단건 조회·목록은 v1 과 차이 없음, PENDING −24 %. [perf/notes/10-improvements.md](perf/notes/10-improvements.md).
 - [ ] 아직 남은 v1.1 비용 [계획]: PENDING 조회 +74 %(조회 두 개를 문장 하나로, pending_poll 워밍업 늘려 정상 상태 측정), 썸네일 일과 CPU 공유(작은 업로드 +38 %, 동시 E2E −26 %: EXIF 읽기 생략·writer 재사용, 가짜 사진 대조 측정), 결과 GLB 크기 저장(항목당 `File.length` 약 0.1 ms, v1 부터 있던 비용). (BE)
 - [ ] 2026-11-01 실행에서 다른 작업과 겹친 반복(v2p 2회차 등 13:30~13:46)을 다시 잴지 결정 — 결론은 바뀌지 않았다. (BE)
-- [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — VM 준비 뒤. (BE)
+- [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — GCP VM 은 준비됨(2026-11-13, e2-standard-2 8GB. 부하 문서의 "2 vCPU·4GB" 전제를 고칠 것), 동작 확인 수치만 [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md). (BE)
 - [ ] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. (BE+GEN)
 - [ ] v1.1 을 병합하거나 다음 버전이 생기면 `versions.json` 에 한 줄 더해 같은 명령으로 재측정([perf/notes/20-next-version.md](perf/notes/20-next-version.md)). (BE)
 
