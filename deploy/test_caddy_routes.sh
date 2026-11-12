@@ -25,9 +25,12 @@ cleanup() {
 trap cleanup EXIT
 
 # 가짜 백엔드: 본문을 끝까지 읽고(그래야 큰 업로드가 Caddy 의 상한에 걸린다) 200 을 준다.
+# 손님이 보낸 전달 헤더(Caddy 가 지워야 하는 것)가 도착하면 418 을 줘서 시험이 알아채게 한다.
 cat > "$WORK/upstream.py" <<'PY'
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+MUST_BE_STRIPPED = ("Forwarded", "X-Forwarded-Prefix", "X-Forwarded-Port", "X-Forwarded-Ssl")
 
 
 class Upstream(BaseHTTPRequestHandler):
@@ -38,7 +41,8 @@ class Upstream(BaseHTTPRequestHandler):
             if not chunk:
                 break
             left -= len(chunk)
-        self.send_response(200)
+        leaked = any(self.headers.get(h) is not None for h in MUST_BE_STRIPPED)
+        self.send_response(418 if leaked else 200)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -105,11 +109,28 @@ check 404 GET  "/api;x=1/jobs"
 check 404 GET  "/api/v1/jobs;x=1"
 check 404 GET  "/api;x=1/v1/jobs"
 check 404 DELETE "/api/v1/jobs;x=1/$JOB"
+check 404 GET  /webjars/swagger-ui/5.10.3/index.html
+check 404 GET  /WEBJARS/x.js
 
 echo "-- 401: web pages and admin/list/delete APIs without credentials"
 check 401 GET  /
 check 401 GET  /index.html
 check 401 GET  /app.js
+# 끝의 / 와 인코딩된 / (2026-11-13 감사: 예전 규칙에서 Spring 이 index.html·app.js 를 인증 없이 내줬다)
+check 401 GET  /index.html/
+check 401 GET  /index.html//
+check 401 GET  /index.html%2F
+check 401 GET  /INDEX.HTML/
+check 401 GET  /app.js/
+check 401 GET  /app.js/x
+# method 철자·종류에 기대지 않기: 목록 경로는 POST 말고 전부, 작업 하나는 GET·HEAD·POST 말고 전부 인증
+check 401 get  /api/v1/jobs
+check 401 OPTIONS /api/v1/jobs
+check 401 PUT  /api/v1/jobs
+check 401 delete "/api/v1/jobs/$JOB"
+check 401 PATCH "/api/v1/jobs/$JOB"
+check 401 PUT  "/api/v1/jobs/$JOB/pet/"
+check 401 GET  "/api/v1/jobs/$JOB/pet"
 check 401 GET  /admin/
 check 401 GET  /admin/index.html
 check 401 GET  /library/
@@ -145,6 +166,23 @@ check 200 GET  /share.html
 check 200 GET  /share.js
 check 200 GET  /api/v1/shares/AbCdEf123
 check 200 GET  /api/v1/shares/AbCdEf123/asset
+check 200 HEAD "/api/v1/jobs/$JOB"
+
+echo "-- forwarding headers a client sends are stripped before Spring (fake backend answers 418 if one arrives)"
+check 200 GET  /api/v1/healthz -H 'Forwarded: for=127.0.0.1;host=localhost;proto=http'
+check 200 GET  /api/v1/healthz -H 'X-Forwarded-Prefix: /zz'
+check 200 GET  /api/v1/healthz -H 'X-Forwarded-Port: 80' -H 'X-Forwarded-Ssl: off'
+check 200 GET  /api/v1/jobs "${AUTH[@]}" -H 'Forwarded: host=evil.example'
+
+echo "-- response headers"
+check_header() { # check_header <path> <header line regex>
+  local got
+  got="$(curl -s -o /dev/null -D - --max-time 20 "$BASE$1" | tr -d '\r' | grep -iE "$2" || true)"
+  if [[ -n "$got" ]]; then printf 'ok   %s: %s\n' "$1" "$got"; else printf 'FAIL %s: no header matching %s\n' "$1" "$2"; failures=$((failures + 1)); fi
+}
+check_header /api/v1/healthz '^strict-transport-security: max-age=[0-9]+'
+check_header /api/v1/healthz '^x-content-type-options: nosniff'
+check_header /index.html '^strict-transport-security: '   # 401 응답에도
 
 echo "-- 413: body over request_body max_size (25MB)"
 head -c 26000000 /dev/zero > "$WORK/big.bin"

@@ -15,43 +15,63 @@
 		max_size 25MB
 	}
 
+	# 응답 보안 헤더. HSTS: 한 번 HTTPS 로 온 브라우저는 이후 http:// 를 거치지 않는다(Basic 인증 정보가 평문으로 나가지 않게).
+	# includeSubDomains·preload 는 넣지 않는다(duckdns.org 하위 이름 하나만 우리 것이다).
+	header {
+		Strict-Transport-Security "max-age=15552000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
 	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서.
+	#    /webjars: prod 에서도 Spring 의 기본 정적 경로가 springdoc 의 Swagger UI 묶음을 내준다(2026-11-13 감사에서 200 확인).
 	#    경로에 ; 가 있으면 함께 막는다. Tomcat 은 /api/jobs;x 나 /api;x/v1/jobs 를 ; 뒤를 뺀 경로로 처리하므로
 	#    ; 를 열어 두면 아래 인증 규칙과 이 404 규칙을 비켜 갈 수 있다. 앱과 웹은 ; 를 쓰지 않는다.
-	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* *;*
+	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* /webjars* *;*
 	respond @blocked 404
 
 	# 2) Basic 인증(팀 계정 하나).
 	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지.
 	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
-	@web path / /index.html /app.js /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet
+	#    파일 이름에도 끝에 * 를 붙인다: Caddy 는 // 와 . 조각은 정리하지만 끝의 / 는 남기므로 /index.html/ 은 /index.html 과
+	#    맞지 않는데, Spring 은 그것을 index.html 파일로 내준다(2026-11-13 감사에서 /index.html/ · /app.js/ 가 인증 없이 200).
+	@web path / /index.html* /app.js* /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet*
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
-	#    작업 목록(모든 작업과 GLB 가 보인다). Spring 은 HEAD 를 GET 처럼 처리하므로 둘 다.
-	#    같은 경로의 POST(앱 업로드)는 공개다.
+	#    작업 목록(모든 작업과 GLB 가 보인다). 같은 경로의 POST(앱 업로드)만 공개다.
+	#    "GET·HEAD 면 인증" 이 아니라 "POST 가 아니면 인증" 으로 쓴다: method 비교는 대소문자를 가려서
+	#    get·head 같은 철자는 앞의 방식으로는 인증을 비켜 Spring 까지 간다(지금은 Spring 도 405 로 막지만 그것에 기대지 않는다).
 	@jobList {
-		method GET HEAD
 		path /api/v1/jobs /api/v1/jobs/
+		not method POST
 	}
 	basic_auth @jobList {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
-	#    작업 삭제.
-	@jobDelete {
-		method DELETE
+	#    작업 하나에 대한 쓰기(삭제 등). 공개는 조회(GET·HEAD /api/v1/jobs/{id}, /asset)와 다시 시도(POST /retry)뿐이다.
+	@jobWrite {
 		path /api/v1/jobs/*
+		not method GET HEAD POST
 	}
-	basic_auth @jobDelete {
+	basic_auth @jobWrite {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
 	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry), /api/v1/healthz,
 	#    공유 링크(/s/*, /share.*, /api/v1/shares/*), styles.css 같은 정적 파일.
-	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 붙인다(prod 프로파일의 forward-headers 가 읽는다).
-	reverse_proxy {$BACKEND_UPSTREAM:backend:8080}
+	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 손님 값을 버리고 새로 붙인다(prod 프로파일의 forward-headers 가 읽는다).
+	#    Spring 의 ForwardedHeaderFilter 는 그 밖에 Forwarded(RFC 7239, X-Forwarded-* 보다 먼저 읽음)와 X-Forwarded-Prefix·
+	#    -Port·-Ssl 도 읽는데 Caddy 는 이것들을 그대로 넘긴다 → 손님이 Spring 이 보는 요청 URI·호스트를 바꿀 수 있다
+	#    (2026-11-13 감사: X-Forwarded-Prefix 로 오류 응답 모양이 바뀜). 그래서 지운다.
+	reverse_proxy {$BACKEND_UPSTREAM:backend:8080} {
+		header_up -Forwarded
+		header_up -X-Forwarded-Prefix
+		header_up -X-Forwarded-Port
+		header_up -X-Forwarded-Ssl
+	}
 
 	# 접근 로그 → docker compose logs caddy. Authorization 헤더는 Caddy 가 기본으로 가린다.
 	log
