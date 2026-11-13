@@ -2,11 +2,11 @@
 
 세 트랙이 **같은 이름**으로 측정값을 남긴다. 이름은 여기서만 정의하고, 보고서·발표·실험 기록은 이 이름을 그대로 쓴다. 단위는 시간 ms(정수), 크기 bytes 또는 MB(정수), 비율 0~1. 측정 시점이 다른 값(예: 서버가 잰 `processingMs` 와 앱이 잰 `waitMs`)은 이름이 다르므로 섞지 않는다.
 
-상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐).
+상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록은 **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`). 첫 측정은 개발 PC 의 [실험 결과]([preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md))뿐이고 VM 측정은 [계획].
 
 ## 1. 서버 `events.jsonl` (Backend, [구현됨] PLAN 0단계)
 
-작업의 한 실행(run)이 COMPLETED/FAILED 로 끝날 때마다 한 줄씩 추가한다. retry 하면 같은 jobId 로 줄이 하나 더 생긴다(`attempt` 로 구분). 위치 `backend/storage/events.jsonl`(gitignore), 설정 `storage.events.path`(빈 값이면 꺼짐, 테스트는 끔). Mock·real 모두 같은 파일에 쓰고 `workerType` 으로 구분한다. 기록은 `JobFinisher` 한 곳에서만 하며, 줄과 §1.1 의 `job_runs` 행은 같은 객체(`JobRun`)에서 나온다. 2026-10-06 부터 처음 10개 필드 뒤에 추론 수치(§2 이름 그대로)와 실행 사실 3개가 붙는다. 값이 없으면 `null` 이고 키는 항상 있다.
+작업의 한 실행(run)이 COMPLETED/FAILED 로 끝날 때마다 한 줄씩 추가한다. retry 하면 같은 jobId 로 줄이 하나 더 생긴다(`attempt` 로 구분). 위치 `backend/storage/events.jsonl`(gitignore), 설정 `storage.events.path`(빈 값이면 꺼짐, 테스트는 끔). Mock·real 모두 같은 파일에 쓰고 `workerType` 으로 구분한다. 기록은 `JobFinisher` 한 곳에서만 하며, 줄과 §1.1 의 `job_runs` 행은 같은 객체(`JobRun`)에서 나온다. 2026-10-06 부터 처음 10개 필드 뒤에 추론 수치(§2 이름 그대로)와 실행 사실 3개가 붙는다. 2026-11 부터 그 뒤에 대표 사진 검사·전처리 5개가 붙는다(표의 마지막 5행). 값이 없으면 `null` 이고 키는 항상 있다.
 
 | 필드 | 타입 | 정의 | 측정 시점 |
 |---|---|---|---|
@@ -14,7 +14,7 @@
 | `attempt` | int | 1 = 첫 실행, retry 마다 +1 (서버 전용 추가 필드) | — |
 | `finishedAt` | string | 실행이 끝난 시각, ISO 8601 UTC (서버 전용 추가 필드) | 종료 시 |
 | `uploadBytes` | int | 업로드된 사진 바이트 합. retry 해도 처음 업로드 값 | 접수 시 |
-| `uploadMs` | int \| null | 업로드 요청이 서버에 도착한 때(필터, multipart 파싱 전) → 사진 저장 완료. 수신·파싱·저장 포함. HTTP 밖에서 만든 작업은 null. retry 해도 처음 업로드 값 | 접수 처리 중 |
+| `uploadMs` | int \| null | 업로드 요청이 서버에 도착한 때(필터, multipart 파싱 전) → 사진 저장 완료. 수신·파싱·저장 포함. 대표 사진 검사를 켠 서버에서는 검사 시간(`checkMs`)을 뺀 값이다 — 검사는 저장 전에 하지만 이 값의 뜻을 2026-10 측정과 같게 둔다. HTTP 밖에서 만든 작업은 null. retry 해도 처음 업로드 값 | 접수 처리 중 |
 | `queuedMs` | int | PENDING 유지 시간 (= `timings.queuedMs` 최종값, 같은 계산 `JobTimings`) | PROCESSING 전이 시 |
 | `processingMs` | int \| null | PROCESSING 유지 시간 (= `timings.processingMs` 최종값). PROCESSING 없이 끝나면 null | 종료 시 |
 | `totalMs` | int | 접수(또는 retry) → 종료 (= `timings.totalMs`) | 종료 시 |
@@ -24,6 +24,11 @@
 | `glbBytes` | int \| null | 서버가 저장한 base GLB 의 크기(= `asset.bytes`). mock·FAILED 는 null | 종료 시 |
 | `passthrough` | bool \| null | true 면 추론 서비스가 모델 대신 샘플을 돌려준 것 → 측정에서 **제외**. `/infer` 응답이 없으면(mock·FAILED) null | 종료 시 |
 | `modelVersion` | string \| null | `/infer` 선택 필드. 베이스라인과 개선안을 구분하는 모델·가중치 이름(예 `animallift-baseline@3f2a1c9`) | 종료 시 |
+| `checkMs` | int \| null | 대표 사진 검사(202 전): 동시 검사 대기 + 디코딩 + 개·고양이 감지 + 밝기·선명도. `uploadMs` 와 겹치지 않는다. 검사가 꺼져 있거나 v0·HTTP 밖이면 null. retry 해도 처음 값. 거절된 업로드는 작업이 없어 남지 않는다(서버 로그만) | 접수 처리 중 |
+| `checkResult` | string \| null | `PASSED` \| `SKIPPED:BUSY`(동시 검사 대기 초과) \| `SKIPPED:ERROR`(모델 오류) — 서버 사정으로 검사하지 못하고 받은 사진을 셀 수 있게. 거절은 400 이라 여기 오지 않는다. 꺼져 있으면 null | 접수 처리 중 |
+| `preprocessMs` | int \| null | 전처리(다시 감지 → 크롭 → 배경 제거 → PNG 저장) 시간, 전처리 대기는 뺀다. 추론 슬롯을 잡기 전(PENDING)에 하므로 `queuedMs` 안에 들어간다 | 실행 중 |
+| `preprocessResult` | string \| null | `APPLIED` \| `REUSED`(retry 때 같은 설정의 결과를 다시 씀) \| `FALLBACK:<NO_ANIMAL\|MASK_EMPTY\|MASK_FULL\|DECODE_FAILED\|BUSY\|ERROR>`(원본 사진으로 진행) \| `OFF`(전처리 꺼짐). mock 은 null | 실행 중 |
+| `preprocessVersion` | string \| null | 전처리가 돈 실행의 방식·모델·설정(예 `cutout1 bg=remove det=yolox_s#c5c2d13e seg=u2net#8d10d2f3 m=0.15 f=0.85 s=1024 lcc=1`, 128자 이하). 3D 비교 실험에서 원본(`OFF`)·크롭(`bg=keep`)·배경 제거(`bg=remove`)를 이 값으로 나눈다 | 실행 중 |
 
 예 (2026-10-04 동작 확인 때 실제로 남은 줄, 측정값 아님 — mock, real 패스스루, real 추론 서비스 꺼짐. 2026-10-06 이후 줄에는 위 9개 키가 더 붙는다):
 
@@ -37,7 +42,7 @@
 
 ### 1.1 `job_runs` 테이블 (Backend, [구현됨] 2026-10-06)
 
-같은 내용이 H2 파일 DB 의 테이블 `job_runs` 에도 실행마다 한 행씩 남는다(PK `{jobId}:{attempt}`, 삽입 전용). 컬럼은 위 줄의 필드를 snake_case 로 쓴 것(`job_id, attempt, finished_at, upload_bytes, upload_ms, queued_ms, processing_ms, total_ms, worker_type, infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms, glb_bytes, passthrough, model_version`)에 `status`(COMPLETED|FAILED)와 `error_code` 를 더한 것이다. `result` 는 `status`+`error_code` 로 대신한다. 서버 경로는 없다. 프로파일마다 DB 파일이 다르므로(`beside-mock.mv.db`, `beside-real.mv.db`) 측정표는 real 파일에서 뽑는다.
+같은 내용이 H2 파일 DB 의 테이블 `job_runs` 에도 실행마다 한 행씩 남는다(PK `{jobId}:{attempt}`, 삽입 전용). 컬럼은 위 줄의 필드를 snake_case 로 쓴 것(`job_id, attempt, finished_at, upload_bytes, upload_ms, queued_ms, processing_ms, total_ms, worker_type, infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms, glb_bytes, passthrough, model_version, check_ms, check_result, preprocess_ms, preprocess_result, preprocess_version`)에 `status`(COMPLETED|FAILED)와 `error_code` 를 더한 것이다. `result` 는 `status`+`error_code` 로 대신한다. 서버 경로는 없다. 프로파일마다 DB 파일이 다르므로(`beside-mock.mv.db`, `beside-real.mv.db`) 측정표는 real 파일에서 뽑는다.
 
 5단계 측정표는 이 테이블에서 SQL 로 뽑는다. 서버가 켜진 상태에서 `http://localhost:8080/h2-console`(real 프로파일도 켜져 있음, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행하면 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
 
@@ -46,13 +51,15 @@ CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
  'SELECT job_id AS "jobId", attempt AS "attempt", finished_at AS "finishedAt", worker_type AS "workerType", status AS "status", error_code AS "errorCode",
          upload_bytes AS "uploadBytes", upload_ms AS "uploadMs", queued_ms AS "queuedMs", processing_ms AS "processingMs", total_ms AS "totalMs",
          infer_ms AS "inferMs", gpu_peak_mb AS "gpuPeakMB", model_params AS "modelParams", output_vertices AS "outputVertices",
-         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough AS "passthrough", model_version AS "modelVersion"
+         output_triangles AS "outputTriangles", convert_ms AS "convertMs", glb_bytes AS "glbBytes", passthrough AS "passthrough", model_version AS "modelVersion",
+         check_ms AS "checkMs", check_result AS "checkResult", preprocess_ms AS "preprocessMs", preprocess_result AS "preprocessResult",
+         preprocess_version AS "preprocessVersion"
   FROM job_runs
   WHERE worker_type = ''real'' AND status = ''COMPLETED'' AND passthrough = FALSE
   ORDER BY finished_at');
 ```
 
-제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
+제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 전처리 비교(3D 품질 실험)는 `preprocess_result = 'OFF'`(원본)와 `preprocess_version` 의 `bg=keep`·`bg=remove` 로 나누고, `FALLBACK:*` 행은 원본이 들어간 것이므로 개선안 쪽에서 뺀다. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
 
 ## 2. 추론 서비스 (3D Generation, 수치 채우기는 [계획] PLAN 3·4단계)
 

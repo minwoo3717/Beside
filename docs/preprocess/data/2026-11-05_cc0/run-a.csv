@@ -1,0 +1,7 @@
+file,width,height,decision,detail,animals,mainClass,mainScore,mainLongSidePx,brightnessP90,sharpness,bestOtherClass,bestOtherScore,decodeMs,detectMs,checkMs,cutout,cutoutMs,segmentMs,foreground,cropPad
+dog-blurry.jpg,1200,800,IMAGE_TOO_BLURRY,too blurry (sharpness 11.1 < 50.0),1,cat,0.746,1080,170,11.089,,0.000,52,156,224,APPLIED,1303,1128,0.530,APPLIED
+dog-single-black.jpg,800,1200,PASS,"dog 0.92, brightness 186, sharpness 1566.8",1,dog,0.922,1015,186,1566.848,,0.000,12,197,224,APPLIED,1372,1154,0.359,APPLIED
+dog-single-edge.jpg,1200,675,PASS,"dog 0.69, brightness 160, sharpness 1952.8",1,dog,0.688,551,160,1952.849,,0.000,12,211,227,APPLIED,1270,1070,0.435,APPLIED
+dog.jpg,800,1200,PASS,"dog 0.93, brightness 166, sharpness 835.2",1,dog,0.928,898,166,835.212,,0.000,13,182,198,APPLIED,1258,1047,0.395,APPLIED
+dogs-two-swimming.jpg,1200,675,TOO_MANY_ANIMALS,"2 animals (dog 0.71, dog 0.48)",2,dog,0.711,568,-1,,boat,0.594,9,200,211,APPLIED,1243,1042,0.338,APPLIED
+no-animal-room.jpg,1200,800,NO_ANIMAL_DETECTED,no dog or cat with score >= 0.4 (none found),0,,0.000,0,-1,,chair,0.922,11,205,218,FALLBACK:NO_ANIMAL,198,0,,FALLBACK:NO_ANIMAL

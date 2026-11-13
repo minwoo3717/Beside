@@ -22,7 +22,7 @@
 
 막는 범위가 큰 것부터.
 
-1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 21개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#19 큐 상한(503 `QUEUE_FULL`)·#20 요청 제한(429 `RATE_LIMITED`)·#21 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
+1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 23개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#19 큐 상한(503 `QUEUE_FULL`)·#20 요청 제한(429 `RATE_LIMITED`)·#21 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
 2. [ ] **GPU PC 세팅 + exp-01** — 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [ ] **`deploy/vm-4b` → main PR 열기** — CI(`.github/workflows/backend-ci.yml`)는 main push·main 대상 PR 에서만 돈다. Docker 이미지 빌드와 Caddy 경로 시험이 이때 처음 실행된다. (BE)
 4. [ ] **VM·도메인·Tailscale 준비(11-04 까지)** — [deploy/README.md](../deploy/README.md) 순서대로. 폰 → VM → GPU PC 1건이 4b 의 첫 증빙이다. VM 이 있어야 부하 시험(아래 5절, 보고용 수치는 VM 에서만 잰다)도 시작할 수 있다. (BE, 직접 할 일)
@@ -72,6 +72,7 @@
 - [ ] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인([deploy/README.md](../deploy/README.md)).
 - [ ] 남은 낮은 위험(10-30 검토): retry 를 동시에 두 번 누르는 경합, GPU 오프라인 대기가 N건이면 N×30분, V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
+- [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
 - [ ] 전체 코드 리뷰(2026-10-31)의 [계획] 항목: real 로 쓸 때 Mock UI 의 60초·15초 제한, 측정 중 한 번 본 'COMPLETED 직후 에셋 409'(재현부터) — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md).
 
 ### Unity (UN)
@@ -84,11 +85,12 @@
 - [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 쓴다 → 안건 #14 결정 후 한쪽에 맞춤(GEN 과 함께).
 - [ ] (v1.1 을 받으면) 진행 화면에 `queue`/`estimate`, 취소 버튼이 `POST /cancel` 호출(지금은 앱 안 코루틴만 멈춤), `CANCELED` 문구.
 - [ ] 코드 리뷰 보고 7건: 에셋 다운로드 실패 때 화면이 멈춤, 바뀐 템플릿·GltfImport 를 해제하지 않아 memMB 가 계속 오름, 재개·retry 실행도 `metrics.csv` 에 줄을 더함(METRICS §3 '작업당 한 줄') 등 — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고'.
+- [ ] 대표 사진 검사 문구 7개(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 2026-11-04 백엔드가 `ErrorMessages.cs` 에 넣었다(재시도 대상 아님). 실기기에서 real 서버에 두 마리 사진과 동물이 없는 사진을 올려 문구가 나오는지 확인한다. real·prod 서버에 '캡처로 테스트'를 하면 이제 400(`NO_ANIMAL_DETECTED`)이다(mock 은 그대로).
 
 ### 3D Generation (GEN)
 - [ ] GPU PC: AnimalLift·체크포인트 설치, ASCII 경로, WSL 이면 그 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`([deploy/README.md](../deploy/README.md)).
 - [ ] exp-01(1건 시간·VRAM) → exp-02(우리 사진 3마리 이상, 실제 E2E 10건 이상, `job_runs` CSV) → exp-03·04(개선 2건 이상).
-- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교, 털 맵을 GLB 안에 넣기.
+- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교(Spring 이 크롭·배경 제거를 한다 [구현됨] 2026-11-05, 3D 비교 실험 틀 `experiments/2026-11-05_exp-03_input-preprocess.md` 를 GPU PC 에서 실행 [계획]), 털 맵을 GLB 안에 넣기.
 - [ ] gltf-validator·glTFast 로드 결과 기록, 변환기 테스트.
 - [ ] `/infer/upload` 리뷰(업로드 모드, DELETE 범위).
 - [ ] 끊긴 `/infer` 가 MODEL_LOCK 을 쥔 채 다음 작업의 시간 제한을 깎는 문제: busy 신호 또는 끊긴 요청 건너뛰기 중 설계 결정(GEN·BE, 코드 리뷰 보고서).
@@ -101,7 +103,7 @@
 - [ ] 첫 배포 후 GPU PC 를 끈 채 작업 1건 → PENDING 대기 + Discord 알림 → 켜면 진행되는지 확인.
 
 ### 계약·문서 (회의 안건)
-- [ ] 안건 #1~#21 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다. #17(prod 의 사진 내용 검사)·#18(`modelVersion` 의 `+rig`)은 코드 리뷰에서, #19~#21(큐 상한·요청 제한·보존 정책)은 부하 시험 계획(2026-11-01)에서 나왔다.
+- [ ] 안건 #1~#23 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다. #17(prod 의 사진 내용 검사)·#18(`modelVersion` 의 `+rig`)은 코드 리뷰에서, #19(대표 사진 검사의 프로파일 차이·제안 기준값)·#20(전처리 측정 이름)은 전처리(2026-11-04)에서, #21~#23(큐 상한·요청 제한·보존 정책)은 부하 시험 계획(2026-11-01)에서 나왔다.
 - [ ] 계약 파일의 상태 표기가 실제 코드보다 늦음(아래 6절) — 계약 파일이라 회의에서 함께 고친다.
 - [ ] 측정 정의 확정: `convertMs` 에 리깅 시간이 더해짐(`app.py`), 앱 `e2eMs` 가 첫 AR 배치까지(사용자 탭 포함), 앱 `downloadMs` 가 캐시 적중 때 0.
 - [ ] 백엔드 벤치마크 이름(`bench.*`)과 부하 시험 이름(k6 `load.*`)을 METRICS 에 올릴지(안건 #15).
@@ -130,8 +132,8 @@
 - [ ] A0~A4 기준 측정(연기 시험·혼합 흐름·폴링 포화·업로드·에셋 송신)을 VM 에서. (BE)
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
-- [ ] 보호 장치(큐 상한 #19, 요청 제한 #20) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #19 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산)
+- [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산)
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
   - 실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지(`collect.py` 의 `jvm_heap_after_gc`, 'GC 뒤 힙 < 75 %' 판정). 이름은 로컬 `/actuator/prometheus` 에서만 봤다.

@@ -108,7 +108,7 @@ DoD:
 | 10-06 ~ 10-12 | 환경 구축(GPU PC), 공식 코드 실행, 샘플 1건 생성. **출력 파일 형식·1건 소요 시간·VRAM 을 기록**한다 — 문서의 `mesh.obj + uv.png (+ hair.npz)` 가정을 여기서 확인하고, 1건 시간은 `inference.timeout-ms`(제안: 3배) 와 Unity 최대 대기의 근거가 된다 | exp-01 |
 | 10-13 ~ 10-19 | (앞당김) `convert_asset.py` 투입 → exp-01 출력으로 GLB_SPEC §8 통과 GLB 1개(0바이트 `sample-dog.glb` 교체) → `app.py` 의 501 TODO 를 실제 경로로(모델이 별도 conda env 면 subprocess), `modelVersion` 채움 → 우리 사진 3마리 이상으로 베이스라인 수치·품질 채점 | exp-02 |
 | 10-20 ~ 10-26 | (앞당김, 4단계 선행) **실제 E2E**: GPU PC 에 `run_real.ps1` 로 Spring real + 추론 서비스 → PC 에서 `e2e_mock.ps1 -Photos <실제 사진> -TimeoutSeconds 600` → 폰(Unity)에서 실제 모델 AR 배치 → 10건 이상 → `job_runs` CSV 내보내기(METRICS §1.1) | exp-02 완성 (첫 [실험 결과]) |
-| 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
+| 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭 — Spring 쪽 [구현됨] 2026-11-05 브랜치 `feat/preprocess`, 3D 비교는 [generation/experiments/2026-11-05_exp-03_input-preprocess.md](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) [계획]), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
 
 DoD:
 - [ ] exp-01 ~ exp-04 기록, 표 채움 **[실험 결과]** (실제 E2E 의 `job_runs` CSV 와 `events.jsonl` 사본을 exp 폴더에)
@@ -166,7 +166,7 @@ DoD:
 
 | 조각 | 내용 | 계약 영향 | 상태 |
 |---|---|---|---|
-| B0 | 목표 트래픽 모델, 계약 회의 안건 #19~#21 과 #15 확장, PLAN·CHECKLIST 갱신 | 없음(안건만 추가) | **[구현됨]** 브랜치 `load/socar`, main 미병합 |
+| B0 | 목표 트래픽 모델, 계약 회의 안건 #21~#23 과 #15 확장, PLAN·CHECKLIST 갱신 | 없음(안건만 추가) | **[구현됨]** 브랜치 `load/socar`, main 미병합 |
 | B1 | Actuator 를 관리 포트 8081 에 둠(공개 8080 에는 `/actuator` 없음), Prometheus 노출 | 없음 | **[구현됨]** 브랜치 `load/socar`, main 미병합 — `ObservabilityEndpointTest`(공개 포트 404·관리 포트 200) |
 | B2 | 작업 지표 `beside.jobs.*`·`beside.job.*`(성공률·생성 시간·대기열 길이) | METRICS 추가 | **[구현됨]** 〃 — `JobMetrics`·`JobQueueGauge` 와 테스트 |
 | B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | **[구현됨]** 〃 — 실제 Tomcat 에서 다운로드 중간 끊기 시험 포함 |
@@ -175,7 +175,7 @@ DoD:
 | B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 **[계획]** |
 | B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 82개. 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 **[계획]** |
 | VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | **[계획]** VM 준비 뒤 |
-| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #19·#20, 결정 전에는 검토 브랜치에만 |
+| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #21·#22, 결정 전에는 검토 브랜치에만 |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
 
 막는 것: VM(11-04 목표, 위 직접 할 일)이 있어야 부하 시험을 시작할 수 있고, 계약 회의가 있어야 R1~R3 을 main 에 넣을 수 있다.
@@ -206,4 +206,4 @@ DoD:
 | 패스스루 실행이 측정에 섞임 | 베이스라인 수치 오염 | `job_runs.passthrough=true` 로 거른다(METRICS §1.1 SQL). 개선안은 `modelVersion` 으로 구분 |
 | 기기 성능 (FPS) | 2단계 | 삼각형 상한 하향, 텍스처 1024 로 축소 실험 |
 | 쏘카 수준(T3) 생성 수요를 GPU 1대로 감당 못 함 | 공개 베타(T2)부터 GPU 1대 용량 초과: 생성 시간 T > 21초면 이용률 0.7 초과, T ≥ 30초면 대기열이 계속 늘어 앱의 600초를 넘김 | 용량 모델로 필요 GPU 수를 계산해 보고하고(c = ⌈λT/0.7⌉, T3·T=60초면 86대, [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md)), 넘치는 요청은 큐 상한으로 즉시 거절한다(안건 #19). 다중 GPU 풀은 [계획] |
-| 업로드·GLB 누적으로 디스크 고갈 | T2(하루 2.3 GB)에서 VM 디스크가 참: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) | 보존 정책(안건 #21). 부하 시험은 별도 볼륨에 쓰고 디스크 80 %에서 중단한다 |
+| 업로드·GLB 누적으로 디스크 고갈 | T2(하루 2.3 GB)에서 VM 디스크가 참: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) | 보존 정책(안건 #23). 부하 시험은 별도 볼륨에 쓰고 디스크 80 %에서 중단한다 |

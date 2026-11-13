@@ -70,4 +70,12 @@ public class Job {
      * Null for jobs created outside an HTTP request. events.jsonl uploadMs (docs/METRICS.md §1).
      */
     private Long uploadMs;
+    /**
+     * First-photo check before the 202 (decode, dogs and cats, brightness, sharpness), including the wait for a check
+     * slot; not part of uploadMs. Null when the check is off (mock), for v0 and outside HTTP. METRICS §1 checkMs.
+     */
+    private Long checkMs;
+    /** PASSED, or SKIPPED:BUSY / SKIPPED:ERROR when the server could not check; null when off. METRICS §1. */
+    @Column(length = 32)
+    private String checkResult;
 }

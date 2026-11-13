@@ -33,5 +33,7 @@ COPY --from=build /src/app.jar /app/app.jar
 USER beside
 VOLUME /app/storage
 EXPOSE 8080
-# Heap follows the container memory limit (mem_limit in deploy/docker-compose.yml). Extra JVM flags: JAVA_TOOL_OPTIONS.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]
+# Heap follows the container memory limit (mem_limit in deploy/docker-compose.yml): 40 %, because the preprocessing
+# models (ONNX Runtime, mounted at /app/models) live outside the heap. Extra JVM flags: JAVA_TOOL_OPTIONS (a flag
+# given here wins over it, so change this line to change the share). ONNX Runtime unpacks its native library to /tmp.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=40", "-jar", "/app/app.jar"]

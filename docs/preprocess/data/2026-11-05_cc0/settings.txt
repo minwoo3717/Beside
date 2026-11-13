@@ -1,0 +1,12 @@
+when: 2026-11-05T00:32:18.538277400+09:00
+java: 17.0.17 (Microsoft)
+os: Windows 11 amd64, 12 processors
+detector: yolox_s#c5c2d13e
+segmenter: u2net#8d10d2f3
+check: Rules[minImageSide=320, minAnimalScore=0.4, secondAnimalScore=0.4, secondAnimalMinArea=0.15, minAnimalPx=224, minBrightness=50, brightnessPercentile=0.9, minSharpness=50.0, sharpnessPx=512]
+decode: Limits[maxPixels=67108864, maxWebpPixels=16777216, timeLimitMs=5000], check long side 1600, cutout long side 2048
+detector settings: input 0, classes [15, 16], candidate 0.25, nms 0.45, containment 0.7, threads 2
+segmenter settings: input 320, mean [0.485, 0.456, 0.406], std [0.229, 0.224, 0.225], threads 1
+cutout (remove): cutout1 bg=remove det=yolox_s#c5c2d13e seg=u2net#8d10d2f3 m=0.15 f=0.85 s=1024 lcc=1
+cutout (keep): cutout1 bg=keep det=yolox_s#c5c2d13e m=0.15 f=0.85 s=1024
+model input size for the before/after previews: 512 (assumed: AnimalLift's ctrl_size is read from its checkpoint on the GPU PC)

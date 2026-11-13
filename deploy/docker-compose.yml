@@ -34,17 +34,27 @@ services:
       NOTIFY_PUBLICBASEURL: https://${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}
       # Prometheus 지표의 공통 태그 env. 부하 시험 덮어쓰기는 loadtest 로 바꿔 운영 지표와 섞이지 않게 한다.
       METRICS_ENV: prod
+      # 대표 사진 검사(202 전)와 크롭·배경 제거(추론 전): real,prod 기본 켬. 모델은 아래 /app/models 마운트.
+      # deploy/.env 에서 false 로 끌 수 있다(끄면 deploy_vm.sh 가 모델을 받지 않는다).
+      PREPROCESS_MODELSDIR: /app/models
+      PREPROCESS_CHECK_ENABLED: ${PREPROCESS_CHECK_ENABLED:-true}
+      PREPROCESS_CUTOUT_ENABLED: ${PREPROCESS_CUTOUT_ENABLED:-true}
+      # ONNX Runtime 스레드마다 glibc arena 가 늘어 RSS 가 커지는 것을 막는다.
+      MALLOC_ARENA_MAX: "2"
     volumes:
-      # H2 DB · uploads · results · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
+      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
+      # 전처리 모델(약 210 MB, scripts/fetch_models.sh 가 받는다). 이미지에 넣지 않고 읽기 전용으로 붙인다.
+      - ${BESIDE_MODELS_DIR:-../backend/models}:/app/models:ro
     # 8080 은 compose 내부망에만 연다. 밖에서는 Caddy(80/443)로만 들어온다.
     # 8081 은 Actuator 관리 포트(/actuator/health, /actuator/prometheus): Prometheus 만 내부망에서 읽는다.
     # 둘 다 ports: 로 게시하지 않는다. Caddy 도 /actuator* 를 404 로 막는다(두 겹).
     expose:
       - "8080"
       - "8081"
-    # 힙은 Dockerfile 의 -XX:MaxRAMPercentage=75 → 이 한도의 75%. 4GB VM 기준.
-    mem_limit: 2g
+    # 4GB VM 기준. 힙은 Dockerfile 의 -XX:MaxRAMPercentage=40 → 약 1.2GB, 나머지는 ONNX Runtime 의 네이티브 메모리
+    # (YOLOX·U2Net 세션, 추정 0.6~1.0GB — VM 실측은 [계획])와 JVM 의 힙 밖 메모리. 2g 로는 모델이 들어갈 자리가 없다.
+    mem_limit: 3g
     logging: *default-logging
     healthcheck:
       test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8080/api/v1/healthz"]
@@ -90,7 +100,8 @@ services:
     logging: *default-logging
 
   # ---- 모니터링 (선택): docker compose ... --profile monitoring up -d ----
-  # 메모리 예산(4GB VM): backend 2g + prometheus 384m + grafana 256m + caddy·OS ≈ 3.2GB. swap 2GB 권장(README).
+  # 메모리 예산: backend 3g + prometheus 384m + grafana 256m + caddy·OS ≈ 4.2GB — 4GB VM 이면 한도 합이 RAM 을 넘으므로
+  # monitoring 프로필에는 swap 2GB 가 꼭 필요하다(README '메모리'). backend 3g 는 전처리 모델(ONNX Runtime) 때문이다.
 
   prometheus:
     image: prom/prometheus:v2.54.1

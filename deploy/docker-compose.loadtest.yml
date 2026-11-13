@@ -23,6 +23,11 @@ services:
       NOTIFY_WEBHOOKURL: ""
       # prod 의 매일 04:30 H2 온라인 백업(DatabaseBackup, @ConditionalOnProperty storage.backup.enabled=true) 끔.
       STORAGE_BACKUP_ENABLED: "false"
+      # 대표 사진 검사·크롭 끔(기본 compose 는 켬). k6 사진(scripts/load/make_fixtures.py)은 동물이 없는 잡음 PNG 라
+      # 검사를 켜면 업로드가 모두 400 NO_ANIMAL_DETECTED 가 된다. 전처리 비용까지 재려면 실제 동물 사진 픽스처와 함께
+      # 셸에서 LOADTEST_PREPROCESS_CHECK_ENABLED=true · LOADTEST_PREPROCESS_CUTOUT_ENABLED=true 로 켠다([계획]).
+      PREPROCESS_CHECK_ENABLED: ${LOADTEST_PREPROCESS_CHECK_ENABLED:-false}
+      PREPROCESS_CUTOUT_ENABLED: ${LOADTEST_PREPROCESS_CUTOUT_ENABLED:-false}
       # mock 워커: 바로 PROCESSING(0 ms), 60초 뒤 COMPLETED(합성 GLB). GPU 생성을 뺀 API 계층만 잰다.
       MOCK_WORKER_PENDINGMS: ${MOCK_WORKER_PENDINGMS:-0}
       MOCK_WORKER_PROCESSINGMS: ${MOCK_WORKER_PROCESSINGMS:-60000}

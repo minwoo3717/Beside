@@ -1559,7 +1559,7 @@
       "id": 21,
       "type": "timeseries",
       "title": "JVM 힙",
-      "description": "사용 중인 힙, 최대 힙(-XX:MaxRAMPercentage=75 × mem_limit), 마지막 GC 뒤 살아 있는 데이터. 기준 제안: GC 뒤 힙 < 75 %.",
+      "description": "사용 중인 힙, 최대 힙(-XX:MaxRAMPercentage=40 × mem_limit), 마지막 GC 뒤 살아 있는 데이터. 기준 제안: GC 뒤 힙 < 75 %.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"

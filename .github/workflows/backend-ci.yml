@@ -64,8 +64,10 @@ jobs:
       - name: image starts as non-root and writes to /app/storage (real,prod, no inference service)
         run: |
           trap 'docker logs --tail 80 beside-smoke || true; docker rm -f beside-smoke >/dev/null 2>&1 || true' EXIT
+          # Preprocessing off: the image has no models (backend/models/README.md) and the 1x1 probe below is no pet photo.
           docker run -d --name beside-smoke -p 127.0.0.1:18080:8080 \
-            -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 beside-backend:ci
+            -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 \
+            -e PREPROCESS_CHECK_ENABLED=false -e PREPROCESS_CUTOUT_ENABLED=false beside-backend:ci
           for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:18080/api/v1/healthz && break; sleep 2; done
           curl -fsS http://127.0.0.1:18080/api/v1/healthz; echo
           # the compose healthcheck runs this inside the container
@@ -76,6 +78,18 @@ jobs:
           echo "POST /api/v1/jobs -> $code"
           test "$code" = 202
           docker exec beside-smoke ls -la /app/storage /app/storage/uploads
+
+      - name: preprocessing on without its models refuses to start (fails fast, says how to fix)
+        run: |
+          set +e
+          out="$(timeout 180 docker run --rm -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 \
+            -e PREPROCESS_CHECK_ENABLED=true beside-backend:ci 2>&1)"
+          code=$?
+          set -e
+          echo "$out" | grep -E "preprocess|APPLICATION FAILED" | tail -5
+          echo "exit code $code"
+          test "$code" -ne 0 && test "$code" -ne 124
+          echo "$out" | grep -q "fetch_models"
 
       - name: compose file + .env.example (bcrypt $ survives single quotes)
         run: |
@@ -117,13 +131,17 @@ jobs:
                   continue
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
+          assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token
           be = lt["services"]["backend"]
           env = be["environment"]
-          mounts = [(v.get("source"), v.get("target")) for v in be["volumes"]]
-          assert mounts == [("beside-loadtest-storage", "/app/storage")], mounts
+          mounts = {v.get("target"): v for v in be["volumes"]}
+          # storage is the load-test volume; the only other mount is the read-only preprocessing models
+          assert sorted(mounts) == ["/app/models", "/app/storage"], sorted(mounts)
+          assert mounts["/app/storage"].get("source") == "beside-loadtest-storage", mounts["/app/storage"]
+          assert mounts["/app/models"].get("read_only") is True, mounts["/app/models"]
           want = {
               "SPRING_PROFILES_ACTIVE": "mock,prod",
               "METRICS_ENV": "loadtest",
@@ -133,6 +151,8 @@ jobs:
               "SPRING_TASK_EXECUTION_POOL_CORESIZE": "400",
               "INFERENCE_BASEURL": "http://127.0.0.1:9",
               "INFERENCE_TRANSFER": "upload",
+              "PREPROCESS_CHECK_ENABLED": "false",
+              "PREPROCESS_CUTOUT_ENABLED": "false",
           }
           for key, value in want.items():
               assert env.get(key) == value, f"{key}={env.get(key)!r}, want {value!r}"

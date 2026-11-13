@@ -2,6 +2,8 @@
 # Ubuntu: Beside real profile on one machine — inference service (AnimalLift) + Spring real, both in the background.
 #   ./scripts/run_real.sh /path/to/AnimalLift [/path/to/conda/envs/animallift/bin/python]
 # Logs: logs/inference.log, logs/spring.log.  Stop: ./scripts/run_real.sh stop (kills the PIDs in logs/*.pid).
+# real has the first-photo check and the cutout on: the models (about 210 MB) are fetched first into
+# $PREPROCESS_MODELSDIR (default backend/models; already there = nothing to do). NO_PREPROCESS=1 turns both off.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 mkdir -p "$ROOT/logs"
@@ -39,9 +41,16 @@ echo "[0/2] building the backend jar (logs/spring.log)"
 ( cd "$ROOT/backend" && ./gradlew --no-daemon -q bootJar -x test ) > "$ROOT/logs/spring.log" 2>&1 \
   || { echo "backend build failed (see logs/spring.log)"; exit 1; }
 JAR="$(ls "$ROOT"/backend/build/libs/*.jar | grep -v -- '-plain\.jar$' | head -n1)"
+PREPROCESS_ARGS=()
+if [[ "${NO_PREPROCESS:-}" == 1 ]]; then
+  PREPROCESS_ARGS=(--preprocess.check.enabled=false --preprocess.cutout.enabled=false)
+else
+  export PREPROCESS_MODELSDIR="${PREPROCESS_MODELSDIR:-$ROOT/backend/models}"
+  "$ROOT/scripts/fetch_models.sh" "$PREPROCESS_MODELSDIR"
+fi
 ( cd "$ROOT/backend" || exit 1
   exec nohup java -jar "$JAR" --spring.profiles.active=real --server.port="$PORT" \
-    --inference.base-url="http://127.0.0.1:$INFER_PORT" >> "$ROOT/logs/spring.log" 2>&1 ) &
+    --inference.base-url="http://127.0.0.1:$INFER_PORT" "${PREPROCESS_ARGS[@]}" >> "$ROOT/logs/spring.log" 2>&1 ) &
 echo $! > "$ROOT/logs/spring.pid"
 
 wait_for() { for _ in $(seq 1 120); do curl -sf "$1" && return 0; sleep 2; done; echo; echo "no answer from $1 (see logs/)"; return 1; }

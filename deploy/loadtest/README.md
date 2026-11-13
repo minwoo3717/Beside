@@ -22,7 +22,7 @@
 
 ## 덮어쓰기가 바꾸는 것
 
-backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·grafana·이미지(`beside-backend:local`)·`mem_limit 2g`·관리 포트 8081 은 그대로다. 같은 프로젝트(`beside`)의 같은 서비스라 `up -d backend` 는 운영 backend 컨테이너를 **대신**한다(4GB 에 backend 두 개는 못 띄운다). 값은 compose 명령 앞의 셸 환경변수로 바꾼다(`deploy/.env` 보다 우선).
+backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·grafana·이미지(`beside-backend:local`)·`mem_limit 3g`·관리 포트 8081 은 그대로다. 같은 프로젝트(`beside`)의 같은 서비스라 `up -d backend` 는 운영 backend 컨테이너를 **대신**한다(4GB 에 backend 두 개는 못 띄운다). 값은 compose 명령 앞의 셸 환경변수로 바꾼다(`deploy/.env` 보다 우선).
 
 | 셸에서 바꾸는 이름 | 컨테이너 환경변수 → Spring 속성 | 기본값 | 이유 |
 |---|---|---|---|
@@ -30,6 +30,8 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | (고정) | `METRICS_ENV` → 지표 태그 `env` | `loadtest` | Grafana 에서 운영(`prod`)과 나눠 본다 |
 | (고정) | `NOTIFY_WEBHOOKURL` → `notify.webhook-url` | 빈 값 | 팀 채널에 알림 수천 건이 가지 않게 |
 | (고정) | `STORAGE_BACKUP_ENABLED` → `storage.backup.enabled` | `false` | 매일 H2 백업(DatabaseBackup) 끔 |
+| `LOADTEST_PREPROCESS_CHECK_ENABLED` | `PREPROCESS_CHECK_ENABLED` → `preprocess.check.enabled` | `false` | 운영은 켬. k6 사진은 동물이 없는 잡음 PNG 라 켜면 업로드가 모두 400 `NO_ANIMAL_DETECTED`. 전처리 비용까지 재려면 동물 사진 픽스처와 함께 켠다([계획]) |
+| `LOADTEST_PREPROCESS_CUTOUT_ENABLED` | `PREPROCESS_CUTOUT_ENABLED` → `preprocess.cutout.enabled` | `false` | 운영은 켬(G 시리즈 real 에서 추론 전 크롭·배경 제거). 위와 같은 이유로 끔 |
 | `MOCK_WORKER_PENDINGMS` | → `mock.worker.pending-ms` | `0` | 접수 즉시 PROCESSING. A2 의 PENDING 시드와 측정 동안만 길게(아래 '시리즈별 값') |
 | `MOCK_WORKER_PROCESSINGMS` | → `mock.worker.processing-ms` | `60000` | 생성 시간 T = 60초 가정 |
 | `SPRING_TASK_EXECUTION_POOL_CORESIZE` | → `spring.task.execution.pool.core-size` | `400` | 기본 8 스레드면 mock 이 'GPU 8대'처럼 동작한다(큐가 무한이라 스레드 수 = core-size) |
@@ -39,7 +41,7 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | `LOADTEST_INFERENCE_TIMEOUT_MS` | `INFERENCE_TIMEOUTMS` → `inference.timeout-ms` | `120000` | 운영 600000 보다 짧게. F1b 는 `20000` |
 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS` | `INFERENCE_OFFLINEWAITMS` → `inference.offline-wait-ms` | `300000` | 운영 1800000 보다 짧게. F2 는 운영과 같은 `1800000` |
 | `LOADTEST_INFERENCE_MAX_CONCURRENCY` | `INFERENCE_MAXCONCURRENCY` → `inference.max-concurrency` | `1` | G2 의 c(1·2·4). 스텁 `BESIDE_PASSTHROUGH_SLOTS` 와 같게 |
-| (볼륨) | `beside-loadtest-storage:/app/storage` | — | 부하 작업·사진·`events.jsonl` 은 여기에만 쌓인다. 운영 `beside-storage` 는 붙지 않는다 |
+| (볼륨) | `beside-loadtest-storage:/app/storage` | — | 부하 작업·사진·`events.jsonl` 은 여기에만 쌓인다. 운영 `beside-storage` 는 붙지 않는다. 전처리 모델 `/app/models`(읽기 전용)는 기본 파일 그대로 붙는다 |
 
 ### 시리즈별 값
 

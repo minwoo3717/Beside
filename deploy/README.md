@@ -42,7 +42,7 @@
 
 ### 1. VM 만들기
 
-- Ubuntu 24.04 LTS, **2 vCPU · 4GB RAM · 30GB 디스크** 권장(backend 컨테이너 한도 2GB + Caddy + 첫 Gradle 빌드). 공인 IP 는 고정(예약) IP 로 받는다 — 도메인이 이 IP 를 가리킨다.
+- Ubuntu 24.04 LTS, **2 vCPU · 4GB RAM · 30GB 디스크** 권장(backend 컨테이너 한도 3GB — 전처리 모델 포함 — + Caddy + 첫 Gradle 빌드, 스왑 2GB 권장). 공인 IP 는 고정(예약) IP 로 받는다 — 도메인이 이 IP 를 가리킨다.
 - 클라우드 방화벽(보안 그룹)은 인바운드 **TCP 80, TCP 443** 만 연다(UDP 443 은 HTTP/3 용, 선택). SSH 22 는 가능하면 내 IP 로만. **8080 은 열지 않는다.**
 - Docker 가 게시한 포트(80/443)는 ufw 규칙을 거치지 않는다. 그래서 막는 일은 클라우드 방화벽과 "8080 을 게시하지 않는 compose"(`expose` 만)가 맡는다. ufw 를 쓴다면 `sudo ufw allow OpenSSH && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw enable`.
 
@@ -105,6 +105,14 @@ nano deploy/.env
 
 ## 띄우기
 
+전처리 모델(대표 사진 검사·크롭/배경 제거, 약 210 MB)을 먼저 받는다. `deploy_vm.sh` 는 이 단계를 스스로 한다. `deploy/.env` 의 `BESIDE_MODELS_DIR` 를 비우면 리포의 `backend/models` 를 쓴다.
+
+```bash
+scripts/fetch_models.sh backend/models        # 또는 BESIDE_MODELS_DIR 에 적은 절대 경로. 해시가 맞으면 다시 받지 않는다
+```
+
+backend 컨테이너는 이 모델 때문에 메모리 한도가 3 GB 다(힙 40% + ONNX Runtime). 4 GB VM 에서 이미지를 다시 빌드하는 동안 메모리가 모자랄 수 있으니 스왑 2 GB 를 만들어 둔다(`sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`, 재부팅 뒤에도 쓰려면 `/etc/fstab` 에 `/swapfile none swap sw 0 0`). 실제 사용량(`docker stats`)은 **[계획]** 이다. 전처리를 끄려면 `deploy/.env` 에 `PREPROCESS_CHECK_ENABLED=false`·`PREPROCESS_CUTOUT_ENABLED=false`.
+
 리포 루트에서(compose 파일 기준 상대 경로와 `--env-file` 경로가 맞도록):
 
 ```bash
@@ -150,13 +158,13 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 
 | 컨테이너 | 한도 |
 |---|---|
-| backend | 2g (`mem_limit`, 힙은 그 75 %) |
+| backend | 3g (`mem_limit`, 힙은 그 40 %, 나머지는 전처리 모델의 ONNX Runtime 네이티브 메모리) |
 | prometheus | 384m |
 | grafana | 256m |
 | caddy · Docker · OS | 한도 없음, 약 0.5GB |
-| **합계** | **약 3.2 / 4GB** |
+| **합계** | **약 4.2 / 4GB** (한도 합) |
 
-여유가 적으므로 **swap 2GB 를 권장**한다(한 번):
+monitoring 프로필까지 띄우면 한도 합이 4GB 를 넘으므로 **swap 2GB 가 필요**하다(한 번). 실제 사용량 측정은 [계획]:
 
 ```bash
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile

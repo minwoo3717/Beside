@@ -58,6 +58,12 @@ public class EventLog {
             event.put("glbBytes", run.getGlbBytes());
             event.put("passthrough", run.getPassthrough());
             event.put("modelVersion", run.getModelVersion());
+            // First-photo check and preprocessing come after those (additive, 2026-11).
+            event.put("checkMs", run.getCheckMs());
+            event.put("checkResult", run.getCheckResult());
+            event.put("preprocessMs", run.getPreprocessMs());
+            event.put("preprocessResult", run.getPreprocessResult());
+            event.put("preprocessVersion", run.getPreprocessVersion());
             Path parent = path.toAbsolutePath().getParent();
             if (parent != null) {
                 Files.createDirectories(parent);

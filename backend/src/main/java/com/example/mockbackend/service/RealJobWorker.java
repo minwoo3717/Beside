@@ -5,6 +5,9 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.StoredUpload;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
+import com.example.mockbackend.domain.RunDetails;
+import com.example.mockbackend.service.preprocess.CutoutStage;
+import com.example.mockbackend.service.preprocess.PreparedPhoto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +30,8 @@ import java.util.concurrent.Semaphore;
 /**
  * Profile "real": the 3D model comes from the Python inference service (generation/inference_service).
  * <ol>
+ *   <li>Preprocesses the first photo (CutoutStage: crop, background removal, square PNG) while still PENDING and
+ *       before the slot, so the CPU work overlaps the GPU run of the job ahead; a failed cutout sends the original.</li>
  *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU). The job stays PENDING meanwhile, so
  *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
  *   <li>With inference.offline-wait-ms &gt; 0 (prod): while {@link InferenceHealthMonitor} does not read UP (the GPU PC
@@ -55,12 +60,13 @@ public class RealJobWorker implements JobWorker {
     private final Path resultDir;
     private final Semaphore inferenceSlots;
     private final InferenceHealthMonitor healthMonitor;
+    private final CutoutStage cutoutStage;
     private final long offlineWaitMs;
     private final long offlinePollMs;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
     public RealJobWorker(JobRepository jobRepository, JobFinisher jobFinisher, InferenceClient inferenceClient,
-                         InferenceHealthMonitor healthMonitor,
+                         InferenceHealthMonitor healthMonitor, CutoutStage cutoutStage,
                          @Value("${storage.result.dir:storage/results}") String resultDir,
                          @Value("${inference.max-concurrency:1}") int maxConcurrency,
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
@@ -69,6 +75,7 @@ public class RealJobWorker implements JobWorker {
         this.jobFinisher = jobFinisher;
         this.inferenceClient = inferenceClient;
         this.healthMonitor = healthMonitor;
+        this.cutoutStage = cutoutStage;
         this.resultDir = Path.of(resultDir);
         this.inferenceSlots = new Semaphore(Math.max(1, maxConcurrency), true);
         this.offlineWaitMs = Math.max(0, offlineWaitMs);
@@ -85,9 +92,10 @@ public class RealJobWorker implements JobWorker {
     public void dispatch(String jobId) {
         Instant start = Instant.now();
         try {
+            PreparedPhoto photo = prepare(jobId);
             inferenceSlots.acquire();
             try {
-                run(jobId, start);
+                run(jobId, start, photo);
             } finally {
                 inferenceSlots.release();
             }
@@ -103,7 +111,13 @@ public class RealJobWorker implements JobWorker {
         }
     }
 
-    private void run(String jobId, Instant start) throws InterruptedException {
+    /** The cutout of the job's first photo; OFF when the job is gone (run() then logs it). */
+    private PreparedPhoto prepare(String jobId) throws InterruptedException {
+        Job job = jobRepository.findById(jobId).orElse(null);
+        return job == null ? PreparedPhoto.off() : cutoutStage.prepare(job);
+    }
+
+    private void run(String jobId, Instant start, PreparedPhoto photo) throws InterruptedException {
         Job job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
             log.warn("jobId={} not found for real worker", jobId);
@@ -112,7 +126,8 @@ public class RealJobWorker implements JobWorker {
         if (!awaitInferenceService(jobId)) {
             InferenceHealthMonitor.Status status = healthMonitor.current();
             jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "The inference service was not ready within "
-                    + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type());
+                    + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type(),
+                    photo.apply(RunDetails.NONE));
             log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE after waiting {} ms for the inference service ({})",
                     jobId, offlineWaitMs, status.detail());
             return;
@@ -126,9 +141,11 @@ public class RealJobWorker implements JobWorker {
         log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.requestUri());
 
         try {
-            InferenceClient.Result result = inferenceClient.infer(jobId, imagePaths(job), filenames(job));
+            InferenceClient.Result result = inferenceClient.infer(jobId, photo.paths(imagePaths(job)),
+                    photo.names(filenames(job)));
             StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
-            jobFinisher.complete(job, stored.path().toString(), start, type(), result.details(stored.bytes()));
+            jobFinisher.complete(job, stored.path().toString(), start, type(),
+                    photo.apply(result.details(stored.bytes())));
             if (result.passthrough()) {
                 log.warn("jobId={} stage=COMPLETED with the passthrough sample GLB: not an inference result, "
                         + "leave it out of measurements (job_runs.passthrough = true)", jobId);
@@ -137,12 +154,13 @@ public class RealJobWorker implements JobWorker {
                         result.modelVersion(), result.metrics());
             }
         } catch (InferenceFailure failure) {
-            jobFinisher.fail(job, failure.code(), failure.getMessage(), type());
+            jobFinisher.fail(job, failure.code(), failure.getMessage(), type(), photo.apply(RunDetails.NONE));
             log.warn("jobId={} stage=FAILED code={} {} [{}]", jobId, failure.code(), failure.getMessage(), failure.logDetail());
         } catch (RuntimeException unexpected) {
             log.error("jobId={} real worker error", jobId, unexpected);
             // The exception text may name server paths; it stays in the log.
-            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type());
+            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type(),
+                    photo.apply(RunDetails.NONE));
         } finally {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
             // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.

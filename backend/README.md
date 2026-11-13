@@ -128,6 +128,18 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 .\scripts\e2e_mock.ps1        # PROCESSING → COMPLETED → GLB 다운로드. 추론 서비스 로그에 POST /infer/upload → GET /artifacts/… → DELETE
 ```
 
+### 대표 사진 검사·전처리 (2026-11, real·prod 기본 켬)
+
+발표에서 약속한 백엔드 이미지 전처리다. 계약은 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md) '대표 사진 검사', 측정은 METRICS §1 의 `checkMs`·`checkResult`·`preprocessMs`·`preprocessResult`·`preprocessVersion`, 첫 측정은 [docs/preprocess/2026-11-05_photo-check.md](../docs/preprocess/2026-11-05_photo-check.md).
+
+- **업로드 검사(202 전)**: 첫 장을 디코딩(EXIF 반영)한 뒤 해상도·개/고양이 0마리·2마리 이상·동물 크기·밝기·선명도 순으로 보고 처음 걸린 이유로 400. 기준값은 `application.properties` 의 `preprocess.check.*`(제안값).
+- **크롭·배경 제거(202 뒤)**: real 워커가 추론 슬롯을 잡기 전에 개를 여백 15% 로 자르고 U2Net 으로 배경을 지워 정사각 투명 PNG(`storage/preprocessed/`)를 만들어 `/infer` 의 첫 사진으로 보낸다. 실패하면 원본.
+- **모델**: 리포에 없다. `.\scripts\fetch_models.ps1 -Target C:\beside\models`(OneDrive 밖) 후 `$env:PREPROCESS_MODELSDIR = 'C:\beside\models'`. 출처·해시는 [models/README.md](models/README.md). 켠 상태로 모델이 없으면 real 이 시작하지 않는다.
+- **Windows JDK**: Red Hat OpenJDK 17 은 오래된 msvcp140.dll(14.29)을 실어 ONNX Runtime 을 쓸 수 없다(서버가 그 이유로 시작을 거부). Microsoft Build of OpenJDK 17 처럼 14.40 이상을 가진 JDK 로 실행한다: `$env:JAVA_HOME = 'C:\Users\<you>\.jdks\ms-17.0.17'`. 리눅스(VM·Docker·CI)는 해당 없음.
+- **끄기**: `--preprocess.check.enabled=false --preprocess.cutout.enabled=false`(환경변수 `PREPROCESS_CHECK_ENABLED`·`PREPROCESS_CUTOUT_ENABLED`, `scripts/run_real.ps1 -NoPreprocess`). 패스스루 시험의 1×1 시험 사진은 검사에 걸리므로 끄거나 실제 개 사진을 쓴다.
+- **3D 비교 실험**: 원본 = `--preprocess.cutout.enabled=false`, 크롭+패딩 = `--preprocess.cutout.background=keep`, 크롭+배경 제거 = 기본. `job_runs` 의 `preprocessResult`·`preprocessVersion` 으로 나눈다(METRICS §1.1).
+- **폴더 일괄 도구**: `.\gradlew.bat preprocessBatch --args="--in <사진 폴더> --out <폴더> [--set preprocess.check.min-sharpness=80]"` — 서버와 같은 설정으로 사진마다 원본·감지 박스·크롭+패딩·배경 제거·흰 배경 합성·지금/새 모델 입력과 `report.csv`·`index.html`·`settings.txt` 를 만든다. 발표용 전/후 비교와 기준값 조정에 쓴다.
+
 ### GPU PC 에 real 배치 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
 
 결정(2026-10-05): Spring 과 Python 추론 서비스를 **팀원 GPU PC 한 대**에 함께 띄운다(공유 파일시스템 가정 그대로, [REVIEW_CHECKLIST](../docs/api/REVIEW_CHECKLIST.md) #6 (a)). 폰과 다른 PC 는 그 PC 의 IP 로 붙는다.
@@ -200,6 +212,9 @@ src/main/
 │  │                                     # metrics·passthrough·modelVersion → RunDetails, X-Inference-Token (전송 방식은 여기만)
 │  ├─ repository/JobRepository.java      # Spring Data JPA (H2). IdempotencyKeyRepository·JobRunRepository 도 같은 폴더
 │  ├─ service/InterruptedJobRecovery.java  # 시작 시 PENDING/PROCESSING 으로 남은 작업을 FAILED 로
+│  ├─ preprocess/                       # 대표 사진 검사·크롭 코어(JDK + ONNX Runtime): ImageDecoding, PhotoCheck, Cutout, YoloxDetector, OnnxSaliencySegmenter
+│  ├─ service/preprocess/               # Spring 연결: PreprocessProperties, PreprocessModels(시작 때 로드), UploadCheck(202 전), CutoutStage(real, 슬롯 전)
+│  ├─ tool/PreprocessBatch.java         # 폴더 일괄 도구(.\gradlew.bat preprocessBatch)
 │  ├─ service/JobFinisher.java           # 실행 종료(COMPLETED/FAILED)는 여기서만 → job_runs 행 + events.jsonl 줄 (같은 JobRun) → JobFinishedEvent
 │  ├─ service/JobMetrics.java            # 운영 지표: JobFinishedEvent → beside.jobs.finished·작업 타이머, 접수·retry 카운터 (METRICS §5)
 │  ├─ service/JobQueueGauge.java         # 운영 지표: beside.jobs.queue (5초마다 PENDING/PROCESSING 개수)

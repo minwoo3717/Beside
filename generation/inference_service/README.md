@@ -104,6 +104,8 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 ### `POST /infer`
 
+2026-11 부터 Spring(real·prod)은 `imagePaths[0]`(업로드 모드는 첫 `photos` 파트, 파일 이름 `*-cutout.png`, `image/png`)에 원본 대신 **전처리한 사진**을 보낼 수 있다: 개를 여백 15% 로 잘라 배경을 지우고 정사각 캔버스 가운데(한 변의 85%)에 둔 RGBA PNG, 긴 변 1024 이하, EXIF 없음(이미 똑바로 세움). 투명한 곳은 지금의 `load_rgb` 가 흰색으로 합성하고, 정사각이라 `Resize` 가 더는 늘리지 않는다. 요청 스키마·응답·오류 표는 그대로이고 두 번째 사진부터는 원본이다. 전처리가 실패하면 원본이 온다. Spring 쪽 규칙은 [backend/README.md](../../backend/README.md) '대표 사진 검사·전처리'.
+
 요청:
 
 ```json

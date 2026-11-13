@@ -61,12 +61,15 @@ public class JobV1Controller {
     private final Environment environment;
 
     @Operation(operationId = "createJob", summary = "사진을 업로드해 3D 생성 작업을 만든다",
-            description = "multipart/form-data 의 photos 파트로 1~10장 (image/jpeg|png|webp, 장당 ≤5MB, 전체 ≤20MB). 접수 즉시 202, 처리는 비동기.")
+            description = "multipart/form-data 의 photos 파트로 1~10장 (image/jpeg|png|webp, 장당 ≤5MB, 전체 ≤20MB). 접수 즉시 202, 처리는 비동기."
+                    + " 설정으로 켠 경우(real·prod 기본) 첫 장(대표 사진)을 접수 전에 검사해 400 으로 거절할 수 있다.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "작업 접수",
                     headers = @Header(name = "Location", description = "/api/v1/jobs/{jobId}", schema = @Schema(type = "string")),
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = JobCreatedResponse.class))),
-            @ApiResponse(responseCode = "400", description = "잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)",
+            @ApiResponse(responseCode = "400", description = "잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)"
+                    + " 또는 대표 사진 검사 거절 (UNREADABLE_IMAGE, IMAGE_TOO_SMALL, NO_ANIMAL_DETECTED, TOO_MANY_ANIMALS,"
+                    + " ANIMAL_TOO_SMALL, IMAGE_TOO_DARK, IMAGE_TOO_BLURRY)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "413", description = "용량 초과 (PAYLOAD_TOO_LARGE)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),

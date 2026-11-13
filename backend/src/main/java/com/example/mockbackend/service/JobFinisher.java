@@ -52,6 +52,14 @@ public class JobFinisher {
 
     /** FAILED with a job failure code (docs/api/ERROR_CODES.md) and a developer message. */
     public void fail(Job job, ErrorCode code, String message, String workerType) {
+        fail(job, code, message, workerType, RunDetails.NONE);
+    }
+
+    /**
+     * Same, keeping what the run produced before it failed (the real worker's preprocessing facts). Same signature as
+     * the review branch's overload (review/api-v1.1).
+     */
+    public void fail(Job job, ErrorCode code, String message, String workerType, RunDetails details) {
         Instant now = Instant.now();
         job.setErrorCode(code.name());
         job.setErrorMessage(message);
@@ -60,7 +68,7 @@ public class JobFinisher {
         job.setUpdatedAt(now);
         job.setStatus(JobStatus.FAILED);
         jobRepository.save(job);
-        measure(JobRun.of(job, now, workerType, RunDetails.NONE));
+        measure(JobRun.of(job, now, workerType, details != null ? details : RunDetails.NONE));
     }
 
     /** Insert-only row first (finishing one attempt twice is a bug and must not overwrite the first measurement), then the line. */
