@@ -32,6 +32,8 @@ services:
       # (선택) Discord 웹훅: notify.webhook-url ↔ NOTIFY_WEBHOOKURL. 비면 알림 끔. 메시지의 관리 페이지 링크는 도메인 기준.
       NOTIFY_WEBHOOKURL: ${NOTIFY_WEBHOOK_URL:-}
       NOTIFY_PUBLICBASEURL: https://${BESIDE_DOMAIN:?deploy/.env 에 BESIDE_DOMAIN 을 넣는다}
+      # (선택) GPU 알림에 붙는 서버 이름(예: Runpod A40): notify.inference-label ↔ NOTIFY_INFERENCELABEL. 비면 이름 없이.
+      NOTIFY_INFERENCELABEL: ${NOTIFY_INFERENCE_LABEL:-}
       # Prometheus 지표의 공통 태그 env. 부하 시험 덮어쓰기는 loadtest 로 바꿔 운영 지표와 섞이지 않게 한다.
       METRICS_ENV: prod
       # 대표 사진 검사(202 전)와 크롭·배경 제거(추론 전): real,prod 기본 켬. 모델은 아래 /app/models 마운트.

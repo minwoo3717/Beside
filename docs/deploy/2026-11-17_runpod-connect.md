@@ -47,6 +47,22 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
 - 공개 주소로 실제 사진 3장이 모두 COMPLETED, GLB 1,310,876~1,327,400 B, 삼각형 7,774. 모델 수치(inferMs 3.9~5.7 s, gpuPeakMB 5,120)와 작업 시간은 [exp-01](../../generation/experiments/2026-11-17_exp-01_baseline-runpod.md).
 - VM 의 `INFERENCE_BASE_URL` 은 그대로(Pod 의 100.x:8002). 스텁에서 바꾼 뒤 backend 는 다시 띄우지 않았다(같은 주소의 서비스만 바뀜).
 
+## Pod 끄기·다시 켜기와 디스코드 알림 (2026-11-17 17:35~17:40 UTC, 한국 11-18 02:35~02:40)
+
+- 사용자 요청으로 API 로 Pod 를 **멈췄다**(`stop` → EXITED). 켜져 있던 시간 32,068 s(약 8시간 54분), 시간당 $0.59 로 약 $5.3(추정, Runpod 청구 내역은 늦게 반영된다). 이 Pod 는 볼륨 디스크 없이 네트워크 볼륨만 쓰므로 멈춘 동안 Pod 요금은 없고 볼륨 월 $2.10 만 나간다. conda·AnimalLift·체크포인트·Tailscale 상태는 모두 `/workspace` 에 있어 그대로다.
+- 지우지(terminate) 않고 멈춘 이유: 콘솔의 Start 한 번으로 같은 Pod·같은 100.x 로 돌아온다. 멈춘 Pod 는 원래 기계로만 돌아가므로 그 GPU 를 남이 쓰고 있으면 켜지지 않는다. 그때는 지우고 위 '구성'의 값(이미지, A40, EU-SE-1, 볼륨 `z4kgw4v5zi` 를 `/workspace` 에, env 토큰, `gpu.minCudaVersion 12.4`)으로 새로 만든다.
+- VM 은 Pod 주소를 그대로 둔다. 17:35:17 `UP -> DOWN`. Pod 가 꺼진 동안 들어온 작업은 30분 PENDING 으로 기다리다 `INFERENCE_UNAVAILABLE` 로 끝난다.
+- 디스코드: 웹훅 주소가 개발 PC 의 로컬 설정에만 있고 VM `.env` 의 `NOTIFY_WEBHOOK_URL` 은 비어 있었다(그래서 11-17 의 연결·끊김은 알림이 없었다). VM `.env` 에 넣고(백업 `deploy/.env.bak-20261118-notify`) backend 를 다시 만들자(healthy 까지 약 30 s) `UNKNOWN -> DOWN` 끊김 메시지 1건이 웹훅 오류 로그 없이 나갔다 **[구현됨]**. 메시지의 서버 이름(`NOTIFY_INFERENCE_LABEL=Runpod A40`, VM `.env` 에 넣어 둠)과 45초 유예는 이 브랜치의 코드라 PR 병합 뒤 VM 을 main 으로 바꿔 배포할 때부터 적용된다.
+
+다시 켜는 순서:
+
+1. Runpod 콘솔 → Pods → `beside-gpu` → Start(또는 API `pod-action start`).
+2. RUNNING 이 되면 Pod 의 웹 터미널(Connect → Web Terminal)에서 아래 한 줄. Pod 의 시작 명령이 비어 있어 서비스가 저절로 뜨지 않는다. `start_pod.sh` 가 `/workspace/AnimalLift` 를 보고 모델 모드로 띄우고, 모델 로드는 약 31 s 다.
+   ```bash
+   nohup bash /workspace/beside-bootstrap.sh > /workspace/beside-logs/start.log 2>&1 &
+   ```
+3. VM 이 15초마다 `/healthz` 를 읽어 `DOWN -> LOADING -> UP` 이 되고 디스코드에 🟡·🟢 메시지가 간다. 기다리던 작업은 UP 이 되면 이어서 처리된다.
+
 ## 남은 것 [계획]
 
 - VM ↔ Pod 직접 연결: GCP 방화벽에 UDP 41641 을 열면 DERP 를 거치지 않을 수 있다(Tailscale GCE 안내). 큰 사진 업로드 시간을 재 보고 정한다.

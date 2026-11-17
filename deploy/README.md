@@ -22,7 +22,7 @@
 | Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). VM ↔ Pod 는 아직 DERP 중계(왕복 약 300 ms). 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌았는지는 아직 보지 않았다 — **[계획]** |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 이 PR 병합 뒤 배포부터). 오프라인 대기 중 작업이 실제로 이어지는지는 **[계획]** |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus·Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · 실행 **[계획]** — [loadtest/README.md](loadtest/README.md) |
 
@@ -151,6 +151,7 @@ nano deploy/.env
 | `INFERENCE_BASE_URL` | `http://<Runpod Pod 의 Tailscale IP>:8002`(`start_pod.sh` 가 마지막에 출력), GPU PC 면 `http://<그 PC 의 Tailscale IP>:8001` |
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU 쪽 `BESIDE_INFERENCE_TOKEN` 과 같게 |
 | `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
+| `NOTIFY_INFERENCE_LABEL` | (선택) GPU 알림에 붙는 서버 이름(예: `Runpod A40` → "🟢 GPU 추론 서버(Runpod A40) 연결됨"). 비우면 이름 없이. prod 는 끊김(🔴)을 45초(`notify.down-grace-ms`) 넘게 이어질 때만 알린다. 그 안에 바로 다시 연결되면 🔴·🟢 둘 다 보내지 않고, 서비스가 다시 시작돼 모델을 불러오는 중(🟡)을 거쳐 돌아오면 🟡·🟢 만 보낸다. `#` 는 쓰지 않는다(따옴표 없는 값에서 compose 가 ` #` 뒤를 주석으로 자른다) |
 | `GRAFANA_ADMIN_USER` · `GRAFANA_ADMIN_PASSWORD` | (monitoring 프로필을 쓸 때만) Grafana 관리자 계정. 비밀번호는 `openssl rand -base64 24`. 견본에는 일부러 비어 있고, 비어 있으면 grafana 컨테이너가 뜨지 않는다(아래 '모니터링') |
 
 **해시의 `$` 처리**: docker compose v2 는 `.env` 의 따옴표 없는 값과 큰따옴표 값에서 `$이름`·`${이름}` 을 변수로 바꾸고, **작은따옴표 값은 글자 그대로** 쓴다(Docker 문서 'Interpolation — .env file syntax'). bcrypt 해시(`$2a$14$...`)를 따옴표 없이 넣으면 `$14...` 같은 부분이 빈 값으로 바뀌어 로그인이 영영 안 된다. `$$` 는 compose **YAML 파일 안**에서 `$` 를 쓰는 방법이고 `.env` 에서는 쓰지 않는다. 들어간 값은 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec caddy printenv BASIC_AUTH_HASH` 로 확인한다(CI 도 견본 파일로 같은 확인을 한다).
