@@ -61,7 +61,10 @@ cd C:\beside\Beside
 - 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 PLAN 3단계 개선 후보.
 - 같은 사진은 같은 결과(시드 고정).
 - 결과 GLB 는 정적 메시다(애니메이션 없음). 앱은 동작 버튼을 자동으로 숨긴다. 리깅(SMAL 뼈대·클립)을 붙이려면 리깅 스크립트를 `convert` 다음 단계로 넣는다 — GLB_SPEC rigged 확정 후.
-- 털: `hair_length.png`/`hair_flow.png`/`hair_maps.json` 이 GLB 옆에 생기지만 API 로 내려주지는 않는다(계약 미정).
+- 털: `hair_length.png`/`hair_flow.png`/`hair_maps.json` 이 GLB 옆에 생기고, 리깅이 끝난 뒤 `tools/embed_hair.py` 가 두 PNG 를 `base.glb` 안에 넣는다(`extras.beside = {hairLengthImage, hairFlowImage, furLength}`, 재질에서 쓰지 않는 이미지라 일반 뷰어는 무시). 앱(RuntimeModelLoader)이 이를 읽어 그 개의 털 길이·결로 쉘 털을 그린다. GLB 가 약 0.6 MB 커진다. 끄려면 `BESIDE_EMBED_HAIR=0`.
+  - 털 맵은 AnimalLift `assets/hair_map_meta_uvanchor.npz` 의 가이드 텍셀(약 5.6만 개, 21 %)만으로 다시 만든다. 나머지 텍셀은 학습되지 않은 값이라 버린다. 눈 주변처럼 가이드가 없는 곳과, 템플릿 텍스처(`assets/base_texture.png`)에서 코 가죽·발바닥 패드로 보이는 어두운 부분(`convert_asset._BARE_BOXES` 범위)에는 털이 없고, 그 둘레 4 텍셀은 털이 점점 짧아진다. UV 섬 경계 밖 3 텍셀은 가장 가까운 값으로 채워 이음새에서 털이 얇아지지 않게 한다. 같은 폴더에 부위 번호 지도 `hair_region.png` 도 생긴다(부위별 털 혼합용, 아직 GLB 에 넣지 않음). 경로를 바꾸려면 `BESIDE_HAIR_META`.
+  - `uv.png` 의 초록 배경은 가장 가까운 섬 색으로 채운 `texture_padded.png` 로 바꿔 GLB 에 넣는다(귀·이음새의 초록 번짐 방지).
+  - 털 결 방향을 위해 GLB 에 TANGENT 를 추가한다(AnimalLift 털 좌표계 x = dP/du, y = dP/dv, z = 법선과 같은 기준).
 - 라이선스: AnimalLift 리포에 라이선스 파일이 없다. 학습·연구 목적 사용은 저자 안내를 따르고, 결과물·가중치를 공개 배포하기 전에 확인한다.
 
 ## 모델 교체 (개선 모델로 바꿀 때)

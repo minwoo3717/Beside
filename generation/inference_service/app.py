@@ -9,6 +9,7 @@ Model mode (set BESIDE_ANIMALLIFT_DIR, run in the AnimalLift Python env):
             BESIDE_WORK_DIR (default ./work), BESIDE_VAE_LOCAL_PATH
   Spring on Windows, this service in WSL2 Ubuntu: BESIDE_PATH_MAP='C:\\=/mnt/c/' and BESIDE_WORK_DIR=/mnt/c/beside/work
   rigging: BESIDE_RIG_TEMPLATE=<rigged template .glb> -> skeleton + Idle/Walk/Sit/TailWag/HeadTilt on every result
+  fur maps: on by default (tools/embed_hair.py puts hair_length/flow PNGs into base.glb); BESIDE_EMBED_HAIR=0 = off
   swapping the model (no Spring/Unity change):
             BESIDE_MODEL_DIR (alias of BESIDE_ANIMALLIFT_DIR), BESIDE_MODEL_NAME (modelVersion label, default animallift-baseline),
             BESIDE_RUNNER (module:Class, default animallift_runner:AnimalLiftRunner), BESIDE_FORWARD_AXIS (+x for SMAL/AnimalLift)
@@ -42,6 +43,13 @@ FORWARD_AXIS = os.environ.get("BESIDE_FORWARD_AXIS", "+x")                   # h
 # Optional: rigged template GLB (SMAL-derived, keep out of git). When set, every result gets its skeleton + clips
 # (tools/rig_transfer.py). If the transfer fails the static GLB is delivered, the job does not fail.
 RIG_TEMPLATE = os.environ.get("BESIDE_RIG_TEMPLATE")
+# Per-dog fur maps (hair_length/flow PNGs) embedded in the delivered GLB (extras.beside) for the app's fur.
+# BESIDE_EMBED_HAIR=0 turns it off (GLB without fur maps, as before).
+EMBED_HAIR = os.environ.get("BESIDE_EMBED_HAIR", "1") != "0"
+# AnimalLift's guide-texel map: fur maps are rebuilt from the guide texels only (convert_asset._from_guides).
+# Default: <model dir>/assets/hair_map_meta_uvanchor.npz. Missing file = old behaviour (all texels used).
+HAIR_META = os.environ.get("BESIDE_HAIR_META") or (
+    os.path.join(ANIMALLIFT_DIR, "assets", "hair_map_meta_uvanchor.npz") if ANIMALLIFT_DIR else None)
 
 # Spring on Windows + this service in WSL2 Ubuntu on the same PC: translate paths both ways.
 #   BESIDE_PATH_MAP="C:\\=/mnt/c/"   (several pairs separated by ';')
@@ -221,7 +229,8 @@ def infer(request: InferRequest) -> InferResponse:
     glb = job_dir / "base.glb"
     try:
         m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
-                    hair_npz=str(pred.hair_npz) if pred.hair_npz else None, forward_axis=FORWARD_AXIS)
+                    hair_npz=str(pred.hair_npz) if pred.hair_npz else None, forward_axis=FORWARD_AXIS,
+                    hair_meta=HAIR_META if HAIR_META and os.path.isfile(HAIR_META) else None)
     except ConversionError as e:
         raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": str(e)})
     except Exception as e:  # noqa: BLE001
@@ -235,7 +244,8 @@ def infer(request: InferRequest) -> InferResponse:
         rig_started = time.perf_counter()
         tmp = job_dir / "base.rigged.glb"
         try:
-            info = transfer(str(glb), str(pred.uv_png), RIG_TEMPLATE, str(tmp))
+            padded = job_dir / "texture_padded.png"          # green background replaced (convert_asset.pad_texture)
+            info = transfer(str(glb), str(padded if padded.is_file() else pred.uv_png), RIG_TEMPLATE, str(tmp))
             os.replace(tmp, glb)
             m["bytes"] = info["bytes"]
             m["convertMs"] += int((time.perf_counter() - rig_started) * 1000)
@@ -246,10 +256,23 @@ def infer(request: InferRequest) -> InferResponse:
             if tmp.exists():
                 tmp.unlink()
 
+    # per-dog fur maps go inside the final GLB (after rigging, which rebuilds the file) -> app shell fur
+    hair_json = job_dir / "hair_maps.json"
+    if EMBED_HAIR and hair_json.is_file():
+        from embed_hair import embed_from_json
+
+        try:
+            info = embed_from_json(str(glb), str(hair_json))
+            m["bytes"] = info["bytes"]
+            log.warning("job %s: hair maps embedded (furLength %.4f, +%d bytes)", request.jobId,
+                        info["furLength"], info["lengthBytes"] + info["flowBytes"])
+        except Exception as e:  # noqa: BLE001  fur is optional: deliver the GLB without it
+            log.warning("job %s: hair maps not embedded: %s", request.jobId, e)
+
     log.warning("job %s: infer %d ms, convert %d ms, %d tris, %d bytes", request.jobId, pred.infer_ms, m["convertMs"], m["triangles"], m["bytes"])
     return InferResponse(
         glbPath=_to_remote(str(glb.resolve())),
-        hairGlbPath=None,   # hair variant GLB is [계획]; hair_length/flow PNGs are written next to base.glb
+        hairGlbPath=None,   # fur maps are embedded in base.glb (extras.beside); no separate hair GLB
         metrics=InferMetrics(inferMs=pred.infer_ms, gpuPeakMB=pred.gpu_peak_mb, modelParams=MODEL.model_params,
                              outputVertices=m["vertices"], outputTriangles=m["triangles"], convertMs=m["convertMs"]),
         passthrough=False,
