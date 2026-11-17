@@ -1,42 +1,54 @@
 #!/usr/bin/env bash
 # Runpod Pod: install AnimalLift + the Beside inference deps under /workspace (survives stop/terminate on a network volume).
-#   nohup bash install_animallift.sh > /workspace/beside-logs/install.log 2>&1 &     progress: beside-logs/install.status
+#   mkdir -p /workspace/beside-logs && nohup bash /workspace/Beside/deploy/runpod/install_animallift.sh \
+#     > /workspace/beside-logs/install.log 2>&1 &                         progress: beside-logs/install.status
 # The checkout is moved to /workspace/AnimalLift only at the very end: start_pod.sh switches to model mode as soon as that
-# folder exists. Re-running resumes (conda, env, clone and checkpoint are skipped when already there).
+# folder exists. Re-running after the previous run has ended resumes: a step that was cut off (Pod stopped, disk full)
+# is redone from scratch, a finished one is skipped. One run at a time (lock).
 set -euo pipefail
 WS="${WORKSPACE:-/workspace}"
 REPO="${BESIDE_REPO:-$WS/Beside}"
 CONDA_HOME="${CONDA_HOME:-$WS/miniconda3}"        # Miniforge (conda-forge, no Anaconda ToS prompt) at the default path
 CONDA_ENV="${CONDA_ENV:-animallift}"
+LOCK_FILE="${LOCK_FILE:-/tmp/install_animallift.lock}"   # container disk, like start_pod.sh's RUN_DIR
 MF_VER=26.9.4-2
-MF_SHA=bbaf16b3897da24c4be50315934ba74848f617b4495982841d6a0a60e0edbbdf
+MF_SHA="${MF_SHA:-bbaf16b3897da24c4be50315934ba74848f617b4495982841d6a0a60e0edbbdf}"
+MF_URL="${MF_URL:-https://github.com/conda-forge/miniforge/releases/download/$MF_VER/Miniforge3-$MF_VER-Linux-x86_64.sh}"
+AL_URL="${AL_URL:-https://github.com/Chuny1/AnimalLift.git}"
 PYVER=3.10.20                                      # upstream AnimalLift README
-CKPT_BYTES=2317900684                              # Chunyi99/AnimalLift latest.pt (Hugging Face API)
+CKPT_BYTES="${CKPT_BYTES:-2317900684}"             # Chunyi99/AnimalLift latest.pt (Hugging Face API)
 DEST="$WS/AnimalLift"
 WORK="$WS/AnimalLift.installing"
 STATUS="$WS/beside-logs/install.status"
 export HF_HOME="${HF_HOME:-$WS/.cache/huggingface}" TORCH_HOME="${TORCH_HOME:-$WS/.cache/torch}"
 export PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 mkdir -p "$WS/beside-logs"
+exec 9> "$LOCK_FILE"
+flock -n 9 || { echo "another install_animallift.sh is still running (see $STATUS)" >&2; exit 1; }
 step() { echo "$(date -u +%FT%TZ) +${SECONDS}s $*" | tee -a "$STATUS"; }
 trap 'step "FAILED at line $LINENO (see install.log)"' ERR
 [[ -d "$DEST" ]] && { step "already installed at $DEST"; exit 0; }
 step "start"
 if [[ ! -x "$CONDA_HOME/bin/conda" ]]; then
   step "miniforge $MF_VER"
+  rm -rf "$CONDA_HOME"   # a cut-off install leaves the prefix without bin/conda, and the installer refuses an existing prefix
   f="/tmp/Miniforge3-$MF_VER-Linux-x86_64.sh"
-  curl -fsSL --retry 3 -o "$f" "https://github.com/conda-forge/miniforge/releases/download/$MF_VER/Miniforge3-$MF_VER-Linux-x86_64.sh"
+  curl -fsSL --retry 3 -o "$f" "$MF_URL"
   echo "$MF_SHA  $f" | sha256sum -c --quiet -
   bash "$f" -b -p "$CONDA_HOME"
   rm -f "$f"
 fi
 PY="$CONDA_HOME/envs/$CONDA_ENV/bin/python"
-if [[ ! -x "$PY" ]]; then
+if ! "$PY" -m pip --version > /dev/null 2>&1; then   # python without pip = env creation was cut off
   step "conda env $CONDA_ENV python=$PYVER"
+  rm -rf "$CONDA_HOME/envs/$CONDA_ENV"
   "$CONDA_HOME/bin/conda" create -y -q -n "$CONDA_ENV" "python=$PYVER" pip
 fi
 step "env $("$PY" --version 2>&1)"
-[[ -d "$WORK/.git" ]] || { rm -rf "$WORK"; git clone -q https://github.com/Chuny1/AnimalLift.git "$WORK"; }
+if ! { git -C "$WORK" rev-parse -q --verify HEAD > /dev/null 2>&1 && [[ -f "$WORK/requirements.txt" ]]; }; then
+  rm -rf "$WORK"   # a killed clone leaves .git with no commit
+  git clone -q "$AL_URL" "$WORK"
+fi
 step "AnimalLift $(git -C "$WORK" rev-parse --short HEAD)"
 step "pip: AnimalLift requirements (torch 2.4.0+cu124)"
 "$PY" -m pip install -q -r "$WORK/requirements.txt"

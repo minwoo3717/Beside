@@ -42,7 +42,14 @@ cid="$("${C[@]}" ps -q caddy 2>/dev/null || true)"
 if [ -n "$cid" ]; then
   made_from="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$cid")"
   if [ "$made_from" = "$here/docker-compose.yml" ] && [ "$ENV_FILE" = "$here/.env" ]; then
-    "${C[@]}" up -d --no-deps caddy >/dev/null 2>&1 && echo "caddy 를 새 비밀번호로 다시 띄웠습니다."
+    # stdout 만 버린다: compose 는 진행과 오류를 stderr 로 쓰므로 실패 원인이 보인다.
+    if "${C[@]}" up -d --no-deps caddy >/dev/null; then
+      echo "caddy 를 새 비밀번호로 다시 띄웠습니다."
+    else
+      echo "caddy 를 다시 만들지 못했습니다. .env 에는 새 해시가 들어갔으니 비밀번호를 전달하기 전에 $(dirname "$here") 에서" >&2
+      echo "  docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --no-deps caddy 를 다시 실행하세요." >&2
+      exit 1
+    fi
   else
     echo "떠 있는 caddy 는 다른 체크아웃($made_from)의 것이라 건드리지 않았습니다. 그 폴더에서 up -d --no-deps caddy 하세요."
   fi
