@@ -148,9 +148,9 @@ DoD:
 | 조각 | 내용 | 계약 영향 | 상태 |
 |---|---|---|---|
 | S1 | prod 프로파일(H2 콘솔·Swagger off), 업로드 매직 바이트 검사, 결과 폴더 설정화 | 없음 | **[구현됨]** `ProdProfileTest`, 로컬 real,prod 실행 확인 |
-| S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e, GCP VM 의 backend ↔ VM 안 스텁 컨테이너로 공개 주소 e2e(2026-11-13). Pod 쪽 시작 스크립트 `deploy/runpod/start_pod.sh` [구현됨](WSL 시험 45개, 실제 Pod 전). VM ↔ Runpod Pod 연결은 [계획] |
+| S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e, GCP VM 의 backend ↔ VM 안 스텁 컨테이너로 공개 주소 e2e(2026-11-13). Pod 쪽 `deploy/runpod/start_pod.sh`(WSL 시험 65개)·`install_animallift.sh` 로 VM ↔ Runpod Pod 연결과 AnimalLift 모델 모드 공개 주소 e2e 3건 [구현됨](2026-11-17, A40 EU-SE-1, [기록](deploy/2026-11-17_runpod-connect.md)) |
 | S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | **[구현됨]** 테스트 + 로컬에서 GPU 끔 → PENDING → 켬 → COMPLETED 확인 |
-| S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | **[구현됨]** CI(main push·PR #4) 통과, GCP VM 배포 2026-11-13(`https://beside-team.duckdns.org`, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 첫 배포 감사로 Caddy 규칙 강화(`deploy/gcp` 브랜치, push 전) |
+| S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | **[구현됨]** CI(main push·PR #4) 통과, GCP VM 배포 2026-11-13(`https://beside-team.duckdns.org`, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 첫 배포 감사로 Caddy 규칙 강화(`deploy/gcp` 브랜치, 이 브랜치의 PR 로 main 병합) |
 | S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합) |
 | S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
@@ -158,7 +158,7 @@ DoD:
 | S9 | 반려동물 보관함(웹) | openapi 추가 | 〃 |
 | S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | 문서 동기화 **[구현됨]**, 실측 10건+ **[계획]**(VM·Runpod Pod 연결 뒤) |
 
-직접 할 일: ~~VM 생성, 도메인, `deploy/.env`~~(2026-11-13 GCP e2-standard-2·50GB, Ubuntu 24.04 로 끝남), Runpod 크레딧 구매 → Tailscale 계정과 로그인 승인(VM·Pod) → Pod 에서 `deploy/runpod/start_pod.sh`. 실측은 VM 과 Pod 가 연결된 뒤에 한다.
+직접 할 일: ~~VM 생성, 도메인, `deploy/.env`~~(2026-11-13 GCP e2-standard-2·50GB, Ubuntu 24.04 로 끝남), ~~Runpod 크레딧 구매 → Tailscale 계정과 로그인 승인(VM·Pod) → Pod 에서 `deploy/runpod/start_pod.sh` → AnimalLift 설치·모델 모드 1건~~(2026-11-17 끝남, exp-01). 남은 것: Runpod Secret 값에서 `INFERENCE_TOKEN=` 떼기, 폰 앱으로 1건, 실측 10건+.
 
 ### 부하·운영 — 쏘카 수준 목표 (2026-11-01 추가)
 

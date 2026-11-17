@@ -23,12 +23,12 @@
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌았는지는 아직 보지 않았다 — **[계획]** |
-| 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · 실행 **[계획]**: compose 검증·경로 시험은 CI 에 넣었지만 아직 돌지 않았고, Prometheus·Grafana 를 실제로 띄워 본 적은 없다(이 PC 에 Docker 없음). 아래 '모니터링' |
+| 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus·Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · 실행 **[계획]** — [loadtest/README.md](loadtest/README.md) |
 
 ## GCP 메인 서버 (2026-11-13)
 
-2026-11-12 결정으로 팀 메인 서버는 GCP 무료 체험 크레딧($300, 90일)으로 돌린다([docs/budget/2026-11_purchase-plan.md](../docs/budget/2026-11_purchase-plan.md) §3). **업그레이드(전체 계정 활성화)를 누르지 않으면 청구되지 않는다.** 체험 중에는 GPU 를 붙일 수 없으므로 추론은 GCP 밖의 Runpod Pod 에 두고 Pod 안의 Tailscale 로 잇는다(2026-11-13 결정, 아래 'Runpod Pod 쪽').
+2026-11-12 결정으로 팀 메인 서버는 GCP 무료 체험 크레딧($300, 90일)으로 돌린다(팀 내부 재료비 구매 계획 §3 — 리포에는 올리지 않은 문서). **업그레이드(전체 계정 활성화)를 누르지 않으면 청구되지 않는다.** 체험 중에는 GPU 를 붙일 수 없으므로 추론은 GCP 밖의 Runpod Pod 에 두고 Pod 안의 Tailscale 로 잇는다(2026-11-13 결정, 아래 'Runpod Pod 쪽').
 
 | 항목 | 값 |
 |---|---|
@@ -37,7 +37,7 @@
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
-| 코드 | VM 의 `~/Beside` 는 `feat/preprocess`(PR #4). 병합 뒤 `main` 으로 바꾼다 |
+| 코드 | VM 의 `~/Beside` 는 `feat/preprocess`(PR #4) + 감사 뒤 강화한 Caddyfile(로컬 수정). `deploy/gcp` → `main` PR 이 병합되면 `main` 으로 바꾼다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -45,12 +45,12 @@
 
 1. 아래 '1. VM 만들기' 의 Docker 설치. 컨테이너를 만들기 전에 `/etc/docker/daemon.json` 에 로그 회전 `{"log-driver": "json-file", "log-opts": {"max-size": "20m", "max-file": "5"}}` 를 넣는다(기본은 무제한이라 접근 로그가 디스크를 채운다).
 2. 스왑 2GB(fstab 포함, '띄우기' 절).
-3. `git clone https://github.com/minwoo3717/Beside.git ~/Beside` → `git checkout feat/preprocess` → `scripts/fetch_models.sh backend/models`.
+3. `git clone https://github.com/minwoo3717/Beside.git ~/Beside` → `main`(2026-11-13 에는 `feat/preprocess` 였다. Caddy 강화가 든 `deploy/gcp` PR 이 병합되기 전에 다시 만든다면 `deploy/gcp`) → `scripts/fetch_models.sh backend/models`.
 4. `deploy/.env`: `cp deploy/.env.example deploy/.env && chmod 600 deploy/.env`, 도메인, `INFERENCE_TOKEN` 은 VM 에서 `openssl rand -hex 32` 로 만들어 바로 파일에 넣는다(화면에 찍지 않는다).
 5. 팀 비밀번호: 개발 PC 에서 `ssh -t beside-gcp 'bash ~/Beside/deploy/set_basic_auth.sh'`([set_basic_auth.sh](set_basic_auth.sh) — 두 번 묻고 해시만 `.env` 에 넣는다. 비밀번호를 바꿀 때도 같다). 이 파일이 VM 의 체크아웃에 들어오기 전에는 같은 일을 하는 VM 의 `~/bin/beside-set-password` 를 쓴다(`ssh -t beside-gcp '~/bin/beside-set-password'`).
 6. `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build` → 밖에서 '확인' 절.
 
-**지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다(그 커밋이 원격에 올라가면 `git checkout deploy/Caddyfile` 뒤 pull). 2026-11-17 에 VM 에 Tailscale 을 설치하고(apt 저장소, `beside-vm` 100.98.76.5) `INFERENCE_BASE_URL` 을 Runpod Pod(100.83.86.62:8002)로 바꿨다. 이전 값은 `deploy/.env.bak-20261117-stub` 에 있고 스텁 컨테이너 `beside-stub` 는 되돌릴 때를 위해 남겨 두었다.
+**지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다. 이 강화는 `deploy/gcp` → `main` PR 로만 들어가고 `feat/preprocess` 에서 pull 해도 오지 않으므로, PR 이 병합되기 전에는 VM 의 Caddyfile 을 되돌리지 않는다. 병합 뒤 VM 에서 `git checkout deploy/Caddyfile && git checkout main && git pull --ff-only`, 그다음 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`(main 의 compose 변경으로 컨테이너가 다시 만들어진다). 2026-11-17 에 VM 에 Tailscale 을 설치하고(apt 저장소, `beside-vm` 100.98.76.5) `INFERENCE_BASE_URL` 을 Runpod Pod(100.83.86.62:8002)로 바꿨다. 이전 값은 `deploy/.env.bak-20261117-stub` 에 있고 스텁 컨테이너 `beside-stub` 는 되돌릴 때를 위해 남겨 두었다.
 
 **남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다(`create_vm.sh` 는 이제 서비스 계정 없이 만든다). 바꾸려면 VM 을 잠깐 멈춰야 한다(약 1분 중단, 컨테이너는 스스로 다시 뜬다). 기본 네트워크가 만든 RDP 규칙도 필요 없다.
 
@@ -344,7 +344,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | `MODE` | 하는 일 |
 |---|---|
 | `passthrough`: `/workspace/AnimalLift` 가 없을 때의 기본값 | `/workspace/beside-venv` 에 `requirements.txt` 를 설치하고 고정 GLB 를 돌려준다. 연결 시험용이다. `/workspace/beside-sample.glb` 가 없으면 삼각형 하나짜리 GLB 를 만든다. 진짜 강아지를 보이려면 그 자리에 GLB 를 올려 둔다 |
-| `model`: `/workspace/AnimalLift` 가 있을 때의 기본값 | `scripts/start_inference_wsl.sh` 로 AnimalLift 를 띄운다. `nvidia-smi` 에 GPU 가 없으면 시작하지 않는다(GPU 없이 다시 켜진 Pod 에서 모델이 CPU 로 조용히 올라가 모든 작업이 600초 뒤 실패하는 것을 막는다). conda(`/workspace/miniconda3`, env `animallift`)·AnimalLift·체크포인트·리깅 템플릿(`/workspace/beside-rig/template-rigged.glb`)은 모두 `/workspace` 아래에 둔다. 설치는 [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md) |
+| `model`: `/workspace/AnimalLift` 가 있을 때의 기본값 | `scripts/start_inference_wsl.sh` 로 AnimalLift 를 띄운다. `nvidia-smi` 에 GPU 가 없으면 시작하지 않는다(GPU 없이 다시 켜진 Pod 에서 모델이 CPU 로 조용히 올라가 모든 작업이 600초 뒤 실패하는 것을 막는다). conda(`/workspace/miniconda3`, env `animallift`)·AnimalLift·체크포인트·리깅 템플릿(`/workspace/beside-rig/template-rigged.glb`)은 모두 `/workspace` 아래에 둔다. 설치는 [runpod/install_animallift.sh](runpod/install_animallift.sh)(`mkdir -p /workspace/beside-logs && nohup bash /workspace/Beside/deploy/runpod/install_animallift.sh > /workspace/beside-logs/install.log 2>&1 &`, 진행은 `install.status`). `/workspace/AnimalLift.installing` 에 받고 모두 끝난 뒤에만 `/workspace/AnimalLift` 로 옮긴다. 자세한 것은 [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md) |
 
 파일 위치:
 

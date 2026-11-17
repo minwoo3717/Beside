@@ -2,7 +2,7 @@
 
 결정됨(재논의하지 않는다): **Unity Android 앱(ARCore, glTFast) ↔ Spring Boot 공개 API(Job 상태·저장·에셋 서빙) ↔ Python 추론 서비스(FastAPI, GPU, AnimalLift + GLB 변환, 내부 전용 `POST /infer`)**. Spring 은 profile 로 `mock | real` 워커를 교체하고 real 워커가 Python 을 호출한다. Unity 는 Spring API 계약 v1 만 본다.
 
-상태: Spring(v0·v1·Mock/real 워커·H2 저장소·실행별 측정 `job_runs`)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱과 AnimalLift 추론·변환·자동 리깅 연결은 #1(2026-10-14)로 머지됐다 — 앱 DoD 증빙과 실제 모델 실측 기록은 아직 없다 ([PLAN.md](PLAN.md)). 실제 E2E 배치는 팀원 GPU PC 한 대에 Spring 과 추론 서비스를 함께 두기로 했다(2026-10-05). 2026-10-30 결정으로 Spring 은 **클라우드 VM**(Docker Compose + Caddy)에 올리고 GPU 쪽과는 Tailscale 로 잇는다: 배포 파일·prod 프로파일·`/infer` 업로드 모드·GPU 오프라인 대기는 **[구현됨]**([deploy/](../deploy/README.md), 같은 PC 패스스루로 확인), 실제 VM 배포는 2026-11-13 GCP 로 **[구현됨]**(추론은 아직 VM 안 스텁). GPU 는 **Runpod Pod** 로 하고 Pod 안에 Tailscale 을 띄우기로 했다(2026-11-13, 연결은 **[계획]**, 아래 '배포 가정').
+상태: Spring(v0·v1·Mock/real 워커·H2 저장소·실행별 측정 `job_runs`)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱과 AnimalLift 추론·변환·자동 리깅 연결은 #1(2026-10-14)로 머지됐다 — 앱 DoD 증빙은 아직 없고, 실제 모델 실측은 2026-11-17 Runpod 에서 처음 했다([exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md), [PLAN.md](PLAN.md)). 실제 E2E 배치는 팀원 GPU PC 한 대에 Spring 과 추론 서비스를 함께 두기로 했다(2026-10-05). 2026-10-30 결정으로 Spring 은 **클라우드 VM**(Docker Compose + Caddy)에 올리고 GPU 쪽과는 Tailscale 로 잇는다: 배포 파일·prod 프로파일·`/infer` 업로드 모드·GPU 오프라인 대기는 **[구현됨]**([deploy/](../deploy/README.md), 같은 PC 패스스루로 확인), 실제 VM 배포는 2026-11-13 GCP 로 **[구현됨]**. GPU 는 **Runpod Pod** 로 하고 Pod 안에 Tailscale 을 띄우기로 했고(2026-11-13), 2026-11-17 VM ↔ Pod 연결과 AnimalLift 모델 모드로 공개 주소 전체 흐름이 **[구현됨]**(사진 3건, VM ↔ Pod 는 DERP 중계, 아래 '배포 가정').
 
 ## 구성 요소
 
@@ -93,7 +93,7 @@ stateDiagram-v2
 |---|---|---|
 | 워커 | `MockJobWorker`: 고정 지연 후 샘플 GLB. 파일명 `fail` 트리거 | `RealJobWorker`: 추론 슬롯 대기 → `POST {inference.base-url}/infer` → 결과 GLB 복사 **[구현됨]**. AnimalLift 연결은 #1 로 머지(실측 기록 없음), GPU 없이 시험할 때는 FastAPI 패스스루 |
 | 설정 파일 | `application-mock.properties` (`mock.worker.*`, `storage.result.sample`) | `application-real.properties` (`inference.base-url`, `inference.timeout-ms`, `inference.max-concurrency`, `storage.result.dir`) |
-| GPU | 불필요 | FastAPI 추론 서비스가 같은 GPU PC 에서 실행(`scripts/run_real.ps1`). VM 배치에서는 Tailscale 너머의 Runpod Pod 또는 GPU PC([deploy/README.md](../deploy/README.md), 업로드 모드 [구현됨], VM ↔ GPU 연결 [계획]) |
+| GPU | 불필요 | FastAPI 추론 서비스가 같은 GPU PC 에서 실행(`scripts/run_real.ps1`). VM 배치에서는 Tailscale 너머의 Runpod Pod 또는 GPU PC([deploy/README.md](../deploy/README.md), 업로드 모드 [구현됨], VM ↔ Runpod Pod 연결 [구현됨] 2026-11-17, VM ↔ GPU PC [계획]) |
 | 용도 | Unity·브라우저 개발, 계약 테스트, 데모 백업 | Spring↔Python 연동 시험(패스스루), 실제 모델 E2E(10-20 주 선행), 4단계 실 연동 |
 | healthz | `{ "profile": "mock", "workerType": "mock" }` | `{ "profile": "real", "workerType": "real" }` |
 | DB 파일 | `storage/db/beside-mock.mv.db` (+ `/h2-console`) | `storage/db/beside-real.mv.db` (+ `/h2-console` — `job_runs` 측정표 내보내기, METRICS §1.1) |
@@ -121,11 +121,11 @@ backend/storage/
 
 결정(2026-10-30): Spring 은 **클라우드 VM 한 대**, GPU 추론은 **팀원 GPU PC** 에 남기고 **Tailscale** 사설망으로 잇는다. 팀 내부 테스트용이라 계정은 없고 웹·관리 경로만 Basic 인증으로 막는다. 같은 PC 배치(2026-10-05 결정)는 개발과 대안으로 남는다.
 
-결정(2026-11-13): GPU 추론은 **Runpod Pod** 에서 한다(학교 재료비로 크레딧 구매 예정, 팀원 GPU PC 는 대안). Pod 는 컨테이너라 Tailscale 을 **Pod 안에 userspace 모드**로 띄우고 추론 서비스는 127.0.0.1 에만 연다. 다른 두 방법을 쓰지 않는 이유: Runpod HTTP 프록시는 요청을 100초에서 끊는데 Spring 은 `/infer/upload` 를 최대 600초 기다리고, Pod 의 TCP 포트를 공개하면 사진·토큰이 암호화 없이 지나가며 Pod 를 다시 켤 때마다 외부 포트가 바뀐다. 절차는 [deploy/README.md](../deploy/README.md) 'Runpod Pod 쪽'.
+결정(2026-11-13): GPU 추론은 **Runpod Pod** 에서 한다(학교 재료비로 2026-11-17 크레딧 약 $200 구매, 팀원 GPU PC 는 대안). Pod 는 컨테이너라 Tailscale 을 **Pod 안에 userspace 모드**로 띄우고 추론 서비스는 127.0.0.1 에만 연다. 다른 두 방법을 쓰지 않는 이유: Runpod HTTP 프록시는 요청을 100초에서 끊는데 Spring 은 `/infer/upload` 를 최대 600초 기다리고, Pod 의 TCP 포트를 공개하면 사진·토큰이 암호화 없이 지나가며 Pod 를 다시 켤 때마다 외부 포트가 바뀐다. 절차는 [deploy/README.md](../deploy/README.md) 'Runpod Pod 쪽'.
 
 | 배치 | 용도 | 상태 |
 |---|---|---|
-| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://beside-team.duckdns.org` | **[구현됨]** 배포 파일(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`), CI(이미지 빌드·Caddy 경로 시험, main push·PR #4 통과), GCP VM 실제 배포(2026-11-13: e2-standard-2 서울, HTTPS·Basic 인증·전체 흐름·재부팅 복구, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 추론은 아직 VM 안 패스스루 스텁이고 Tailscale·Runpod Pod 연결은 **[계획]**(Pod 쪽 스크립트 `deploy/runpod/start_pod.sh` 는 WSL 에서 가짜 Tailscale 로만 시험). prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
+| **클라우드 VM**: Docker Compose(Caddy + Spring `real,prod`), 볼륨 `beside-storage` | 팀 테스트·시연. 폰은 어디서나 `https://beside-team.duckdns.org` | **[구현됨]** 배포 파일(`backend/Dockerfile`, `deploy/`, `scripts/deploy_vm.sh`), CI(이미지 빌드·Caddy 경로 시험, main push·PR #4 통과), GCP VM 실제 배포(2026-11-13: e2-standard-2 서울, HTTPS·Basic 인증·전체 흐름·재부팅 복구, [기록](deploy/2026-11-13_gcp-first-deploy.md)). Tailscale·Runpod Pod 연결과 AnimalLift 모델 모드 **[구현됨]**(2026-11-17, A40 EU-SE-1, 사진 3건, [기록](deploy/2026-11-17_runpod-connect.md)). VM ↔ Pod 직접 연결(지금은 DERP 중계)·폰 앱 시험은 **[계획]**. prod 프로파일·업로드 모드·오프라인 대기·H2 온라인 백업 **[구현됨]** |
 | GPU PC 한 대에 Spring + 추론 서비스 | 실제 모델 개발·측정, VM 을 쓸 수 없을 때의 대안 | **[구현됨]** `scripts/run_real.ps1`, 경로 모드 |
 | 각자 PC, profile mock | Unity·브라우저 개발, 계약 테스트 | **[구현됨]** |
 
@@ -135,7 +135,7 @@ backend/storage/
   - Caddy 설정이 v0 `/api/jobs*`, `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `/webjars*`, `;` 가 든 경로를 404 로 막는다 **[구현됨]**(CI 와 공개 주소에서 확인)(v0 코드는 동결이라 배포 설정에서 막는다, REVIEW_CHECKLIST #10 안건).
   - Basic 인증: 웹 화면(`/`, Mock UI 파일 — 끝에 `/` 를 붙인 경로도, 관리·보관함·작업 상세), `/api/v1/jobs` 의 POST 가 아닌 method(목록, #9 안건), `/api/v1/jobs/*` 의 GET·HEAD·POST 가 아닌 method(삭제 등), `/api/v1/jobs/*/pet*`, `/api/v1/admin*`, `/api/v1/pets*`. 응답에 HSTS 를 붙이고, 손님이 보낸 `Forwarded`·`X-Forwarded-Prefix` 는 Spring 에 넘기지 않는다(2026-11-13 첫 배포 감사 뒤).
   - 공개: 앱 API(업로드·상태·에셋·retry), `/api/v1/healthz`, 공유 링크. 작업은 id(UUID)를 아는 사람만 볼 수 있다는 가정이다.
-  - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU 쪽 `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[구현됨]**(같은 PC 패스스루 e2e 와 VM 안 스텁으로 확인, REVIEW_CHECKLIST #6 (b) 제안). 추론 서비스는 GPU PC 에서는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에, Runpod Pod 에서는 127.0.0.1 에만 바인드한다(userspace 모드의 tailscaled 가 자기 100.x 로 온 연결을 127.0.0.1 의 같은 포트로 넘긴다 — Tailscale 소스 `wgengine/netstack` 로 확인, 실제 Pod 에서는 **[계획]**).
+  - Spring ↔ Python: 공유 파일시스템이 없으므로 `/infer` 업로드 모드(사진 업로드 + GLB 다운로드, `inference.transfer=upload`, 토큰 `inference.token` ↔ GPU 쪽 `BESIDE_INFERENCE_TOKEN`)로 보낸다 — **[구현됨]**(같은 PC 패스스루 e2e, VM 안 스텁, 그리고 2026-11-17 VM ↔ Runpod Pod 로 확인, REVIEW_CHECKLIST #6 (b) 제안). 추론 서비스는 GPU PC 에서는 그 PC 의 Tailscale IP(`BESIDE_HOST`)에, Runpod Pod 에서는 127.0.0.1 에만 바인드한다(userspace 모드의 tailscaled 가 자기 100.x 로 온 연결을 127.0.0.1 의 같은 포트로 넘긴다 — Tailscale 소스 `wgengine/netstack` 로 확인했고, 2026-11-17 실제 Pod 로그에서도 요청이 127.0.0.1 에서 들어왔다 **[구현됨]**).
   - 데이터: H2 파일·업로드·결과 GLB·`events.jsonl` 은 볼륨 `beside-storage`(컨테이너 `/app/storage`)에 있다. prod 는 매일 H2 온라인 백업(`BACKUP TO` → `storage/backup/`, 최신 7개) **[구현됨]**. 볼륨 전체는 backend 를 멈추고 tar 로 묶는다(문서).
   - GPU 쪽(Pod·GPU PC)이 꺼져 있거나 모델이 준비 전이면 prod 는 작업을 PENDING 으로 두고 `/healthz` 를 5초마다 다시 읽다가 UP 이 되면 시작한다. 30분(`inference.offline-wait-ms`)을 넘기면 `INFERENCE_UNAVAILABLE` **[구현됨]**. 작업 종료와 GPU 상태 변화는 Discord 웹훅으로 알린다(`notify.webhook-url`, 선택) **[구현됨]**. 재배포로 backend 가 다시 시작되면 진행 중 작업은 FAILED(`INTERNAL_ERROR`)가 된다.
 - 개발: 폰과 PC 는 같은 Wi-Fi, `http://<PC IP>:8080`, 방화벽 8080 허용, 앱은 개발용 cleartext 허용. 절차는 [unity/README.md](../unity/README.md).

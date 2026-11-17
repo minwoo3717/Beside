@@ -55,7 +55,7 @@
 | 4 | 실기기 실제 모델 AR(영상) | [ ] | — | UN · GPU PC |
 | 4 | `events.jsonl` 10건 이상 [실험 결과] | [ ] | 실측 0건 | BE+GEN |
 | 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). GPU PC 연결에서는 아직 | BE |
-| 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치(push 전, VM 에는 로컬 수정으로 적용) | BE |
+| 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치(이 브랜치의 PR 로 main 병합, 그 전까지 VM 에는 로컬 수정으로 적용) | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
 | 4b | 실측 10건 이상 | [ ] | VM·GPU PC 준비 뒤 | BE+GEN |
 | 5 | 측정표 3종 + 환경 | [ ] | 서버·추론·앱 측정 모두 0건(VM·GPU·기기). 백엔드 단독 성능(개발 PC 루프백)만 [실험 결과] [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |

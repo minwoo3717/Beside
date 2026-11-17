@@ -13,7 +13,7 @@
 | VM | GCP `beside-514511` / `beside-vm`, asia-northeast3-a, e2-standard-2(2 vCPU, 7.7 GiB), Ubuntu 24.04.5(커널 7.0.0-1017-gcp), 균형 디스크 50GB, 스왑 2GB |
 | 주소 | 고정 IP 34.64.91.254, `https://beside-team.duckdns.org`(Let's Encrypt) |
 | 소프트웨어 | Docker 29.9.3, Compose v5.7.1, caddy 2.11.7, backend 이미지(`feat/preprocess` `ad0c3f6`, profile `real,prod`, 전처리 켬) |
-| Caddyfile | 위 커밋 + 감사 뒤 강화판(`deploy/gcp` 브랜치, VM 에는 push 전까지 로컬 수정으로 적용) |
+| Caddyfile | 위 커밋 + 감사 뒤 강화판(`deploy/gcp` 브랜치, VM 에는 그 PR 이 main 에 병합될 때까지 로컬 수정으로 적용) |
 | 추론 | VM 안 패스스루 스텁 `beside-stub`(리포의 FastAPI 앱, 업로드 모드, 토큰 필수). 샘플 GLB 는 개발 PC 의 `sample-dog-rigged.glb`(1,429,772 B — 리포의 `sample-dog.glb` 는 0 B) |
 | 클라이언트 | 개발 PC(국내 가정용 회선), Git Bash curl, `scripts/e2e_mock.sh` |
 
