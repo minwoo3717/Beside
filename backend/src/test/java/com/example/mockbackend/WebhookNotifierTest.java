@@ -139,6 +139,101 @@ class WebhookNotifierTest {
         assertThat(new WebhookNotifier(" ", "", JSON).enabled()).isFalse();
     }
 
+    @Test
+    void gpuMessagesNameTheServerWhenALabelIsSet() {
+        Instant now = Instant.now();
+        Status up = new Status(State.UP, "cuda", now, now, "ok");
+        Status loading = new Status(State.LOADING, null, now, now, "no model loaded");
+        Status down = new Status(State.DOWN, null, now, now, "HttpTimeoutException");
+        assertThat(WebhookNotifier.stateMessage(new StateChanged(up, down), "Runpod A40"))
+                .isEqualTo("🔴 GPU 추론 서버(Runpod A40)에 연결할 수 없어요 (HttpTimeoutException) — 새 작업은 대기열에서 기다립니다");
+        assertThat(WebhookNotifier.stateMessage(new StateChanged(down, loading), "Runpod A40"))
+                .isEqualTo("🟡 GPU 추론 서버(Runpod A40)는 켜졌지만 모델이 아직 준비되지 않았어요");
+        // One line: newlines and runs of spaces collapse, ends are trimmed, long labels are cut.
+        assertThat(WebhookNotifier.stateMessage(new StateChanged(loading, up), "  Runpod\n\tA40 "))
+                .startsWith("🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda)");
+        assertThat(WebhookNotifier.stateMessage(new StateChanged(up, down), " ")).startsWith("🔴 GPU 추론 서버에 연결할 수 없어요");
+        assertThat(WebhookNotifier.stateMessage(new StateChanged(up, down), "x".repeat(100)))
+                .contains("(" + "x".repeat(40) + ")에");
+    }
+
+    @Test
+    void withoutGraceEveryGpuChangeIsPostedAtOnce() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "", 0, JSON);
+        Instant now = Instant.now();
+        Status unknown = new Status(State.UNKNOWN, null, null, now, "not checked yet");
+        Status up = new Status(State.UP, "cuda", now, now, "ok");
+        Status down = new Status(State.DOWN, null, now, now, "ConnectException");
+        notifier.onInferenceStateChanged(new StateChanged(unknown, up));
+        notifier.onInferenceStateChanged(new StateChanged(up, down));
+        notifier.onInferenceStateChanged(new StateChanged(down, up));
+        await().atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 2);
+        assertThat(gpuMessages().get(0)).startsWith("🔴 GPU 추론 서버에 연결할 수 없어요 (ConnectException)");
+        assertThat(gpuMessages().get(1)).startsWith("🟢 GPU 추론 서버 연결됨 (cuda)");
+    }
+
+    @Test
+    void aDownShorterThanTheGraceTimePostsNothing() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "Runpod A40", 400, JSON);
+        Instant now = Instant.now();
+        Status unknown = new Status(State.UNKNOWN, null, null, now, "not checked yet");
+        Status up = new Status(State.UP, "cuda", now, now, "ok");
+        Status loading = new Status(State.LOADING, null, now, now, "no model loaded");
+        Status down = new Status(State.DOWN, null, now, now, "HttpTimeoutException");
+
+        notifier.onInferenceStateChanged(new StateChanged(unknown, up));      // normal start: silent
+        notifier.onInferenceStateChanged(new StateChanged(up, down));         // the relay misses a check ...
+        notifier.onInferenceStateChanged(new StateChanged(down, up));         // ... and is back within 400 ms
+        await().during(Duration.ofMillis(1200)).atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().isEmpty());
+
+        notifier.onInferenceStateChanged(new StateChanged(up, down));         // the Pod is stopped
+        await().atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 1);
+        assertThat(gpuMessages().get(0)).startsWith("🔴 GPU 추론 서버(Runpod A40)에 연결할 수 없어요 (HttpTimeoutException)");
+
+        notifier.onInferenceStateChanged(new StateChanged(down, loading));    // started again, model loading
+        notifier.onInferenceStateChanged(new StateChanged(loading, up));
+        await().atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 3);
+        assertThat(gpuMessages().get(1)).startsWith("🟡 GPU 추론 서버(Runpod A40)는 켜졌지만");
+        assertThat(gpuMessages().get(2)).startsWith("🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda)");
+
+        // A restart seen as DOWN then LOADING within the grace time: only the LOADING (and the UP after it) is news.
+        notifier.onInferenceStateChanged(new StateChanged(up, down));
+        notifier.onInferenceStateChanged(new StateChanged(down, loading));
+        notifier.onInferenceStateChanged(new StateChanged(loading, up));
+        await().atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 5);
+        await().during(Duration.ofMillis(1200)).atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 5);
+        assertThat(gpuMessages().get(3)).startsWith("🟡");
+        assertThat(gpuMessages().get(4)).startsWith("🟢");
+    }
+
+    @Test
+    void aDownThatOutlastedTheGraceTimeIsAnnouncedEvenIfItsTimerIsLate() throws InterruptedException {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "", 200, JSON);
+        Instant now = Instant.now();
+        Status up = new Status(State.UP, "cuda", now, now, "ok");
+        Status down = new Status(State.DOWN, null, now, now, "HttpTimeoutException");
+        notifier.onInferenceStateChanged(new StateChanged(new Status(State.UNKNOWN, null, null, now, "-"), up));
+        notifier.onInferenceStateChanged(new StateChanged(up, down));
+        // Hold the notifier's lock past the grace time so its timer cannot run, then report the GPU back.
+        synchronized (notifier) {
+            Thread.sleep(500);
+            notifier.onInferenceStateChanged(new StateChanged(down, up));
+        }
+        await().atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 2);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> gpuMessages().size() == 2);
+        assertThat(gpuMessages().get(0)).startsWith("🔴 GPU 추론 서버에 연결할 수 없어요 (HttpTimeoutException)");
+        assertThat(gpuMessages().get(1)).startsWith("🟢 GPU 추론 서버 연결됨");
+    }
+
+    private static String hookUrl() {
+        return "http://127.0.0.1:" + webhook.getAddress().getPort() + "/hook";
+    }
+
+    /** GPU messages only: job messages from the other tests' uploads may still arrive. */
+    private static List<String> gpuMessages() {
+        return received.stream().map(WebhookNotifierTest::content).filter(text -> text.contains("GPU 추론 서버")).toList();
+    }
+
     private String upload(String filename) throws Exception {
         String body = mvc.perform(multipart("/api/v1/jobs")
                         .file(new MockMultipartFile("photos", filename, "image/jpeg", new byte[16])))
