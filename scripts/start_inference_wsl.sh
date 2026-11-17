@@ -31,9 +31,12 @@ else
   fi
 fi
 
+# conda's activation scripts read variables that may be unset, so relax nounset only around them
+set +u
 # shellcheck disable=SC1091
 source "$CONDA_HOME/etc/profile.d/conda.sh"
 conda activate "$CONDA_ENV"
+set -u
 cd "$REPO/generation/inference_service"
 echo "AnimalLift: $BESIDE_ANIMALLIFT_DIR | work: $BESIDE_WORK_DIR | listen: $HOST:$PORT"
 echo "token: $TOKEN_STATE"

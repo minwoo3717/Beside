@@ -6,10 +6,10 @@
 폰(Unity 앱) ─┐                       ┌──────────── 클라우드 VM (Docker Compose) ────────────┐
 브라우저 ─────┴─ HTTPS 443 ─────────▶ │ caddy ──▶ backend:8080 (real,prod) ──▶ 볼륨 beside-storage │
                                       └──────────────────────────────┬─────────────────────────┘
-                                                Tailscale 100.x:8001 │  /infer/upload
+                                                Tailscale 100.x:8002 │  /infer/upload
                                                                      ▼
-                      Runpod Pod: tailscaled(userspace) → 127.0.0.1:8001 FastAPI + AnimalLift
-                      (대안: 팀원 GPU PC 의 WSL, 서비스를 그 PC 의 100.x 에 바인드)
+                      Runpod Pod: tailscaled(userspace) → 127.0.0.1:8002 FastAPI + AnimalLift
+                      (대안: 팀원 GPU PC 의 WSL, 서비스를 그 PC 의 100.x:8001 에 바인드)
 ```
 
 ## 상태
@@ -19,7 +19,7 @@
 | `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** CI(backend-ci)가 main push(`af4a747`, 2026-11-01)와 PR #4(`ad0c3f6`)에서 이미지 빌드·compose/Caddy 검증·경로 시험까지 통과했다. GCP VM 에서 빌드·기동·`deploy_vm.sh`·재부팅 복구를 확인했다(2026-11-13) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
-| Tailscale, 폰 → VM → Runpod Pod 1건 | **[계획]** 지금 VM 의 추론은 VM 안 패스스루 스텁이다. Pod 쪽 스크립트 [runpod/start_pod.sh](runpod/start_pod.sh) 는 **[구현됨]** 이지만 WSL 에서 가짜 Tailscale 과 실제 추론 서비스로만 시험했다(아래 'Runpod Pod 쪽'). Runpod 크레딧은 아직 사지 않았다 |
+| Tailscale, 폰 → VM → Runpod Pod 1건 | **[계획]** 지금 VM 의 추론은 VM 안 패스스루 스텁이다. Pod 쪽 스크립트 [runpod/start_pod.sh](runpod/start_pod.sh) 는 **[구현됨]** 이지만 WSL 에서 가짜 Tailscale 과 실제 추론 서비스로만 시험했다(아래 'Runpod Pod 쪽'). Runpod 크레딧은 2026-11-17 에 약 $200 결제, Pod 는 아직 없다 |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰)으로 공개 주소에서 전체 흐름 확인. VM ↔ GPU PC 실제 연결은 **[계획]** |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌았는지는 아직 보지 않았다 — **[계획]** |
@@ -48,7 +48,7 @@
 5. 팀 비밀번호: 개발 PC 에서 `ssh -t beside-gcp 'bash ~/Beside/deploy/set_basic_auth.sh'`([set_basic_auth.sh](set_basic_auth.sh) — 두 번 묻고 해시만 `.env` 에 넣는다. 비밀번호를 바꿀 때도 같다). 이 파일이 VM 의 체크아웃에 들어오기 전에는 같은 일을 하는 VM 의 `~/bin/beside-set-password` 를 쓴다(`ssh -t beside-gcp '~/bin/beside-set-password'`).
 6. `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build` → 밖에서 '확인' 절.
 
-**지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다(그 커밋이 원격에 올라가면 `git checkout deploy/Caddyfile` 뒤 pull). Tailscale·Runpod Pod 연결은 **[계획]**(Runpod 크레딧 구매 뒤).
+**지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다(그 커밋이 원격에 올라가면 `git checkout deploy/Caddyfile` 뒤 pull). Tailscale·Runpod Pod 연결은 **[계획]**.
 
 **남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다(`create_vm.sh` 는 이제 서비스 계정 없이 만든다). 바꾸려면 VM 을 잠깐 멈춰야 한다(약 1분 중단, 컨테이너는 스스로 다시 뜬다). 기본 네트워크가 만든 RDP 규칙도 필요 없다.
 
@@ -121,14 +121,14 @@ docker compose version              # v2 인지 확인
 ```bash
 # VM
 curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up --hostname=beside-vm   # 출력된 링크로 팀 tailnet 에 로그인
+sudo tailscale up --hostname=beside-vm --accept-dns=false   # 출력된 링크로 팀 tailnet 에 로그인. DNS 는 GCP 것을 그대로
 tailscale ip -4                          # VM 의 100.x 주소
 ```
 
 - Runpod Pod: 아래 'Runpod Pod 쪽'. Pod 안에서 스크립트가 Tailscale 을 받아 띄우고 로그인 링크를 한 번 보여 준다.
 - GPU PC(대안): 추론 서비스가 **WSL2 안**에서 돌면 Tailscale 도 **WSL 안**에 설치하고 로그인한다(위와 같은 명령. WSL 에 systemd 가 꺼져 있으면 `/etc/wsl.conf` 에 `[boot]` `systemd=true` 를 넣고 PowerShell 에서 `wsl --shutdown` 뒤 다시 연다). 그 WSL 의 `tailscale ip -4` 가 `.env` 의 `INFERENCE_BASE_URL` 과 GPU PC 쪽 `BESIDE_HOST` 가 된다.
 - 연결 확인: VM 에서 `tailscale ping <Pod 또는 GPU PC 의 100.x>`.
-- (선택) Tailscale 관리 콘솔의 Access controls 에서 VM → GPU 쪽:8001 만 허용하면 tailnet 안의 다른 기기는 추론 서비스(와 Pod 의 다른 포트)에 못 붙는다.
+- (선택) Tailscale 관리 콘솔의 Access controls 에서 VM → GPU 쪽 추론 포트(Pod 8002, GPU PC 8001)만 허용하면 tailnet 안의 다른 기기는 추론 서비스에 못 붙는다. userspace 모드의 Pod 는 tailnet 에서 오는 연결을 **모든 포트**에 대해 127.0.0.1 로 넘기므로(Jupyter 8888, sshd 22, nginx 포트 포함), 팀원 노트북·폰을 tailnet 에 넣기 전에는 꼭 건다.
 
 ### 4. 리포와 `.env`
 
@@ -146,7 +146,7 @@ nano deploy/.env
 | `BESIDE_DOMAIN` | `beside-team.duckdns.org` (스킴·경로 없이) |
 | `BASIC_AUTH_USER` | 팀 공용 사용자 이름 |
 | `BASIC_AUTH_HASH` | `caddy hash-password` 출력. **작은따옴표로 감싼다**: `BASIC_AUTH_HASH='$2a$14$...'` |
-| `INFERENCE_BASE_URL` | `http://<Runpod Pod(또는 GPU PC)의 Tailscale IP>:8001` |
+| `INFERENCE_BASE_URL` | `http://<Runpod Pod 의 Tailscale IP>:8002`(`start_pod.sh` 가 마지막에 출력), GPU PC 면 `http://<그 PC 의 Tailscale IP>:8001` |
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU 쪽 `BESIDE_INFERENCE_TOKEN` 과 같게 |
 | `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
 
@@ -233,57 +233,71 @@ $C start backend
 
 | 방법 | 판단 |
 |---|---|
-| Runpod HTTP 프록시(`https://<pod>-8001.proxy.runpod.net`) | 쓰지 않는다. 요청을 100초에서 끊는다(Runpod 문서). Spring 은 `/infer/upload` 를 최대 600초(`inference.timeout-ms`) 기다리고, 실제 생성 시간은 아직 재지 않았다(exp-01) |
+| Runpod HTTP 프록시(`https://<pod>-<포트>.proxy.runpod.net`) | 쓰지 않는다. 요청을 100초에서 끊는다(Runpod 문서). Spring 은 `/infer/upload` 를 최대 600초(`inference.timeout-ms`) 기다리고, 실제 생성 시간은 아직 재지 않았다(exp-01) |
 | Pod 의 TCP 포트 공개 + 토큰 | 쓰지 않는다. 사진과 토큰이 암호화 없이 인터넷을 지나고, Pod 를 다시 켜면 외부 포트가 바뀌어 그때마다 `.env` 를 고치고 backend 를 다시 띄워야 한다 |
-| **Pod 안 Tailscale** | **고름.** 암호화되고 공개 포트가 없다. 노드 상태를 `/workspace` 에 두면 Pod 를 껐다 켜도 같은 100.x 로 돌아오고, 600초 요청도 그대로 지나간다. 처음 한 번 로그인 링크 승인이 필요하다 |
+| **Pod 안 Tailscale** | **고름.** 암호화되고 공개 포트가 없다. 노드 상태를 `/workspace` 에 두면 Pod 를 다시 만들어도 같은 100.x 로 돌아오고, 600초 요청도 그대로 지나간다. 처음 한 번 로그인 링크 승인이 필요하다 |
 
-**동작 방식**: Pod 는 컨테이너라 TUN 장치가 없어서 `tailscaled --tun=userspace-networking` 으로 띄운다. 이 모드는 자기 100.x 로 들어온 TCP 를 `127.0.0.1` 의 같은 포트로 넘긴다(Tailscale 소스 `wgengine/netstack` 의 `acceptTCP` 에서 확인). 그래서 추론 서비스는 `127.0.0.1:8001` 에만 열고, Pod 의 공개 포트와 HTTP 프록시에는 아무것도 내놓지 않는다.
+**동작 방식**: Pod 는 컨테이너라 TUN 장치가 없어서 `tailscaled --tun=userspace-networking` 으로 띄운다. 이 모드는 자기 100.x 로 들어온 TCP 를 `127.0.0.1` 의 같은 포트로 넘긴다(Tailscale 소스 `wgengine/netstack` 의 `acceptTCP` 에서 확인). 그래서 추론 서비스는 `127.0.0.1:8002` 에만 열고, Pod 의 공개 포트와 HTTP 프록시에는 아무것도 내놓지 않는다. **8001 이 아니라 8002** 인 이유: Runpod 공식 이미지의 nginx 가 8001(그리고 3001·7270·7861·8081·9091)을 이미 쓴다(`runpod/containers` 의 `container-template/proxy/nginx.conf`, 2026-11-17 조사).
 
-**처음 한 번** (Runpod 크레딧을 산 뒤):
+**Pod 구성** (2026-11-17 조사. 가격과 재고는 Pod 를 만들기 직전에 다시 읽는다 — 같은 날에도 바뀌었다):
+
+- **Secure Cloud + 네트워크 볼륨**(30GB, $0.07/GB/월)을 `/workspace` 에 붙인다. 정지한 Pod 는 원래 기계에서만 다시 켜지고, 그 GPU 를 다른 사람이 빌리면 GPU 없이 켜진다(Runpod 문서 'Zero GPU Pods'). 네트워크 볼륨은 Terminate 뒤에도 남으므로, 같은 데이터센터에 새 Pod 를 만들면 conda·가중치·Tailscale 노드가 그대로다. 그래서 쓰지 않을 때는 정지 대신 Terminate 하고, 다시 쓸 때 새 Pod 를 만든다. 네트워크 볼륨은 Secure Cloud 에서만, 만든 데이터센터 안에서만 쓸 수 있다.
+- **GPU**: Ampere·Ada 계열(A40 48GB, RTX A5000·A6000, RTX 4090 등). RTX 5090 같은 Blackwell 은 AnimalLift 가 고정한 PyTorch 2.4 가 지원하지 않는다. 아시아 데이터센터에는 24~48GB 재고가 없어 유럽에 둔다(서울 VM 과의 지연은 첫 연결 때 잰다).
+- **CUDA**: 조사 시점의 Secure 재고는 모두 CUDA 13.2 호스트에만 있었다. 공식 템플릿 `runpod-torch-v240` 은 12.4~12.9 만 허용하므로 콘솔에서 그대로 만들면 GPU 가 잡히지 않는다. API(MCP `create-pod`)로 `gpu.minCudaVersion: "12.4"` 를 준다. CUDA 12.4 이미지가 13.2 드라이버에서 도는 것은 NVIDIA 하위 호환에 따른 예상이고 아직 Pod 에서 확인하지 않았다.
+- **이미지**: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`(root, curl·git·nginx·python3.11-venv 있음, tmux 없음). Jupyter(8888)와 SSH(22)는 필요 없으면 열지 않는다.
+- CPU Pod 에는 볼륨 디스크를 붙일 수 없어서 연결 시험도 GPU Pod 에서 한다. AnimalLift 를 설치하기 전에는 스크립트가 알아서 패스스루로 뜬다.
+
+**처음 한 번**:
 
 1. Tailscale 계정(무료)을 만든다. VM 과 Pod 를 같은 tailnet 에 넣을 계정이다.
 2. VM: 위 '3. Tailscale' 의 명령을 실행하고 출력된 링크를 승인한다.
-3. Pod 를 만든다. 연결 시험만이면 CPU Pod 로 충분하다(패스스루). GPU 종류와 이미지는 3D 트랙이 정한다. `/workspace`(Volume disk)를 두고, 포트는 더 열지 않는다. 정지하면 컨테이너 디스크는 지워지고 `/workspace` 는 남는다. Terminate 하면 `/workspace` 도 지워진다(Runpod 문서 'Storage types').
-4. Pod 웹 터미널이나 SSH 에서 아래를 실행한다. 브랜치는 이 스크립트가 들어 있는 것(지금 `deploy/gcp`, 병합 뒤 `main`)이다. 토큰은 개발 PC 에서 `ssh beside-gcp "grep ^INFERENCE_TOKEN= ~/Beside/deploy/.env"` 로 꺼내 Pod 터미널에만 붙인다.
+3. 위 구성으로 Pod 를 만든다.
+4. Pod 안에서 실행한다. **토큰 줄은 사람이 웹 터미널이나 SSH 에서** 한다: 개발 PC 에서 `ssh beside-gcp "grep ^INFERENCE_TOKEN= ~/Beside/deploy/.env"` 로 직접 꺼내 `=` 뒤의 값만 붙인다(이름·따옴표가 들어가면 스크립트가 거부한다). 채팅·문서·셸 기록에 남지 않게 파일로 둔다. exec 도구(Runpod MCP `exec-pod`)는 입력(stdin)이 없어 이 줄을 할 수 없고, 토큰을 명령이나 env 로 넘기면 도구 호출 기록에 남는다. 나머지 줄(clone, mkdir, nohup)은 exec 도구로 해도 된다. exec 도구는 MCP 에 연결된 Runpod 계정의 Pod 에만 닿으므로, 크레딧이 있는 계정으로 연결돼 있어야 한다.
 
    ```bash
-   git clone -b <브랜치> https://github.com/minwoo3717/Beside.git /workspace/Beside
-   BESIDE_INFERENCE_TOKEN='<VM deploy/.env 의 INFERENCE_TOKEN>' bash /workspace/Beside/deploy/runpod/start_pod.sh
+   git clone -b deploy/gcp https://github.com/minwoo3717/Beside.git /workspace/Beside   # main 에 병합된 뒤에는 -b 없이
+   (umask 077; cat > /workspace/beside-token)    # 토큰을 붙이고 Enter, Ctrl-D
+   mkdir -p /workspace/beside-logs
+   nohup bash /workspace/Beside/deploy/runpod/start_pod.sh > /workspace/beside-logs/start.log 2>&1 &
    ```
 
-5. 첫 실행은 Tailscale 1.104.6 을 `/workspace/tailscale` 에 받고(sha256 고정), 로그인 링크를 한 번 보여 준다. 승인하면 마지막에 `INFERENCE_BASE_URL=http://100.x.y.z:8001` 이 나온다.
-6. VM: `deploy/.env` 의 `INFERENCE_BASE_URL` 을 그 값으로 바꾸고 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 를 실행한다. 확인은 아래 'GPU PC 쪽' 마지막 문단의 `curl` 두 줄(주소만 Pod 의 100.x)로 한다. 실제 사진 1건이 끝나면 `docker rm -f beside-stub` 를 실행한다.
+5. 첫 실행은 Tailscale 1.104.6 을 `/workspace/tailscale` 에 받고(sha256 고정) 로그인 링크를 `/workspace/beside-logs/tailscale-up.log` 에 쓴다. 그 링크를 승인하면 `start.log` 끝에 `INFERENCE_BASE_URL=http://100.x.y.z:8002` 가 나온다. 터미널을 보고 있다면 `nohup ... &` 없이 실행해도 같은 내용이 화면에 나온다.
+6. VM: `deploy/.env` 의 `INFERENCE_BASE_URL` 을 그 값으로 바꾸고 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 를 실행한다. 확인은 `/healthz` 만이 아니라 실제 사진 1건(`scripts/e2e_mock.sh https://<도메인> <사진>`)으로 한다 — tailnet 의 MTU 가 작아 큰 업로드만 막히는 경우를 healthz 는 잡지 못한다. 끝나면 `docker rm -f beside-stub`.
 
-**Pod 를 다시 켤 때마다** 4번의 둘째 명령만 다시 실행한다. 노드 상태가 `/workspace/tailscale` 에 남아 있어서 로그인 없이 같은 100.x 로 돌아오므로 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다.
+**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 4번의 마지막 두 줄만 실행한다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
 
-**Pod 를 Terminate 했을 때**는 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤(남겨 두면 새 노드 이름에 번호가 붙는다), VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
+**네트워크 볼륨이 아니라 Pod 볼륨 디스크로 만든 Pod 를 Terminate 했을 때**는 `/workspace` 가 지워져 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤, VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
 
 | `MODE` | 하는 일 |
 |---|---|
 | `passthrough`: `/workspace/AnimalLift` 가 없을 때의 기본값 | `/workspace/beside-venv` 에 `requirements.txt` 를 설치하고 고정 GLB 를 돌려준다. 연결 시험용이다. `/workspace/beside-sample.glb` 가 없으면 삼각형 하나짜리 GLB 를 만든다. 진짜 강아지를 보이려면 그 자리에 GLB 를 올려 둔다 |
-| `model`: `/workspace/AnimalLift` 가 있을 때의 기본값 | `scripts/start_inference_wsl.sh` 로 AnimalLift 를 띄운다. conda(`/workspace/miniconda3`, env `animallift`)·AnimalLift·체크포인트·리깅 템플릿(`/workspace/beside-rig/template-rigged.glb`)은 모두 `/workspace` 아래에 있어야 정지 뒤에도 남는다. 설치는 [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md)(3D 트랙) |
+| `model`: `/workspace/AnimalLift` 가 있을 때의 기본값 | `scripts/start_inference_wsl.sh` 로 AnimalLift 를 띄운다. `nvidia-smi` 에 GPU 가 없으면 시작하지 않는다(GPU 없이 다시 켜진 Pod 에서 모델이 CPU 로 조용히 올라가 모든 작업이 600초 뒤 실패하는 것을 막는다). conda(`/workspace/miniconda3`, env `animallift`)·AnimalLift·체크포인트·리깅 템플릿(`/workspace/beside-rig/template-rigged.glb`)은 모두 `/workspace` 아래에 둔다. 설치는 [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md) |
 
 파일 위치:
 
 | 경로 | 내용 |
 |---|---|
-| `/workspace/tailscale/` | 바이너리와 노드 상태(노드 키, 권한 700) |
-| `/workspace/beside-logs/` | `tailscaled.log`, `inference.log` |
-| `/workspace/beside-work/` | 작업 폴더 |
+| `/workspace/tailscale/` | 바이너리와 노드 상태(노드 키, 권한 700), 마지막 Pod id |
+| `/workspace/beside-token` | 추론 토큰(권한 600). `BESIDE_INFERENCE_TOKEN` 환경 변수가 있으면 그쪽이 먼저다 |
+| `/workspace/.cache/` | SD VAE·DINOv2 가중치 캐시(`HF_HOME`, `TORCH_HOME`). 없으면 컨테이너 디스크에 받아 정지할 때마다 다시 받는다 |
+| `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`. 실행마다 시각 표시를 붙여 이어 쓴다 |
+| `/workspace/beside-work/` | 작업 폴더(Spring 이 GLB 를 받은 뒤 지운다) |
 | `/var/run/beside/` | 소켓과 pid. 정지하면 사라진다 |
 
 **확인한 것**
 
-- **[구현됨]** WSL(Ubuntu 26.04)에서 가짜 `tailscale`·`tailscaled`(네트워크에 나가지 않음)와 실제 추론 서비스(패스스루 uvicorn)로 45개 검사가 모두 통과했다.
-  - 거부: 토큰 없음·빈 토큰·잘못된 `MODE`.
-  - Tailscale 실행: userspace·statedir·소켓 플래그, 로그인 링크는 첫 실행에만.
-  - 서비스: `127.0.0.1` 에만 바인드, 토큰이 없거나 틀리면 401, 업로드한 결과가 샘플 GLB 와 같음.
-  - 다시 실행: 이미 떠 있으면 두 번 띄우지 않음, 재시작을 흉내 낸 경우(프로세스 없음, 낡은 pid 파일) 로그인 없이 다시 뜸.
-  - `model` 모드의 환경 변수(가짜 conda).
-  - 실패 처리: 포트가 막혔거나 다른 서버가 이미 응답하면 실패로 끝남.
+- **[구현됨]** WSL(Ubuntu 26.04)에서 가짜 `tailscale`·`tailscaled`·`nvidia-smi`(네트워크에 나가지 않음)와 실제 추론 서비스(패스스루 uvicorn)로 65개 검사가 모두 통과했다(2026-11-17, 검토 워크플로가 찾은 문제를 고친 뒤).
+  - 거부: 토큰 없음·빈 토큰·이름(`INFERENCE_TOKEN=`)이나 따옴표가 붙은 토큰·잘못된 `MODE`, `model` 모드인데 GPU 없음, 앞의 실행이 아직 도는 중, 떠 있는 서비스와 모드가 다름(패스스루가 떠 있는데 AnimalLift 를 설치한 경우 — 서비스는 그대로 두고 kill 할 pid 를 알림).
+  - 포트: `PORT=1800` 이 8002·18001 에 떠 있는 서비스로 오인되지 않음.
+  - 토큰: 환경 변수 또는 `/workspace/beside-token`, 권한이 600 이 아니면 경고.
+  - Tailscale 실행: userspace·statedir·소켓 플래그, 로그인 링크는 첫 실행에만이고 `tailscale-up.log` 에도 남음, 마지막 Pod id 가 바뀌면 알림.
+  - 서비스: 기본 포트 8002, `127.0.0.1` 에만 바인드, 토큰이 없거나 틀리면 401, 업로드한 결과가 샘플 GLB 와 같음.
+  - 다시 실행: 이미 떠 있으면 두 번 띄우지 않음, 재시작을 흉내 낸 경우(프로세스 없음, 낡은 pid 파일) 로그인 없이 다시 뜸, 로그는 이어 씀.
+  - `model` 모드: 환경 변수, 가중치 캐시가 `/workspace/.cache`, `set -u` 아래의 conda 활성화(가짜 conda 가 정의되지 않은 변수를 읽어도 통과).
+  - 실패 처리: 포트를 HTTP 가 아닌 것(nginx 처럼 502 를 주는 것 포함)이 쓰고 있으면 바로 실패로 끝남.
   - 상태 폴더 권한 700.
 - **[구현됨]** 실제 Tailscale 1.104.6 tarball: sha256 이 틀리면 설치하지 않는다. 받기와 설치가 되고, 스크립트가 쓰는 플래그가 실제 CLI 에 모두 있다.
-- **[계획]** 실제 Pod 에서 실행, VM ↔ Pod 전체 흐름 1건, Pod 재시작 뒤 같은 100.x 유지, `model` 모드 실측.
+- **[계획]** 실제 Pod 에서 실행, VM ↔ Pod 전체 흐름 1건, Pod 를 다시 만든 뒤 같은 100.x 유지, `model` 모드 실측.
 
 ## GPU PC 쪽 (대안)
 
@@ -309,6 +323,6 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 맞는 비밀번호인데 계속 401 | `... exec caddy printenv BASIC_AUTH_HASH` 가 `$2a$14$` 로 시작하는 완전한 해시인지 | `.env` 에서 작은따옴표로 감싸고 `up -d`(환경변수가 바뀌면 caddy 가 새로 만들어진다) |
 | 업로드 413 | 응답 본문이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)면 Spring(장당 5MB·요청 20MB), 본문이 비었으면 Caddy(25MB) | 사진을 줄인다. 상한을 바꾸려면 Spring 설정과 Caddyfile 을 함께(계약 회의) |
 | 502 Bad Gateway | `... ps` 에서 backend 상태, `... logs backend` | 기동 중(첫 30~60초)이면 기다린다. 종료됐으면 로그의 원인(DB 잠김·메모리) |
-| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:8001/healthz` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
