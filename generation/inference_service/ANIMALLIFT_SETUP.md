@@ -133,4 +133,4 @@ Runpod Pod 에 둘 때(2026-11-13 결정): Pod 는 정지하면 컨테이너 디
 - 체크포인트 `latest.pt` 는 2,317,900,684 B(Hugging Face `Chunyi99/AnimalLift`, 라이선스 태그 CC BY-NC 2.0)다. `cd /workspace/AnimalLift && hf download Chunyi99/AnimalLift --local-dir ckpt`.
 - Runpod 이미지가 `PIP_CACHE_DIR` 을 `/workspace` 로 둘 수 있으므로 `pip install --no-cache-dir` 로 설치한다(토치 휠만 약 2.9GB). Miniconda 를 비대화식으로 설치하면 `conda create` 가 이용 약관 확인에서 멈출 수 있다 — `conda tos accept` 를 먼저 하거나 Miniforge 를 쓴다.
 - `/workspace` 가 네트워크 파일시스템(fuse)이면 env 의 import 와 2.3GB 로드가 느릴 수 있다. 로그의 `model loaded in …s on cuda` 로 재고, `on cpu` 면 GPU 가 안 잡힌 것이다.
-- 위 크기는 Hugging Face API·PyPI 로 읽은 값이고, 설치 시간·VRAM·디스크 사용량은 아직 재지 않았다(exp-01 **[계획]**).
+- 설치는 `deploy/runpod/install_animallift.sh` 로 한다(Miniforge·env·AnimalLift·체크포인트, 다 끝난 뒤에만 `/workspace/AnimalLift` 로 옮김). **[실험 결과]** 2026-11-17 A40 Pod 에서 497 s(Miniforge 104 s, env 67 s, pip 약 300 s, 체크포인트 약 20 s), 디스크 conda 12 GB + AnimalLift 2.3 GB, 모델 로드 31.3 s(첫 실행, VAE·DINOv2 418 MB 를 받음), 1건 inferMs 약 4 s·gpuPeakMB 5,120 — [experiments/2026-11-17_exp-01_baseline-runpod.md](../experiments/2026-11-17_exp-01_baseline-runpod.md).

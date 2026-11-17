@@ -2,9 +2,9 @@
 
 GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)로 처음 이어 공개 주소에서 전체 흐름을 돌린 기록이다. 절차는 [deploy/README.md](../../deploy/README.md) 'Runpod Pod 쪽'. 시각은 UTC.
 
-- **[구현됨]** VM·Pod 가 같은 tailnet 에 있고, 공개 주소 → VM → Pod(패스스루) → GLB 까지 사진 1건이 끝났다. Pod 의 추론 서비스는 127.0.0.1:8002 에만 열려 있고 Pod 에 공개 포트는 없다.
-- **[실험 결과]** 아래 수치는 표본 1건이다. 동작 확인용이며 성능 측정이 아니다.
-- **[계획]** AnimalLift(모델 모드) 설치와 exp-01, VM ↔ Pod 직접 연결(지금은 DERP 중계), Unity 앱 시험, Pod 를 지우고 다시 만들었을 때 같은 100.x 유지 확인.
+- **[구현됨]** VM·Pod 가 같은 tailnet 에 있고, 공개 주소 → VM → Pod(패스스루) → GLB 까지 사진 1건이 끝났다. 같은 날 Pod 에 AnimalLift 를 설치해 실제 모델로 3건이 끝났다(아래 '모델 모드'). Pod 의 추론 서비스는 127.0.0.1:8002 에만 열려 있고 Pod 에 공개 포트는 없다.
+- **[실험 결과]** 아래 수치는 표본 1~4건이다. 동작 확인용이며 성능 측정이 아니다.
+- **[계획]** VM ↔ Pod 직접 연결(지금은 DERP 중계), Unity 앱 시험, Pod 를 지우고 다시 만들었을 때 같은 100.x 유지 확인.
 
 ## 구성
 
@@ -40,9 +40,15 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
 - Secret 값에 `INFERENCE_TOKEN=` 이름까지 붙어 들어갔다(길이 80, 이름을 떼면 64 자리이고 해시 앞자리가 VM 값과 같음). 스크립트는 이 형태를 거부하므로 이번에는 `/workspace/beside-bootstrap.sh` 에서 이름을 떼고 띄웠다. Secret 을 값만으로 고치는 것은 사용자 몫 **[계획]**.
 - VM 에 공식 설치 스크립트(`curl … | sh`)를 쓰려던 것은 이 세션의 자동 권한 검사가 막아서 사용자가 apt 저장소 명령으로 직접 설치했다.
 
+## 모델 모드 (같은 날 09:26~09:38 UTC)
+
+- `deploy/runpod/install_animallift.sh` 를 Pod 에서 백그라운드로 돌려 497 s 에 끝났다: Miniforge 26.9.4-2 104 s, env(Python 3.10.20) 67 s, AnimalLift `5d364cf` 와 pip(torch 2.4.0+cu124) 약 300 s, 체크포인트 약 20 s. 디스크 conda 12 GB, AnimalLift 2.3 GB. torch 가 A40 을 `cuda 12.4` 로 인식.
+- `start_pod.sh` 를 다시 실행하자 "the inference service (pid 266) runs in passthrough mode, MODE is model - kill 266" 으로 멈췄다(리뷰에서 넣은 거부가 실제로 동작). 패스스루를 끄고 다시 띄우자 `model loaded in 31.3s on cuda`.
+- 공개 주소로 실제 사진 3장이 모두 COMPLETED, GLB 1,310,876~1,327,400 B, 삼각형 7,774. 모델 수치(inferMs 3.9~5.7 s, gpuPeakMB 5,120)와 작업 시간은 [exp-01](../../generation/experiments/2026-11-17_exp-01_baseline-runpod.md).
+- VM 의 `INFERENCE_BASE_URL` 은 그대로(Pod 의 100.x:8002). 스텁에서 바꾼 뒤 backend 는 다시 띄우지 않았다(같은 주소의 서비스만 바뀜).
+
 ## 남은 것 [계획]
 
-- AnimalLift·conda·체크포인트를 `/workspace` 에 설치하고 `MODE=model` 로 다시 띄워 exp-01(생성 시간·GPU 메모리) 기록.
 - VM ↔ Pod 직접 연결: GCP 방화벽에 UDP 41641 을 열면 DERP 를 거치지 않을 수 있다(Tailscale GCE 안내). 큰 사진 업로드 시간을 재 보고 정한다.
 - Unity 앱으로 `https://beside-team.duckdns.org` 시험(지금 결과는 삼각형이라 모양 확인용은 아님).
 - 쓰지 않을 때 Pod 를 지우고(볼륨은 남음) 다시 만들어 같은 100.x 로 돌아오는지 확인.

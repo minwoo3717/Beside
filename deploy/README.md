@@ -19,7 +19,7 @@
 | `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** CI(backend-ci)가 main push(`af4a747`, 2026-11-01)와 PR #4(`ad0c3f6`)에서 이미지 빌드·compose/Caddy 검증·경로 시험까지 통과했다. GCP VM 에서 빌드·기동·`deploy_vm.sh`·재부팅 복구를 확인했다(2026-11-13) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
-| Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). VM ↔ Pod 는 아직 DERP 중계(왕복 약 300 ms). AnimalLift(모델 모드)와 폰 앱 시험은 **[계획]** |
+| Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). VM ↔ Pod 는 아직 DERP 중계(왕복 약 300 ms). 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`) | **[구현됨]** (S3, 테스트로 확인). VM 에서 실제로 돌았는지는 아직 보지 않았다 — **[계획]** |
@@ -371,7 +371,8 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
   - 상태 폴더 권한 700.
 - **[구현됨]** 실제 Tailscale 1.104.6 tarball: sha256 이 틀리면 설치하지 않는다. 받기와 설치가 되고, 스크립트가 쓰는 플래그가 실제 CLI 에 모두 있다.
 - **[구현됨]** 2026-11-17 실제 Pod(A40, EU-SE-1, 네트워크 볼륨)에서 실행: 첫 로그인 링크 → 승인 → 패스스루 서비스, VM ↔ Pod 전체 흐름 1건. Pod 의 nginx 8001 점유와 tailnet 연결이 127.0.0.1 로 넘어오는 것을 실제로 확인했다([기록](../docs/deploy/2026-11-17_runpod-connect.md)).
-- **[계획]** Pod 를 지우고 다시 만든 뒤 같은 100.x 유지, `model` 모드 실측(exp-01), VM ↔ Pod 직접 연결(지금은 DERP 중계).
+- **[구현됨]** 같은 날 `install_animallift.sh` 로 설치(497 s) 뒤 `start_pod.sh` 가 패스스루가 떠 있다며 멈추는 것을 확인하고, 그것을 끈 뒤 `model` 모드로 띄워 실제 사진 3건 성공([exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)).
+- **[계획]** Pod 를 지우고 다시 만든 뒤 같은 100.x 유지, VM ↔ Pod 직접 연결(지금은 DERP 중계, 작업마다 전송에 5~7 s).
 
 ## GPU PC 쪽 (대안)
 
