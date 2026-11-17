@@ -21,7 +21,7 @@ flowchart LR
         FS[("storage/ — VM 에서는 볼륨 beside-storage<br/>uploads · results")]
         DB[("H2 파일 DB<br/>storage/db/beside-{mock,real}.mv.db<br/>jobs · idempotency_keys · job_runs")]
     end
-    subgraph Gpu["GPU 서버: Runpod Pod 또는 팀원 GPU PC (WSL) — VM 에서는 Tailscale 100.x:8001, 같은 PC 배치면 127.0.0.1:8001"]
+    subgraph Gpu["GPU 서버: Runpod Pod 또는 팀원 GPU PC (WSL) — VM 에서는 Tailscale 100.x:8002(Pod) / 100.x:8001(GPU PC), 같은 PC 배치면 127.0.0.1:8001"]
         P["FastAPI 추론 서비스 (내부)<br/>POST /infer · GET /healthz<br/>AnimalLift → convert_asset.py → GLB"]
     end
     U -->|"HTTPS: POST /jobs · GET /jobs/{id} · GET asset(GLB) · POST retry"| C
