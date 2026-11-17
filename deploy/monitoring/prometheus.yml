@@ -1,0 +1,19 @@
+# Prometheus 설정 (deploy/docker-compose.yml 의 prometheus 서비스, profile monitoring).
+# 바꾼 뒤: docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring restart prometheus
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Spring Actuator 관리 포트(management.server.port=8081). compose 내부망에서만 닿는다 — 공개 8080 에는 /actuator 가 없다.
+  # 지표에는 공통 태그 env(prod | loadtest | local)가 붙어 있어, 부하 시험 덮어쓰기로 바꿔 띄워도 같은 대상에서 구분된다.
+  - job_name: beside-backend
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["backend:8081"]
+
+  # Prometheus 자신(수집 실패·메모리 확인용).
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

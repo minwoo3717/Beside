@@ -1,5 +1,5 @@
 # Beside VM 앞단 프록시 (Caddy 2.11). deploy/docker-compose.yml 이 /etc/caddy/Caddyfile 로 넣는다.
-# 환경변수는 compose 가 deploy/.env 에서 넘긴다: BESIDE_DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH, (선택) BACKEND_UPSTREAM.
+# 환경변수는 compose 가 deploy/.env 에서 넘긴다: BESIDE_DOMAIN, BASIC_AUTH_USER, BASIC_AUTH_HASH, (선택) BACKEND_UPSTREAM, GRAFANA_UPSTREAM.
 # 경로 규칙 표는 deploy/README.md '경로 규칙'. 규칙을 바꾸면 deploy/test_caddy_routes.sh 의 기대값도 같이 고친다.
 #
 # Caddy 매처 문법:
@@ -23,19 +23,21 @@
 		X-Frame-Options "DENY"
 	}
 
-	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서.
+	# 1) 없는 것처럼 404: v0 /api/jobs(동결, 서버 경로를 노출한다), H2 콘솔, Swagger UI, OpenAPI 문서, Actuator.
 	#    /webjars: prod 에서도 Spring 의 기본 정적 경로가 springdoc 의 Swagger UI 묶음을 내준다(2026-11-13 감사에서 200 확인).
+	#    Actuator 는 관리 포트 8081(compose 내부망, Prometheus 만 읽음)에 있어 공개 8080 에는 없다. 여기서 한 겹 더 막는다.
 	#    경로에 ; 가 있으면 함께 막는다. Tomcat 은 /api/jobs;x 나 /api;x/v1/jobs 를 ; 뒤를 뺀 경로로 처리하므로
 	#    ; 를 열어 두면 아래 인증 규칙과 이 404 규칙을 비켜 갈 수 있다. 앱과 웹은 ; 를 쓰지 않는다.
-	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* /webjars* *;*
+	@blocked path /api/jobs /api/jobs/* /h2-console* /swagger* /v3/api-docs* /webjars* /actuator* *;*
 	respond @blocked 404
 
 	# 2) Basic 인증(팀 계정 하나).
-	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지.
+	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지,
+	#    Grafana(/grafana, monitoring 프로필 — 이 인증 다음에 Grafana 자체 로그인이 한 번 더 있다).
 	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
 	#    파일 이름에도 끝에 * 를 붙인다: Caddy 는 // 와 . 조각은 정리하지만 끝의 / 는 남기므로 /index.html/ 은 /index.html 과
 	#    맞지 않는데, Spring 은 그것을 index.html 파일로 내준다(2026-11-13 감사에서 /index.html/ · /app.js/ 가 인증 없이 200).
-	@web path / /index.html* /app.js* /admin* /library* /job* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet*
+	@web path / /index.html* /app.js* /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet*
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
@@ -65,7 +67,18 @@
 	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 손님 값을 버리고 새로 붙인다(prod 프로파일의 forward-headers 가 읽는다).
 	#    Spring 의 ForwardedHeaderFilter 는 그 밖에 Forwarded(RFC 7239, X-Forwarded-* 보다 먼저 읽음)와 X-Forwarded-Prefix·
 	#    -Port·-Ssl 도 읽는데 Caddy 는 이것들을 그대로 넘긴다 → 손님이 Spring 이 보는 요청 URI·호스트를 바꿀 수 있다
-	#    (2026-11-13 감사: X-Forwarded-Prefix 로 오류 응답 모양이 바뀜). 그래서 지운다.
+	#    (2026-11-13 감사: X-Forwarded-Prefix 로 오류 응답 모양이 바뀜). 그래서 지운다(Grafana 쪽도 같이).
+	#    /grafana* 만 Grafana 로 간다(위 @web 의 Basic 인증을 통과한 뒤). 경로 매처가 있는 reverse_proxy 가
+	#    매처 없는 것보다 먼저 정렬되므로 적은 순서와 상관없이 이 규칙이 먼저다. 접두사 /grafana 는 떼지 않는다
+	#    (GF_SERVER_SERVE_FROM_SUB_PATH=true). Basic 인증의 Authorization 헤더는 지운다: 남아 있으면 Grafana 가 그
+	#    팀 계정을 자기 사용자로 검사해 401 을 준다.
+	reverse_proxy /grafana* {$GRAFANA_UPSTREAM:grafana:3000} {
+		header_up -Authorization
+		header_up -Forwarded
+		header_up -X-Forwarded-Prefix
+		header_up -X-Forwarded-Port
+		header_up -X-Forwarded-Ssl
+	}
 	reverse_proxy {$BACKEND_UPSTREAM:backend:8080} {
 		header_up -Forwarded
 		header_up -X-Forwarded-Prefix

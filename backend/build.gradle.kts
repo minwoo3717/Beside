@@ -20,6 +20,9 @@ dependencies {
     runtimeOnly("com.h2database:h2")
     // API v1 스펙 생성 (/v3/api-docs, /swagger-ui). 계약 테스트가 docs/api/openapi.yaml 과 비교한다.
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0")
+    // 운영 지표 (docs/METRICS.md §5): Actuator 는 관리 포트(management.server.port, 기본 8081)에만, Prometheus 형식으로.
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     // 대표 사진 검사·전처리(preprocess): ImageIO 가 WEBP 사진도 읽도록 하는 플러그인 (ImageIO 서비스로 자동 등록).
     // 검토 브랜치 review/api-v1.1 의 썸네일과 같은 버전.
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.3")

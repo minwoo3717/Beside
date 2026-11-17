@@ -6,6 +6,8 @@
 - **[실험 결과]** `data/` 의 원시 결과와 [backend-perf-report.pdf](backend-perf-report.pdf). 측정 조건(PC, JVM 옵션, 고정 CPU, 다른 프로그램의 부하, 명령)은 각 데이터 폴더의 `run.json` 과 보고서 '측정 방법'에 있다.
 - **[계획]** 클라우드 VM, VM ↔ GPU PC(Tailscale), 실제 AnimalLift 추론, Unity 쪽 측정: [notes/20-next-version.md](notes/20-next-version.md).
 
+부하 시험(k6, 배포 VM)은 이 벤치마크와 따로 둔다. 쏘카 수준 목표 트래픽 모델·합격 기준·시험 구성은 [load/TRAFFIC_MODEL.md](load/TRAFFIC_MODEL.md), 원시 결과는 k6 실행마다 `load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`, 스크립트는 [scripts/load/](../../scripts/load/)에 있다. 루프백 벤치마크는 같은 PC 에서 버전끼리 비교한 값이고 부하 시험 값(`load.*`)은 VM 에서 잰 용량이라, 한 표에 섞거나 서로 대신해 인용하지 않는다. 부하 문서는 `notes/` 에 넣지 않는다(`report.py` 가 `notes/*.md` 를 모두 이 보고서에 넣는다). 부하 시험 측정값은 아직 없다 **[계획]**.
+
 ## 파일
 
 | 파일 | 내용 |
