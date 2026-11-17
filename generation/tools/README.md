@@ -1,28 +1,60 @@
 # tools — 에셋 변환 도구 (3D Generation 트랙)
 
-## `convert_asset.py` 자리 (직접 할 일)
+AnimalLift 출력(`mesh.obj` + `uv.png` + `hair.npz`)을 앱이 쓰는 GLB 로 만든다. 추론 서비스(`inference_service/app.py`)가 아래 순서로 부르며, 손으로 돌릴 때도 순서가 같다. 계약은 [docs/asset/GLB_SPEC.md](../../docs/asset/GLB_SPEC.md).
 
-OBJ + PNG (+ hair.npz) → GLB 변환기와 glTFast 로드 검증은 팀이 별도 세션에서 완성했다고 보고됐으나 **이 리포에는 아직 없다**. 그 결과물을 이 폴더에 투입하고, 아래 인터페이스와 다르면 이 README 와 [docs/asset/GLB_SPEC.md](../../docs/asset/GLB_SPEC.md) §5 를 실제 스크립트에 맞게 고친다(PLAN 0단계).
+```text
+mesh.obj + uv.png + hair.npz
+   │ 1. convert_asset.py   GLB_SPEC 변환 + 털 지도 PNG
+   ▼
+base.glb (정적) + base.metrics.json + texture_padded.png + hair_length.png / hair_flow.png / hair_maps.json + hair_region.png
+   │ 2. rig_transfer.py    SMAL 뼈대·웨이트·클립 옮기기 (템플릿이 있을 때만)
+   ▼
+base.glb (리깅)
+   │ 3. embed_hair.py      털 지도 2장 + TANGENT 를 GLB 안에 (마지막 단계)
+   ▼
+base.glb (리깅 + extras.beside)
+```
 
-### 제안 인터페이스
+상태: 세 도구 모두 **[구현됨]**. 털 지도 삽입은 2026-11-01 추가.
+
+## 1. `convert_asset.py`
 
 ```bash
 python tools/convert_asset.py \
-  --obj outputs/<jobId>/mesh.obj --texture outputs/<jobId>/uv.png \
-  [--hair outputs/<jobId>/hair.npz] \
-  --out results/<jobId>/base.glb [--hair-out results/<jobId>/hair.glb] \
-  --metrics results/<jobId>/base.metrics.json \
-  [--normalize-height 1.0] [--max-triangles 20000] [--max-texture 2048] [--max-bytes 10485760]
+  --obj work/<jobId>/raw/mesh.obj --texture work/<jobId>/raw/uv.png \
+  [--hair work/<jobId>/raw/hair.npz --hair-meta <AnimalLift>/assets/hair_map_meta_uvanchor.npz] \
+  --out results/<jobId>/base.glb --metrics results/<jobId>/base.metrics.json \
+  [--forward-axis +x] [--normalize-longest-axis 1.0] [--max-triangles 20000] [--max-texture 2048] [--max-bytes 10485760]
 ```
 
-- 출력 GLB 는 GLB_SPEC §1~§4 를 만족해야 한다: 텍스처 임베드, Y-up, 1 unit = 1 m, 원점 발바닥 중심(최저점 y = 0), 정면 +Z, 노드 이름 `base`/`hair`. 출력 경로 `results/<jobId>/base.glb` 는 추론 서비스가 `/infer` 응답의 `glbPath` 로 돌려주고 Spring 이 `storage/results/{jobId}/base.glb` 로 복사한다(GLB_SPEC §5·§6 과 같은 모양).
-- `--normalize-height 1.0` 은 GLB_SPEC §2 의 "바운딩 박스 **최장 축** 1.0 m" 와 다르다. 실제 스크립트를 투입할 때 플래그 이름과 의미를 §2 에 맞춘다(예 `--normalize-longest-axis 1.0`).
-- `metrics.json`: `{ "vertices", "triangles", "textureSize", "bytes", "convertMs" }` (이름 고정, [docs/METRICS.md](../../docs/METRICS.md)).
-- 상한 위반 시 종료 코드 ≠ 0 과 이유 출력 → 추론 서비스는 `CONVERSION_FAILED` 로 보고한다.
-- 검증: `gltf-validator` 오류 0 (`npm i -g gltf-validator` 또는 Khronos 바이너리), Unity 에디터 glTFast 로드.
+- GLB_SPEC §1~§4: 단일 GLB, 텍스처 임베드, 노드 `base`, Y-up, 최장 축 1.0 m, 최저점 y = 0, 정면 +Z(AnimalLift 템플릿은 머리가 +X 라 기본 `--forward-axis +x`), metallic 0 / roughness 0.9.
+- `metrics.json`: `vertices`, `triangles`, `textureSize`, `bytes`, `convertMs` ([docs/METRICS.md](../../docs/METRICS.md)).
+- 위반 시 종료 코드 2 와 이유 → 추론 서비스는 `CONVERSION_FAILED`.
+- `uv.png` 의 초록 배경은 가장 가까운 UV 섬 색으로 채운 `texture_padded.png` 로 바꿔 넣는다(귀·이음새 초록 번짐 방지).
+- `--hair`: 털 길이·결 지도를 만든다. `--hair-meta` 를 주면 AnimalLift 가이드 텍셀(약 21%)만 써서 다시 채우고, 코·발바닥·눈 주변은 털을 없앤다. 자세한 규칙은 [ANIMALLIFT_SETUP.md](../inference_service/ANIMALLIFT_SETUP.md).
 
-### 이 폴더에 둘 것
+## 2. `rig_transfer.py`
 
-- `convert_asset.py` (+ 의존성 `requirements.txt`: trimesh / pygltflib 등 실제 사용 라이브러리)
-- `validate_glb.sh` 또는 `.py`: gltf-validator 실행 + GLB_SPEC 상한 검사 (계획)
-- 변환 결과 샘플은 커밋하지 않는다. Mock 서버용 유효 GLB 1개만 `backend/storage/results/sample-dog.glb` 로 교체한다.
+```bash
+python tools/rig_transfer.py --base results/<jobId>/base.glb --texture results/<jobId>/texture_padded.png \
+    --template <로컬 경로>/template-rigged.glb --out results/<jobId>/base.glb
+```
+
+- 모든 AnimalLift 출력은 같은 토폴로지(정점 4,310개, 같은 순서)라 웨이트를 그대로 옮기고, 관절 위치만 새 체형에 맞춘다.
+- **템플릿 GLB 는 SMAL 파생(학술 라이선스)이라 커밋하지 않는다.** 실행 시 경로로 넘긴다(추론 서비스는 `BESIDE_RIG_TEMPLATE`).
+- 종료 코드 2 = 옮길 수 없음(토폴로지 다름 등) → 정적 GLB 를 그대로 쓴다.
+
+## 3. `embed_hair.py`
+
+```bash
+python tools/embed_hair.py --glb results/<jobId>/base.glb --maps results/<jobId>/hair_maps.json
+```
+
+- `hair_length.png`, `hair_flow.png` 를 GLB 바이너리에 넣고 루트 `extras.beside = {hairLengthImage, hairFlowImage, furLength}` 를 쓴다. 털 결 방향에 필요한 TANGENT 도 추가한다. 형식은 GLB_SPEC §3.1.
+- 리깅이 GLB 를 템플릿에서 다시 만들기 때문에 **반드시 마지막**에 돌린다. 다시 돌리면 이전 지도를 교체한다.
+- 추론 서비스에서 끄려면 `BESIDE_EMBED_HAIR=0`.
+
+## 검증
+
+- `gltf-validator` 오류 0 (`npm i -g gltf-validator`), Unity 기기에서 glTFast 로드·털 표시 확인.
+- 변환 결과(`work/`, `results/`)는 커밋하지 않는다.

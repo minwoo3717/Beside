@@ -9,4 +9,8 @@ AnimalLift 베이스라인 재현부터 품질·속도 개선까지 모든 실�
 
 | 날짜 | 파일 | 한 줄 결론 |
 |---|---|---|
-| (아직 없음) | | |
+| 2026-11-04 | [2026-11-04_model-comparison.md](2026-11-04_model-comparison.md) | 1장당 생성 시간 SF3D 0.67 s, TripoSR 1.63 s, AnimalLift 5.31 s. 고정 토폴로지·털 정보는 AnimalLift만 제공 |
+| 2026-11-05 | [2026-11-05_animallift-robustness.md](2026-11-05_animallift-robustness.md) | AnimalLift는 동물이 없는 사진에도 강아지를 냄 → 서버 입력 검사 필요. 사진 선택이 전처리보다 영향이 큼 |
+| 2026-11-05 | [2026-11-05_animallift-consistency.md](2026-11-05_animallift-consistency.md) | 같은 개 식별 86~90%, 거의 털색으로 구분됨. 배경 제거가 가장 일관적이나 차이는 작음 |
+
+위 세 기록은 exp 번호를 붙이기 전에 쓴 것이라 파일 이름에 `exp-NN`이 없다. 번호를 정하면 파일 이름을 바꾼다. Unity 쪽 측정(털 렌더링 성능)은 [unity/experiments](../../unity/experiments/README.md)에 있다.

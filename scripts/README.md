@@ -6,6 +6,9 @@
 |---|---|---|
 | `e2e_mock.ps1` | Windows PowerShell 5.1+ | `curl.exe`(Windows 10 이상 기본 포함) 사용. mock·real 서버 모두에 쓴다 |
 | `e2e_mock.sh` | Git Bash / macOS / Linux | `curl`만 필요, `jq` 불필요 |
+| `run_real.sh`, `start_inference_wsl.sh` | Ubuntu / WSL2 | 추론 서비스를 WSL 에서 띄우는 스크립트. 절차는 [ANIMALLIFT_SETUP.md](../generation/inference_service/ANIMALLIFT_SETUP.md) |
+| `analyze_fur_bench.py` | Python 3 + matplotlib | Unity FurLab 측정 결과(폰에서 공유한 텍스트·CSV) → 표(`summary.md`, `unit_costs.md`)·그래프. 유지 담당: Unity 트랙 |
+| `make_rating_set.py` | Python 3 (+ Pillow, board.png 용) | 털 조건별 스크린샷으로 블라인드 화질 평가 세트 만들기(`prepare`)·점수 집계(`score`). 유지 담당: Unity 트랙 |
 | `run_real.ps1` | Windows PowerShell 5.1+ (GPU PC) | 추론 서비스(uvicorn, 127.0.0.1:8001)와 Spring real 을 새 창 두 개로 띄우고 두 healthz 를 확인한다. `-SampleGlb` 를 주면 패스스루(연동 확인용, 측정 아님). 절차는 [backend/README.md](../backend/README.md) 'GPU PC 에 real 배치' |
 
 ```powershell
@@ -31,3 +34,15 @@ GPU PC 에서 real 프로파일(실제 모델 E2E):
 ```
 
 종료 코드 0은 COMPLETED와 다운로드 성공, 1은 FAILED·타임아웃·HTTP 오류다. 다운로드한 GLB가 0바이트이면 경고를 출력한다(`backend/storage/results/sample-dog.glb` 교체 필요).
+
+털 측정 분석 (Unity 트랙, [unity/experiments/2026-11-03_fur-benchmark.md](../unity/experiments/2026-11-03_fur-benchmark.md)):
+
+```bash
+pip install matplotlib
+python scripts/analyze_fur_bench.py unity/experiments/2026-11-03_fur-benchmark/data/method_*.csv \
+       unity/experiments/2026-11-03_fur-benchmark/data/optim_*.csv --out fur_report
+python scripts/make_rating_set.py prepare <스크린샷 폴더> --out rating --distance near
+python scripts/make_rating_set.py score rating
+```
+
+`fur_report/`, `rating/` 은 커밋하지 않는다(.gitignore).

@@ -1,48 +1,58 @@
 # unity — Beside Android AR 클라이언트 (Unity 트랙)
 
-Unity 트랙의 소스 폴더다. **실행 가능한 Unity 프로젝트**로, `Assets/`, `Packages/`, `ProjectSettings/` 가 올라가 있다. Unity 가 생성하는 폴더(`Library/`, `Temp/`, `Logs/`, `obj/`)는 `.gitignore` 로 제외되며 프로젝트를 열면 자동으로 다시 만들어진다. 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md).
+Unity 트랙의 폴더다. **Unity 프로젝트 루트는 `unity/BesideApp/`** 이고, 그 안에 `Assets/`, `Packages/`, `ProjectSettings/` 가 있다. 문서(`docs/`, `experiments/`)는 프로젝트 밖 `unity/` 에 두어, Unity 가 만드는 폴더(`Library/`, `Temp/`, `Logs/`, `UserSettings/`, `*.csproj`)와 섞이지 않게 했다. 생성 폴더는 `.gitignore` 로 제외되며 프로젝트를 열면 다시 만들어진다. 이 문서의 `Assets/…` 경로는 모두 `unity/BesideApp/` 기준이다. 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md).
 
 ```text
 unity/
 ├─ CLAUDE.md
 ├─ README.md
-├─ Packages/                   # manifest.json (설치 패키지 목록)
-├─ ProjectSettings/            # Android 빌드 설정, XR 설정, Define Symbols
-└─ Assets/
-   ├─ Scenes/SampleScene.unity # 유일한 씬. 빌드에 포함
-   ├─ MobileARTemplateAssets/  # Unity AR Mobile 템플릿(ObjectSpawner, 메뉴, 코칭 UI)
-   ├─ Samples/XR Interaction Toolkit/3.5.1/
-   ├─ Plugins/NativeGallery/   # 갤러리 선택 플러그인 (unitypackage 로 설치)
-   ├─ Models/                  # 테스트용 강아지 모델·텍스처·털 지도
-   └─ Beside/
-      ├─ Api/
-      │  ├─ ApiV1Routes.cs        # 경로 상수와 URL 빌더 (= docs/api/openapi.yaml)
-      │  ├─ ApiEnums.cs           # JobStatus / AssetVariant + Unknown 처리
-      │  ├─ JobResponse.cs        # JobResponse, Timings, AssetInfo, JobError, UploadedFile
-      │  ├─ ApiResponses.cs       # JobCreatedResponse, JobListResponse, ErrorResponse, HealthResponse
-      │  ├─ BesideApiClient.cs    # UnityWebRequest 경계: 업로드·조회·다운로드·retry·healthz
-      │  └─ ErrorMessages.cs      # error.code → 사용자 문구, 재시도 가능 여부 (= ERROR_CODES.md)
-      ├─ Job/JobManager.cs        # 업로드 → 폴링 → 캐시/다운로드 → 로드 수명주기, 복원, retry, 측정, 서버 주소 변경
-      ├─ Loader/
-      │  ├─ RuntimeModelLoader.cs # glTFast 로드, 정면·크기·바닥·콜라이더 보정, 머티리얼 교체, 스포너 등록
-      │  ├─ ShellFur.shader       # URP 셸 퍼 셰이더 (털 길이·방향 지도 사용)
-      │  └─ ShellFurRenderer.cs   # 셸 퍼 렌더링 + 스프링 물리 (일반 메시 / 리깅 메시 BakeMesh)
-      ├─ Pet/PetAnimationPlayer.cs # 리깅 GLB 의 클립 재생 (Idle/Walk/Sit/TailWag/HeadTilt)
-      ├─ Metrics/MetricsRecorder.cs # metrics.csv 기록, 구간별 JSON 로그, FPS·메모리 샘플링
-      ├─ AR/
-      │  ├─ ARGuidance.cs         # 카메라 권한·AR 미지원·바닥 미인식 안내
-      │  ├─ CenterPlacer.cs       # 화면 중앙 배치 (바닥만)
-      │  ├─ SpawnLimiter.cs       # 배치 개수 제한(기본 1, 추가 터치 무시), 벽·천장 배치 차단
-      │  ├─ PlaneVisibility.cs    # 모델 배치 후 바닥 점 숨김
-      │  └─ PlaneScanGate.cs      # AR 화면에서만 바닥 인식 (진입 시 세션 리셋)
-      └─ UI/
-         ├─ MainUIController.cs   # 기본 UI (테스트용 Canvas)
-         ├─ UiKit.cs              # uGUI 위젯 빌더
-         ├─ PhotoPicker.cs        # NativeGallery 선택 / 에디터 경로 / 화면 캡처 대체
-         ├─ ModelPreview.cs       # 배치 전 3D 미리보기 (RenderTexture)
-         └─ Designed/
-            ├─ DesignKit.cs       # 디자인 토큰, 둥근 위젯
-            └─ DesignedUIController.cs # 시안 적용 UI: 홈·사진 확인·만드는 중·미리보기·AR·실패·서버 설정
+├─ CHANGELOG.md                # Unity 트랙 날짜별 변경
+├─ docs/FUR_RENDERING.md       # 털 방식·구조·설정값·한계
+├─ experiments/                # 앱 쪽 실험 기록 (털 렌더링 성능 등)
+└─ BesideApp/                  # ← Unity Hub 에서 여는 폴더
+   ├─ Packages/                # manifest.json (설치 패키지 목록)
+   ├─ ProjectSettings/         # Android 빌드 설정, XR 설정, Define Symbols
+   └─ Assets/
+      ├─ Scenes/SampleScene.unity # 유일한 씬. 빌드에 포함
+      ├─ MobileARTemplateAssets/  # Unity AR Mobile 템플릿(ObjectSpawner, 메뉴, 코칭 UI)
+      ├─ Samples/XR Interaction Toolkit/3.5.1/
+      ├─ Plugins/NativeGallery/   # 갤러리 선택 플러그인 (unitypackage 로 설치)
+      ├─ Models/                  # 테스트용 강아지 모델·텍스처·털 지도
+      └─ Beside/
+         ├─ Api/
+         │  ├─ ApiV1Routes.cs        # 경로 상수와 URL 빌더 (= docs/api/openapi.yaml)
+         │  ├─ ApiEnums.cs           # JobStatus / AssetVariant + Unknown 처리
+         │  ├─ JobResponse.cs        # JobResponse, Timings, AssetInfo, JobError, UploadedFile
+         │  ├─ ApiResponses.cs       # JobCreatedResponse, JobListResponse, ErrorResponse, HealthResponse
+         │  ├─ BesideApiClient.cs    # UnityWebRequest 경계: 업로드·조회·다운로드·retry·healthz
+         │  └─ ErrorMessages.cs      # error.code → 사용자 문구, 재시도 가능 여부 (= ERROR_CODES.md)
+         ├─ Job/JobManager.cs        # 업로드 → 폴링 → 캐시/다운로드 → 로드 수명주기, 복원, retry, 측정, 서버 주소 변경
+         ├─ Loader/
+         │  ├─ RuntimeModelLoader.cs # glTFast 로드, 정면·크기·바닥·콜라이더 보정, 머티리얼 교체, 스포너 등록,
+         │  │                        #   GLB 속 털 맵 읽기(extras.beside), 그림자 바닥면, 털 붙이기
+         │  ├─ ShellFur.shader       # 쉘 털 v2 (Custom/ShellFur): 털 결 방향, 노이즈 털 자리, 털 하이라이트, alpha-to-coverage
+         │  ├─ ShellFurRenderer.cs   # 쉘 털 그리기, 화면 차지율에 따른 쉘 수 자동 조절, 스프링 물리
+         │  ├─ FurNoise.cs           # 털 자리 노이즈 텍스처(256², 밉맵) 생성
+         │  └─ ShadowCatcher.shader  # 그림자만 보이는 투명 바닥면 (+ ShadowCatcher_Mat)
+         ├─ Pet/PetAnimationPlayer.cs # 리깅 GLB 의 클립 재생 (Idle/Walk/Sit/TailWag/HeadTilt)
+         ├─ Metrics/
+         │  ├─ MetricsRecorder.cs    # metrics.csv 기록, 구간별 JSON 로그, FPS·메모리 샘플링
+         │  └─ FpsOverlay.cs         # 화면 FPS 표시 (세 손가락 탭으로 켜고 끔)
+         ├─ FurLab/                  # 털 성능 측정 전용 (가닥·핀 털, 측정 패널, 결과 공유). 사용법은 FurLab/README.md
+         ├─ AR/
+         │  ├─ ARGuidance.cs         # 카메라 권한·AR 미지원·바닥 미인식 안내
+         │  ├─ CenterPlacer.cs       # 화면 중앙 배치 (바닥만)
+         │  ├─ SpawnLimiter.cs       # 배치 개수 제한(기본 1, 추가 터치 무시), 벽·천장 배치 차단
+         │  ├─ PlaneVisibility.cs    # 모델 배치 후 바닥 점 숨김
+         │  └─ PlaneScanGate.cs      # AR 화면에서만 바닥 인식 (진입 시 세션 리셋)
+         └─ UI/
+            ├─ MainUIController.cs   # 기본 UI (테스트용 Canvas)
+            ├─ UiKit.cs              # uGUI 위젯 빌더
+            ├─ PhotoPicker.cs        # NativeGallery 선택 / 에디터 경로 / 화면 캡처 대체
+            ├─ ModelPreview.cs       # 배치 전 3D 미리보기 (RenderTexture)
+            └─ Designed/
+               ├─ DesignKit.cs       # 디자인 토큰, 둥근 위젯
+               └─ DesignedUIController.cs # 시안 적용 UI: 홈·사진 확인·만드는 중·미리보기·AR·실패·서버 설정
 ```
 
 ## 상태
@@ -50,15 +60,19 @@ unity/
 - **[구현됨]** 계약 DTO (`Assets/Beside/Api/*.cs`): [openapi.yaml](../docs/api/openapi.yaml) v1 과 필드 이름 1:1. 알 수 없는 `status`/`variant` 는 `Unknown`.
 - **[구현됨]** API 클라이언트: multipart 업로드(`Idempotency-Key`, `X-Request-Id`), 상태 조회, `DownloadHandlerFile` 다운로드, `POST /retry`, `healthz`, `ErrorResponse` 봉투 파싱.
 - **[구현됨]** JobManager: 업로드 → 2초 폴링 → `persistentDataPath/models/{jobId}-base.glb` 캐시 확인 → 다운로드 → GLB 매직 검증 → glTFast 로드 → ObjectSpawner 0번 칸 교체. 앱 재실행 시 저장된 jobId 로 복원, 서버 실패는 `/retry`, 앱 실패는 재실행. **서버 주소를 앱에서 바꿔 저장**(`SetBaseUrl`, PlayerPrefs).
-- **[구현됨]** 런타임 로더: 정면 보정(`modelFacing`, 머리 → +Z), 최장 축 0.6 m 정규화(기본), 발바닥 원점, BoxCollider, glTFast 머티리얼 → URP/Lit 교체(빌드 셰이더 누락 방지), 선택적 셸 퍼(리깅 메시 포함).
+- **[구현됨]** 런타임 로더: 정면 보정(`modelFacing`, 머리 → +Z), 최장 축 0.6 m 정규화(기본), 발바닥 원점, BoxCollider, glTFast 머티리얼 → URP/Lit 교체(빌드 셰이더 누락 방지), 그림자 바닥면(바닥 점을 숨겨도 그림자 유지).
+- **[구현됨]** 쉘 털 v2: 서버가 GLB 에 넣어 보낸 그 개의 털 길이·결 맵(`extras.beside`)으로 털을 그린다. 털이 결 방향으로 눕고, 펫이 화면의 20%→60% 를 차지하면 쉘을 20겹→10겹으로 줄인다. 리깅 메시는 프레임당 한 번 `BakeMesh` 해 공유한다. 자세한 내용은 [docs/FUR_RENDERING.md](docs/FUR_RENDERING.md).
+- **[구현됨]** 털 측정 도구 FurLab: 털 방식(없음·노멀맵·쉘·핀·가닥)과 최적화 조건을 바꿔 가며 펫 1마리당 GPU 시간(msPerPet)을 잰다. 네 손가락 탭으로 패널을 연다.
 - **[구현됨]** 리깅 GLB 애니메이션: glTFast 레거시 Animation 으로 클립 재생, AR 화면 동작 버튼(걷기/앉기/꼬리/갸웃/기본), 실제 재생 중인 클립에 맞춘 버튼 강조. 에디터 단축키 1~5.
 - **[구현됨]** AR 배치 규칙: 1마리 제한(추가 터치 무시), 바닥에만 배치(벽·천장 차단), 배치 후 바닥 점 숨김, **"AR로 배치하기" 이후에만 바닥 인식**(다른 화면에서는 인식 중지, 진입 시 세션 리셋).
 - **[구현됨]** 측정: 구간별 JSON 로그(`[BesideMetric]`), `metrics.csv`(e2eMs 는 첫 AR 배치 시점), 배치 후 30초 FPS·메모리.
 - **[구현됨]** UI 두 종류: 기본 UI(`MainUIController`)와 디자인 UI(`DesignedUIController`). 둘 다 붙이고 하나만 켠다(화면은 `OnEnable` 에서 생성되므로 꺼진 쪽은 나타나지 않는다). 디자인 UI: 갤러리 선택, 사진 확인, 진행 단계, 미리보기, AR 3단계 안내, 상단 안내 닫기(×), 하단 버튼 숨기기/보기, 서버 설정 화면, 템플릿 UI 자동 숨김.
 - **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식.
 - **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
-- **[미검증]** 리깅 모델 털(셸 퍼 BakeMesh), Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
-- **[계획]** 리깅 다음 단계(아래 "리깅 GLB" 참고): 바닥 위 걷기, GLB_SPEC rigged 계약, 추론 → 리깅 연결, 실제 사진 E2E 측정, 자세 따라하기. 그 밖에 터치 상호작용, 분류 모델(Jev) 연동, 크래시 수집(Sentry/Crashlytics).
+- **[검증됨]** 실제 기기(SM-S947N): 리깅 모델 털(애니메이션 중 크기·위치), 그림자 바닥면, 서버 GLB 의 털 맵 적용.
+- **[실험 결과]** 털 렌더링 성능: [experiments/2026-11-03_fur-benchmark.md](experiments/2026-11-03_fur-benchmark.md). 앱 기본값(쉘 20겹 + 자동 조절)은 펫이 화면 87% 일 때 13.5 ms, 20% 일 때 4.2 ms.
+- **[미검증]** 중저가 기기 FPS, Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
+- **[계획]** 화질 옵션(낮음: 노멀맵 / 중간: 쉘 8겹 / 높음: 쉘 20겹 + 자동 조절, 3차 멘토링 제안), 털 색 보존·귀 가장자리 초록 번짐 수정, 부위별 털(꼬리·귀만 가닥), 블라인드 화질 평가. 리깅 다음 단계(아래 "리깅 GLB" 참고): 바닥 위 걷기, GLB_SPEC rigged 계약, 실제 사진 E2E 측정, 자세 따라하기. 그 밖에 터치 상호작용, 분류 모델(Jev) 연동, 크래시 수집(Sentry/Crashlytics).
 
 ## 환경 (실제 프로젝트 값)
 
@@ -67,7 +81,9 @@ unity/
 | Unity | **6 (6000.6.0f1)**, AR Mobile 템플릿 (URP). 다른 6000.x 버전으로 열면 업그레이드 안내가 뜬다. 2022.3 이하로는 열 수 없다 |
 | 패키지 | AR Foundation 6.6.x · Google ARCore XR Plugin 6.6.x · XR Interaction Toolkit 3.5.1 (Starter Assets, AR Starter Assets 샘플) · Input System 1.20 · glTFast (`com.unity.cloud.gltfast`) · Newtonsoft Json (`com.unity.nuget.newtonsoft-json`) · NativeGallery (yasirkula, unitypackage) |
 | Scripting Define Symbols | `BESIDE_NATIVEGALLERY` — NativeGallery 가 설치된 경우에만. 없으면 갤러리 코드가 꺼진 채 컴파일되고 화면 캡처가 사진을 대신한다 |
-| Android | Minimum API Level 24 이상(템플릿 기본값), Scripting Backend IL2CPP, ARM64, Graphics API 는 템플릿 기본값 |
+| Android | Minimum API Level 24 이상(템플릿 기본값), Scripting Backend IL2CPP, ARM64 |
+| Graphics API | Auto 끔, **OpenGLES3 를 맨 위, Vulkan 을 그 아래**. Vulkan 만 두면 SM-S947N 에서 AR 카메라 화면이 검게 나온다(2026-11-02 확인) |
+| 렌더링 | URP 에셋(`Assets/Settings/URP-Performant.asset`) **MSAA 4x** — 쉘 털 v2 는 alpha-to-coverage 라 MSAA 를 끄면 털 대부분이 사라진다(2x 이상 유지). Player 의 **Frame Timing Stats** 켬(FurLab GPU 시간) |
 | 권한 | `INTERNET`, `CAMERA`(AR Foundation), 사진 접근은 NativeGallery |
 | 개발용 HTTP | Player Settings → Other Settings → **Allow downloads over HTTP: Always allowed** (같은 Wi-Fi·USB 의 `http://` 서버용. 터널(https)만 쓰면 `Not allowed` 로 되돌려도 된다. 릴리스 전 `Not allowed`) |
 | 외부 접속 (선택) | `cloudflared` (`winget install --id Cloudflare.cloudflared --source winget`) |
@@ -76,8 +92,8 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 
 ## 프로젝트 열기
 
-1. 저장소를 받는다. `unity/` 가 Unity 프로젝트 루트다.
-2. Unity Hub → Projects → **Add** → **Add project from disk** → `unity/` 폴더 선택. Unity 6000.6.0f1 이 없으면 Hub 가 설치를 안내한다.
+1. 저장소를 받는다. **`unity/BesideApp/` 가 Unity 프로젝트 루트다.**
+2. Unity Hub → Projects → **Add** → **Add project from disk** → `unity/BesideApp/` 폴더 선택(`unity/` 가 아님). 예전에 `unity/` 를 등록해 뒀다면 Hub 목록에서 지우고 다시 추가한다. Unity 6000.6.0f1 이 없으면 Hub 가 설치를 안내한다.
 3. 처음 열 때 `Library/` 를 만들며 수 분 걸린다. Package Manager 가 `Packages/manifest.json` 의 패키지를 자동 설치한다.
 4. **NativeGallery 는 git 저장소에 포함돼 있다** (`Assets/Plugins/NativeGallery/`). 없거나 빠졌으면 [releases](https://github.com/yasirkula/UnityNativeGallery/releases) 의 `NativeGallery.unitypackage` 를 받아 Project 창에 드래그 → Import 한다. git URL 설치는 PC 에 Git 이 있어야 한다.
 5. Console 에 빨간 오류가 없어야 한다. 노란 경고(`FindFirstObjectByType is obsolete`, `type 'long?' is skipped by serializer`, `LoadGltfBinary is obsolete`)는 무시한다.
@@ -88,7 +104,7 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 
 | 오브젝트 | 컴포넌트 | 설정 |
 |---|---|---|
-| `ModelLoader` | `RuntimeModelLoader` | Shell Prefab = `RuntimeShell`, Replace Slot 0, **Normalize Mode LongestAxis, Target Size 0.6, Model Facing PlusZ** (리깅 GLB 기준. 예전 OBJ 기반 샘플은 Height 0.4 / MinusX), Base Material Template = `Dog_Mat`, Fur Material Template = `Dog_Fur_Mat`, Test 칸 비움 |
+| `ModelLoader` | `RuntimeModelLoader` | Shell Prefab = `RuntimeShell`, Replace Slot 0, **Normalize Mode LongestAxis, Target Size 0.6, Model Facing PlusZ** (리깅 GLB 기준. 예전 OBJ 기반 샘플은 Height 0.4 / MinusX), Base Material Template = `Dog_Mat`, **Shadow Catcher Material = `ShadowCatcher_Mat`, Shadow Quad Scale 1.6**, Fur Material Template = `Dog_Fur_Mat`, Fur Shell Count 20, Fallback Hair 칸 비움(GLB 에 털 맵이 없으면 털을 끔), Test 칸 비움 |
 | `Beside` | `JobManager` | Base Url = 빌드 기본 주소(아래 연결 절차). 앱 서버 설정에서 저장한 주소가 있으면 그쪽이 우선 |
 | `Beside` | `PhotoPicker` | Editor Test Image Paths 에 에디터용 테스트 사진 절대 경로 (선택) |
 | `Beside` | `ModelPreview`, `ARGuidance`, `MetricsRecorder` | 기본값 |
@@ -96,11 +112,12 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 | `Beside` | `PlaneVisibility` | Hide When Placed 체크 |
 | `Beside` | `DesignedUIController` **또는** `MainUIController` | 하나만 체크. 디자인 UI: Font(Noto Sans KR TTF, 선택), Hero Image(선택), Show AR Instructions, Reshow On New Message, **Scan Only In AR** 체크, Hide Template Objects |
 | `Beside` | `PlaneScanGate`, `CenterPlacer`, `PetAnimationPlayer` | 디자인 UI 가 없으면 자동으로 붙인다. 수동 추가 불필요 |
+| (측정용) | `FurBenchmark`, `FpsOverlay` | 씬에 붙어 있다. 네 손가락 탭 = 털 측정 패널, 세 손가락 탭 = FPS 표시. 발표·배포 빌드에서는 컴포넌트를 끈다. 설정은 [FurLab/README.md](BesideApp/Assets/Beside/FurLab/README.md) |
 | `XR Origin (AR Rig)` | `ARPlaneManager` | **Detection Mode = Horizontal** (벽 인식 안 함) |
 | `XR Origin > Camera Offset > Object Spawner` | `ObjectSpawner` | **Apply Random Angle At Spawn 해제** (정면이 카메라를 향함) |
 | 같은 오브젝트 | `ARInteractorSpawnTrigger` | **Require Horizontal Up Surface 체크** |
 
-`RuntimeShell` 은 템플릿 샘플 프리팹에서 모델(`Visuals`)·콜라이더(`Cube_COL`)·**Interaction Affordance** 를 뺀 껍데기(XR Grab Interactable, AR Transformer 만 남김)다. Interaction Affordance 를 남기면 지워진 `Visuals` 를 찾느라 매 프레임 NullReferenceException 이 난다. 로더가 이 안에 GLB 를 넣어 스포너에 등록한다. `Dog_Fur_Mat` 의 Shader 는 `Custom/ShellFur` 여야 한다.
+`RuntimeShell` 은 템플릿 샘플 프리팹에서 모델(`Visuals`)·콜라이더(`Cube_COL`)·**Interaction Affordance** 를 뺀 껍데기(XR Grab Interactable, AR Transformer 만 남김)다. Interaction Affordance 를 남기면 지워진 `Visuals` 를 찾느라 매 프레임 NullReferenceException 이 난다. 로더가 이 안에 GLB 를 넣어 스포너에 등록한다. `Dog_Fur_Mat` 의 Shader 는 `Custom/ShellFur`, `ShadowCatcher_Mat` 은 `Custom/ShadowCatcher` 여야 한다.
 
 ## 폰 ↔ 서버 연결
 
@@ -151,6 +168,10 @@ APK 만 만들려면 **Build** 로 `.apk` 를 저장해 `adb install -r 파일.a
 | 증상 | 원인 | 조치 |
 |---|---|---|
 | `The name 'NativeGallery' does not exist` | 심볼은 있는데 플러그인 없음 | NativeGallery 설치, 또는 심볼 `BESIDE_NATIVEGALLERY` 제거 |
+| AR 카메라 화면이 검정 | Graphics API 가 Vulkan 만 있음 | OpenGLES3 를 맨 위로 (위 환경 표) |
+| 털이 거의 안 보임 / 점처럼 보임 | MSAA 꺼짐 | URP 에셋 MSAA 2x 이상 |
+| 털이 몸보다 작게 다리 사이에 그려짐 | 크기가 두 번 곱해짐 | `ShellFurRenderer.bakeUseScale` 끈 상태 유지(기본값). [FUR_RENDERING.md](docs/FUR_RENDERING.md) §4 |
+| 바닥 점을 숨기면 그림자가 사라짐 | 그림자 받을 면 없음 | `ModelLoader` 의 Shadow Catcher Material 연결 |
 | 폰에서 모델이 분홍색 | 셰이더가 빌드에서 제외 | 로더가 URP/Lit 로 교체하므로 보통 안 생김. 생기면 `ModelLoader` 의 Base Material Template(`Dog_Mat`) 연결 확인 |
 | 생성 요청 시 `NETWORK_ERROR` | 서버 미실행, adb reverse 풀림, Wi-Fi 다름, 터널 꺼짐/주소 바뀜, HTTP 차단 | 서버 설정의 "연결 확인", healthz, Allow downloads over HTTP 확인 |
 | 받은 모델 대신 기존 모델이 배치됨 | 로드 실패로 스포너 0번 칸이 교체되지 않음 | Logcat 에서 `RuntimeModelLoader` 오류 확인 |
@@ -194,8 +215,8 @@ AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입
 | 텍스처 | 1장(`pet_body`), 기존 OBJ 와 같은 UV 라 털 지도 공용 |
 
 - **SMAL 은 학술용 라이선스**라 리깅 GLB 도 파생물로 취급해 공개 레포에 커밋하지 않는다. `sample-dog.glb` 는 이미 추적 중인 파일이므로 `.gitignore` 만으로는 부족하다: 로컬은 `git update-index --assume-unchanged backend/storage/results/sample-dog.glb`, 레포에서 빼려면 백엔드 담당과 `git rm --cached` 후 `.gitignore`.
-- 서버는 아직 털 지도를 내려주지 않는다. 리깅 모델 털은 `ModelLoader` 의 Test Glb Url + Test Hair Length/Flow Url(로컬 파일)로만 확인할 수 있다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다).
-- 다음 단계: ① 리깅 모델 털 확인 ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
+- 서버가 털 길이·결 맵을 GLB 안에 넣어 보낸다(`extras.beside = {hairLengthImage, hairFlowImage, furLength}`, `generation/tools/embed_hair.py`). 로더가 `TryReadEmbeddedHair` 로 읽어 쉘 털에 넘긴다. 털 맵이 없는 예전 GLB 는 Fallback Hair 칸의 맵을 쓰거나 털을 끈다. 로컬 확인은 `ModelLoader` 의 Test Glb Url(+ Test Hair Length/Flow Url)로 한다.
+- 다음 단계: ① ~~리깅 모델 털 확인~~ (2026-11 완료) ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
 
 ## 폰 ↔ GPU PC real 서버 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
 
@@ -214,7 +235,7 @@ real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GP
 - `COMPLETED` → `asset.url` 을 `baseUrl` 과 결합해 `DownloadHandlerFile` 로 `{jobId}-base.glb` 저장 → 매직 바이트 검증 → glTFast 로드. 같은 jobId 는 다시 받지 않는다.
 - `FAILED` → `ErrorMessages.ForCode(error.code)` 문구, 재시도 가능하면 `POST /retry`.
 - 모든 오류 응답은 `ErrorResponse` 봉투. 알 수 없는 `code`·`status` 는 일반 문구/`Unknown`.
-- 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털 지도 PNG 방식과 `variant=hair` 방식 중 어느 쪽으로 갈지는 계약 회의에서 정한다.
+- 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털 지도는 현재 base GLB 안에 PNG 로 넣어 보낸다(`extras.beside`, [GLB_SPEC](../docs/asset/GLB_SPEC.md) §3.1). `variant=hair` 는 쓰지 않는다 — 계약 회의에서 확정.
 
 ## metrics.csv
 
@@ -227,7 +248,7 @@ real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GP
 
 ## 직접 할 일
 
-- 리깅 모델 털 확인, 바닥 위 걷기 (위 "리깅 GLB" 다음 단계).
+- 바닥 위 걷기 (위 "리깅 GLB" 다음 단계). 화질 옵션 UI, 중저가 기기 털 측정.
 - 실패 시나리오·기기 `metrics.csv` 회수 검증 (PLAN 3·4단계). Wi-Fi 와 터널의 업로드·다운로드 시간 비교.
 - 디자인 UI 마감: Noto Sans KR TTF 넣고 `Font` 연결, 홈 Hero Image 준비.
 - 계약 회의: GLB_SPEC rigged, 털 지도 전달 방식, 서버 인증(터널 공개 대비), `sample-dog.glb` 레포 처리.

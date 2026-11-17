@@ -7,17 +7,19 @@ Beside/
 ├─ CLAUDE.md        공통 작업 원칙, 아키텍처, 계약 변경 규칙
 ├─ docs/            CONTRACT.md(계약 통합본), 아키텍처, 단계별 계획, openapi.yaml, GLB 에셋 계약, 측정 항목
 ├─ backend/         Spring Boot 3.2 / Java 17 — API v0(동결)·v1, Mock/Real 워커, 브라우저 Mock UI
-├─ unity/           Unity Android AR 클라이언트 — 계약 DTO와 C# 틀 (Assets/Beside)
-├─ generation/      3D 생성 트랙 — AnimalLift 실험 기록, FastAPI 추론 서비스 스텁, GLB 변환 도구 자리
-└─ scripts/         e2e_mock.ps1 / e2e_mock.sh — 업로드 → 폴링 → GLB 다운로드 전체 흐름
+├─ unity/           Unity Android AR 클라이언트 — 업로드·폴링·AR 배치·애니메이션·쉘 털, 털 측정 도구(FurLab), 앱 실험 기록
+├─ generation/      3D 생성 트랙 — AnimalLift 추론 서비스, GLB 변환·리깅·털 맵 삽입 도구, 실험 기록
+└─ scripts/         e2e_mock.ps1 / e2e_mock.sh(전체 흐름), run_real.ps1(GPU PC), analyze_fur_bench.py(털 측정 분석)
 ```
 
-## 현재 상태 (2026-10-04 기준)
+## 현재 상태 (2026-11-17 기준)
 
-- **[구현됨]** Spring Mock 서버: v1 `/api/v1`(Unity 와 브라우저 Mock UI 가 쓰는 계약), v0 `/api/jobs`(동결, 제거 대기), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, 재시도), H2 파일 DB(재시작 후에도 작업 유지), 계약 테스트(openapi.yaml ↔ springdoc). real 워커는 Python `/infer` 를 호출한다(FastAPI 스텁의 패스스루로 연동 확인, 실제 모델은 [계획]).
-- **[구현됨]** 계약 문서: 통합본 [docs/CONTRACT.md](docs/CONTRACT.md), 원본 [docs/api/openapi.yaml](docs/api/openapi.yaml), [ERROR_CODES](docs/api/ERROR_CODES.md), [GLB_SPEC](docs/asset/GLB_SPEC.md), [METRICS](docs/METRICS.md). Unity 계약 DTO([unity/Assets/Beside/Api](unity/Assets/Beside/Api)), FastAPI `/infer` 스텁([generation/inference_service](generation/inference_service)).
-- **[계획]** Unity 실제 프로젝트와 AR 배치, AnimalLift 추론 연동, 측정 자동화. 단계·일정·완료 기준은 [docs/PLAN.md](docs/PLAN.md).
-- **직접 할 일**: `backend/storage/results/sample-dog.glb`는 0바이트다. [GLB_SPEC](docs/asset/GLB_SPEC.md)을 만족하는 유효한 GLB로 교체해야 Unity 로드 검증을 할 수 있다.
+- **[구현됨]** Spring 서버: v1 `/api/v1`, Mock/Real 워커, H2 파일 DB, 실행별 측정 테이블 `job_runs`, 계약 테스트. real 워커가 Python `/infer` 를 호출한다.
+- **[구현됨]** AnimalLift 추론 서비스: 사진 → AnimalLift → GLB 변환(+Z 정면, 최장 축 1 m) → SMAL 뼈대 리깅 → **개별 털 길이·결 맵을 GLB 안에 삽입**(`extras.beside`). [generation/inference_service/ANIMALLIFT_SETUP.md](generation/inference_service/ANIMALLIFT_SETUP.md)
+- **[구현됨]** Unity 앱: 갤러리 → 업로드 → 폴링 → GLB 캐시·로드 → AR 배치(1마리, 바닥만) → 애니메이션(Idle/Walk/Sit/TailWag/HeadTilt). **쉘 털 v2**(털 결 방향, 화면 차지율에 따른 쉘 수 자동 조절)와 그림자 바닥면. [unity/README.md](unity/README.md)(프로젝트 루트 `unity/BesideApp/`), [unity/docs/FUR_RENDERING.md](unity/docs/FUR_RENDERING.md)
+- **[실험 결과]** 털 렌더링 성능(실기기, 방식·최적화별 GPU 시간): [unity/experiments](unity/experiments/README.md). 3D 생성 모델 비교, AnimalLift 방해 요소·일관성: [generation/experiments](generation/experiments/README.md).
+- **[계획]** 화질 옵션(구형 기기 대응), 부하 테스트(k6)와 장애 시나리오, 서버 이중화 검토, 털 색 보존·귀 가장자리 색 번짐 수정, 블라인드 화질 평가. 단계·일정은 [docs/PLAN.md](docs/PLAN.md).
+- SMAL 파생 데이터(리깅 템플릿·웨이트·`.pkl`)와 AnimalLift 결과물은 라이선스 때문에 공개 배포 전 확인이 필요하다. 템플릿은 커밋하지 않는다.
 
 ## 빠른 시작
 

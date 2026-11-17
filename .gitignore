@@ -11,7 +11,23 @@ backend/storage/results/*/
 .vscode/
 backend/.vscode/
 
-# Unity generated folders (Unity 프로젝트를 unity/ 안에 만들거나 복사했을 때)
+# Unity generated folders (Unity 프로젝트 루트 = unity/BesideApp/. 아래 unity/ 직속 항목은 예전 위치용)
+unity/BesideApp/Library/
+unity/BesideApp/Temp/
+unity/BesideApp/Logs/
+unity/BesideApp/Obj/
+unity/BesideApp/[Bb]uild/
+unity/BesideApp/[Bb]uilds/
+unity/BesideApp/UserSettings/
+unity/BesideApp/MemoryCaptures/
+unity/BesideApp/*.csproj
+unity/BesideApp/*.sln
+unity/BesideApp/.vs/
+unity/BesideApp/.utmp/
+unity/BesideApp/.vsconfig
+unity/BesideApp/UpgradeLog*.htm
+unity/BesideApp/*.apk
+unity/BesideApp/*.aab
 unity/Library/
 unity/Temp/
 unity/Logs/
@@ -22,6 +38,10 @@ unity/UserSettings/
 unity/*.csproj
 unity/*.sln
 unity/.vs/
+unity/.utmp/
+unity/UpgradeLog*.htm
+unity/*.apk
+unity/*.aab
 
 # Python (generation/)
 __pycache__/
@@ -39,3 +59,12 @@ generation/inference_service/work/
 logs/
 backend/storage/results/*.glb
 !backend/storage/results/sample-dog.glb
+
+# 털 측정 분석 출력 (정리본은 unity/experiments/ 에 둔다)
+fur_report/
+rating/
+fur_bench/
+
+# SMAL 파생 데이터 (학술 라이선스, 커밋 금지)
+*.pkl
+**/template-rigged.glb

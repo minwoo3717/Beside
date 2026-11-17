@@ -6,11 +6,13 @@
 generation/
 ├─ CLAUDE.md
 ├─ README.md
-├─ inference_service/      # FastAPI 내부 서비스 스텁: POST /infer, GET /healthz  (담당: 3D Generation, 계약은 Backend 와 합의)
-│  ├─ app.py
+├─ inference_service/      # FastAPI 내부 서비스: POST /infer, GET /healthz  (담당: 3D Generation, 계약은 Backend 와 합의)
+│  ├─ app.py               # 추론 → 변환 → 리깅 → 털 지도 삽입
+│  ├─ animallift_runner.py # AnimalLift 를 한 번 불러 두고 사진 → mesh.obj, uv.png, hair.npz
+│  ├─ ANIMALLIFT_SETUP.md  # AnimalLift 설치, 환경 변수, WSL/Ubuntu 실행, 모델 교체
 │  ├─ requirements.txt
-│  └─ README.md            # GPU 서버 실행법, /infer 계약
-├─ tools/                  # convert_asset.py 자리 (OBJ+PNG → GLB + metrics.json). 별도 세션 결과물 투입 예정
+│  └─ README.md            # /infer 계약
+├─ tools/                  # convert_asset.py (GLB 변환 + 털 지도), rig_transfer.py (리깅), embed_hair.py (털 지도 삽입)
 │  └─ README.md
 └─ experiments/            # 실험 기록. TEMPLATE.md 순서를 따른다
    ├─ README.md
@@ -20,7 +22,7 @@ generation/
 ## 파이프라인
 
 ```text
-사진 1~10장 ─▶ AnimalLift 추론 ─▶ mesh.obj + uv.png (+ hair.npz) ─▶ tools/convert_asset.py ─▶ {jobId}/base.glb (+ hair.glb) + base.metrics.json
+사진 1장 ─▶ AnimalLift 추론 ─▶ mesh.obj + uv.png + hair.npz ─▶ convert_asset.py ─▶ rig_transfer.py ─▶ embed_hair.py ─▶ {jobId}/base.glb (리깅 + 털 지도) + base.metrics.json
                  inferMs, gpuPeakMB, modelParams                         convertMs, vertices, triangles, textureSize, bytes
 ```
 
@@ -28,9 +30,11 @@ Spring 의 real 워커가 `POST /infer` 로 이 파이프라인을 호출하고,
 
 ## 상태
 
-- **[구현됨]** `inference_service/app.py` 스텁: 입·출력 스키마, `GET /healthz`, 모델이 없을 때 501, `BESIDE_SAMPLE_GLB` 패스스루 모드.
-- **[계획]** (순서 변경 2026-10-06, [docs/PLAN.md](../docs/PLAN.md) 3단계) AnimalLift 베이스라인 재현(exp-01, 출력 형식·시간·VRAM 기록) → `convert_asset.py` 투입 → `/infer` 에 베이스라인 모델 연결(`modelVersion` 채움, 10-13 주) → GPU PC 에서 폰까지 실제 E2E(10-20 주) → 품질·속도 개선 실험(exp-03·04, 개선안마다 E2E 로 확인).
-- **직접 할 일**: 별도 세션에서 만든 `convert_asset.py` 와 glTFast 로드 검증 결과를 `tools/` 와 `experiments/` 에 투입한다. 이 리포에는 아직 없다. `inference_service/requirements.txt`("별도 conda/venv")와 `inference_service/README.md`("같은 env")의 환경 표현을 통일한다 — 모델이 별도 env 면 `app.py` 가 subprocess 로 부른다.
+- **[구현됨]** (2026-10-14) AnimalLift 추론 서비스: 시작 시 모델 로드, `/infer` 에서 추론 → GLB 변환 → SMAL 리깅(템플릿이 있을 때) → `glbPath`·metrics·`modelVersion` 응답. 패스스루 모드(`BESIDE_SAMPLE_GLB`) 유지. 실행은 [ANIMALLIFT_SETUP.md](inference_service/ANIMALLIFT_SETUP.md).
+- **[구현됨]** (2026-11-01) 개별 털 지도: `hair.npz` → 털 길이·결 지도(가이드 텍셀만 사용, 코·발바닥 털 제거) → GLB `extras.beside` 에 삽입, TANGENT 추가, 텍스처 초록 배경 채우기. 앱이 그 개의 털로 쉘 털을 그린다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §3.1.
+- **[실험 결과]** (2026-11-04~05) 생성 모델 비교(AnimalLift / SF3D / TripoSR), AnimalLift 방해 요소·같은 개 일관성. [experiments/README.md](experiments/README.md).
+- **[계획]** 입력 사진 전처리(반려동물 검출·배경 제거) 연동 효과 정리, 여러 장 중 좋은 사진 고르기, 털 색 재현 개선(흰 개·붉은 털), 부위 번호 지도(`hair_region.png`)를 GLB 에 넣어 부위별 털 혼합.
+- AnimalLift 리포에 라이선스 파일이 없다. 결과물·가중치를 공개 배포하기 전에 확인한다. 리깅 템플릿(SMAL 파생)은 커밋하지 않는다.
 
 ## 실험 기록 규칙
 

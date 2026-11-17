@@ -45,7 +45,7 @@ Beside/
 │  ├─ api/REVIEW_CHECKLIST.md     # 계약 회의 검토 안건
 │  └─ asset/GLB_SPEC.md           # GLB 에셋 계약
 ├─ backend/                       # Spring Boot 3.2 / Java 17 — v0(/api/jobs, 동결) + v1(/api/v1) + Mock/Real 워커
-├─ unity/                         # Unity 트랙. Assets/Beside/ 를 Unity 프로젝트의 Assets/Beside 로 가져간다
+├─ unity/                         # Unity 트랙. BesideApp/ = Unity 프로젝트 루트(Assets·Packages·ProjectSettings), docs/·experiments/ = 문서
 ├─ generation/                    # 3D 트랙: inference_service/(FastAPI), tools/(convert_asset.py 자리), experiments/(실험 기록)
 └─ scripts/                       # e2e_mock.ps1 / e2e_mock.sh — curl 로 업로드→폴링→다운로드 전체 흐름
 ```

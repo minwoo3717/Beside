@@ -9,7 +9,7 @@
 ```mermaid
 flowchart LR
     subgraph Phone["Android 폰"]
-        U["Unity 앱<br/>AR Foundation · ARCore · glTFast · NativeGallery<br/>계약 DTO: unity/Assets/Beside/Api"]
+        U["Unity 앱<br/>AR Foundation · ARCore · glTFast · NativeGallery<br/>계약 DTO: unity/BesideApp/Assets/Beside/Api"]
     end
     subgraph Server["GPU PC (Spring Boot, :8080) — mock 개발 때는 각자 PC"]
         S["공개 API /api/v1<br/>JobV1Controller · JobServiceImpl<br/>(v0 /api/jobs 는 동결, 사용처 없음 — 제거 대기)"]

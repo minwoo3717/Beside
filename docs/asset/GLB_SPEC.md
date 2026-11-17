@@ -2,7 +2,7 @@
 
 적용 대상: 추론 서비스가 만들고(`generation/tools/convert_asset.py`), Spring 이 `GET /api/v1/jobs/{jobId}/asset` 으로 서빙하며, Unity 가 glTFast 로 로드하는 `.glb` 파일. 세 트랙이 이 문서 하나를 기준으로 삼는다. **"제안값"** 으로 표시한 숫자는 계약 회의에서 확정하기 전까지 임시값이다([REVIEW_CHECKLIST.md](../api/REVIEW_CHECKLIST.md)).
 
-상태: 변환기(`convert_asset.py`)와 glTFast 로드 검증은 팀이 별도 세션에서 수행했다고 보고됐으나 **이 리포에는 아직 없다** → 투입은 [계획](PLAN 0단계). Mock 서버의 `backend/storage/results/sample-dog.glb` 는 0바이트라 이 계약을 만족하지 않는다(직접 교체).
+상태: 변환기(`generation/tools/convert_asset.py`), 리깅(`rig_transfer.py`), 털 지도 삽입(`embed_hair.py`)이 리포에 있고 추론 서비스가 차례로 부른다 **[구현됨]**(2026-10-14, 털 지도 2026-11-01). glTFast 로드는 Unity 기기에서 확인했다. Mock 서버의 `sample-dog.glb` 는 로컬에서 리깅 GLB 로 교체해 쓴다(SMAL 파생이라 커밋하지 않음).
 
 ## 1. 파일 형식
 
@@ -32,9 +32,26 @@
 | 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0` 필수. `TANGENT` 선택. 인덱스는 uint16 또는 uint32 |
 | 머티리얼 | PBR metallic-roughness. `baseColorTexture` = `uv.png`. metallic 0, roughness 0.8~1.0 (제안값) |
 | hair 머티리얼 | `alphaMode` = `MASK`(기본) 또는 `BLEND`, `doubleSided` = true |
-| 애니메이션/스킨 | 없음(확장 기능, [계획]) |
+| 애니메이션/스킨 | 선택. 리깅 GLB 는 SMAL 뼈대 36개·클립 `Idle`/`Walk`/`Sit`/`TailWag`/`HeadTilt`, 정점당 뼈 ≤ 4 (임시 계약, [unity/README.md](../../unity/README.md) "리깅 GLB") |
 
 노드 이름 `base`/`hair` 는 고정이다. Unity 는 `Transform.Find("hair")` 로 털 표시를 켜고 끌 수 있다.
+
+### 3.1 털 지도 삽입 (`extras.beside`) — [구현됨] 2026-11-01, 추가 필드
+
+`variant=hair` 메시 대신, base GLB 안에 그 개의 털 지도 두 장을 넣어 보낸다. 앱이 쉘 털로 그린다. 필드 **추가**이므로 털 지도를 모르는 클라이언트·뷰어는 그대로 동작한다.
+
+| 위치 | 값 |
+|---|---|
+| 루트 `extras.beside.hairLengthImage` | `images[]` 인덱스. 털 길이 지도 PNG(R, 0~1, 선형). 코·발바닥 등 털 없는 곳은 0 |
+| 루트 `extras.beside.hairFlowImage` | `images[]` 인덱스. 털 결 지도 PNG(RGB, 선형, 값 = 방향 × 0.5 + 0.5). RG = 털이 눕는 방향(UV 접선 기준 x = +u, y = +v), B = 털이 서 있는 정도 |
+| 루트 `extras.beside.furLength` | 털 최대 길이(GLB 단위 = m) |
+| 이미지 | bufferView + `mimeType: image/png` 로 임베드. 어떤 머티리얼도 참조하지 않는다 |
+| 정점 속성 | 털 지도가 있으면 `TANGENT` 필수(털 결 방향 계산) |
+
+- 만드는 곳: `generation/tools/convert_asset.py --hair --hair-meta`(지도 PNG + `hair_maps.json`) → `rig_transfer.py` → `embed_hair.py`(마지막 단계). 끄기: 추론 서비스 `BESIDE_EMBED_HAIR=0`.
+- 읽는 곳: Unity `RuntimeModelLoader.TryReadEmbeddedHair`. 지도가 없으면 앱 설정의 기본 지도를 쓰거나 털을 끈다.
+- 크기: GLB 가 약 0.6 MB 커진다(§1 상한 안).
+- 계약 회의 안건: 이 방식을 `variant=hair` 대신 정식으로 채택할지, rigged GLB(뼈대·클립 이름) 항목과 함께 확정.
 
 ## 4. 텍스처
 

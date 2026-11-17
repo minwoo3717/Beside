@@ -47,7 +47,7 @@ gantt
 | 계약 테스트 `openapi.yaml` ↔ `/v3/api-docs` | **[구현됨]** | `JobV1ContractTest` |
 | profile `mock \| real` 분리, real 워커 스텁 | **[구현됨]** | `/infer` 호출은 2026-10-04 4단계 선행으로 구현 |
 | `GLB_SPEC.md`, `METRICS.md`, `ARCHITECTURE.md` | **[구현됨]** | 숫자 상한은 제안값 |
-| Unity 계약 DTO (`unity/Assets/Beside/Api`) | **[구현됨]** | 알 수 없는 enum → Unknown |
+| Unity 계약 DTO (`unity/BesideApp/Assets/Beside/Api`) | **[구현됨]** | 알 수 없는 enum → Unknown |
 | FastAPI `/infer` 스텁 (501 + 패스스루) | **[구현됨]** | 모델 로드는 3단계 |
 | e2e 스크립트 (`scripts/e2e_mock.ps1`, `.sh`) | **[구현됨]** | |
 | 0바이트 `sample-dog.glb` → GLB_SPEC 을 만족하는 유효 GLB 로 교체 | **직접 할 일** | Unity 로드 검증의 전제 |
