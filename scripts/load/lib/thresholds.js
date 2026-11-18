@@ -62,6 +62,15 @@ export function droppedThresholds(scenarioNames) {
   return out;
 }
 
+// No-op thresholds whose only job is to keep dropped_iterations{scenario:<name>} in the summary for scenarios that run
+// every level (api_staged.js flows and browse): their drops cannot fail one level (the whole-run count==0 does that), but
+// lib/summary.js verdict.droppedByScenario then tells which scenario ran short of pre-allocated VUs.
+export function droppedReportThresholds(scenarioNames) {
+  const out = {};
+  (scenarioNames || []).forEach((name) => { out[key('dropped_iterations', null, `scenario:${name}`)] = ['count>=0']; });
+  return out;
+}
+
 // Error budget and the abort rule. k6 thresholds are cumulative, so "errors > 5 % for one minute" is approximated
 // by the cumulative rate evaluated only after the first minute; lib/guard.js adds the real one-minute window from
 // Prometheus when PROM_URL is set.

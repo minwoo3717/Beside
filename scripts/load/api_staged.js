@@ -8,8 +8,10 @@
 //
 // Env: SCENARIO (staged|spike|soak), USERS=25,200,... (subset of A1 levels), RAMP_S, HOLD_S, SOAK_HOLD_S,
 //      FAIL_RATIO (tiers failureRatio = 0.05; the photo filenames then carry FAIL_TOKEN and the job fails, then is
-//      retried once), EXPECTED_FLOW_S (75: sizes preAllocatedVUs), PRE_VUS, MAX_VUS, BROWSE, GRACEFUL_STOP_S,
-//      PROM_URL/PROM_ENV (abort guard), plus the common ones in lib/config.js.
+//      retried once), EXPECTED_FLOW_S (75: sizes preAllocatedVUs), PRE_VUS, MAX_VUS (these three: the flows scenario),
+//      BROWSE, BROWSE_PRE_VUS (the browse scenario's pre-allocated VUs, default the top browse rate x 10 s, at least 5),
+//      BROWSE_MAX_VUS (200, or BROWSE_PRE_VUS if larger), GRACEFUL_STOP_S, PROM_URL/PROM_ENV (abort guard), plus the
+//      common ones in lib/config.js.
 import exec from 'k6/execution';
 import { browsePerHourForUsers, CONFIG, ENV, flowDrainS, jobsPerHourForUsers, photoPaths, readList, readNum, readStr,
   requireRtt } from './lib/config.js';
@@ -18,7 +20,7 @@ import { browseOnly, makeContext, userFlow } from './lib/flow.js';
 import { guardLoop, guardScenario } from './lib/guard.js';
 import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
-import { stagedThresholds } from './lib/thresholds.js';
+import { droppedReportThresholds, merge, stagedThresholds } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
@@ -54,6 +56,21 @@ const BROWSE = buildLevels(LEVELS.map((l) => ({
   target: browsePerHourForUsers(TIERS, CONVERSION_TIER, l.users), users: l.users, rampS: l.rampS, holdS: l.holdS, label: l.label,
 })));
 
+// browse: one healthz per iteration. ramping-arrival-rate drops an iteration whenever no pre-allocated VU is free and
+// only then starts one more (up to maxVUs), and this script cannot tie a drop to a stage, so one drop turns every "pass"
+// "invalid" (lib/summary.js). On the VM on 2026-11-18 the 5 VUs this scenario then had dropped 12 healthz at 9,000 users
+// (20/s, RTT 154 ms), and PRE_VUS only sizes the flows. The default covers 10 s of the top browse rate (200 VUs at 9,000
+// users), above the 7.8-8.3 s poll p99 of the VM's collapse in A2; a browse VU builds no upload body (about 1.1 MB each,
+// README "디스크와 VU"). An explicit BROWSE_PRE_VUS is used as given; an explicit BROWSE_MAX_VUS below it is refused.
+const BROWSE_PRE_VUS = readNum(ENV, 'BROWSE_PRE_VUS', Math.max(5, Math.ceil((maxTarget(BROWSE.stages) / 3600) * 10)));
+const BROWSE_MAX_VUS = readNum(ENV, 'BROWSE_MAX_VUS', Math.max(200, BROWSE_PRE_VUS));
+if (BROWSE_ON && !(Number.isInteger(BROWSE_PRE_VUS) && BROWSE_PRE_VUS >= 1)) {
+  throw new Error(`api_staged.js: BROWSE_PRE_VUS ${BROWSE_PRE_VUS} must be a whole number of at least 1`);
+}
+if (BROWSE_ON && !(BROWSE_MAX_VUS >= BROWSE_PRE_VUS)) {
+  throw new Error(`api_staged.js: BROWSE_PRE_VUS ${BROWSE_PRE_VUS} > BROWSE_MAX_VUS ${BROWSE_MAX_VUS}; raise BROWSE_MAX_VUS or lower BROWSE_PRE_VUS`);
+}
+
 const MAX_PER_S = maxTarget(FLOW.stages) / 3600;
 const EXPECTED_FLOW_S = readNum(ENV, 'EXPECTED_FLOW_S', 75);
 const PRE_VUS = readNum(ENV, 'PRE_VUS', Math.max(5, Math.ceil(MAX_PER_S * EXPECTED_FLOW_S * 1.2)));
@@ -83,8 +100,8 @@ if (BROWSE_ON) {
     exec: 'browse',
     startRate: 0,
     timeUnit: '1h',
-    preAllocatedVUs: 5,
-    maxVUs: readNum(ENV, 'BROWSE_MAX_VUS', 200),
+    preAllocatedVUs: BROWSE_PRE_VUS,
+    maxVUs: BROWSE_MAX_VUS,
     stages: BROWSE.stages,
     gracefulStop: '30s',
   };
@@ -97,9 +114,11 @@ export const options = {
   summaryTrendStats: ['min', 'med', 'avg', 'p(90)', 'p(95)', 'p(99)', 'max', 'count'],
   setupTimeout: '60s',
   scenarios,
-  thresholds: stagedThresholds({
+  // dropped_iterations{scenario:flows|browse} only report (verdict.droppedByScenario): k6 tags a drop with its scenario
+  // and no stage, so they say which scenario ran short of VUs, not which stage
+  thresholds: merge(stagedThresholds({
     rttMs: RTT, endpoints: ['healthz', 'create', 'poll', 'asset'], flows: true, uploads: true, scopes: holdScopes(FLOW.segments),
-  }),
+  }), droppedReportThresholds(BROWSE_ON ? ['flows', 'browse'] : ['flows'])),
 };
 
 const flowCtx = makeContext({
@@ -149,7 +168,8 @@ export function handleSummary(data) {
       photoBytes: totalBytes(FILES),
       expectedFlows: Math.round(EXPECTED_FLOWS),
       expectedUploadGB: Math.round((EXPECTED_FLOWS * totalBytes(FILES)) / 1e7) / 100,
-      vus: { preAllocated: PRE_VUS, max: MAX_VUS },
+      // preAllocated and max: the flows scenario; browse: its own (null with BROWSE=0)
+      vus: { preAllocated: PRE_VUS, max: MAX_VUS, browse: BROWSE_ON ? { preAllocated: BROWSE_PRE_VUS, max: BROWSE_MAX_VUS } : null },
       server: (data.setup_data && data.setup_data.server) || null,
     },
   }, CONFIG);

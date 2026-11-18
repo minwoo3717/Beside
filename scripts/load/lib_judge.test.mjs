@@ -101,6 +101,51 @@ test('summary: dropped iterations that no stage can own make the staged result i
   assert.equal(ok.verdict.breakingPoint.lastPassingStage, 1);
 });
 
+test('summary: drops per scenario name the browse scenario of api_staged.js (BROWSE_PRE_VUS, not PRE_VUS)', async () => {
+  const s = await lib('summary.js');
+  const th = await lib('thresholds.js');
+  assert.deepEqual(th.droppedReportThresholds(['flows', 'browse']),
+    { 'dropped_iterations{scenario:flows}': ['count>=0'], 'dropped_iterations{scenario:browse}': ['count>=0'] });
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<120': { ok: true } } };
+  const kept = (count) => ({ values: { count, rate: 0 }, thresholds: { 'count>=0': { ok: true } } });
+  const metrics = {
+    'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'http_req_duration{endpoint:poll,stage:1,phase:hold}': pass,
+    dropped_iterations: { values: { count: 12, rate: 0.01 }, thresholds: { 'count==0': { ok: false } } },
+    'dropped_iterations{scenario:browse}': kept(12),
+    'dropped_iterations{scenario:flows}': kept(0),
+  };
+  const stages = [0, 1].map((i) => ({ index: i, users: [7200, 9000][i], target: i, holdS: 480, label: '' }));
+  const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  const v = report.verdict;
+  assert.deepEqual(v.droppedByScenario, { browse: 12, flows: 0 });
+  assert.deepEqual(v.stages.map((x) => x.status), ['invalid', 'invalid']); // still no stage can own them
+  assert.equal(v.breakingPoint, null);
+  assert.match(v.breakingPointNote, /^dropped_iterations 12 > 0 \(browse 12, flows 0\) and k6 cannot tie them to a stage/);
+  assert.match(v.breakingPointNote, /the browse drops need BROWSE_PRE_VUS \(api_staged\.js: PRE_VUS sizes the flows scenario only\)/);
+  assert.match(s.textReport(report), /dropped_iterations 12 \(browse 12, flows 0\), vus_max/);
+  // drops of the flows only: no BROWSE_PRE_VUS hint
+  metrics['dropped_iterations{scenario:browse}'] = kept(0);
+  metrics['dropped_iterations{scenario:flows}'] = kept(12);
+  const flows = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.doesNotMatch(flows.verdict.breakingPointNote, /BROWSE_PRE_VUS/);
+  // data without the per-scenario submetrics (before api_staged.js kept them, gpu_queue.js): null and the old wording
+  delete metrics['dropped_iterations{scenario:browse}'];
+  delete metrics['dropped_iterations{scenario:flows}'];
+  const old = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.equal(old.verdict.droppedByScenario, null);
+  assert.match(old.verdict.breakingPointNote, /^dropped_iterations 12 > 0 and k6 cannot tie them/);
+  assert.match(s.textReport(old), /dropped_iterations 12, vus_max/);
+  // a one-level-per-scenario script keeps its count==0 submetrics: they are listed too, and its drops stay with their stage
+  const a2 = s.buildReport({ metrics: { 'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'dropped_iterations{scenario:rps0}': { values: { count: 3 }, thresholds: { 'count==0': { ok: false } } },
+    dropped_iterations: { values: { count: 3 }, thresholds: { 'count==0': { ok: false } } } }, setup_data: {}, state: {} },
+  { script: 'poll_saturation.js', scenario: 'A2', stages: [{ index: 0, target: 100, holdS: 300, label: '', scenario: 'rps0' }] }, cfg, 'T1');
+  assert.deepEqual(a2.verdict.droppedByScenario, { rps0: 3 });
+  assert.deepEqual(a2.verdict.stages.map((x) => [x.status, x.dropped]), [['fail', 3]]);
+});
+
 test('summary: failed checks and unexpected responses are counted and printed', async () => {
   const s = await lib('summary.js');
   const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };

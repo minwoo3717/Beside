@@ -107,18 +107,35 @@ export function stageVerdicts(metrics, stages) {
   });
 }
 
+// dropped_iterations{scenario:<name>} of every scenario whose submetric the summary keeps (a threshold names it: the
+// count==0 of a one-level scenario, or the report-only count>=0 of api_staged.js flows and browse): { "<name>": count },
+// null when there is none (gpu_queue.js, smoke.js, data from before api_staged.js kept them).
+export function droppedByScenario(metrics) {
+  let out = null;
+  Object.keys(metrics).sort().forEach((name) => {
+    const parsed = parseMetricName(name);
+    if (parsed.metric !== 'dropped_iterations' || parsed.tags.scenario === undefined || Object.keys(parsed.tags).length !== 1) return;
+    if (out === null) out = {};
+    out[parsed.tags.scenario] = (metrics[name].values && metrics[name].values.count) || 0;
+  });
+  return out;
+}
+
 // Dropped iterations that no stage owns (a script that runs all its stages in one ramping-arrival-rate scenario cannot
 // tag drops by stage) could have happened in any stage, so no stage may read as "pass" and there is no breaking point.
-// Returns the reason, or null.
-function unattributedDrops(verdicts, dropped) {
+// byScenario (droppedByScenario) names the scenarios that dropped. Returns the reason, or null.
+function unattributedDrops(verdicts, dropped, byScenario) {
   if (!(dropped > 0) || verdicts.length === 0) return null;
   let attributed = 0;
   verdicts.forEach((v) => { if (typeof v.dropped === 'number') attributed += v.dropped; });
   if (dropped <= attributed) return null;
   verdicts.forEach((v) => { if (v.status === 'pass') v.status = 'invalid'; });
-  return `dropped_iterations ${dropped} > 0 and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as ` +
-    'passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so MAX_VUS ' +
-    'alone does not help) or check the load PC, and run again';
+  const which = byScenario ? ` (${Object.keys(byScenario).map((n) => `${n} ${byScenario[n]}`).join(', ')})` : '';
+  const browse = byScenario && byScenario.browse > 0
+    ? '; the browse drops need BROWSE_PRE_VUS (api_staged.js: PRE_VUS sizes the flows scenario only)' : '';
+  return `dropped_iterations ${dropped} > 0${which} and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts ` +
+    'as passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so ' +
+    `MAX_VUS alone does not help) or check the load PC, and run again${browse}`;
 }
 
 // A1's capacity search (TRAFFIC_MODEL.md §8): the levels only go up, the operating limit is 70 % of the users of the
@@ -315,6 +332,7 @@ export function buildReport(data, info, cfg, endedAt) {
   const uplinkRatio = cfg.uplinkMbps && highest.length ? Math.max.apply(null, highest) / cfg.uplinkMbps : null;
   const uplinkRatioWholeRun = cfg.uplinkMbps && sentMbps !== null ? sentMbps / cfg.uplinkMbps : null;
   const dropped = value(metrics, 'dropped_iterations', 'count') || 0;
+  const byScenario = droppedByScenario(metrics);
   // On the VM an A1 search normally ends this way: the abortOnFail error rule (or the guard's 5xx rule) stops the run in
   // the level that broke, so the breaking point still holds. Any other stop (setup, disk, unreadable Prometheus, Ctrl+C,
   // flows cut off in the drain) says nothing about capacity.
@@ -329,7 +347,7 @@ export function buildReport(data, info, cfg, endedAt) {
       "abortOnFail error rule and the guard's 5xx rule give one); read verdict.stages " +
       '(a hold cut short, or whose flows were cut off, reads "incomplete", never "pass")');
   }
-  const dropNote = unattributedDrops(verdicts, dropped);
+  const dropNote = unattributedDrops(verdicts, dropped, byScenario);
   if (dropNote) notes.push(dropNote);
   if (info.breakingPoint === false) {
     notes.push('the levels are not an increasing search (A5 spike and recovery, A6 one soak level): no breaking point; ' +
@@ -370,6 +388,8 @@ export function buildReport(data, info, cfg, endedAt) {
     httpReqs: value(metrics, 'http_reqs', 'count'),
     httpReqRate: round(value(metrics, 'http_reqs', 'rate')),
     droppedIterations: dropped,
+    // { "<scenario>": drops } for the scenarios the summary keeps (null: none kept); api_staged.js: flows and browse
+    droppedByScenario: byScenario,
     checksFailed: value(metrics, 'checks', 'fails') || 0,
     checksPassed: value(metrics, 'checks', 'passes') || 0,
     unexpectedCount: value(metrics, 'load_unexpectedCount', 'count') || 0,
@@ -418,7 +438,9 @@ export function textReport(report) {
   const lines = [];
   lines.push(`== beside load: ${m.script} (${m.scenario}) run=${m.runId} base=${m.baseUrl}`);
   if (v.aborted) lines.push(abortLine(v.aborted));
-  lines.push(`requests ${v.httpReqs} (${v.httpReqRate}/s), dropped_iterations ${v.droppedIterations}, vus_max ${v.vusMax}`);
+  const byScenario = v.droppedByScenario && v.droppedIterations > 0
+    ? ` (${Object.keys(v.droppedByScenario).map((n) => `${n} ${v.droppedByScenario[n]}`).join(', ')})` : '';
+  lines.push(`requests ${v.httpReqs} (${v.httpReqRate}/s), dropped_iterations ${v.droppedIterations}${byScenario}, vus_max ${v.vusMax}`);
   lines.push(`data sent ${v.dataSentMbps} Mbps (whole-run average)` +
     (v.peakStageSentMbps === null ? '' : `, peak stage ${v.peakStage} upload ${v.peakStageSentMbps} Mbps`) +
     `, received ${v.dataReceivedMbps} Mbps` +
