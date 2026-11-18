@@ -20,9 +20,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -477,6 +479,76 @@ class InferenceClientTest {
 
         client(5_000).cleanup("job-u12");
         assertThat(calls).as("path mode has nothing to clean on the service").hasSize(1);
+    }
+
+    @Test
+    void cleanupSendsTheDeleteOnceMoreWhenTheConnectionClosesWithoutAnAnswer() throws Exception {
+        // The service closes the first connection after reading the request (a keep-alive close racing the DELETE,
+        // seen in the 2026-11-18 load test as "HTTP/1.1 header parser received no bytes") and answers the second.
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(5_000);
+            Thread service = new Thread(() -> {
+                try {
+                    try (Socket first = listener.accept()) {
+                        requestLines.add(readRequestLine(first));
+                    }
+                    try (Socket second = listener.accept()) {
+                        requestLines.add(readRequestLine(second));
+                        second.getOutputStream().write(
+                                "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                        second.getOutputStream().flush();
+                    }
+                } catch (IOException ignored) {
+                    // the assertion below reports what arrived
+                }
+            });
+            service.start();
+
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u13");
+            service.join(10_000);
+        }
+        assertThat(requestLines).containsExactly("DELETE /artifacts/job-u13 HTTP/1.1", "DELETE /artifacts/job-u13 HTTP/1.1");
+    }
+
+    @Test
+    void cleanupGivesUpAfterTheSecondDeleteWithoutAnAnswer() throws Exception {
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(3_000);
+            Thread service = new Thread(() -> {
+                while (true) {
+                    try (Socket connection = listener.accept()) {
+                        requestLines.add(readRequestLine(connection));   // read, then close without answering
+                    } catch (IOException e) {
+                        return;   // accept timed out: no further attempt came
+                    }
+                }
+            });
+            service.start();
+
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u14"); // logged only, never thrown
+            service.join(10_000);
+        }
+        assertThat(requestLines).as("one retry, not more").hasSize(2)
+                .allMatch(line -> line.equals("DELETE /artifacts/job-u14 HTTP/1.1"));
+    }
+
+    /** The request line of an HTTP/1.1 request on {@code socket}, after reading its headers (DELETE has no body). */
+    private static String readRequestLine(Socket socket) throws IOException {
+        InputStream in = socket.getInputStream();
+        StringBuilder head = new StringBuilder();
+        int b;
+        while ((b = in.read()) != -1) {
+            head.append((char) b);
+            if (head.length() >= 4 && head.substring(head.length() - 4).equals("\r\n\r\n")) {
+                break;
+            }
+        }
+        int end = head.indexOf("\r\n");
+        return end < 0 ? head.toString() : head.substring(0, end);
     }
 
     @Test

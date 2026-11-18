@@ -103,7 +103,7 @@ cd backend
 1. `POST {inference.base-url}/infer/upload` — multipart `request`(JSON `{jobId, options.hair=false}`) + `photos`(저장한 사진 파일, 업로드 원래 파일명, 확장자로 Content-Type).
 2. 응답은 경로 모드와 같은 필드 + `glbUrl`(서비스 기준 상대 경로). Spring 은 `inference.base-url` 뒤에 붙여 GET 하고 `storage/tmp/{jobId}/base.glb` 에 받는다. 절대 URL 은 받지 않는다(그 호스트로 토큰이 가지 않도록).
 3. 경로 모드와 같은 GLB 헤더 확인 → `storage/results/{jobId}/base.glb` 복사 → COMPLETED.
-4. 성공·실패 모두 실행이 끝나면 임시 파일을 지우고 `DELETE /artifacts/{jobId}` 로 GPU PC 의 작업 폴더(업로드 사진·결과)를 지운다. 실패해도 서버 로그에 WARN 만 남고 작업 결과는 그대로다.
+4. 성공·실패 모두 실행이 끝나면 임시 파일을 지우고 `DELETE /artifacts/{jobId}` 로 GPU PC 의 작업 폴더(업로드 사진·결과)를 지운다. 응답 없이 연결 오류가 나면 한 번 더 보낸다(서비스가 유휴 연결을 막 닫은 경우, 2026-11-18 부하 시험에서 539건 중 1건). 그래도 실패하면 서버 로그에 WARN 만 남고 작업 결과는 그대로다.
 
 | 설정 (`application-real.properties`) | 기본 | 설명 |
 |---|---|---|
