@@ -328,6 +328,53 @@ $L exec -T backend sh -c 'cd /app/storage/uploads && echo "f3bad stored $(ls | g
 # 'f3bad stored' 뒤에 숫자가 없으면(sh 의 RUN_ID 파일 오류) <RUN_ID> 를 바꾸지 않은 것이다
 ```
 
+**Caddy 네트워크 이름공간 [계획]**
+
+호스트의 `nstat` 은 Caddy 의 연결을 보지 못한다. Caddy 는 Docker 브리지 네트워크에 있어 443 연결을 자기 네트워크 이름공간에서 받기 때문이다. 2026-11-18 1차 A1 동안 호스트 `TcpPassiveOpens` 는 98 늘었는데, k6 가 새로 맺은 연결은 약 8,000개였다(`docs/perf/load/2026-11-18_vm-1st.md` 1.1절). 그래서 Caddy 쪽 연결 수와 연결 거부(listen 큐 넘침)는 그 이름공간 안에서 읽는다.
+
+아래 명령은 아직 VM 에서 돌리지 않았다. 이름공간에 들어가는 부분만 바꿔 끼워 WSL(Ubuntu, iproute2 6.19)에서 확인한 것은 세 가지다: 줄마다 JSON 이 되는지, 실패하면 null 이 되는지, `kill` 뒤 멈추는지.
+
+- **root 가 필요하다.** `nsenter` 가 다른 프로세스의 네트워크 이름공간에 들어가기 때문이다. `sudo -n true` 가 암호 없이 끝나는지 먼저 본다. 암호를 묻는 VM 이면 아래 명령이 값 대신 null 을 남기고, 표본기는 그 이유를 `caddy-ns.err` 에 적는다.
+- **`nstat -asz`**:
+  - `-a` 는 Caddy 컨테이너의 이름공간이 생긴 뒤의 누적값이다. 증가분은 표본끼리 빼서 구한다. Caddy 가 다시 뜨면 값이 0 부터 다시 시작한다.
+  - `-s` 는 nstat 의 기록 파일(`/tmp/.nstat.u<uid>`)을 고치지 않는다. 이 파일은 `-a` 만 줘도 써진다(WSL 에서 확인). 고치게 두면 같은 사용자가 나중에 호스트에서 돌리는 증가분 `nstat` 에 Caddy 이름공간의 값이 섞인다.
+- **컨테이너.** 이름은 compose 프로젝트 `beside` 의 `beside-caddy-1` 이다(`docker ps` 로 확인한다). 부를 때마다 PID 를 다시 읽으므로 Caddy 가 다시 떠도 따라간다.
+
+```bash
+# VM. 함수는 셸마다 한 번 정한다
+caddy_ns() { sudo -n nsenter -t "$(docker inspect -f '{{.State.Pid}}' beside-caddy-1)" -n "$@"; }
+# 실행이 끝나면 위 블록과 함께(같은 $OUT): Caddy 가 받은 443 연결 수, TCP 카운터(누적값)
+caddy_ns ss -Htn state established '( sport = :443 )' | wc -l > "$OUT/caddy-estab443-end.txt"
+caddy_ns nstat -asz > "$OUT/caddy-nstat-end.txt"
+```
+
+**15초 표본기(제안).** 1차의 `docker stats` 표본기(`vm/docker-stats-series.jsonl`, 약 17초 간격)는 리포 밖, VM 에 있다. 그 표본기에 같은 주기로 아래 루프를 더하거나, 옆에 따로 띄운다.
+
+- **켜고 끄기.** k6 를 시작하기 직전에 그 실행의 `RID`·`OUT`(위 블록 첫 줄)을 먼저 정하고 띄운다. k6 가 끝나면 멈춘다.
+- **한 줄이 한 표본이다.** 읽지 못한 값은 0 이 아니라 null 이다.
+  - `estab443`: Caddy 가 받은 443 연결 수.
+  - `estabUpstream`: Caddy → backend:8080 연결 수.
+  - `nstat.kernel`: 누적 TCP 카운터다. 새 연결(`TcpPassiveOpens`), 연결 거부(`TcpExtListenOverflows`·`TcpExtListenDrops`·`TcpExtTCPReqQFullDrop`), SYN 쿠키, 리셋·중단을 담는다.
+
+```bash
+# VM, k6 시작 직전(그 실행의 OUT 을 정한 셸에서, 위의 caddy_ns 를 정한 뒤)
+conns() { local o; o=$(caddy_ns ss -Htn state established "( $1 )") || { echo null; return; }; printf '%s' "$o" | grep -c .; }
+( while :; do
+    tcp=$(caddy_ns nstat -aszj TcpPassiveOpens TcpEstabResets TcpExtListenOverflows TcpExtListenDrops TcpExtSyncookiesSent \
+          TcpExtTCPReqQFullDrop TcpExtTCPAbortOnData TcpExtTCPAbortOnTimeout)
+    echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"estab443\":$(conns 'sport = :443'),\"estabUpstream\":$(conns 'dport = :8080'),\"nstat\":${tcp:-null}}"
+    sleep 15
+  done ) >> "$OUT/caddy-ns.jsonl" 2>> "$OUT/caddy-ns.err" &
+CADDY_NS=$!
+# k6 가 끝나면(위 블록의 수집 전에)
+kill $CADDY_NS
+```
+
+- **가져오기.** `caddy-*` 파일은 아래 `scp` 로 `$RUN/vm/` 에 같이 온다. 결과 문서에 인용할 파일은 `collect.py --attach` 로 run.json 에 붙인다.
+- **2차에서 볼 것.**
+  - A2 붕괴 단계: `estab443`·`TcpExtListenOverflows`·`TcpExtListenDrops` 의 증가를 k6 의 `verdict.stages[].httpStatus`(상태 0·5xx, [scripts/load/README.md](../../scripts/load/README.md) '상태 계열')와 같은 시각으로 맞춰 본다.
+  - A1: Caddy 메모리(1차 최대 2,246 MiB)가 열린 연결 수를 따라가는지 본다. 1차는 흐름 기록으로 연결 수를 다시 만든 모형이었다 [가설].
+
 개발 PC, 그 실행의 폴더로 가져와 `run.json` 에 붙인다:
 
 ```bash
