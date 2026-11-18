@@ -74,6 +74,8 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 
 k6 v2.3.0 은 어떤 끝(정상 0, setup 예외 107·setup 시간 초과 100, 가드 108, `abortOnFail` 99, Ctrl+C 105, REST API 정지 103)에도 `handleSummary` 를 부르지만 어떻게 끝났는지는 알려 주지 않고, 표본이 없는 지표의 기준은 통과로 친다. 그래서 `lib/summary.js` 가 끝을 다시 짜 맞춘다. 정상 끝이면 `verdict.aborted` 는 null, 아니면 `{ by, reason, atS, plannedS, cutStages, unfinishedFlows }` 다.
 
+- REST API 정지(`curl -X PATCH localhost:6565/v1/status -d '{"data":{"type":"status","id":"default","attributes":{"stopped":true}}}'`)를 쓰려면 k6 를 `--address 127.0.0.1:6565` 로 띄운다. 2026-11-18 VM 1차에서 k6 v2.3.0 은 이 옵션 없이는 6565 를 열지 않았다(개발 PC 실행은 프로세스를 죽여야 했고, 그러면 요약이 남지 않는다). Pod 실행은 이 옵션을 붙여 `v1/status` 로 진행을 봤다.
+
 | `by` | 언제 |
 |---|---|
 | `setup` | setup() 이 끝나지 않았다(`setup_data` 없음; 예외 107, `setupTimeout` 초과 100 — asset.js 20분, poll_saturation.js `SEED_WAIT_S` + 600초, 그 밖은 60초·F3 5분). 부하는 돌지 않았다 |

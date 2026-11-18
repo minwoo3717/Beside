@@ -1,7 +1,7 @@
 # 부하 시험 덮어쓰기: backend 서비스만 바꾼다. caddy·caddy_data(인증서)·prometheus·grafana 는 그대로다.
 # 절차(팀 공지 → 운영 백업 → 띄우기 → 합성 GLB → k6 → 수집 → 복구 → 확인)는 deploy/loadtest/README.md.
 # 리포 루트에서 기본 파일 뒤에 덧붙인다(같은 프로젝트 beside, 같은 서비스 이름이라 운영 backend 컨테이너를 대신한다 —
-# 4GB VM 에 backend 두 개는 못 띄운다):
+# 처음 가정한 4GB VM 에는 backend 두 개가 안 들어갔고, 지금 8GB VM 도 2 vCPU 를 나눠 쓰면 측정이 섞인다):
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring \
 #     -f deploy/docker-compose.loadtest.yml up -d backend
 # 아래 ${...} 값은 그 명령 앞의 셸 환경변수로 바꾼다(deploy/.env 보다 우선). 예: G 시리즈

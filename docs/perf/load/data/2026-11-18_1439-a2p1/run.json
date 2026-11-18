@@ -1,0 +1,549 @@
+{
+  "schema": "beside-load-run/1",
+  "status": "[실험 결과] 원시 데이터 — 인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다",
+  "resultCandidate": true,
+  "outcome": {
+    "ended": "normal",
+    "abortedBy": null,
+    "reason": null,
+    "guardFailures": null,
+    "guardLastError": null
+  },
+  "scenario": "A2",
+  "tier": "T3",
+  "runId": "a2p1",
+  "window": {
+    "start": "2026-11-18T05:06:25+00:00",
+    "end": "2026-11-18T05:39:02+00:00",
+    "durationS": 1956.9,
+    "padS": 60.0
+  },
+  "target": {
+    "baseUrl": "https://beside-team.duckdns.org",
+    "local": false,
+    "serverSha": "b6c0e6c"
+  },
+  "tool": {
+    "gitSha": "b6c0e6c6c93d081ce6e2688ecd5229731b59319d",
+    "scriptsDirty": false,
+    "k6Version": "k6 v2.3.0 (commit/e088784614, go1.26.8, linux/amd64)",
+    "script": "poll_saturation.js"
+  },
+  "vm": {
+    "provider": "GCP",
+    "type": "e2-standard-2",
+    "vcpu": 2.0,
+    "ramGb": 8.0,
+    "diskGb": 48.0,
+    "region": "asia-northeast3-a"
+  },
+  "client": {
+    "uplinkMbps": 103.0,
+    "downlinkMbps": 210.0,
+    "cpuMaxPct": 22.0
+  },
+  "photos": [
+    {
+      "name": "photo-400k.png",
+      "bytes": 400300,
+      "sha256": "24ce7224640061c52908d9e4e977375828a9bf56d3164dd8ad890955f88f255f"
+    }
+  ],
+  "k6": {
+    "file": "k6-summary.json",
+    "meta": {
+      "script": "poll_saturation.js",
+      "scenario": "A2",
+      "tier": "",
+      "runId": "a2p1",
+      "baseUrl": "https://beside-team.duckdns.org",
+      "startedAt": "2026-11-18T05:06:25.804Z",
+      "endedAt": "2026-11-18T05:39:02.683Z",
+      "testRunDurationMs": 1956676.25897,
+      "loadPlannedS": 1950,
+      "loadRanS": 1956.1,
+      "rttBaseMsUsed": 153.628,
+      "rttBaseMsMeasured": null,
+      "uplinkMbps": null,
+      "stages": [
+        {
+          "index": 0,
+          "label": "100 rps",
+          "users": null,
+          "target": 100,
+          "holdS": 300,
+          "holdEndS": 300,
+          "scenario": "rps0"
+        },
+        {
+          "index": 1,
+          "label": "300 rps",
+          "users": null,
+          "target": 300,
+          "holdS": 300,
+          "holdEndS": 630,
+          "scenario": "rps1"
+        },
+        {
+          "index": 2,
+          "label": "600 rps",
+          "users": null,
+          "target": 600,
+          "holdS": 300,
+          "holdEndS": 960,
+          "scenario": "rps2"
+        },
+        {
+          "index": 3,
+          "label": "900 rps",
+          "users": null,
+          "target": 900,
+          "holdS": 300,
+          "holdEndS": 1290,
+          "scenario": "rps3"
+        },
+        {
+          "index": 4,
+          "label": "1200 rps",
+          "users": null,
+          "target": 1200,
+          "holdS": 300,
+          "holdEndS": 1620,
+          "scenario": "rps4"
+        },
+        {
+          "index": 5,
+          "label": "1800 rps",
+          "users": null,
+          "target": 1800,
+          "holdS": 300,
+          "holdEndS": 1950,
+          "scenario": "rps5"
+        }
+      ],
+      "status": "[실험 결과] 후보 — 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)은 collect.py 의 run.json 에 붙인다. 로컬 실행은 동작 확인용으로만 쓴다.",
+      "mode": "load",
+      "rps": [
+        100,
+        300,
+        600,
+        900,
+        1200,
+        1800
+      ],
+      "ids": {
+        "file": "/root/lt/runs/a2seedc/ids.json,/root/lt/runs/a2seedp/ids.json",
+        "files": [
+          "/root/lt/runs/a2seedc/ids.json",
+          "/root/lt/runs/a2seedp/ids.json"
+        ],
+        "completed": 1000,
+        "pending": 1000,
+        "checkedInSetup": 20,
+        "pendingAgeS": 172.5,
+        "endCheck": {
+          "checked": 20,
+          "leftPending": 0
+        }
+      },
+      "server": {
+        "workerType": "mock",
+        "profile": "mock,prod"
+      }
+    },
+    "verdict": {
+      "thresholdsOk": false,
+      "aborted": null,
+      "unfinishedFlows": null,
+      "failedThresholds": [
+        {
+          "metric": "dropped_iterations",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "dropped_iterations{scenario:rps2}",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "dropped_iterations{scenario:rps3}",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "dropped_iterations{scenario:rps4}",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "dropped_iterations{scenario:rps5}",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll,stage:4,phase:hold}",
+          "threshold": "p(95)<253.63"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll,stage:4,phase:hold}",
+          "threshold": "p(99)<453.63"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll,stage:5,phase:hold}",
+          "threshold": "p(95)<253.63"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll,stage:5,phase:hold}",
+          "threshold": "p(99)<453.63"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll}",
+          "threshold": "p(95)<253.63"
+        },
+        {
+          "metric": "http_req_duration{endpoint:poll}",
+          "threshold": "p(99)<453.63"
+        },
+        {
+          "metric": "load_errorRatio",
+          "threshold": "rate<0.005"
+        },
+        {
+          "metric": "load_errorRatio{stage:4,phase:hold}",
+          "threshold": "rate<0.005"
+        },
+        {
+          "metric": "load_errorRatio{stage:5,phase:hold}",
+          "threshold": "rate<0.005"
+        }
+      ],
+      "stages": [
+        {
+          "stage": 0,
+          "label": "100 rps",
+          "users": null,
+          "target": 100,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "pass",
+          "dropped": 0,
+          "latency": {
+            "poll": {
+              "med": 152.51,
+              "p95": 157.62,
+              "p99": 160.51,
+              "count": 30001
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        },
+        {
+          "stage": 1,
+          "label": "300 rps",
+          "users": null,
+          "target": 300,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "pass",
+          "dropped": 0,
+          "latency": {
+            "poll": {
+              "med": 154.55,
+              "p95": 158.73,
+              "p99": 242.9,
+              "count": 90000
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        },
+        {
+          "stage": 2,
+          "label": "600 rps",
+          "users": null,
+          "target": 600,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "fail",
+          "dropped": 71,
+          "latency": {
+            "poll": {
+              "med": 153.77,
+              "p95": 159.24,
+              "p99": 220.75,
+              "count": 179930
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        },
+        {
+          "stage": 3,
+          "label": "900 rps",
+          "users": null,
+          "target": 900,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "fail",
+          "dropped": 509,
+          "latency": {
+            "poll": {
+              "med": 154.6,
+              "p95": 201.13,
+              "p99": 321.51,
+              "count": 269491
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        },
+        {
+          "stage": 4,
+          "label": "1200 rps",
+          "users": null,
+          "target": 1200,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "fail",
+          "dropped": 164817,
+          "latency": {
+            "poll": {
+              "med": 2131.5,
+              "p95": 6313.64,
+              "p99": 8257.81,
+              "count": 195184
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        },
+        {
+          "stage": 5,
+          "label": "1800 rps",
+          "users": null,
+          "target": 1800,
+          "holdS": 300,
+          "heldS": 300,
+          "status": "fail",
+          "dropped": 365935,
+          "latency": {
+            "poll": {
+              "med": 3061.24,
+              "p95": 6552.68,
+              "p99": 7771.61,
+              "count": 174067
+            }
+          },
+          "sentMbps": null,
+          "assetMbps": null
+        }
+      ],
+      "breakingPoint": {
+        "firstFailingStage": 2,
+        "lastPassingStage": 1,
+        "lastPassingUsers": null,
+        "operatingLimitUsers": null
+      },
+      "breakingPointNote": null,
+      "guard": null,
+      "httpReqs": 938714,
+      "httpReqRate": 479.75,
+      "droppedIterations": 531332,
+      "checksFailed": 7298,
+      "checksPassed": 931375,
+      "unexpectedCount": 0,
+      "vusMax": 2000,
+      "dataSentMbps": 0.309,
+      "dataReceivedMbps": 2.148,
+      "peakStage": null,
+      "peakStageSentMbps": null,
+      "uplinkRatio": null,
+      "uplinkRatioWholeRun": null,
+      "uplinkSaturated": null,
+      "honesty": [
+        "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 stages[].users(도착률 환산)로 적는다.",
+        "T3 통과는 T3 단계 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화를 모두 만족할 때만 쓴다."
+      ]
+    }
+  },
+  "prometheus": {
+    "url": "http://127.0.0.1:9090",
+    "env": "loadtest",
+    "step": 15.0,
+    "from": "2026-11-18T05:05:25+00:00",
+    "to": "2026-11-18T05:40:02+00:00",
+    "queries": [
+      {
+        "name": "http_p95_by_uri",
+        "query": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p95_by_uri.csv",
+        "series": 3,
+        "points": 414
+      },
+      {
+        "name": "http_p99_by_uri",
+        "query": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p99_by_uri.csv",
+        "series": 3,
+        "points": 414
+      },
+      {
+        "name": "http_rps_by_uri",
+        "query": "sum by (uri) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_uri.csv",
+        "series": 3,
+        "points": 414
+      },
+      {
+        "name": "http_rps_by_status",
+        "query": "sum by (status) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_status.csv",
+        "series": 2,
+        "points": 278
+      },
+      {
+        "name": "http_5xx_ratio",
+        "query": "sum(rate(http_server_requests_seconds_count{env=\"loadtest\",status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m])), 1e-9)",
+        "file": "prometheus/http_5xx_ratio.csv",
+        "series": 0,
+        "points": 0
+      },
+      {
+        "name": "jobs_queue",
+        "query": "sum by (state) (beside_jobs_queue{env=\"loadtest\"})",
+        "file": "prometheus/jobs_queue.csv",
+        "series": 2,
+        "points": 278
+      },
+      {
+        "name": "jobs_finished_rate",
+        "query": "sum by (result, code) (rate(beside_jobs_finished_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jobs_finished_rate.csv",
+        "series": 0,
+        "points": 0
+      },
+      {
+        "name": "asset_downloads_rate",
+        "query": "sum by (outcome) (rate(beside_asset_downloads_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/asset_downloads_rate.csv",
+        "series": 5,
+        "points": 695
+      },
+      {
+        "name": "process_cpu",
+        "query": "process_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/process_cpu.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "system_cpu",
+        "query": "system_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/system_cpu.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "jvm_heap_used",
+        "query": "sum(jvm_memory_used_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_used.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "jvm_heap_max",
+        "query": "sum(jvm_memory_max_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_max.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "jvm_heap_after_gc",
+        "query": "max(jvm_memory_usage_after_gc_percent{env=\"loadtest\",area=\"heap\",pool=\"long-lived\"})",
+        "file": "prometheus/jvm_heap_after_gc.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "jvm_gc_pause_rate",
+        "query": "sum(rate(jvm_gc_pause_seconds_sum{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jvm_gc_pause_rate.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "tomcat_busy",
+        "query": "tomcat_threads_busy_threads{env=\"loadtest\"}",
+        "file": "prometheus/tomcat_busy.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "hikari_pending",
+        "query": "hikaricp_connections_pending{env=\"loadtest\"}",
+        "file": "prometheus/hikari_pending.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "process_open_files",
+        "query": "process_files_open_files{env=\"loadtest\"}",
+        "file": "prometheus/process_open_files.csv",
+        "series": 1,
+        "points": 139
+      },
+      {
+        "name": "disk_free",
+        "query": "disk_free_bytes{env=\"loadtest\"}",
+        "file": "prometheus/disk_free.csv",
+        "series": 1,
+        "points": 139
+      }
+    ]
+  },
+  "attachments": [
+    {
+      "name": "events.jsonl",
+      "bytes": 4955293,
+      "sha256": "7fe4f1e2e39f4427c8b0c45094fca10214d7587dcfb78b3b839178b9b2ade935",
+      "file": "attachments/events.jsonl"
+    },
+    {
+      "name": "docker-stats-end.jsonl",
+      "bytes": 1029,
+      "sha256": "62b578b34a38ecb1813436a633161fc253ba96814a941acce6cefa180d3056d4",
+      "file": "attachments/docker-stats-end.jsonl"
+    },
+    {
+      "name": "df.txt",
+      "bytes": 89,
+      "sha256": "c8fc1218e20166a14aef9209d1e39ade40e18462d8179dd353b1d626cfc01bca",
+      "file": "attachments/df.txt"
+    },
+    {
+      "name": "commit.txt",
+      "bytes": 41,
+      "sha256": "d6bc819d5a3d3e8abaf142125c34628a0b9e0aa783bbde9d0b196c5c062ce54c",
+      "file": "attachments/commit.txt"
+    },
+    {
+      "name": "glb.sha256",
+      "bytes": 93,
+      "sha256": "ab426e266dcb44a62e9326d06147606d413a1d7a0711697236b346ed0d19c07a",
+      "file": "attachments/glb.sha256"
+    },
+    {
+      "name": "prom-up.json",
+      "bytes": 274,
+      "sha256": "865c9dbe40b134dbbed1c6ffd87ea175d4d745fa3797f22cff8d1980ba988abe",
+      "file": "attachments/prom-up.json"
+    }
+  ],
+  "note": "client: Runpod CPU pod 2026-11-18 (cpu3g 8 vCPU 32 GB, US-CA-2); pod CPU max 22% of 8 vCPU; k6 RSS max 2201 MB",
+  "honesty": [
+    "mock 결과는 '생성을 뺀 API 처리량', 스텁 결과는 '큐 동작 검증(생성 시간은 가정 T)'이다.",
+    "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 k6.meta.stages[].users(도착률 환산)로 적는다.",
+    "'API 계층이 T3 를 통과했다'는 T3 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화일 때만 쓴다.",
+    "resultCandidate 가 false 인 실행(로컬, 용량과 무관하게 중단된 실행, 끝난 방식을 모르는 요약)은 [실험 결과] 로 인용하지 않는다.",
+    "오류 기준으로 멈춘 실행(outcome.ended = ruleStop)은 후보지만, 그 시각에 서버 재시작·재배포·네트워크 끊김이 없었을 때만 용량 한계로 쓴다.",
+    "GC 뒤 힙 < 75 % 는 prometheus/jvm_heap_after_gc.csv(0~1)로 본다. jvm_heap_used/max 는 Eden 을 포함한 순간값이다."
+  ],
+  "collectedAt": "2026-11-18T05:41:11+00:00"
+}

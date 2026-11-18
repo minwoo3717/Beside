@@ -1,0 +1,15 @@
+== beside load: asset.js (A4) run=a4p1 base=https://beside-team.duckdns.org
+requests 6412 (7.07/s), dropped_iterations 0, vus_max 500
+data sent 0.571 Mbps (whole-run average), received 83.363 Mbps (UPLINK_MBPS not set)
+stage  users     target   status     latency p95 (ms)
+0      -         1        pass       asset=2006.21
+1      -         5        pass       asset=1539.7
+2      -         10       pass       asset=2184.57
+3      -         15       fail       asset=7372.16
+last passing stage 2, first failing stage 3
+thresholds: 4 failed
+  FAIL http_req_duration{endpoint:asset,stage:3,phase:hold} p(95)<3000
+  FAIL http_req_duration{endpoint:asset,stage:3,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset} p(95)<3000
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+time="2026-11-18T06:27:56Z" level=error msg="thresholds on metrics 'http_req_duration{endpoint:asset,stage:3,phase:hold}, http_req_duration{endpoint:asset}' have been crossed"

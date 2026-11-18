@@ -1,0 +1,78 @@
+backend-1  | 
+backend-1  |   .   ____          _            __ _ _
+backend-1  |  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+backend-1  | ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+backend-1  |  \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+backend-1  |   '  |____| .__|_| |_|_| |_\__, | / / / /
+backend-1  |  =========|_|==============|___/=/_/_/_/
+backend-1  |  :: Spring Boot ::                (v3.2.0)
+backend-1  | 
+backend-1  | 2026-11-18T06:11:01.736Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+backend-1  | 2026-11-18T06:11:01.754Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "mock", "prod"
+backend-1  | 2026-11-18T06:11:04.675Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+backend-1  | 2026-11-18T06:11:04.800Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 109 ms. Found 3 JPA repository interfaces.
+backend-1  | 2026-11-18T06:11:06.568Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+backend-1  | 2026-11-18T06:11:07.204Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+backend-1  | 2026-11-18T06:11:07.205Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+backend-1  | 2026-11-18T06:11:07.350Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+backend-1  | 2026-11-18T06:11:07.353Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 5386 ms
+backend-1  | 2026-11-18T06:11:08.119Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+backend-1  | 2026-11-18T06:11:08.213Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+backend-1  | 2026-11-18T06:11:08.262Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+backend-1  | 2026-11-18T06:11:08.611Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+backend-1  | 2026-11-18T06:11:08.651Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+backend-1  | 2026-11-18T06:11:08.955Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:file:./storage/db/beside-mock user=SA
+backend-1  | 2026-11-18T06:11:08.959Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+backend-1  | 2026-11-18T06:11:10.550Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+backend-1  | 2026-11-18T06:11:10.639Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+backend-1  | 2026-11-18T06:11:11.416Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+backend-1  | 2026-11-18T06:11:12.944Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: check off, cutout off (no model loaded)
+backend-1  | 2026-11-18T06:11:13.397Z  INFO 1 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+backend-1  | 2026-11-18T06:11:14.855Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+backend-1  | 2026-11-18T06:11:14.985Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+backend-1  | 2026-11-18T06:11:14.989Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+backend-1  | 2026-11-18T06:11:14.989Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+backend-1  | 2026-11-18T06:11:15.007Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+backend-1  | 2026-11-18T06:11:15.008Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 146 ms
+backend-1  | 2026-11-18T06:11:15.041Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+backend-1  | 2026-11-18T06:11:15.162Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path ''
+backend-1  | 2026-11-18T06:11:15.191Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 14.442 seconds (process running for 16.004)
+backend-1  | 2026-11-18T06:11:16.365Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+backend-1  | 2026-11-18T06:11:16.366Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+backend-1  | 2026-11-18T06:11:16.371Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 3 ms
+backend-1  | 2026-11-18T06:11:17.491Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: 264c30f2-f8c4-476c-835c-70283313520d status=PENDING worker=mock
+backend-1  | 2026-11-18T06:11:17.545Z  INFO 1 --- [         task-1] c.e.mockbackend.service.MockJobWorker    : jobId=264c30f2-f8c4-476c-835c-70283313520d stage=PROCESSING
+backend-1  | 2026-11-18T06:11:25.753Z  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServletRegistration'
+backend-1  | 2026-11-18T06:11:25.754Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServletRegistration'
+backend-1  | 2026-11-18T06:11:25.755Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+backend-1  | 2026-11-18T06:12:17.578Z  INFO 1 --- [         task-1] c.e.mockbackend.service.MockJobWorker    : jobId=264c30f2-f8c4-476c-835c-70283313520d stage=COMPLETED durationMs=60053
+backend-1  | 2026-11-18T06:12:50.609Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: 616ab42c-277b-4003-9392-da2e24505516 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.634Z  INFO 1 --- [         task-2] c.e.mockbackend.service.MockJobWorker    : jobId=616ab42c-277b-4003-9392-da2e24505516 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:50.639Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 0f4cc1c3-0c17-4481-b1b6-8f128ff6ce16 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.670Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 23fab4c6-836d-4953-9225-6a2a50e9b393 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.687Z  INFO 1 --- [         task-3] c.e.mockbackend.service.MockJobWorker    : jobId=0f4cc1c3-0c17-4481-b1b6-8f128ff6ce16 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:50.691Z  INFO 1 --- [         task-4] c.e.mockbackend.service.MockJobWorker    : jobId=23fab4c6-836d-4953-9225-6a2a50e9b393 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:50.780Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: c6efacf4-1332-4c9d-a17f-8cdda9541ae0 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.786Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: 3e4f9f00-ed53-40dd-9436-6ad072716702 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.790Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: 3a8aa7ca-e08c-47bb-a957-6a5dce0efc19 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:50.816Z  INFO 1 --- [         task-6] c.e.mockbackend.service.MockJobWorker    : jobId=3e4f9f00-ed53-40dd-9436-6ad072716702 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:50.817Z  INFO 1 --- [         task-7] c.e.mockbackend.service.MockJobWorker    : jobId=3a8aa7ca-e08c-47bb-a957-6a5dce0efc19 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:50.816Z  INFO 1 --- [         task-5] c.e.mockbackend.service.MockJobWorker    : jobId=c6efacf4-1332-4c9d-a17f-8cdda9541ae0 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:51.153Z  INFO 1 --- [nio-8080-exec-1] c.e.mockbackend.service.JobServiceImpl   : Job created: 4c6e75fd-aba5-4766-96f5-678ebadfc661 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:51.162Z  INFO 1 --- [io-8080-exec-10] c.e.mockbackend.service.JobServiceImpl   : Job created: 7d0b3471-cce4-4666-8f60-5872b704ab25 status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:51.176Z  INFO 1 --- [         task-8] c.e.mockbackend.service.MockJobWorker    : jobId=4c6e75fd-aba5-4766-96f5-678ebadfc661 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:51.183Z  INFO 1 --- [         task-9] c.e.mockbackend.service.MockJobWorker    : jobId=7d0b3471-cce4-4666-8f60-5872b704ab25 stage=PROCESSING
+backend-1  | 2026-11-18T06:12:51.227Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 84a6384f-d045-48f1-8994-497c8f656a2b status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:51.239Z  INFO 1 --- [        task-10] c.e.mockbackend.service.MockJobWorker    : jobId=84a6384f-d045-48f1-8994-497c8f656a2b stage=PROCESSING
+backend-1  | 2026-11-18T06:12:51.278Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: 88801716-0eff-4608-92b4-1ddf3b6a345b status=PENDING worker=mock
+backend-1  | 2026-11-18T06:12:51.288Z  INFO 1 --- [        task-11] c.e.mockbackend.service.MockJobWorker    : jobId=88801716-0eff-4608-92b4-1ddf3b6a345b stage=PROCESSING
+backend-1  | 2026-11-18T06:13:50.645Z  INFO 1 --- [         task-2] c.e.mockbackend.service.MockJobWorker    : jobId=616ab42c-277b-4003-9392-da2e24505516 stage=COMPLETED durationMs=60024
+backend-1  | 2026-11-18T06:13:50.699Z  INFO 1 --- [         task-3] c.e.mockbackend.service.MockJobWorker    : jobId=0f4cc1c3-0c17-4481-b1b6-8f128ff6ce16 stage=COMPLETED durationMs=60050
+backend-1  | 2026-11-18T06:13:50.705Z  INFO 1 --- [         task-4] c.e.mockbackend.service.MockJobWorker    : jobId=23fab4c6-836d-4953-9225-6a2a50e9b393 stage=COMPLETED durationMs=60020
+backend-1  | 2026-11-18T06:13:50.836Z  INFO 1 --- [         task-6] c.e.mockbackend.service.MockJobWorker    : jobId=3e4f9f00-ed53-40dd-9436-6ad072716702 stage=COMPLETED durationMs=60029
+backend-1  | 2026-11-18T06:13:50.839Z  INFO 1 --- [         task-7] c.e.mockbackend.service.MockJobWorker    : jobId=3a8aa7ca-e08c-47bb-a957-6a5dce0efc19 stage=COMPLETED durationMs=60025
+backend-1  | 2026-11-18T06:13:50.839Z  INFO 1 --- [         task-5] c.e.mockbackend.service.MockJobWorker    : jobId=c6efacf4-1332-4c9d-a17f-8cdda9541ae0 stage=COMPLETED durationMs=60040
+backend-1  | 2026-11-18T06:13:51.187Z  INFO 1 --- [         task-8] c.e.mockbackend.service.MockJobWorker    : jobId=4c6e75fd-aba5-4766-96f5-678ebadfc661 stage=COMPLETED durationMs=60023
+backend-1  | 2026-11-18T06:13:51.197Z  INFO 1 --- [         task-9] c.e.mockbackend.service.MockJobWorker    : jobId=7d0b3471-cce4-4666-8f60-5872b704ab25 stage=COMPLETED durationMs=60020
+backend-1  | 2026-11-18T06:13:51.249Z  INFO 1 --- [        task-10] c.e.mockbackend.service.MockJobWorker    : jobId=84a6384f-d045-48f1-8994-497c8f656a2b stage=COMPLETED durationMs=60012
+backend-1  | 2026-11-18T06:13:51.299Z  INFO 1 --- [        task-11] c.e.mockbackend.service.MockJobWorker    : jobId=88801716-0eff-4608-92b4-1ddf3b6a345b stage=COMPLETED durationMs=60010

@@ -1,0 +1,12 @@
+== beside load: upload.js (A3-small) run=a3p1 base=https://beside-team.duckdns.org
+requests 7646 (8.49/s), dropped_iterations 0, vus_max 450
+data sent 54.475 Mbps (whole-run average), peak stage 5 upload 128.152 Mbps, received 0.119 Mbps, uplink ratio 0.495 (whole run 0.21)
+stage  users     target   status     latency p95 (ms)
+0      -         1        pass       create=367.72
+1      -         2        pass       create=363.68
+2      -         5        pass       create=362.67
+3      -         10       pass       create=362.63
+4      -         15       pass       create=362.86
+5      -         20       pass       create=361.9
+last passing stage 5, first failing stage -
+thresholds: all passed

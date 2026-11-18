@@ -1,0 +1,29 @@
+== beside load: api_staged.js (A1) run=a1p1 base=https://beside-team.duckdns.org
+requests 311255 (70.05/s), dropped_iterations 12, vus_max 2017
+data sent 12.188 Mbps (whole-run average), peak stage 7 upload 32.038 Mbps, received 21.753 Mbps, uplink ratio 0.311 (whole run 0.118)
+healthz p50 (RTT_base candidate) 152.819 ms
+stage  users     target   status     latency p95 (ms)
+0      25        50       invalid    asset=1086.12 create=1123.11 healthz=156.62 poll=158.3
+1      200       400      fail       asset=1091.78 create=1066.23 healthz=156.84 poll=158.2
+2      1000      2000     fail       asset=2799.5 create=1065.84 healthz=156.13 poll=156.75
+3      1800      3600     fail       asset=1232.7 create=1063.47 healthz=156.13 poll=156.62
+4      3600      7200     fail       asset=1827.97 create=1064.96 healthz=156.75 poll=157.28
+5      5400      10800    fail       asset=5961.24 create=1065.04 healthz=156.63 poll=157.4
+6      7200      14400    fail       asset=6796.06 create=1066.94 healthz=157.01 poll=157.88
+7      9000      18000    fail       asset=7013.28 create=1069.71 healthz=158.28 poll=159.97
+breaking point: invalid — dropped_iterations 12 > 0 and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so MAX_VUS alone does not help) or check the load PC, and run again
+thresholds: 13 failed
+  FAIL dropped_iterations count==0
+  FAIL http_req_duration{endpoint:asset,stage:1,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:2,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:3,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:4,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:5,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:5,phase:hold} p(95)<3000
+  FAIL http_req_duration{endpoint:asset,stage:6,phase:hold} p(95)<3000
+  FAIL http_req_duration{endpoint:asset,stage:6,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:7,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset,stage:7,phase:hold} p(95)<3000
+  FAIL http_req_duration{endpoint:asset} p(95)<3000
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+time="2026-11-18T04:54:12Z" level=error msg="thresholds on metrics 'dropped_iterations, http_req_duration{endpoint:asset,stage:1,phase:hold}, http_req_duration{endpoint:asset,stage:2,phase:hold}, http_req_duration{endpoint:asset,stage:3,phase:hold}, http_req_duration{endpoint:asset,stage:4,phase:hold}, http_req_duration{endpoint:asset,stage:5,phase:hold}, http_req_duration{endpoint:asset,stage:6,phase:hold}, http_req_duration{endpoint:asset,stage:7,phase:hold}, http_req_duration{endpoint:asset}' have been crossed"

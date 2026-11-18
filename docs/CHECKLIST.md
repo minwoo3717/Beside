@@ -122,7 +122,7 @@
 - [x] 다음 버전에 남은 비용 확인 **[실험 결과]** (2026-11-01): 응답마다 하던 썸네일 파일 확인(P6)과 PENDING 조회의 `@Query` 재파싱(P7)이 원인. `review/api-v1.1` 에 고쳐 폴링 처리량·단건 조회·목록은 v1 과 차이 없음, PENDING −24 %. [perf/notes/10-improvements.md](perf/notes/10-improvements.md).
 - [ ] 아직 남은 v1.1 비용 [계획]: PENDING 조회 +74 %(조회 두 개를 문장 하나로, pending_poll 워밍업 늘려 정상 상태 측정), 썸네일 일과 CPU 공유(작은 업로드 +38 %, 동시 E2E −26 %: EXIF 읽기 생략·writer 재사용, 가짜 사진 대조 측정), 결과 GLB 크기 저장(항목당 `File.length` 약 0.1 ms, v1 부터 있던 비용). (BE)
 - [ ] 2026-11-01 실행에서 다른 작업과 겹친 반복(v2p 2회차 등 13:30~13:46)을 다시 잴지 결정 — 결론은 바뀌지 않았다. (BE)
-- [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — GCP VM 은 준비됨(2026-11-13, e2-standard-2 8GB. 부하 문서의 "2 vCPU·4GB" 전제를 고칠 것), 동작 확인 수치만 [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md). (BE)
+- [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — GCP VM 은 준비됨(2026-11-13, e2-standard-2 8GB. 부하 문서의 "2 vCPU·4GB" 전제는 2026-11-18 에 고쳤고 deploy/README '메모리 (4GB VM)' 절 제목만 남음), 동작 확인 수치만 [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md). 2026-11-18 에 VM 위 부하 1차(A0~A4, 아래 '부하 시험')를 했다. 그중 A2 폴링 포화가 이 항목의 폴링 처리량에 가장 가깝다(VM·Caddy·TLS 에서 규칙상 마지막 통과 300 RPS, 900 RPS 는 지연 기준 안에서 유지했지만 drop 509·VM CPU 85.8 %, 1,200 붕괴, [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md)). 루프백 벤치마크 시나리오 그대로의 VM 재측정은 아직이다. (BE)
 - [ ] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. (BE+GEN)
 - [ ] v1.1 을 병합하거나 다음 버전이 생기면 `versions.json` 에 한 줄 더해 같은 명령으로 재측정([perf/notes/20-next-version.md](perf/notes/20-next-version.md)). (BE)
 
@@ -131,17 +131,22 @@
 멘토링 피드백 "쏘카 수준 트래픽을 목표로 설정하고 테스트"(지표 5종 + 대시보드, 장애 시나리오 5종)와 교수님 피드백 "부하·장애 테스트도 배포 환경에서"는 2026-11-01 전까지 리포에 기록이 없었다. 목표 수치(T1/T2/T3, 모든 비율 [가정])·합격 기준(제안값)·시험 구성은 [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md), 작업은 브랜치 `load/socar`(PLAN 4b '부하·운영'). 보고용 측정은 모두 VM 이 준비된 뒤에 한다 — 루프백 벤치마크나 아래 로컬 동작 확인과 섞어 인용하지 않는다.
 
 - [x] 스크립트 동작 확인 (2026-11-01~02): 개발 PC 에서 실제 k6 v2.3.0 으로 k6 스크립트 7개와 `collect.py`·F3/F4 도우미를 짧게 줄여 돌렸다(루프백, mock jar·패스스루 스텁·Prometheus 대역). 찾은 문제 — 중단된 실행이 'all passed' 로 적힘, 잘린 유지 구간이 pass, A3 의 4xx 거부가 통과, A3·A4 가 `PRE_VUS` 를 읽지 않음, A2 id 의 상태를 보지 않음, F3 느린 업로드가 폴링 뒤에 돎, 'GC 뒤 힙' 판정 CSV 없음 등 — 은 `load/socar` 에서 고치고 시험을 더했다 **[구현됨]**(Node 82·Python 84). 용량 결과가 아니므로 [실험 결과] 로 인용하지 않는다. (BE)
-- [ ] A0~A4 기준 측정(연기 시험·혼합 흐름·폴링 포화·업로드·에셋 송신)을 VM 에서. (BE)
+- [x] A0~A4 기준 측정(연기 시험·혼합 흐름·폴링 포화·업로드·에셋 송신)을 VM 에서 — 1차 2026-11-18 **[실험 결과]**([perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md)). 부하 발생기는 Runpod CPU Pod(미국 서부, RTT 153 ms)였다. 혼합 흐름 9,000명(185 RPS) 8분 5xx 0(drop 12 로 규칙상 통과 단계 없음), 폴링 규칙상 통과 300 RPS·900 RPS 는 지연 기준 안에서 유지·1,200 붕괴(VM CPU 를 가장 많이 쓴 것은 Caddy), 업로드 20/s 통과, 에셋 10/s 통과(15/s 실패는 경로 상한 탓으로 봄 [가설]). (BE)
+- [ ] 1차에서 남은 것 **[계획]**: (BE)
+  - 한국·일본 리전 부하 발생기로 A1·A3·A4 다시 — asset 전체 시간·서버 `uploadMs` 기준은 153 ms 경로가 섞여 판정하지 못했고(경로 탓이라는 것은 [가설]), A4 는 미리 잰 경로 상한(약 210 Mbps) 때문에 서버 송신 상한까지 가지 못했다.
+  - `api_staged.js` 의 browse 시나리오 `preAllocatedVUs`(고정 5)를 환경변수로 — A1 의 drop 12 는 모두 browse 에서 났고 `PRE_VUS` 로는 없어지지 않는다.
+  - Caddy: 실행마다 Caddy 네트워크 이름공간의 연결 수·`nstat` 을 남긴다(호스트 nstat 은 Caddy 연결을 보지 못함). A1 에서 2,246 MiB 까지 늘어난 메모리의 원인을 유휴 시간 A/B 로 가린 뒤 `mem_limit` 을 정한다. A2 가 무너질 때 VM CPU 를 가장 많이 쓴 것은 Caddy 였다. A2 붕괴 단계의 오류 7,298건은 상태 코드가 남지 않아(Caddy 의 502·504 로 보임 [가설]) 다음에는 k6 에 상태별 카운터를 둔다.
+  - A3 large, A5·A6, G·F 시리즈(2차).
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
 - [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산)
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 표·#21 고치기는 exp-01 10건 뒤.
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
-  - 실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지(`collect.py` 의 `jvm_heap_after_gc`, 'GC 뒤 힙 < 75 %' 판정). 이름은 로컬 `/actuator/prometheus` 에서만 봤다.
+  - ~~실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지~~ — 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).
   - 서버를 죽였을 때 실제 Prometheus 의 staleness: Prometheus 대역은 마지막 수집값을 계속 내서 CSV 에 빈 구간이 보이지 않았다.
-  - `SEED_ONLY` 의 `IDS_OUT` 검사가 기대는 k6 `open()` 오류 문구를 Linux k6 에서(Windows k6 v2.3.0 에서만 확인. 부하 PC 는 Windows 개발 PC 라 Linux 에서 k6 를 돌릴 때만 문제다).
-  - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(로컬 측정: 개발 PC·k6 v2.3.0, `api_staged.js` 를 `PRE_VUS`=`MAX_VUS` 20 과 300 으로 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`, 루프백 mock jar) 돌려 k6 프로세스의 최대 작업 집합 83.9 MB·393.2 MB 를 비교한 값, VU 마다 0.4 MB 사진 사본 포함). A1 기본 `MAX_VUS` 3,300(흐름 VU. 시작 때는 사전 할당 450 만 만들고 나머지는 흐름이 길어질 때 생기므로 최악)이면 초기화만 약 3.6 GB, 흐름을 돈 VU 마다 0.8 MB 본문(실패 주입 흐름을 돈 VU 는 0.8 MB 더)이 붙어 약 6.3~8.9 GB [파생], 둘러보기 VU(최대 200)가 약 0.2 GB 더. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB, 업로드가 길어져 기본 `MAX_VUS` 600 까지 늘면 약 15 GB [파생]. 시험 중 k6 메모리를 CPU 와 함께 본다.
+  - `SEED_ONLY` 의 `IDS_OUT` 검사가 기대는 k6 `open()` 오류 문구를 Linux k6 에서(Windows k6 v2.3.0 에서만 확인. 2026-11-18 VM 1차는 Linux k6(Runpod Pod)로 A2 시드를 돌렸지만 이 오류 경로를 확인한 기록은 없다).
+  - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(로컬 측정: 개발 PC·k6 v2.3.0, `api_staged.js` 를 `PRE_VUS`=`MAX_VUS` 20 과 300 으로 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`, 루프백 mock jar) 돌려 k6 프로세스의 최대 작업 집합 83.9 MB·393.2 MB 를 비교한 값, VU 마다 0.4 MB 사진 사본 포함). A1 기본 `MAX_VUS` 3,300(흐름 VU. 시작 때는 사전 할당 450 만 만들고 나머지는 흐름이 길어질 때 생기므로 최악)이면 초기화만 약 3.6 GB, 흐름을 돈 VU 마다 0.8 MB 본문(실패 주입 흐름을 돈 VU 는 0.8 MB 더)이 붙어 약 6.3~8.9 GB [파생], 둘러보기 VU(최대 200)가 약 0.2 GB 더. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB, 업로드가 길어져 기본 `MAX_VUS` 600 까지 늘면 약 15 GB [파생]. 시험 중 k6 메모리를 CPU 와 함께 본다. 2026-11-18 VM 1차(Runpod Pod, Linux k6)에서는 A1 `PRE_VUS` 2,000(VU 2,017)에 k6 RSS 최대 6,662 MB, A2 VU 2,000 에 2,201 MB 였다 **[실험 결과]**(각 실행 `client-cpu.csv`).
 - [ ] 판정 기준 결정 — 지금 코드의 동작은 **[구현됨]**, 바꿀지는 미정. (BE, 첫째는 계약 회의)
   - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #19·#20 과 함께 정한다.
   - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다.

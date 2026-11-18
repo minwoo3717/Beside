@@ -1,0 +1,216 @@
+backend-1  | 
+backend-1  |   .   ____          _            __ _ _
+backend-1  |  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+backend-1  | ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+backend-1  |  \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+backend-1  |   '  |____| .__|_| |_|_| |_\__, | / / / /
+backend-1  |  =========|_|==============|___/=/_/_/_/
+backend-1  |  :: Spring Boot ::                (v3.2.0)
+backend-1  | 
+backend-1  | 2026-11-18T02:54:51.470Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+backend-1  | 2026-11-18T02:54:51.484Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "mock", "prod"
+backend-1  | 2026-11-18T02:54:54.432Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+backend-1  | 2026-11-18T02:54:54.554Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 111 ms. Found 3 JPA repository interfaces.
+backend-1  | 2026-11-18T02:54:56.133Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+backend-1  | 2026-11-18T02:54:56.842Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+backend-1  | 2026-11-18T02:54:56.843Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+backend-1  | 2026-11-18T02:54:56.996Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+backend-1  | 2026-11-18T02:54:56.999Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 5304 ms
+backend-1  | 2026-11-18T02:54:57.687Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+backend-1  | 2026-11-18T02:54:57.763Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+backend-1  | 2026-11-18T02:54:57.813Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+backend-1  | 2026-11-18T02:54:58.241Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+backend-1  | 2026-11-18T02:54:58.284Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+backend-1  | 2026-11-18T02:54:58.584Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:file:./storage/db/beside-mock user=SA
+backend-1  | 2026-11-18T02:54:58.589Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+backend-1  | 2026-11-18T02:55:00.313Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+backend-1  | 2026-11-18T02:55:00.409Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+backend-1  | 2026-11-18T02:55:01.247Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+backend-1  | 2026-11-18T02:55:02.795Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: check off, cutout off (no model loaded)
+backend-1  | 2026-11-18T02:55:03.262Z  INFO 1 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+backend-1  | 2026-11-18T02:55:04.849Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+backend-1  | 2026-11-18T02:55:05.004Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+backend-1  | 2026-11-18T02:55:05.007Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+backend-1  | 2026-11-18T02:55:05.008Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+backend-1  | 2026-11-18T02:55:05.019Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+backend-1  | 2026-11-18T02:55:05.019Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 162 ms
+backend-1  | 2026-11-18T02:55:05.059Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+backend-1  | 2026-11-18T02:55:05.158Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path ''
+backend-1  | 2026-11-18T02:55:05.188Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 14.723 seconds (process running for 16.063)
+backend-1  | 2026-11-18T02:55:06.345Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+backend-1  | 2026-11-18T02:55:06.346Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+backend-1  | 2026-11-18T02:55:06.351Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 4 ms
+backend-1  | 2026-11-18T02:55:07.625Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: df499160-011b-474e-8ed3-134ede915e4d status=PENDING worker=mock
+backend-1  | 2026-11-18T02:55:07.666Z  INFO 1 --- [         task-1] c.e.mockbackend.service.MockJobWorker    : jobId=df499160-011b-474e-8ed3-134ede915e4d stage=PROCESSING
+backend-1  | 2026-11-18T02:55:10.751Z  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServletRegistration'
+backend-1  | 2026-11-18T02:55:10.752Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServletRegistration'
+backend-1  | 2026-11-18T02:55:10.753Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+backend-1  | 2026-11-18T02:56:07.705Z  INFO 1 --- [         task-1] c.e.mockbackend.service.MockJobWorker    : jobId=df499160-011b-474e-8ed3-134ede915e4d stage=COMPLETED durationMs=60041
+backend-1  | 2026-11-18T02:56:54.276Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: 3a201450-fe88-44bd-b44c-05fd63a0e339 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:56:54.292Z  INFO 1 --- [         task-2] c.e.mockbackend.service.MockJobWorker    : jobId=3a201450-fe88-44bd-b44c-05fd63a0e339 stage=PROCESSING
+backend-1  | 2026-11-18T02:57:04.272Z  INFO 1 --- [nio-8080-exec-1] c.e.mockbackend.service.JobServiceImpl   : Job created: e8c42be0-b682-4387-b4c4-ed268a39ec5b status=PENDING worker=mock
+backend-1  | 2026-11-18T02:57:04.284Z  INFO 1 --- [         task-3] c.e.mockbackend.service.MockJobWorker    : jobId=e8c42be0-b682-4387-b4c4-ed268a39ec5b stage=PROCESSING
+backend-1  | 2026-11-18T02:57:14.258Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: 5f71f210-ea3e-4156-be86-5e3c55e7ba2d status=PENDING worker=mock
+backend-1  | 2026-11-18T02:57:14.270Z  INFO 1 --- [         task-4] c.e.mockbackend.service.MockJobWorker    : jobId=5f71f210-ea3e-4156-be86-5e3c55e7ba2d stage=PROCESSING
+backend-1  | 2026-11-18T02:57:24.253Z  INFO 1 --- [nio-8080-exec-1] c.e.mockbackend.service.JobServiceImpl   : Job created: ea5ca93f-d2e1-47f8-bee9-7e071a301edc status=PENDING worker=mock
+backend-1  | 2026-11-18T02:57:24.270Z  INFO 1 --- [         task-5] c.e.mockbackend.service.MockJobWorker    : jobId=ea5ca93f-d2e1-47f8-bee9-7e071a301edc stage=PROCESSING
+backend-1  | 2026-11-18T02:57:34.261Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: 911876bc-e4be-4612-a529-8a170578ac2d status=PENDING worker=mock
+backend-1  | 2026-11-18T02:57:34.274Z  INFO 1 --- [         task-6] c.e.mockbackend.service.MockJobWorker    : jobId=911876bc-e4be-4612-a529-8a170578ac2d stage=PROCESSING
+backend-1  | 2026-11-18T02:57:54.242Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: ae1cdbba-6875-4a95-86ce-85b56ce5b8e0 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:57:54.257Z  INFO 1 --- [         task-7] c.e.mockbackend.service.MockJobWorker    : jobId=ae1cdbba-6875-4a95-86ce-85b56ce5b8e0 stage=PROCESSING
+backend-1  | 2026-11-18T02:57:54.306Z  INFO 1 --- [         task-2] c.e.mockbackend.service.MockJobWorker    : jobId=3a201450-fe88-44bd-b44c-05fd63a0e339 stage=COMPLETED durationMs=60013
+backend-1  | 2026-11-18T02:58:04.216Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: 4fa52117-dc29-4b49-a133-aeb9260c1afd status=PENDING worker=mock
+backend-1  | 2026-11-18T02:58:04.225Z  INFO 1 --- [         task-8] c.e.mockbackend.service.MockJobWorker    : jobId=4fa52117-dc29-4b49-a133-aeb9260c1afd stage=PROCESSING
+backend-1  | 2026-11-18T02:58:04.294Z  INFO 1 --- [         task-3] c.e.mockbackend.service.MockJobWorker    : jobId=e8c42be0-b682-4387-b4c4-ed268a39ec5b stage=COMPLETED durationMs=60012
+backend-1  | 2026-11-18T02:58:14.245Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 0260ded0-4692-48d4-85a2-51b4d5acaa8a status=PENDING worker=mock
+backend-1  | 2026-11-18T02:58:14.253Z  INFO 1 --- [         task-9] c.e.mockbackend.service.MockJobWorker    : jobId=0260ded0-4692-48d4-85a2-51b4d5acaa8a stage=PROCESSING
+backend-1  | 2026-11-18T02:58:14.284Z  INFO 1 --- [         task-4] c.e.mockbackend.service.MockJobWorker    : jobId=5f71f210-ea3e-4156-be86-5e3c55e7ba2d stage=COMPLETED durationMs=60010
+backend-1  | 2026-11-18T02:58:24.243Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: bc08fdd3-41a8-4be4-96b9-a9d61c516a89 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:58:24.254Z  INFO 1 --- [        task-10] c.e.mockbackend.service.MockJobWorker    : jobId=bc08fdd3-41a8-4be4-96b9-a9d61c516a89 stage=PROCESSING
+backend-1  | 2026-11-18T02:58:24.281Z  INFO 1 --- [         task-5] c.e.mockbackend.service.MockJobWorker    : jobId=ea5ca93f-d2e1-47f8-bee9-7e071a301edc stage=COMPLETED durationMs=60015
+backend-1  | 2026-11-18T02:58:34.248Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: 9f4d2587-3a2a-4f48-ab4b-4570def57b09 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:58:34.258Z  INFO 1 --- [        task-11] c.e.mockbackend.service.MockJobWorker    : jobId=9f4d2587-3a2a-4f48-ab4b-4570def57b09 stage=PROCESSING
+backend-1  | 2026-11-18T02:58:34.285Z  INFO 1 --- [         task-6] c.e.mockbackend.service.MockJobWorker    : jobId=911876bc-e4be-4612-a529-8a170578ac2d stage=COMPLETED durationMs=60013
+backend-1  | 2026-11-18T02:58:44.213Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: 6817a886-193b-4e52-8c43-520db4f2bcc3 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:58:44.220Z  INFO 1 --- [        task-12] c.e.mockbackend.service.MockJobWorker    : jobId=6817a886-193b-4e52-8c43-520db4f2bcc3 stage=PROCESSING
+backend-1  | 2026-11-18T02:58:54.265Z  INFO 1 --- [         task-7] c.e.mockbackend.service.MockJobWorker    : jobId=ae1cdbba-6875-4a95-86ce-85b56ce5b8e0 stage=COMPLETED durationMs=60014
+backend-1  | 2026-11-18T02:59:04.238Z  INFO 1 --- [         task-8] c.e.mockbackend.service.MockJobWorker    : jobId=4fa52117-dc29-4b49-a133-aeb9260c1afd stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T02:59:04.244Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: e789936f-287d-4fa5-a070-96a774afc26e status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:04.252Z  INFO 1 --- [        task-13] c.e.mockbackend.service.MockJobWorker    : jobId=e789936f-287d-4fa5-a070-96a774afc26e stage=PROCESSING
+backend-1  | 2026-11-18T02:59:14.213Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: 3608923e-27d4-4afe-a5e7-697a15f9763f status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:14.221Z  INFO 1 --- [        task-14] c.e.mockbackend.service.MockJobWorker    : jobId=3608923e-27d4-4afe-a5e7-697a15f9763f stage=PROCESSING
+backend-1  | 2026-11-18T02:59:14.261Z  INFO 1 --- [         task-9] c.e.mockbackend.service.MockJobWorker    : jobId=0260ded0-4692-48d4-85a2-51b4d5acaa8a stage=COMPLETED durationMs=60008
+backend-1  | 2026-11-18T02:59:24.212Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: a5aa502c-22b0-410a-9876-f79f4f594cc4 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:24.247Z  INFO 1 --- [        task-15] c.e.mockbackend.service.MockJobWorker    : jobId=a5aa502c-22b0-410a-9876-f79f4f594cc4 stage=PROCESSING
+backend-1  | 2026-11-18T02:59:24.264Z  INFO 1 --- [        task-10] c.e.mockbackend.service.MockJobWorker    : jobId=bc08fdd3-41a8-4be4-96b9-a9d61c516a89 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T02:59:34.247Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 0bf25e5a-aade-4684-bf08-d2f87cac1881 status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:34.253Z  INFO 1 --- [        task-16] c.e.mockbackend.service.MockJobWorker    : jobId=0bf25e5a-aade-4684-bf08-d2f87cac1881 stage=PROCESSING
+backend-1  | 2026-11-18T02:59:34.272Z  INFO 1 --- [        task-11] c.e.mockbackend.service.MockJobWorker    : jobId=9f4d2587-3a2a-4f48-ab4b-4570def57b09 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T02:59:44.243Z  INFO 1 --- [        task-12] c.e.mockbackend.service.MockJobWorker    : jobId=6817a886-193b-4e52-8c43-520db4f2bcc3 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T02:59:44.251Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: e574be5f-4241-4f29-8c70-5a24b5df02ff status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:44.257Z  INFO 1 --- [        task-17] c.e.mockbackend.service.MockJobWorker    : jobId=e574be5f-4241-4f29-8c70-5a24b5df02ff stage=PROCESSING
+backend-1  | 2026-11-18T02:59:54.241Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: d6b057b2-277f-4279-b555-88ee54d27a1a status=PENDING worker=mock
+backend-1  | 2026-11-18T02:59:54.252Z  INFO 1 --- [        task-18] c.e.mockbackend.service.MockJobWorker    : jobId=d6b057b2-277f-4279-b555-88ee54d27a1a stage=PROCESSING
+backend-1  | 2026-11-18T03:00:04.259Z  INFO 1 --- [        task-13] c.e.mockbackend.service.MockJobWorker    : jobId=e789936f-287d-4fa5-a070-96a774afc26e stage=COMPLETED durationMs=60007
+backend-1  | 2026-11-18T03:00:14.231Z  INFO 1 --- [        task-14] c.e.mockbackend.service.MockJobWorker    : jobId=3608923e-27d4-4afe-a5e7-697a15f9763f stage=COMPLETED durationMs=60007
+backend-1  | 2026-11-18T03:00:24.258Z  INFO 1 --- [        task-15] c.e.mockbackend.service.MockJobWorker    : jobId=a5aa502c-22b0-410a-9876-f79f4f594cc4 stage=COMPLETED durationMs=60033
+backend-1  | 2026-11-18T03:00:34.264Z  INFO 1 --- [        task-16] c.e.mockbackend.service.MockJobWorker    : jobId=0bf25e5a-aade-4684-bf08-d2f87cac1881 stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:00:44.266Z  INFO 1 --- [        task-17] c.e.mockbackend.service.MockJobWorker    : jobId=e574be5f-4241-4f29-8c70-5a24b5df02ff stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:00:54.261Z  INFO 1 --- [        task-18] c.e.mockbackend.service.MockJobWorker    : jobId=d6b057b2-277f-4279-b555-88ee54d27a1a stage=COMPLETED durationMs=60011
+backend-1  | 2026-11-18T03:01:18.336Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: d1b0d923-5d64-4bf9-83fd-501e474a2e34 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:01:18.346Z  INFO 1 --- [        task-19] c.e.mockbackend.service.MockJobWorker    : jobId=d1b0d923-5d64-4bf9-83fd-501e474a2e34 stage=PROCESSING
+backend-1  | 2026-11-18T03:01:28.341Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: 8df60ce6-1324-4faa-a2e0-477ef897b111 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:01:28.348Z  INFO 1 --- [        task-20] c.e.mockbackend.service.MockJobWorker    : jobId=8df60ce6-1324-4faa-a2e0-477ef897b111 stage=PROCESSING
+backend-1  | 2026-11-18T03:01:38.338Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: bab51009-1042-4a57-a544-2c50c5739e06 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:01:38.343Z  INFO 1 --- [        task-21] c.e.mockbackend.service.MockJobWorker    : jobId=bab51009-1042-4a57-a544-2c50c5739e06 stage=PROCESSING
+backend-1  | 2026-11-18T03:01:48.306Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 03475940-760e-45e3-900d-fd71ca340df8 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:01:48.310Z  INFO 1 --- [        task-22] c.e.mockbackend.service.MockJobWorker    : jobId=03475940-760e-45e3-900d-fd71ca340df8 stage=PROCESSING
+backend-1  | 2026-11-18T03:01:58.319Z  INFO 1 --- [nio-8080-exec-1] c.e.mockbackend.service.JobServiceImpl   : Job created: 1805fcf5-0fcb-404e-aab7-1288b9a04dc6 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:01:58.330Z  INFO 1 --- [        task-23] c.e.mockbackend.service.MockJobWorker    : jobId=1805fcf5-0fcb-404e-aab7-1288b9a04dc6 stage=PROCESSING
+backend-1  | 2026-11-18T03:02:08.315Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: a122f5e2-5ca2-4cf9-9a63-23e841d05e0c status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:08.320Z  INFO 1 --- [        task-24] c.e.mockbackend.service.MockJobWorker    : jobId=a122f5e2-5ca2-4cf9-9a63-23e841d05e0c stage=PROCESSING
+backend-1  | 2026-11-18T03:02:18.332Z  INFO 1 --- [io-8080-exec-10] c.e.mockbackend.service.JobServiceImpl   : Job created: 698aa483-2e18-4e6e-bf74-4fbddb509abc status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:18.336Z  INFO 1 --- [        task-25] c.e.mockbackend.service.MockJobWorker    : jobId=698aa483-2e18-4e6e-bf74-4fbddb509abc stage=PROCESSING
+backend-1  | 2026-11-18T03:02:18.351Z  INFO 1 --- [        task-19] c.e.mockbackend.service.MockJobWorker    : jobId=d1b0d923-5d64-4bf9-83fd-501e474a2e34 stage=COMPLETED durationMs=60010
+backend-1  | 2026-11-18T03:02:28.308Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: d6e5ba23-7555-46f1-91ec-917873c79630 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:28.312Z  INFO 1 --- [        task-26] c.e.mockbackend.service.MockJobWorker    : jobId=d6e5ba23-7555-46f1-91ec-917873c79630 stage=PROCESSING
+backend-1  | 2026-11-18T03:02:28.354Z  INFO 1 --- [        task-20] c.e.mockbackend.service.MockJobWorker    : jobId=8df60ce6-1324-4faa-a2e0-477ef897b111 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:02:38.317Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 56033372-60e3-45ea-b550-672849c1a30d status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:38.323Z  INFO 1 --- [        task-27] c.e.mockbackend.service.MockJobWorker    : jobId=56033372-60e3-45ea-b550-672849c1a30d stage=PROCESSING
+backend-1  | 2026-11-18T03:02:38.351Z  INFO 1 --- [        task-21] c.e.mockbackend.service.MockJobWorker    : jobId=bab51009-1042-4a57-a544-2c50c5739e06 stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:02:48.314Z  INFO 1 --- [nio-8080-exec-6] c.e.mockbackend.service.JobServiceImpl   : Job created: 7a896706-af2b-402c-b4bf-280e30f0a905 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:48.317Z  INFO 1 --- [        task-22] c.e.mockbackend.service.MockJobWorker    : jobId=03475940-760e-45e3-900d-fd71ca340df8 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:02:48.320Z  INFO 1 --- [        task-28] c.e.mockbackend.service.MockJobWorker    : jobId=7a896706-af2b-402c-b4bf-280e30f0a905 stage=PROCESSING
+backend-1  | 2026-11-18T03:02:58.314Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: f0c1d5e9-df36-42ac-94d2-519538451aa0 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:02:58.318Z  INFO 1 --- [        task-29] c.e.mockbackend.service.MockJobWorker    : jobId=f0c1d5e9-df36-42ac-94d2-519538451aa0 stage=PROCESSING
+backend-1  | 2026-11-18T03:02:58.335Z  INFO 1 --- [        task-23] c.e.mockbackend.service.MockJobWorker    : jobId=1805fcf5-0fcb-404e-aab7-1288b9a04dc6 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T03:03:08.317Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 0a2361e6-e790-4013-875b-13a1c11241d6 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:08.326Z  INFO 1 --- [        task-30] c.e.mockbackend.service.MockJobWorker    : jobId=0a2361e6-e790-4013-875b-13a1c11241d6 stage=PROCESSING
+backend-1  | 2026-11-18T03:03:08.330Z  INFO 1 --- [        task-24] c.e.mockbackend.service.MockJobWorker    : jobId=a122f5e2-5ca2-4cf9-9a63-23e841d05e0c stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:03:18.312Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 9105fba7-0c06-42a8-a4e3-923ead08278c status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:18.318Z  INFO 1 --- [        task-31] c.e.mockbackend.service.MockJobWorker    : jobId=9105fba7-0c06-42a8-a4e3-923ead08278c stage=PROCESSING
+backend-1  | 2026-11-18T03:03:18.344Z  INFO 1 --- [        task-25] c.e.mockbackend.service.MockJobWorker    : jobId=698aa483-2e18-4e6e-bf74-4fbddb509abc stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:03:28.296Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 1ce582f6-5908-40b9-8f9e-00e9d0882316 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:28.301Z  INFO 1 --- [        task-32] c.e.mockbackend.service.MockJobWorker    : jobId=1ce582f6-5908-40b9-8f9e-00e9d0882316 stage=PROCESSING
+backend-1  | 2026-11-18T03:03:28.320Z  INFO 1 --- [        task-26] c.e.mockbackend.service.MockJobWorker    : jobId=d6e5ba23-7555-46f1-91ec-917873c79630 stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:03:38.327Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: 4db09872-97d9-495a-b233-92613221f102 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:38.337Z  INFO 1 --- [        task-33] c.e.mockbackend.service.MockJobWorker    : jobId=4db09872-97d9-495a-b233-92613221f102 stage=PROCESSING
+backend-1  | 2026-11-18T03:03:38.337Z  INFO 1 --- [        task-27] c.e.mockbackend.service.MockJobWorker    : jobId=56033372-60e3-45ea-b550-672849c1a30d stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:03:48.317Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 48867aa3-71ca-48be-9c37-e1f4dea9a018 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:48.323Z  INFO 1 --- [        task-34] c.e.mockbackend.service.MockJobWorker    : jobId=48867aa3-71ca-48be-9c37-e1f4dea9a018 stage=PROCESSING
+backend-1  | 2026-11-18T03:03:48.326Z  INFO 1 --- [        task-28] c.e.mockbackend.service.MockJobWorker    : jobId=7a896706-af2b-402c-b4bf-280e30f0a905 stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:03:58.323Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: 008b09b5-8d9b-4987-a2c1-1b197cf0ae0a status=PENDING worker=mock
+backend-1  | 2026-11-18T03:03:58.327Z  INFO 1 --- [        task-29] c.e.mockbackend.service.MockJobWorker    : jobId=f0c1d5e9-df36-42ac-94d2-519538451aa0 stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:03:58.327Z  INFO 1 --- [        task-35] c.e.mockbackend.service.MockJobWorker    : jobId=008b09b5-8d9b-4987-a2c1-1b197cf0ae0a stage=PROCESSING
+backend-1  | 2026-11-18T03:04:08.294Z  INFO 1 --- [io-8080-exec-10] c.e.mockbackend.service.JobServiceImpl   : Job created: b5e99469-2b12-4b65-9cf7-7edaf0e9b8c5 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:04:08.301Z  INFO 1 --- [        task-36] c.e.mockbackend.service.MockJobWorker    : jobId=b5e99469-2b12-4b65-9cf7-7edaf0e9b8c5 stage=PROCESSING
+backend-1  | 2026-11-18T03:04:08.336Z  INFO 1 --- [        task-30] c.e.mockbackend.service.MockJobWorker    : jobId=0a2361e6-e790-4013-875b-13a1c11241d6 stage=COMPLETED durationMs=60011
+backend-1  | 2026-11-18T03:04:18.326Z  INFO 1 --- [        task-31] c.e.mockbackend.service.MockJobWorker    : jobId=9105fba7-0c06-42a8-a4e3-923ead08278c stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:04:28.309Z  INFO 1 --- [        task-32] c.e.mockbackend.service.MockJobWorker    : jobId=1ce582f6-5908-40b9-8f9e-00e9d0882316 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:04:38.345Z  INFO 1 --- [        task-33] c.e.mockbackend.service.MockJobWorker    : jobId=4db09872-97d9-495a-b233-92613221f102 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T03:04:48.332Z  INFO 1 --- [        task-34] c.e.mockbackend.service.MockJobWorker    : jobId=48867aa3-71ca-48be-9c37-e1f4dea9a018 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:04:58.335Z  INFO 1 --- [        task-35] c.e.mockbackend.service.MockJobWorker    : jobId=008b09b5-8d9b-4987-a2c1-1b197cf0ae0a stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:05:08.306Z  INFO 1 --- [        task-36] c.e.mockbackend.service.MockJobWorker    : jobId=b5e99469-2b12-4b65-9cf7-7edaf0e9b8c5 stage=COMPLETED durationMs=60007
+backend-1  | 2026-11-18T03:35:05.163Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: f6066e11-5e13-4f2e-b696-ade1e882e4b1 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:05.173Z  INFO 1 --- [        task-37] c.e.mockbackend.service.MockJobWorker    : jobId=f6066e11-5e13-4f2e-b696-ade1e882e4b1 stage=PROCESSING
+backend-1  | 2026-11-18T03:35:15.276Z  INFO 1 --- [nio-8080-exec-1] c.e.mockbackend.service.JobServiceImpl   : Job created: 7712ac4c-7137-4ccb-bd58-50bf16bd0b27 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:15.280Z  INFO 1 --- [        task-38] c.e.mockbackend.service.MockJobWorker    : jobId=7712ac4c-7137-4ccb-bd58-50bf16bd0b27 stage=PROCESSING
+backend-1  | 2026-11-18T03:35:25.160Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: f128f792-5e6a-4e68-b2aa-04b58762d0eb status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:25.164Z  INFO 1 --- [        task-39] c.e.mockbackend.service.MockJobWorker    : jobId=f128f792-5e6a-4e68-b2aa-04b58762d0eb stage=PROCESSING
+backend-1  | 2026-11-18T03:35:35.272Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 4e1403a2-5726-4991-9397-7a3449402e83 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:35.282Z  INFO 1 --- [        task-40] c.e.mockbackend.service.MockJobWorker    : jobId=4e1403a2-5726-4991-9397-7a3449402e83 stage=PROCESSING
+backend-1  | 2026-11-18T03:35:45.147Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 32f557fb-1e56-4dd8-908c-21fef0eaf709 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:45.151Z  INFO 1 --- [        task-41] c.e.mockbackend.service.MockJobWorker    : jobId=32f557fb-1e56-4dd8-908c-21fef0eaf709 stage=PROCESSING
+backend-1  | 2026-11-18T03:35:55.245Z  INFO 1 --- [nio-8080-exec-9] c.e.mockbackend.service.JobServiceImpl   : Job created: a82eec41-cfbf-4c18-b23b-528e067727c9 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:35:55.251Z  INFO 1 --- [        task-42] c.e.mockbackend.service.MockJobWorker    : jobId=a82eec41-cfbf-4c18-b23b-528e067727c9 stage=PROCESSING
+backend-1  | 2026-11-18T03:36:05.190Z  INFO 1 --- [        task-37] c.e.mockbackend.service.MockJobWorker    : jobId=f6066e11-5e13-4f2e-b696-ade1e882e4b1 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T03:36:05.272Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: db6f5bbf-0f01-440b-86cb-6ce352059b42 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:05.276Z  INFO 1 --- [        task-43] c.e.mockbackend.service.MockJobWorker    : jobId=db6f5bbf-0f01-440b-86cb-6ce352059b42 stage=PROCESSING
+backend-1  | 2026-11-18T03:36:15.155Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: ea4559fb-6f99-4a89-809c-18fd919ecded status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:15.163Z  INFO 1 --- [        task-44] c.e.mockbackend.service.MockJobWorker    : jobId=ea4559fb-6f99-4a89-809c-18fd919ecded stage=PROCESSING
+backend-1  | 2026-11-18T03:36:15.289Z  INFO 1 --- [        task-38] c.e.mockbackend.service.MockJobWorker    : jobId=7712ac4c-7137-4ccb-bd58-50bf16bd0b27 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:36:25.172Z  INFO 1 --- [        task-39] c.e.mockbackend.service.MockJobWorker    : jobId=f128f792-5e6a-4e68-b2aa-04b58762d0eb stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:36:25.289Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: cfd36e00-b133-466d-aa5d-a7bb49849e32 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:25.295Z  INFO 1 --- [        task-45] c.e.mockbackend.service.MockJobWorker    : jobId=cfd36e00-b133-466d-aa5d-a7bb49849e32 stage=PROCESSING
+backend-1  | 2026-11-18T03:36:35.155Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: 92d0567b-dc41-4152-9204-4751a130c11d status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:35.159Z  INFO 1 --- [        task-46] c.e.mockbackend.service.MockJobWorker    : jobId=92d0567b-dc41-4152-9204-4751a130c11d stage=PROCESSING
+backend-1  | 2026-11-18T03:36:35.287Z  INFO 1 --- [        task-40] c.e.mockbackend.service.MockJobWorker    : jobId=4e1403a2-5726-4991-9397-7a3449402e83 stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T03:36:45.163Z  INFO 1 --- [        task-41] c.e.mockbackend.service.MockJobWorker    : jobId=32f557fb-1e56-4dd8-908c-21fef0eaf709 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:36:45.164Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: 4a735b80-b4c9-49e4-b2a8-981afc4063fe status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:45.172Z  INFO 1 --- [        task-47] c.e.mockbackend.service.MockJobWorker    : jobId=4a735b80-b4c9-49e4-b2a8-981afc4063fe stage=PROCESSING
+backend-1  | 2026-11-18T03:36:55.257Z  INFO 1 --- [        task-42] c.e.mockbackend.service.MockJobWorker    : jobId=a82eec41-cfbf-4c18-b23b-528e067727c9 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:36:55.266Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 1620865d-892c-4069-91e6-fe42da7ee067 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:36:55.269Z  INFO 1 --- [        task-48] c.e.mockbackend.service.MockJobWorker    : jobId=1620865d-892c-4069-91e6-fe42da7ee067 stage=PROCESSING
+backend-1  | 2026-11-18T03:37:05.156Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 0321704a-c3fd-4ae1-bb11-098b3331bfda status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:05.163Z  INFO 1 --- [        task-49] c.e.mockbackend.service.MockJobWorker    : jobId=0321704a-c3fd-4ae1-bb11-098b3331bfda stage=PROCESSING
+backend-1  | 2026-11-18T03:37:05.281Z  INFO 1 --- [        task-43] c.e.mockbackend.service.MockJobWorker    : jobId=db6f5bbf-0f01-440b-86cb-6ce352059b42 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:37:15.170Z  INFO 1 --- [        task-44] c.e.mockbackend.service.MockJobWorker    : jobId=ea4559fb-6f99-4a89-809c-18fd919ecded stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:37:15.269Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: 5a6a793e-e20e-4194-a6e2-53a7e635dac7 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:15.273Z  INFO 1 --- [        task-50] c.e.mockbackend.service.MockJobWorker    : jobId=5a6a793e-e20e-4194-a6e2-53a7e635dac7 stage=PROCESSING
+backend-1  | 2026-11-18T03:37:25.273Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: d2c859d4-4bce-41ee-bcef-bcfd10c5896f status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:25.277Z  INFO 1 --- [        task-51] c.e.mockbackend.service.MockJobWorker    : jobId=d2c859d4-4bce-41ee-bcef-bcfd10c5896f stage=PROCESSING
+backend-1  | 2026-11-18T03:37:25.300Z  INFO 1 --- [        task-45] c.e.mockbackend.service.MockJobWorker    : jobId=cfd36e00-b133-466d-aa5d-a7bb49849e32 stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:37:34.186Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 22d44b74-ce78-4e06-9a6e-f9a6b7dd29ed status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:34.190Z  INFO 1 --- [        task-52] c.e.mockbackend.service.MockJobWorker    : jobId=22d44b74-ce78-4e06-9a6e-f9a6b7dd29ed stage=PROCESSING
+backend-1  | 2026-11-18T03:37:35.166Z  INFO 1 --- [        task-46] c.e.mockbackend.service.MockJobWorker    : jobId=92d0567b-dc41-4152-9204-4751a130c11d stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:37:44.215Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 757de202-6453-4b19-971b-4f0d354ac736 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:44.220Z  INFO 1 --- [        task-53] c.e.mockbackend.service.MockJobWorker    : jobId=757de202-6453-4b19-971b-4f0d354ac736 stage=PROCESSING
+backend-1  | 2026-11-18T03:37:45.179Z  INFO 1 --- [        task-47] c.e.mockbackend.service.MockJobWorker    : jobId=4a735b80-b4c9-49e4-b2a8-981afc4063fe stage=COMPLETED durationMs=60009
+backend-1  | 2026-11-18T03:37:54.190Z  INFO 1 --- [nio-8080-exec-7] c.e.mockbackend.service.JobServiceImpl   : Job created: c0fb6cd4-f00e-4fb9-b4ad-ef7e472e6d79 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:37:54.196Z  INFO 1 --- [        task-54] c.e.mockbackend.service.MockJobWorker    : jobId=c0fb6cd4-f00e-4fb9-b4ad-ef7e472e6d79 stage=PROCESSING
+backend-1  | 2026-11-18T03:37:55.277Z  INFO 1 --- [        task-48] c.e.mockbackend.service.MockJobWorker    : jobId=1620865d-892c-4069-91e6-fe42da7ee067 stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:38:04.217Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: 3d6ffa57-8e1d-43a3-89d9-06e1ba60f614 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:38:04.222Z  INFO 1 --- [        task-55] c.e.mockbackend.service.MockJobWorker    : jobId=3d6ffa57-8e1d-43a3-89d9-06e1ba60f614 stage=PROCESSING
+backend-1  | 2026-11-18T03:38:05.171Z  INFO 1 --- [        task-49] c.e.mockbackend.service.MockJobWorker    : jobId=0321704a-c3fd-4ae1-bb11-098b3331bfda stage=COMPLETED durationMs=60006
+backend-1  | 2026-11-18T03:38:15.280Z  INFO 1 --- [        task-50] c.e.mockbackend.service.MockJobWorker    : jobId=5a6a793e-e20e-4194-a6e2-53a7e635dac7 stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:38:25.284Z  INFO 1 --- [        task-51] c.e.mockbackend.service.MockJobWorker    : jobId=d2c859d4-4bce-41ee-bcef-bcfd10c5896f stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:38:34.196Z  INFO 1 --- [        task-52] c.e.mockbackend.service.MockJobWorker    : jobId=22d44b74-ce78-4e06-9a6e-f9a6b7dd29ed stage=COMPLETED durationMs=60003
+backend-1  | 2026-11-18T03:38:44.226Z  INFO 1 --- [        task-53] c.e.mockbackend.service.MockJobWorker    : jobId=757de202-6453-4b19-971b-4f0d354ac736 stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:38:54.201Z  INFO 1 --- [        task-54] c.e.mockbackend.service.MockJobWorker    : jobId=c0fb6cd4-f00e-4fb9-b4ad-ef7e472e6d79 stage=COMPLETED durationMs=60005
+backend-1  | 2026-11-18T03:39:04.228Z  INFO 1 --- [        task-55] c.e.mockbackend.service.MockJobWorker    : jobId=3d6ffa57-8e1d-43a3-89d9-06e1ba60f614 stage=COMPLETED durationMs=60004
+backend-1  | 2026-11-18T03:39:41.524Z  INFO 1 --- [io-8080-exec-10] c.e.mockbackend.service.JobServiceImpl   : Job created: 1dd91d10-e152-425a-bf68-85f5252b1099 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:39:41.530Z  INFO 1 --- [        task-56] c.e.mockbackend.service.MockJobWorker    : jobId=1dd91d10-e152-425a-bf68-85f5252b1099 stage=PROCESSING
+backend-1  | 2026-11-18T03:39:41.857Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 8642032c-9148-4b78-b0fe-0db5a3f38dc8 status=PENDING worker=mock
+backend-1  | 2026-11-18T03:39:41.861Z  INFO 1 --- [        task-57] c.e.mockbackend.service.MockJobWorker    : jobId=8642032c-9148-4b78-b0fe-0db5a3f38dc8 stage=PROCESSING
+backend-1  | 2026-11-18T03:39:42.108Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: d4abdc5c-b43a-4d59-b218-89dd56c0162c status=PENDING worker=mock
+backend-1  | 2026-11-18T03:39:42.110Z  INFO 1 --- [        task-58] c.e.mockbackend.service.MockJobWorker    : jobId=d4abdc5c-b43a-4d59-b218-89dd56c0162c stage=PROCESSING

@@ -11,7 +11,7 @@
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | AR 코드 **머지됨**(#1: 평면 배치·가운데 놓기·1마리 제한·애니메이션 칩 5종·셸 털). FPS 등 [실험 결과] 없음 |
 | 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | `/infer` 에 AnimalLift·변환기·자동 리깅 연결 코드 **머지됨**(#1 — 첫 사진 1장만 사용, 리깅은 템플릿이 있을 때만). exp-01~04 기록 없음 = 측정값 0건 |
 | 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증), 실제 모델 E2E **[계획]**(10-20 주 선행) |
-| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음, 부하·운영(쏘카 수준 목표) | 배포 기반 **[구현됨]**(S1~S4·S10, 2026-10-30), GCP VM 실제 배포 **[구현됨]**(2026-11-13, 추론은 스텁), 기능 4묶음은 검토 브랜치 `review/api-v1.1`(계약 회의 전), GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13): VM ↔ Pod 연결과 AnimalLift 모델 모드 전체 흐름 **[구현됨]**(2026-11-17, A40 EU-SE-1, exp-01 기록), 부하·운영 도구는 `load/socar` 를 main 에 병합(PR #3), VM 위 측정 **[계획]** |
+| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음, 부하·운영(쏘카 수준 목표) | 배포 기반 **[구현됨]**(S1~S4·S10, 2026-10-30), GCP VM 실제 배포 **[구현됨]**(2026-11-13, 추론은 스텁), 기능 4묶음은 검토 브랜치 `review/api-v1.1`(계약 회의 전), GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13): VM ↔ Pod 연결과 AnimalLift 모델 모드 전체 흐름 **[구현됨]**(2026-11-17, A40 EU-SE-1, exp-01 기록), 부하·운영 도구는 `load/socar` 를 main 에 병합(PR #3), VM 위 측정 1차(A 시리즈, mock) **[실험 결과]**(2026-11-18, VM CPU 를 가장 많이 쓴 것은 Caddy, 폴링 규칙상 통과 300·900 RPS 지연 기준 안 유지·1,200 붕괴), G·F 시리즈 **[계획]** |
 | 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
 
 ```mermaid
@@ -172,9 +172,9 @@ DoD:
 | B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | **[구현됨]** 〃 — 실제 Tomcat 에서 다운로드 중간 끊기 시험 포함 |
 | B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 파일 **[구현됨]** 〃. 이 PC 에 Docker 가 없어 compose·Caddy·Grafana 실행은 CI 첫 실행과 VM 에서 처음 확인 **[계획]** |
 | B5 | 추론 스텁 패스스루 설정(지연·슬롯·실패율·느린 요청, 기본 꺼짐) — Generation 리뷰 | 없음 | **[구현됨]** 〃 — `test_app.py` 8개 추가, 3D 담당 리뷰 전 |
-| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 **[계획]** |
-| B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 82개. 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 **[계획]** |
-| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | **[계획]** VM 준비 뒤 |
+| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). A3 large·G·F·A5·A6 **[계획]** |
+| B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 82개. 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 1차 2026-11-18 **[실험 결과]**(B6) |
+| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18), G1·G2·F1~F4·A5·A6·G3·F5 **[계획]** |
 | R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #21·#22, 결정 전에는 검토 브랜치에만 |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
 

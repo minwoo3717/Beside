@@ -1,0 +1,760 @@
+{
+  "schema": "beside-load-run/1",
+  "status": "[실험 결과] 원시 데이터 — 인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다",
+  "resultCandidate": true,
+  "outcome": {
+    "ended": "normal",
+    "abortedBy": null,
+    "reason": null,
+    "guardFailures": null,
+    "guardLastError": null
+  },
+  "scenario": "A1",
+  "tier": "T3",
+  "runId": "a1p1",
+  "window": {
+    "start": "2026-11-18T03:40:09+00:00",
+    "end": "2026-11-18T04:54:12+00:00",
+    "durationS": 4443.3,
+    "padS": 60.0
+  },
+  "target": {
+    "baseUrl": "https://beside-team.duckdns.org",
+    "local": false,
+    "serverSha": "b6c0e6c"
+  },
+  "tool": {
+    "gitSha": "b6c0e6c6c93d081ce6e2688ecd5229731b59319d",
+    "scriptsDirty": false,
+    "k6Version": "k6 v2.3.0 (commit/e088784614, go1.26.8, linux/amd64)",
+    "script": "api_staged.js"
+  },
+  "vm": {
+    "provider": "GCP",
+    "type": "e2-standard-2",
+    "vcpu": 2.0,
+    "ramGb": 8.0,
+    "diskGb": 48.0,
+    "region": "asia-northeast3-a"
+  },
+  "client": {
+    "uplinkMbps": 103.0,
+    "downlinkMbps": 210.0,
+    "cpuMaxPct": 34.0
+  },
+  "photos": [
+    {
+      "name": "photo-400k.png",
+      "bytes": 400300,
+      "sha256": "24ce7224640061c52908d9e4e977375828a9bf56d3164dd8ad890955f88f255f"
+    }
+  ],
+  "k6": {
+    "file": "k6-summary.json",
+    "meta": {
+      "script": "api_staged.js",
+      "scenario": "A1",
+      "tier": "T3",
+      "runId": "a1p1",
+      "baseUrl": "https://beside-team.duckdns.org",
+      "startedAt": "2026-11-18T03:40:09.710Z",
+      "endedAt": "2026-11-18T04:54:12.965Z",
+      "testRunDurationMs": 4443473.399173,
+      "loadPlannedS": 4320,
+      "loadRanS": 4443.3,
+      "rttBaseMsUsed": 153.628,
+      "rttBaseMsMeasured": 152.819,
+      "uplinkMbps": 103,
+      "stages": [
+        {
+          "index": 0,
+          "label": "25 users",
+          "users": 25,
+          "target": 50,
+          "holdS": 480,
+          "holdEndS": 540
+        },
+        {
+          "index": 1,
+          "label": "200 users",
+          "users": 200,
+          "target": 400,
+          "holdS": 480,
+          "holdEndS": 1080
+        },
+        {
+          "index": 2,
+          "label": "1000 users",
+          "users": 1000,
+          "target": 2000,
+          "holdS": 480,
+          "holdEndS": 1620
+        },
+        {
+          "index": 3,
+          "label": "1800 users",
+          "users": 1800,
+          "target": 3600,
+          "holdS": 480,
+          "holdEndS": 2160
+        },
+        {
+          "index": 4,
+          "label": "3600 users",
+          "users": 3600,
+          "target": 7200,
+          "holdS": 480,
+          "holdEndS": 2700
+        },
+        {
+          "index": 5,
+          "label": "5400 users",
+          "users": 5400,
+          "target": 10800,
+          "holdS": 480,
+          "holdEndS": 3240
+        },
+        {
+          "index": 6,
+          "label": "7200 users",
+          "users": 7200,
+          "target": 14400,
+          "holdS": 480,
+          "holdEndS": 3780
+        },
+        {
+          "index": 7,
+          "label": "9000 users",
+          "users": 9000,
+          "target": 18000,
+          "holdS": 480,
+          "holdEndS": 4320
+        }
+      ],
+      "status": "[실험 결과] 후보 — 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)은 collect.py 의 run.json 에 붙인다. 로컬 실행은 동작 확인용으로만 쓴다.",
+      "conversionTier": "T3",
+      "usersPerJobPerS": 1800,
+      "flowRatesPerHour": [
+        50,
+        50,
+        400,
+        400,
+        2000,
+        2000,
+        3600,
+        3600,
+        7200,
+        7200,
+        10800,
+        10800,
+        14400,
+        14400,
+        18000,
+        18000
+      ],
+      "browseRatesPerHour": [
+        200,
+        200,
+        1600,
+        1600,
+        8000,
+        8000,
+        14400,
+        14400,
+        28800,
+        28800,
+        43200,
+        43200,
+        57600,
+        57600,
+        72000,
+        72000
+      ],
+      "failRatio": 0.05,
+      "photos": [
+        "./out/fixtures/photo-400k.png",
+        "./out/fixtures/photo-400k.png"
+      ],
+      "photoBytes": 800600,
+      "expectedFlows": 8318,
+      "expectedUploadGB": 6.66,
+      "vus": {
+        "preAllocated": 2000,
+        "max": 3300
+      },
+      "server": {
+        "profile": "mock,prod",
+        "workerType": "mock"
+      }
+    },
+    "verdict": {
+      "thresholdsOk": false,
+      "aborted": null,
+      "unfinishedFlows": 0,
+      "failedThresholds": [
+        {
+          "metric": "dropped_iterations",
+          "threshold": "count==0"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:1,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:2,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:3,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:4,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:5,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:5,phase:hold}",
+          "threshold": "p(95)<3000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:6,phase:hold}",
+          "threshold": "p(95)<3000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:6,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:7,phase:hold}",
+          "threshold": "p(99)<6000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset,stage:7,phase:hold}",
+          "threshold": "p(95)<3000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset}",
+          "threshold": "p(95)<3000"
+        },
+        {
+          "metric": "http_req_duration{endpoint:asset}",
+          "threshold": "p(99)<6000"
+        }
+      ],
+      "stages": [
+        {
+          "stage": 0,
+          "label": "25 users",
+          "users": 25,
+          "target": 50,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "invalid",
+          "dropped": null,
+          "latency": {
+            "poll": {
+              "med": 156.23,
+              "p95": 158.3,
+              "p99": 160.42,
+              "count": 206
+            },
+            "healthz": {
+              "med": 153.57,
+              "p95": 156.62,
+              "p99": 157.66,
+              "count": 34
+            },
+            "asset": {
+              "med": 1079.98,
+              "p95": 1086.12,
+              "p99": 1086.29,
+              "count": 5
+            },
+            "create": {
+              "med": 1057.99,
+              "p95": 1123.11,
+              "p99": 1144.24,
+              "count": 7
+            }
+          },
+          "sentMbps": 0.093,
+          "assetMbps": null
+        },
+        {
+          "stage": 1,
+          "label": "200 users",
+          "users": 200,
+          "target": 400,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "asset": {
+              "med": 1080.76,
+              "p95": 1091.78,
+              "p99": 7444.58,
+              "count": 46
+            },
+            "poll": {
+              "med": 155.85,
+              "p95": 158.2,
+              "p99": 159.25,
+              "count": 1624
+            },
+            "healthz": {
+              "med": 153.98,
+              "p95": 156.84,
+              "p99": 157.8,
+              "count": 267
+            },
+            "create": {
+              "med": 1056.51,
+              "p95": 1066.23,
+              "p99": 1069.33,
+              "count": 54
+            }
+          },
+          "sentMbps": 0.721,
+          "assetMbps": null
+        },
+        {
+          "stage": 2,
+          "label": "1000 users",
+          "users": 1000,
+          "target": 2000,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "poll": {
+              "med": 154.73,
+              "p95": 156.75,
+              "p99": 157.74,
+              "count": 8003
+            },
+            "healthz": {
+              "med": 152.32,
+              "p95": 156.13,
+              "p99": 156.67,
+              "count": 1333
+            },
+            "asset": {
+              "med": 1077.2,
+              "p95": 2799.5,
+              "p99": 7377.83,
+              "count": 238
+            },
+            "create": {
+              "med": 1054.07,
+              "p95": 1065.84,
+              "p99": 1119.23,
+              "count": 267
+            }
+          },
+          "sentMbps": 3.564,
+          "assetMbps": null
+        },
+        {
+          "stage": 3,
+          "label": "1800 users",
+          "users": 1800,
+          "target": 3600,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "healthz": {
+              "med": 152.28,
+              "p95": 156.13,
+              "p99": 157.56,
+              "count": 2400
+            },
+            "asset": {
+              "med": 1075.91,
+              "p95": 1232.7,
+              "p99": 7381.25,
+              "count": 441
+            },
+            "create": {
+              "med": 1048.31,
+              "p95": 1063.47,
+              "p99": 1068.14,
+              "count": 480
+            },
+            "poll": {
+              "med": 154.67,
+              "p95": 156.62,
+              "p99": 158.32,
+              "count": 14504
+            }
+          },
+          "sentMbps": 6.408,
+          "assetMbps": null
+        },
+        {
+          "stage": 4,
+          "label": "3600 users",
+          "users": 3600,
+          "target": 7200,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "create": {
+              "med": 1052.71,
+              "p95": 1064.96,
+              "p99": 1081.69,
+              "count": 960
+            },
+            "asset": {
+              "med": 1076.16,
+              "p95": 1827.97,
+              "p99": 7415.33,
+              "count": 874
+            },
+            "healthz": {
+              "med": 152.66,
+              "p95": 156.75,
+              "p99": 160.32,
+              "count": 4800
+            },
+            "poll": {
+              "med": 154.82,
+              "p95": 157.28,
+              "p99": 160.77,
+              "count": 28958
+            }
+          },
+          "sentMbps": 12.815,
+          "assetMbps": null
+        },
+        {
+          "stage": 5,
+          "label": "5400 users",
+          "users": 5400,
+          "target": 10800,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "poll": {
+              "med": 154.67,
+              "p95": 157.4,
+              "p99": 160.4,
+              "count": 43092
+            },
+            "asset": {
+              "med": 1075.82,
+              "p95": 5961.24,
+              "p99": 7435.11,
+              "count": 1347
+            },
+            "create": {
+              "med": 1051.88,
+              "p95": 1065.04,
+              "p99": 1100.82,
+              "count": 1440
+            },
+            "healthz": {
+              "med": 152.58,
+              "p95": 156.63,
+              "p99": 159.43,
+              "count": 7200
+            }
+          },
+          "sentMbps": 19.223,
+          "assetMbps": null
+        },
+        {
+          "stage": 6,
+          "label": "7200 users",
+          "users": 7200,
+          "target": 14400,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "asset": {
+              "med": 1076.15,
+              "p95": 6796.06,
+              "p99": 7600.68,
+              "count": 1790
+            },
+            "create": {
+              "med": 1051.33,
+              "p95": 1066.94,
+              "p99": 1124.7,
+              "count": 1920
+            },
+            "poll": {
+              "med": 154.78,
+              "p95": 157.88,
+              "p99": 160.97,
+              "count": 58338
+            },
+            "healthz": {
+              "med": 152.83,
+              "p95": 157.01,
+              "p99": 160.46,
+              "count": 9600
+            }
+          },
+          "sentMbps": 25.63,
+          "assetMbps": null
+        },
+        {
+          "stage": 7,
+          "label": "9000 users",
+          "users": 9000,
+          "target": 18000,
+          "holdS": 480,
+          "heldS": 480,
+          "status": "fail",
+          "dropped": null,
+          "latency": {
+            "healthz": {
+              "med": 153.84,
+              "p95": 158.28,
+              "p99": 269.15,
+              "count": 11988
+            },
+            "asset": {
+              "med": 1076.83,
+              "p95": 7013.28,
+              "p99": 7579.21,
+              "count": 2256
+            },
+            "poll": {
+              "med": 155.05,
+              "p95": 159.97,
+              "p99": 205.17,
+              "count": 72192
+            },
+            "create": {
+              "med": 1051.76,
+              "p95": 1069.71,
+              "p99": 1222.46,
+              "count": 2400
+            }
+          },
+          "sentMbps": 32.038,
+          "assetMbps": null
+        }
+      ],
+      "breakingPoint": null,
+      "breakingPointNote": "dropped_iterations 12 > 0 and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so MAX_VUS alone does not help) or check the load PC, and run again",
+      "guard": null,
+      "httpReqs": 311255,
+      "httpReqRate": 70.05,
+      "droppedIterations": 12,
+      "checksFailed": 0,
+      "checksPassed": 319161,
+      "unexpectedCount": 0,
+      "vusMax": 2017,
+      "dataSentMbps": 12.188,
+      "dataReceivedMbps": 21.753,
+      "peakStage": 7,
+      "peakStageSentMbps": 32.038,
+      "uplinkRatio": 0.311,
+      "uplinkRatioWholeRun": 0.118,
+      "uplinkSaturated": false,
+      "honesty": [
+        "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 stages[].users(도착률 환산)로 적는다.",
+        "T3 통과는 T3 단계 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화를 모두 만족할 때만 쓴다."
+      ]
+    }
+  },
+  "prometheus": {
+    "url": "http://127.0.0.1:9090",
+    "env": "loadtest",
+    "step": 15.0,
+    "from": "2026-11-18T03:39:09+00:00",
+    "to": "2026-11-18T04:55:12+00:00",
+    "queries": [
+      {
+        "name": "http_p95_by_uri",
+        "query": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p95_by_uri.csv",
+        "series": 6,
+        "points": 1808
+      },
+      {
+        "name": "http_p99_by_uri",
+        "query": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p99_by_uri.csv",
+        "series": 6,
+        "points": 1808
+      },
+      {
+        "name": "http_rps_by_uri",
+        "query": "sum by (uri) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_uri.csv",
+        "series": 6,
+        "points": 1808
+      },
+      {
+        "name": "http_rps_by_status",
+        "query": "sum by (status) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_status.csv",
+        "series": 3,
+        "points": 915
+      },
+      {
+        "name": "http_5xx_ratio",
+        "query": "sum(rate(http_server_requests_seconds_count{env=\"loadtest\",status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m])), 1e-9)",
+        "file": "prometheus/http_5xx_ratio.csv",
+        "series": 0,
+        "points": 0
+      },
+      {
+        "name": "jobs_queue",
+        "query": "sum by (state) (beside_jobs_queue{env=\"loadtest\"})",
+        "file": "prometheus/jobs_queue.csv",
+        "series": 2,
+        "points": 610
+      },
+      {
+        "name": "jobs_finished_rate",
+        "query": "sum by (result, code) (rate(beside_jobs_finished_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jobs_finished_rate.csv",
+        "series": 2,
+        "points": 588
+      },
+      {
+        "name": "asset_downloads_rate",
+        "query": "sum by (outcome) (rate(beside_asset_downloads_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/asset_downloads_rate.csv",
+        "series": 5,
+        "points": 1525
+      },
+      {
+        "name": "process_cpu",
+        "query": "process_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/process_cpu.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "system_cpu",
+        "query": "system_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/system_cpu.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "jvm_heap_used",
+        "query": "sum(jvm_memory_used_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_used.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "jvm_heap_max",
+        "query": "sum(jvm_memory_max_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_max.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "jvm_heap_after_gc",
+        "query": "max(jvm_memory_usage_after_gc_percent{env=\"loadtest\",area=\"heap\",pool=\"long-lived\"})",
+        "file": "prometheus/jvm_heap_after_gc.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "jvm_gc_pause_rate",
+        "query": "sum(rate(jvm_gc_pause_seconds_sum{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jvm_gc_pause_rate.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "tomcat_busy",
+        "query": "tomcat_threads_busy_threads{env=\"loadtest\"}",
+        "file": "prometheus/tomcat_busy.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "hikari_pending",
+        "query": "hikaricp_connections_pending{env=\"loadtest\"}",
+        "file": "prometheus/hikari_pending.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "process_open_files",
+        "query": "process_files_open_files{env=\"loadtest\"}",
+        "file": "prometheus/process_open_files.csv",
+        "series": 1,
+        "points": 305
+      },
+      {
+        "name": "disk_free",
+        "query": "disk_free_bytes{env=\"loadtest\"}",
+        "file": "prometheus/disk_free.csv",
+        "series": 1,
+        "points": 305
+      }
+    ]
+  },
+  "attachments": [
+    {
+      "name": "events.jsonl",
+      "bytes": 4448294,
+      "sha256": "14f9e2bf7a40083168d1c8555bc2b186003e3bb837fc2460ae398baceebba64a",
+      "file": "attachments/events.jsonl"
+    },
+    {
+      "name": "docker-stats-end.jsonl",
+      "bytes": 1030,
+      "sha256": "e083a5ea0ace25f7d33bfbad26236b651add41bee6978f353063fb00ce91fc05",
+      "file": "attachments/docker-stats-end.jsonl"
+    },
+    {
+      "name": "df.txt",
+      "bytes": 89,
+      "sha256": "9b010e7cfeaf7ce6862552d7a7e2b71846d0f305dcac723de2a10e5a9e2f8f2d",
+      "file": "attachments/df.txt"
+    },
+    {
+      "name": "commit.txt",
+      "bytes": 41,
+      "sha256": "d6bc819d5a3d3e8abaf142125c34628a0b9e0aa783bbde9d0b196c5c062ce54c",
+      "file": "attachments/commit.txt"
+    },
+    {
+      "name": "glb.sha256",
+      "bytes": 93,
+      "sha256": "ab426e266dcb44a62e9326d06147606d413a1d7a0711697236b346ed0d19c07a",
+      "file": "attachments/glb.sha256"
+    },
+    {
+      "name": "prom-up.json",
+      "bytes": 274,
+      "sha256": "abde35439372ab0eb33fc813c3f9f42bd3bd6aff3d057d9a58ab59384aa9ed73",
+      "file": "attachments/prom-up.json"
+    }
+  ],
+  "note": "client: Runpod CPU pod 2026-11-18 (cpu3g 8 vCPU 32 GB, US-CA-2); pod CPU max 34% of 8 vCPU; k6 RSS max 6662 MB",
+  "honesty": [
+    "mock 결과는 '생성을 뺀 API 처리량', 스텁 결과는 '큐 동작 검증(생성 시간은 가정 T)'이다.",
+    "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 k6.meta.stages[].users(도착률 환산)로 적는다.",
+    "'API 계층이 T3 를 통과했다'는 T3 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화일 때만 쓴다.",
+    "resultCandidate 가 false 인 실행(로컬, 용량과 무관하게 중단된 실행, 끝난 방식을 모르는 요약)은 [실험 결과] 로 인용하지 않는다.",
+    "오류 기준으로 멈춘 실행(outcome.ended = ruleStop)은 후보지만, 그 시각에 서버 재시작·재배포·네트워크 끊김이 없었을 때만 용량 한계로 쓴다.",
+    "GC 뒤 힙 < 75 % 는 prometheus/jvm_heap_after_gc.csv(0~1)로 본다. jvm_heap_used/max 는 Eden 을 포함한 순간값이다."
+  ],
+  "collectedAt": "2026-11-18T06:29:12+00:00"
+}

@@ -1,14 +1,14 @@
 # deploy/loadtest — 배포 VM 부하 시험 절차
 
-배포 VM(2 vCPU · 4GB)에서 k6 로 부하를 거는 동안 운영 backend 를 부하용 backend 로 바꿔 끼우고, 끝나면 운영으로 되돌리는 절차다. 목표 트래픽(T1/T2/T3)·합격 기준·시험 목록은 [docs/perf/load/TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md), k6 스크립트와 수집 스크립트는 [scripts/load/](../../scripts/load/) 에 있다.
+배포 VM(GCP e2-standard-2: 2 vCPU · 8 GB · 디스크 48 GB, 2026-11-13 부터. 이 문서를 처음 쓸 때는 2 vCPU · 4 GB · 30 GB 를 가정했고, 아래 디스크 계산은 그 가정과 지금 값을 함께 적는다)에서 k6 로 부하를 거는 동안 운영 backend 를 부하용 backend 로 바꿔 끼우고, 끝나면 운영으로 되돌리는 절차다. 목표 트래픽(T1/T2/T3)·합격 기준·시험 목록은 [docs/perf/load/TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md), k6 스크립트와 수집 스크립트는 [scripts/load/](../../scripts/load/) 에 있다.
 
 ## 상태
 
 | 항목 | 상태 |
 |---|---|
 | [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI 가 확인하도록 넣었지만 아직 돌지 않았다(이 PC 에 Docker 없음) |
-| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. VM·Caddy·실제 Prometheus·컨테이너 안 경로(5번의 F3 남은 파일 확인)·GPU 실행은 **[계획]** |
-| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | **[계획]** — VM 에서 한 번도 실행하지 않았다. 실행한 뒤 이 표와 결과 문서에 날짜·커밋을 적는다. 그중 합성 GLB 생성 명령(3번, 스텁 PC 용 포함)과 H2 Shell 조회 명령(6번)만 개발 PC 에서 따로 돌려 확인했다(각 절에 적음) |
+| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·G·F·A3 large·A5·A6 은 **[계획]** |
+| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | 1~7번을 2026-11-18 main `b6c0e6c` 의 VM 에서 처음 실행했다(A 시리즈, 02:54~06:3x UTC). 운영 H2 sha256 이 백업 때와 같았고 6번 (2) 의 H2 Shell 조회가 VM 컨테이너에서 `LT_JOBS = 0` 을 냈다. 공개 경로 시험 61개(Caddy 404·401 규칙을 공개 주소로 확인하는 세션 스크립트) 통과. 이 셋의 원본 출력은 리포에 없다(백업·해시는 VM 과 개발 PC). 이번에 달리 한 것: k6 를 개발 PC 가 아니라 Runpod CPU Pod 에서 돌려 가드(`PROM_URL`)를 쓰지 않았고, Grafana 는 띄우지 않았다. G 시리즈(스텁)·F 시리즈 절차는 **[계획]** |
 
 ## 지키는 것
 
@@ -22,7 +22,7 @@
 
 ## 덮어쓰기가 바꾸는 것
 
-backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·grafana·이미지(`beside-backend:local`)·`mem_limit 3g`·관리 포트 8081 은 그대로다. 같은 프로젝트(`beside`)의 같은 서비스라 `up -d backend` 는 운영 backend 컨테이너를 **대신**한다(4GB 에 backend 두 개는 못 띄운다). 값은 compose 명령 앞의 셸 환경변수로 바꾼다(`deploy/.env` 보다 우선).
+backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·grafana·이미지(`beside-backend:local`)·`mem_limit 3g`·관리 포트 8081 은 그대로다. 같은 프로젝트(`beside`)의 같은 서비스라 `up -d backend` 는 운영 backend 컨테이너를 **대신**한다(처음 가정한 4 GB 에는 backend 두 개가 들어가지 않았고, 8 GB 인 지금도 2 vCPU 를 운영과 나눠 쓰면 측정이 섞인다). 값은 compose 명령 앞의 셸 환경변수로 바꾼다(`deploy/.env` 보다 우선).
 
 | 셸에서 바꾸는 이름 | 컨테이너 환경변수 → Spring 속성 | 기본값 | 이유 |
 |---|---|---|---|
@@ -123,7 +123,7 @@ k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RUN_ID -e RTT_BASE_MS=<A0 의 
 1. **팀 공지**(Discord 등): 시작 시각·예상 길이, "그동안 앱·웹으로 만든 작업은 처리되지 않는다(운영 backend 를 내린다), 시작 시점에 진행 중인 작업은 FAILED 가 되니 재시도", 담당자.
 2. 개발 PC: k6 설치(`k6 version` 기록 → `collect.py --k6-version`), 유선 연결, 업링크 측정(iperf3 또는 speedtest 결과 기록. A4 는 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생] 의 내려받기라 `iperf3 -R` 로 내려받기 속도도 재어 `collect.py --downlink-mbps` 로 남긴다). 그 시간에 다른 측정·빌드가 없게 한다. 개발 PC 에는 winget 패키지 `GrafanaLabs.k6` 로 설치한 k6 v2.3.0 이 `C:\Program Files\k6\k6.exe` 에 있다(다시 설치할 때는 `winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget` 으로 확인한 버전에 고정한다. 설치하면 시스템 PATH 에 들어가지만 설치 전에 연 셸에는 없다 — 그러면 새 셸을 열거나 Git Bash 에서 `export PATH="$PATH:/c/Program Files/k6"` 로 넣고 `k6 version` 이 `k6.exe v2.3.0 (...)` 인지 본다). 리포 루트에서 `python scripts/load/make_fixtures.py` 로 사진·GLB 를 `scripts/load/out/fixtures/` 에 만든다(git 에 없어 새로 받은 리포에는 없다. 없으면 k6 는 init 에서 종료 코드 107, `f3_throttled.py` 는 2). 스크립트는 v2.3.0 으로만 돌려 봤고 끝난 방식의 판정도 그 버전의 `handleSummary` 데이터에 맞췄으므로, 다른 버전이면 먼저 로컬 smoke 로 확인한다([scripts/load/README.md](../../scripts/load/README.md) '로컬 smoke').
 3. 개발 PC(부하 PC) 메모리 여유: k6 는 VU 마다 init 을 따로 돌려 사진을 VU 마다 한 벌씩 갖는다. 초기화된 VU 하나에 약 1.1 MB(0.4 MB 사진 사본 포함 — 개발 PC·k6 v2.3.0 로컬 측정: `PRE_VUS`=`MAX_VUS` 20 과 300 으로 A1 을 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`) 돌린 두 실행의 최대 작업 집합 84 MB·393 MB 의 차이)이고, 흐름을 돈 VU 는 본문 0.8 MB(실패 주입 흐름을 돌았으면 실패 본문 0.8 MB 더)를 더 갖는다. [파생] A1 은 처음에 `PRE_VUS` 450개만 만들고 흐름이 길어지면 `MAX_VUS` 기본 3,300개(browse 200개 따로)까지 늘리므로, 다 생기면 초기화만으로 약 3.6 GB 이고, 흐름을 돈 VU 마다 본문 0.8 MB(3,300개면 약 2.6 GB)가 더해져 약 6.3 GB, 실패 본문까지 들면 약 8.9 GB 에 browse 약 0.2 GB 다. A3 large(`upload.js SIZE=large`)는 VU 하나가 5 MB 사진 사본과 첫 업로드 때 만드는 20 MB 본문을 들어 약 25 MB 라, 미리 만드는 50개(`meta.vus.peakPreAllocated`)가 모두 업로드하면 약 1.25 GB, k6 가 VU 를 더 띄우면(`MAX_VUS` 기본 600 까지 — 그 단계는 drop 으로 `fail`) VU 하나마다 약 25 MB 가 더 들어 600개 모두면 약 15 GB 다. 모두 측정값이 아니다. 개발 PC 의 여유 메모리가 이 최악의 경우(A1 약 9 GB, A3 large 약 15 GB)보다 적으면 실행 중 k6 메모리(4번 '시험 중에 볼 것')를 본다. A3 large 는 `-e MAX_VUS=<50 이상>` 으로 상한을 낮출 수 있다: 미리 만든 VU 밖의 VU 는 drop 이 난 단계에서만 생기고 그 단계는 어차피 `fail` 이다(낮추면 그 단계의 drop 이 는다. `upload.js` 머리 주석).
-4. VM: `df -h /` 사용률이 50 % 아래인지(업로드가 쌓인다 — T3 피크면 시간당 수 GB. 30 GB 디스크면 중단선 80 %까지 약 9 GB 이상 남아야 하고, 4절 '디스크' 의 비우기 지점은 이 여유로 정했다), swap 2GB, monitoring 프로필이 떠 있는지([deploy/README.md](../README.md) '모니터링').
+4. VM: `df -h /` 사용률이 50 % 아래인지(업로드가 쌓인다 — T3 피크면 시간당 수 GB. 처음 가정한 30 GB 디스크면 중단선 80 %까지 약 9 GB 이상 남아야 하고, 4절 '디스크' 의 비우기 지점은 이 여유로 정했다. 지금 48 GB 디스크는 2026-11-18 시작 때 사용률 22 %(약 11 GB)라 중단선까지 약 27 GB 가 남았다), swap 2GB, monitoring 프로필이 떠 있는지([deploy/README.md](../README.md) '모니터링').
 5. 기록할 조건: VM 사양, 커밋 SHA(`git -C ~/Beside rev-parse --short HEAD`), k6 버전, 업링크, 사진 크기, 시각.
 
 ## 1. 운영 백업 (운영 backend 를 멈춘 채)
@@ -268,8 +268,8 @@ wait $F3T; echo "f3_throttled exit $?"
 | 7 | G1 (ρ 4개, 594건) · G2 (c 3개, 882건) | 약 1.4 + 2.0 GB (작업당 2.3 MB) | 약 3.4 GB |
 | 8 | F1a·F1b(+ 뒤의 G1)·F2(스텁), F3·F4(mock) | 약 1 GB | 약 4.4 GB |
 
-- **실행마다 먼저 본다**: `df -h /` 의 사용량 + 그 실행의 예상 업로드가 23 GB(30 GB 의 80 % − 1 GB, 로그·H2·`events.jsonl` 몫)를 넘으면 표와 상관없이 먼저 비운다. 예를 들어 A1 + A2(약 8.3 GB)를 잇달아 돌리려면 세션 시작 사용률이 약 49 % 이하여야 한다. 아니면 A2 앞에서도 비운다(A2 는 시드 실행이 자기 작업을 만들므로 빈 볼륨에서도 돈다. 비우기는 COMPLETED 시드 전에 한다).
-- **반복 사이에도 비운다.** 주요 단계를 3회 반복할 때(TRAFFIC_MODEL §9) A1 은 한 번에 약 6.7 GB 라 두 번이면 남은 여유를 넘는다.
+- **실행마다 먼저 본다**: `df -h /` 의 사용량 + 그 실행의 예상 업로드가 23 GB(30 GB 의 80 % − 1 GB, 로그·H2·`events.jsonl` 몫. 지금 48 GB 디스크면 약 37 GB)를 넘으면 표와 상관없이 먼저 비운다. 예를 들어 30 GB 디스크에서 A1 + A2(약 8.3 GB)를 잇달아 돌리려면 세션 시작 사용률이 약 49 % 이하여야 한다(48 GB 면 약 60 % 이하. 2026-11-18 에는 A1 뒤 비우지 않고 A2 를 돌려 최대 약 38 % 였다). 아니면 A2 앞에서도 비운다(A2 는 시드 실행이 자기 작업을 만들므로 빈 볼륨에서도 돈다. 비우기는 COMPLETED 시드 전에 한다).
+- **반복 사이에도 비운다.** 주요 단계를 3회 반복할 때(TRAFFIC_MODEL §9) A1 은 한 번에 약 6.7 GB 라 30 GB 디스크에서는 두 번이면 남은 여유를 넘는다(48 GB 면 시작 사용률에 따라 들어간다).
 - A2 의 `IDS_FILE`(시드 실행이 만든 작업 ID)은 그 볼륨에서만 유효하다. 시드를 만든 뒤 A2 를 끝낼 때까지는 비우지 않는다(비우면 모든 폴링이 404 다). backend 재시작도 PENDING 쪽 id 를 못 쓰게 만든다(FAILED 로 닫힌다): PENDING 시드부터 A2 가 끝날 때까지 `$L up -d backend` 를 하지 않는다. 어기면 A2 setup 이 표본 id 의 상태를 보고 시작을 거부한다(종료 코드 107).
 
 비우는 방법(VM, k6 가 돌지 않을 때):
@@ -371,7 +371,7 @@ $C up -d backend
 $C ps                                      # backend healthy
 ```
 
-- (2) 의 명령은 이미지 안의 Spring Boot 실행 jar 에서 H2 의 `org.h2.tools.Shell` 을 꺼내 쓰는 방법이다(Spring Boot 3.2 의 `PropertiesLauncher` 는 jar 안 `BOOT-INF/lib` 를 클래스패스에 넣는다). 개발 PC 에서 같은 커밋의 bootJar 로 임시 H2 파일 DB(`lt-` 사진이 든 작업 2건 + 아닌 것 1건)를 만들어 같은 `-url ...;ACCESS_MODE_DATA=r`·`-sql` 로 돌려 `LT_JOBS = 2` 를 확인했다(2026-11-01, Windows·JDK 17). **VM 의 컨테이너·운영 DB 에서는 아직 [계획]**. 안 되면 대신 운영 backend 를 띄운 뒤 목록 API 로 최근 작업을 본다: `curl -fsS -u 'team:팀 비밀번호' "$D/api/v1/jobs?limit=100" | grep -c '"name":"lt-'` 가 0(응답의 `nextCursor` 로 다음 쪽).
+- (2) 의 명령은 이미지 안의 Spring Boot 실행 jar 에서 H2 의 `org.h2.tools.Shell` 을 꺼내 쓰는 방법이다(Spring Boot 3.2 의 `PropertiesLauncher` 는 jar 안 `BOOT-INF/lib` 를 클래스패스에 넣는다). 개발 PC 에서 같은 커밋의 bootJar 로 임시 H2 파일 DB(`lt-` 사진이 든 작업 2건 + 아닌 것 1건)를 만들어 같은 `-url ...;ACCESS_MODE_DATA=r`·`-sql` 로 돌려 `LT_JOBS = 2` 를 확인했다(2026-11-01, Windows·JDK 17). VM 의 컨테이너·운영 DB 에서도 2026-11-18 에 같은 명령으로 확인했다(백업 직후와 복구 직전 모두 `LT_JOBS = 0`, 조회 앞뒤 sha256 같음. 출력은 리포에 남기지 않았다). 안 되면 대신 운영 backend 를 띄운 뒤 목록 API 로 최근 작업을 본다: `curl -fsS -u 'team:팀 비밀번호' "$D/api/v1/jobs?limit=100" | grep -c '"name":"lt-'` 가 0(응답의 `nextCursor` 로 다음 쪽).
 - `uploads` 열은 사진 목록 JSON(`[{"name":"lt-...","bytes":...,"path":...}]`)이라 LIKE 로 파일명을 찾는다.
 
 ## 7. 확인 (복구 뒤)

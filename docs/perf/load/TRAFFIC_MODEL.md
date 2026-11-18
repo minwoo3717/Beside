@@ -6,16 +6,16 @@
 - **[가정]** 우리가 정한 비율·크기. 바꿀 수 있다.
 - **[파생]** [가정]과 공식으로 계산한 값. 가정이 바뀌면 다시 계산한다.
 - **[제안값]** 계약 회의에서 정하기 전의 합격 기준·상한.
-- **[계획]** 아직 하지 않은 시험. **이 문서에는 부하 시험 측정값이 하나도 없다.** 루프백 벤치마크를 인용하는 곳만 [실험 결과]로 적는다.
+- **[계획]** 아직 하지 않은 시험. **이 문서의 공식과 [파생] 표에는 부하 시험 측정값이 없다**(측정은 결과 문서 [2026-11-18_vm-1st.md](2026-11-18_vm-1st.md) 에 있고, 여기에는 요약과 9절 표의 상태 열만 적는다). 루프백 벤치마크를 인용하는 곳만 [실험 결과]로 적는다.
 
 - 같은 숫자는 `python scripts/load/model.py` 로 다시 만든다(같은 브랜치의 부하 스크립트 조각, [scripts/load/](../../../scripts/load/)). 이 문서와 출력이 다르면 공식과 가정을 다시 확인해 둘을 맞춘다.
 - **작업 1건의 생성 시간 T 는 아직 재지 않았다.** exp-01(3D 담당, GPU PC)이 없어 T 를 30·60·120·300초로 바꿔 가며 계산하고, 표의 기본값은 60초다. exp-01 이 나오면 그 T 로 이 문서의 표를 모두 다시 계산한다(12절).
 
 ## 요약
 
-발표 한 문장: "API 계층은 쏘카 규모(T3) 요청률로 **측정**했다. 생성은 GPU 1대가 시간당 3600/T건이라 T3에는 N대가 필요하다(**계산**). 우리는 1대이므로 넘치는 요청을 큐 상한으로 즉시 거절한다(**측정**)." — 지금은 세 부분 모두 [계획]이다.
+발표 한 문장: "API 계층은 쏘카 규모(T3) 요청률로 **측정**했다. 생성은 GPU 1대가 시간당 3600/T건이라 T3에는 N대가 필요하다(**계산**). 우리는 1대이므로 넘치는 요청을 큐 상한으로 즉시 거절한다(**측정**)." — API 계층의 1차 측정은 2026-11-18 에 했다([2026-11-18_vm-1st.md](2026-11-18_vm-1st.md), mock 워커·미국 서부 부하 발생기라 조건이 붙는다). 나머지 둘은 [계획]이다.
 
-- **API 계층**: T3 평상시 약 37 RPS, 최악(스파이크 + GPU 포화) 약 920 RPS 를 VM 에서 버텨야 한다 [파생]. A 시리즈로 잰다 [계획].
+- **API 계층**: T3 평상시 약 37 RPS, 최악(스파이크 + GPU 포화) 약 920 RPS 를 VM 에서 버텨야 한다 [파생]. A 시리즈로 잰다. 1차(2026-11-18, A0~A4, mock·미국 서부 부하 발생기): 혼합 흐름 185 RPS(9,000명) 8분 5xx 0, 폴링은 규칙상 통과 300 RPS·900 RPS 는 지연 기준 안이지만 VM CPU 85.8 %·1,200 RPS 붕괴, VM CPU 를 가장 많이 쓴 것은 Caddy [실험 결과]([vm-1st](2026-11-18_vm-1st.md)).
 - **GPU 계층**: GPU 1대는 시간당 3600/T건이다. T2부터 1대로는 모자라고(T ≤ 21초여야 함), T3는 T=60초면 86대가 필요하다 [파생]. 우리는 1대이므로 큐 상한으로 즉시 거절하고(안건 #21), G 시리즈로 큐 이론을 검증한다 [계획].
 - **디스크**: T2(하루 2.3 GB)에서도 VM 디스크가 찬다: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) [파생]. 보존 정책이 필요하다(안건 #23).
 
@@ -115,7 +115,7 @@ T3 평상시(T=60, c=86) 37 RPS 의 내역:
 
 - API 계층(Spring + H2 + Caddy)은 생성 시간과 상관없이 요청 수만 감당하면 된다. 평상시 37 RPS 는 작지만, GPU 가 포화되면 기다리는 모든 앱이 폴링하므로 307 RPS, 스파이크까지 겹치면 921 RPS 로 뛴다. **GPU 가 모자랄수록 API 부하가 커진다.**
 - 그래서 큐 상한은 GPU 와 함께 API 도 보호한다. 상한이 있으면 L ≤ c + Q_max 라서 폴링 ≤ (c + Q_max)/2 다. c=1, Q_max=9 이면 5 RPS 수준이다(거절된 사용자가 Retry-After 를 지킨다고 볼 때).
-- 참고 [실험 결과]: 개발 PC 루프백(127.0.0.1, 서버를 논리 CPU 2개에 고정, TLS·프록시 없음)에서 현재 버전(v1)의 COMPLETED 작업 폴링 처리량은 3회 1,744~1,834 req/s, 중앙값 1,792 req/s 다(2026-11-01, `docs/perf/data/2026-11-01_1257`, `bench.pollReqPerSec`). 921 RPS 의 약 두 배지만 VM(2 vCPU·4 GB) + Caddy TLS + 인터넷 경로에서는 다를 수 있으므로 VM 에서 다시 잰다(A2). 이 값을 VM 용량으로 인용하지 않는다.
+- 참고 [실험 결과]: 개발 PC 루프백(127.0.0.1, 서버를 논리 CPU 2개에 고정, TLS·프록시 없음)에서 현재 버전(v1)의 COMPLETED 작업 폴링 처리량은 3회 1,744~1,834 req/s, 중앙값 1,792 req/s 다(2026-11-01, `docs/perf/data/2026-11-01_1257`, `bench.pollReqPerSec`). 921 RPS 의 약 두 배지만 VM(2 vCPU, 처음 가정 4 GB·실제 8 GB) + Caddy TLS + 인터넷 경로에서는 다를 수 있으므로 VM 에서 다시 잰다(A2). 이 값을 VM 용량으로 인용하지 않는다.
 
 ## 7. 디스크
 
@@ -148,24 +148,24 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 - **깨지는 지점**: 유지 구간에서 위 기준을 처음 넘는 단계다. 아래 중단 조건의 오류 기준(k6 누적 오류 비율, 가드의 5xx 비율)이 멈춘 단계도 깨진 단계로 친다. 통과는 유지 구간을 끝까지 돌고 그 구간에 시작한 흐름이 모두 끝난 단계뿐이다. 보고하는 용량은 마지막으로 통과한 단계다(요약의 `breakingPoint.lastPassingStage`). 단계가 올라가기만 하는 시험(A1~A4)에 쓰고, 운영 상한(그 단계 사용자 수의 70 %, `operatingLimitUsers`)은 사용자 수로 단계를 거는 A1 에만 둔다. A5(스파이크·회복)와 A6(소크 한 단계)는 깨지는 지점 없이 단계별 판정만 본다.
 - **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 멈춘다. k6 가 스스로 멈춘다: 누적 오류 비율 > 5 %(첫 1분 뒤부터, `abortOnFail`, k6 종료 코드 99)와, `PROM_URL` 을 주면 가드가 보는 서버의 최근 1분 5xx 비율 > 5 %(15초 간격 2번 연속)·디스크 > 80 %(108). A0(`smoke.js`)·F3(`f3_uploads.js`)·F4(`f4_abort.py`)에는 이 둘이 없어 사람이 Ctrl+C 한다. 단계를 깨질 때까지 올리는 A1~A4 에서 오류 기준(누적 오류 비율, 가드의 5xx 비율)이 멈춘 것은 탐색의 예정된 끝이다(위 '깨지는 지점'): 부하가 멈춘 뒤 healthz 가 200 이고 5xx 비율이 0 으로 돌아오면 수집하고 다음 실행으로 간다. 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 %이면, 그리고 그 밖의 시험(A0·A5·A6·G·F)은 그 자리에서 멈추고 기본 스택으로 복구한다(`deploy/loadtest/README.md` '지키는 것').
 
-## 9. 시험 구성 [계획]
+## 9. 시험 구성 (상태는 행마다)
 
-보고용 수치는 배포 VM(2 vCPU·4 GB·30 GB)에서 잰다. 이 PC 에는 Docker 가 없고 k6 는 v2.3.0 만 있다(winget `GrafanaLabs.k6`, `C:\Program Files\k6\k6.exe`, 시스템 PATH). 이 PC 의 k6 실행(루프백의 로컬 mock jar, 대역 스텁·Prometheus, 줄인 단계)은 스크립트가 동작하는지만 본 것이며 결과로 쓰지 않는다.
+보고용 수치는 배포 VM 에서 잰다. 처음에는 2 vCPU·4 GB·30 GB 를 가정했고, 실제 VM 은 GCP e2-standard-2(2 vCPU·8 GB·48 GB, 서울, 2026-11-13)다. 이 PC 에는 Docker 가 없고 k6 는 v2.3.0 만 있다(winget `GrafanaLabs.k6`, `C:\Program Files\k6\k6.exe`, 시스템 PATH). 이 PC 의 k6 실행(루프백의 로컬 mock jar, 대역 스텁·Prometheus, 줄인 단계)은 스크립트가 동작하는지만 본 것이며 결과로 쓰지 않는다.
 
-- **격리**: `deploy/docker-compose.loadtest.yml` 덮어쓰기 파일로 backend 서비스만 바꾼다(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `METRICS_ENV=loadtest`). Caddy 와 `caddy_data`(인증서)는 그대로 둔다. 4 GB 에 backend 두 개는 못 띄우므로 시험 시간에는 운영 backend 를 내린다(팀 공지, 전후 H2 백업 복사, 끝나면 healthz 와 Caddy 경로 확인). 절차는 `deploy/loadtest/README.md`(같은 브랜치의 다른 조각).
+- **격리**: `deploy/docker-compose.loadtest.yml` 덮어쓰기 파일로 backend 서비스만 바꾼다(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `METRICS_ENV=loadtest`). Caddy 와 `caddy_data`(인증서)는 그대로 둔다. 처음 가정한 4 GB 에는 backend 두 개가 들어가지 않았고 8 GB 인 지금도 2 vCPU 를 나눠 쓰면 측정이 섞이므로, 시험 시간에는 운영 backend 를 내린다(팀 공지, 전후 H2 백업 복사, 끝나면 healthz 와 Caddy 경로 확인). 절차는 `deploy/loadtest/README.md`(같은 브랜치의 다른 조각).
 - **A 시리즈(API 계층)**: `mock,prod`, PENDING 0초·PROCESSING 60초, @Async 풀 400. 기본 풀은 8스레드라 늘리지 않으면 mock 이 "GPU 8대"처럼 동작한다. 합성 GLB 1.5 MB 를 볼륨에 미리 넣는다(리포의 `sample-dog.glb` 는 0 B). 합성 GLB 는 하나다: `scripts/perf/fixtures.py` 의 `glb_synthetic(1_500_000, seed=14)`, sha256 `03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9`. G 시리즈 스텁의 `BESIDE_SAMPLE_GLB` 도 같은 파일을 스텁 PC 에서 만들어 쓴다.
 - **G 시리즈(GPU 큐)**: `real,prod` + 추론 스텁(패스스루, 업로드 모드, Tailscale). 스텁의 `BESIDE_PASSTHROUGH_DELAY_MS`·`_JITTER_MS`·`_SLOTS`·`_FAIL_RATE`·`_FAIL_TOKEN`·`_SLOW_TOKEN`/`_SLOW_MS` 로 생성 시간·실패·GPU 수를 흉내 낸다. 실제 GPU PC 는 쓰지 않는다.
 - k6 시나리오는 공개 경로만 쓴다(Basic 인증 경로 제외). 파일명은 `lt-<runId>-` 로 시작하고 `Idempotency-Key` 를 붙인다.
-- 부하는 개발 PC 에서 유선으로 건다. 측정 전에 업링크(iperf3/speedtest, `UPLINK_MBPS`)와 k6 클라이언트 CPU 를 기록하고, 요약의 `verdict.uplinkRatio`(가장 바쁜 유지 구간의 업로드 본문 Mbps 와 전체 평균 `data_sent` Mbps 중 큰 값 ÷ 업링크)가 0.7 을 넘으면(`uplinkSaturated`) 같은 리전의 두 번째 VM 으로 옮긴다. A4 는 내려받기라 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생]: 내려받기 속도(`iperf3 -R`)도 기록하고(`collect.py --downlink-mbps`) 단계의 `verdict.stages[].assetMbps` 와 비교한다. 요약은 업링크만 판정한다. `scripts/perf` 등 다른 측정과 겹치지 않게 한다.
+- 부하 발생기: 처음 계획은 개발 PC 유선이었다. 2026-11-18 1차 측정은 개발 PC 대신 **Runpod CPU Pod**(cpu3g 8 vCPU·32 GB, US-CA-2, 서울 VM 까지 TCP 연결 약 153 ms)에서 k6 를 돌렸다. 개발 PC 는 그날 새 TCP 연결 300개 중 3개(1 %, Windows curl)가 응답을 못 받았고(WSL 시험은 파일이 없어 인용하지 않는다) VM 안에서는 0/300, Pod 는 같은 시험에서 0/300 이었다. 또 개발 PC 에서 시작한 A0·A1 은 게임이 함께 돌아 버렸다(기록은 [2026-11-18_vm-1st.md](2026-11-18_vm-1st.md)). Pod 에서는 VM 루프백의 Prometheus 에 닿지 않아 k6 가드(`PROM_URL`)를 쓰지 않았고, 중단은 k6 의 오류 기준(abortOnFail)과 사람이 본 디스크로 했다. 측정 전에 업링크(iperf3/speedtest, `UPLINK_MBPS`)와 k6 클라이언트 CPU 를 기록하고, 요약의 `verdict.uplinkRatio`(가장 바쁜 유지 구간의 업로드 본문 Mbps 와 전체 평균 `data_sent` Mbps 중 큰 값 ÷ 업링크)가 0.7 을 넘으면(`uplinkSaturated`) 같은 리전의 두 번째 VM 으로 옮긴다. A4 는 내려받기라 최고 단계가 40/s × 1.5 MB ≈ 480 Mbps [파생]: 내려받기 속도(`iperf3 -R`)도 기록하고(`collect.py --downlink-mbps`) 단계의 `verdict.stages[].assetMbps` 와 비교한다. 요약은 업링크만 판정한다. `scripts/perf` 등 다른 측정과 겹치지 않게 한다.
 - 주요 단계는 3회 반복한다. 판정 규칙은 [scripts/perf/stats.py](../../../scripts/perf/stats.py) 와 같다.
 
 | 시험 | 내용 | 단계 | 상태 |
 |---|---|---|---|
-| A0 | 연기 시험, RTT_base | 3분 | [계획] |
-| A1 | 혼합 흐름(healthz → POST → 2초 폴링 → asset, 실패 시 retry), `ramping-arrival-rate` | 동시 25(T2) → 200 → 1,000 → **1,800(T3)** → 3,600 → 5,400 → … 깨질 때까지. 단계마다 증가 1분 + 유지 8분 | [계획] |
-| A2 | 폴링 포화(COMPLETED·PENDING 작업 각 1,000건 미리 생성). mock 은 COMPLETED 를 PENDING 0초에서, PENDING 을 긴 PENDING 시간에서만 만들고 backend 재시작은 PENDING 을 모두 FAILED 로 닫으므로, 시드만 하는 실행 두 번(`SEED_ONLY=1`: COMPLETED 를 만든 뒤 긴 `MOCK_WORKER_PENDINGMS` 로 한 번만 재시작하고 PENDING 을 만든다) 뒤 재시작 없이 바로 잰다 | 100 → **300** → 600 → **900** → 1,200 → 1,800 RPS, 각 5분 | [계획] |
-| A3 | 업로드 | 0.8 MB 를 1 → 20/s, 20 MB 를 0.5 → 2/s | [계획] |
-| A4 | 에셋 송신 상한 | 1 → 40/s | [계획] |
+| A0 | 연기 시험, RTT_base | 3분 | 1차 2026-11-18 [실험 결과] |
+| A1 | 혼합 흐름(healthz → POST → 2초 폴링 → asset, 실패 시 retry), `ramping-arrival-rate` | 동시 25(T2) → 200 → 1,000 → **1,800(T3)** → 3,600 → 5,400 → … 깨질 때까지. 단계마다 증가 1분 + 유지 8분 | 1차 2026-11-18(9,000명까지, drop 12 로 통과 단계·깨지는 지점 없음) [실험 결과] |
+| A2 | 폴링 포화(COMPLETED·PENDING 작업 각 1,000건 미리 생성). mock 은 COMPLETED 를 PENDING 0초에서, PENDING 을 긴 PENDING 시간에서만 만들고 backend 재시작은 PENDING 을 모두 FAILED 로 닫으므로, 시드만 하는 실행 두 번(`SEED_ONLY=1`: COMPLETED 를 만든 뒤 긴 `MOCK_WORKER_PENDINGMS` 로 한 번만 재시작하고 PENDING 을 만든다) 뒤 재시작 없이 바로 잰다 | 100 → **300** → 600 → **900** → 1,200 → 1,800 RPS, 각 5분 | 1차 2026-11-18(통과 300, 900 유지, 1,200 붕괴) [실험 결과] |
+| A3 | 업로드 | 0.8 MB 를 1 → 20/s, 20 MB 를 0.5 → 2/s | small 1차 2026-11-18(20/s 통과) [실험 결과], large [계획] |
+| A4 | 에셋 송신 상한 | 1 → 40/s | 1차 2026-11-18 은 1 → 15/s 로 줄임(10/s 통과, 15/s 실패는 부하 발생기 경로 상한 탓으로 봄 [가설]) [실험 결과] |
 | A5 | 스파이크 | 동시 1,800 → 5,400 을 30초 만에, 10분 유지 후 10분 회복 | [계획] |
 | A6 | 소크 | T3 피크 2시간 | [계획] |
 | G1 | 큐 이론 검증(c=1, 스텁 T=10초, 포아송 도착) | ρ = 0.5 / 0.7 / 0.9 / 1.2. 측정한 `queuedMs` 를 예측과 비교한다. 예측은 실행 뒤 잰 도착률과 평균 슬롯 시간으로 다시 계산한다(아래 'G 시리즈의 도착과 예측'). 참고 값(포아송 도착, 슬롯 시간 = T_SEC 10초를 가정): Wq M/D/1 5 / 11.7 / 45초, M/M/1 10 / 23.3 / 90초, ρ=1.2 는 발산 | [계획] |
