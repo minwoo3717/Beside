@@ -1,0 +1,11 @@
+== beside load: gpu_queue.js (G2) run=g2c2a base=https://beside-team.duckdns.org
+requests 8347 (6.28/s), dropped_iterations 2, vus_max 25
+data sent 0.203 Mbps (whole-run average), received 1.528 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 155.688 ms
+thresholds: 3 failed
+  FAIL dropped_iterations count==0
+  FAIL http_req_duration{endpoint:asset} p(95)<3000
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+queue G2: 188 jobs created in 1200 s = 564/h (requested 517/h), 0 retries; mean slot (server processingMs) 12879 ms, mean queuedMs 73214 ms
+  recompute: python scripts/load/model.py --queue-rate-per-h 564 --queue-service-s 12.879 --queue-slots 2
+time="2026-11-18T17:48:40Z" level=error msg="thresholds on metrics 'dropped_iterations, http_req_duration{endpoint:asset}' have been crossed"

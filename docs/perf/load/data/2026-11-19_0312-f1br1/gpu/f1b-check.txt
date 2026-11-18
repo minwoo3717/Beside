@@ -1,0 +1,12 @@
+2026-11-18T18:12:16Z
+before F1b-real
+1281 MiB, 0 %
+2026-11-18T18:22:55Z
+after F1b-real (+15 s)
+1281 MiB, 0 %
+workdir entries: 3
+531a0da0-4624-45b5-a1d2-bd939a7a6332
+79428395-9f32-4a20-825d-b31344dbfae2
+db21bb34-2f05-486b-80fc-72b3b613bcda
+{"status":"ok","device":"cuda","modelLoaded":true,"passthrough":false}
+conversion crashed lines: 61

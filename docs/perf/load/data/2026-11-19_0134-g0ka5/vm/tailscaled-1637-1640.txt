@@ -1,0 +1,39 @@
+2026-11-18T16:38:11+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115288403315 cached=false via=derp
+2026-11-18T16:38:14+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=10s
+2026-11-18T16:38:16+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=12s
+2026-11-18T16:38:23+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=19s
+2026-11-18T16:38:30+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=26s
+2026-11-18T16:38:30+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115307662715 cached=false via=derp
+2026-11-18T16:38:32+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=2s
+2026-11-18T16:38:32+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115310095402 cached=false via=derp
+2026-11-18T16:38:34+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115312354635 cached=false via=derp
+2026-11-18T16:38:36+00:00 tailscaled[key]: netcheck: DetectCaptivePortal(found=false)
+2026-11-18T16:38:37+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=7s
+2026-11-18T16:38:38+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115316097060 cached=false via=derp
+2026-11-18T16:38:40+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115317463735 cached=false via=derp
+2026-11-18T16:38:44+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=14s
+2026-11-18T16:38:44+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115322098896 cached=false via=derp
+2026-11-18T16:38:45+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115322723452 cached=false via=derp
+2026-11-18T16:38:49+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=4s
+2026-11-18T16:38:50+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115327750704 cached=false via=derp
+2026-11-18T16:38:51+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=6s
+2026-11-18T16:38:52+00:00 tailscaled[key]: logtail: upload: log upload of 281 bytes compressed failed: Post "<url>": context deadline exceeded
+2026-11-18T16:38:55+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115333048992 cached=false via=derp
+2026-11-18T16:38:58+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=3s
+2026-11-18T16:39:00+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115338269973 cached=false via=derp
+2026-11-18T16:39:05+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=10s
+2026-11-18T16:39:06+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115343484947 cached=false via=derp
+2026-11-18T16:39:07+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=1s
+2026-11-18T16:39:11+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115348511004 cached=false via=derp
+2026-11-18T16:39:12+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=6s
+2026-11-18T16:39:15+00:00 tailscaled[key]: magicsock: [key] derp.Recv(derp-28): derp.Recv: read tcp4 <ip>-><ip>: read: connection reset by peer
+2026-11-18T16:39:15+00:00 tailscaled[key]: derphttp.Client.Recv: connecting to derp-28 (hel)
+2026-11-18T16:39:16+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115353606390 cached=false via=derp
+2026-11-18T16:39:18+00:00 tailscaled[key]: magicsock: derp-28 connected; connGen=2
+2026-11-18T16:39:19+00:00 tailscaled[key]: open-conn-track: timeout opening (TCP <ip> => <ip>) to node [key]; online=yes, lastRecv=3s
+2026-11-18T16:39:23+00:00 tailscaled[key]: magicsock: disco: node [key] d:<disco> now using <ip> mtu=1360 tx=d0a3537c6e47
+2026-11-18T16:39:23+00:00 tailscaled[key]: magicsock: new contact: peer=[key] usec=115360464509 cached=false via=direct
+2026-11-18T16:39:23+00:00 tailscaled[key]: Received error: PollNetMap: read tcp <ip>-><ip>: read: connection reset by peer
+2026-11-18T16:39:24+00:00 tailscaled[key]: control: controlhttp: forcing port 443 dial due to recent noise dial
+2026-11-18T16:39:25+00:00 tailscaled[key]: control: netmap: got new dial plan from control
+2026-11-18T16:39:43+00:00 tailscaled[key]: logtail: upload succeeded after 1 failures and 51s

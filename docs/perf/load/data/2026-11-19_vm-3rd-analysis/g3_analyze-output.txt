@@ -1,0 +1,216 @@
+# round-3 analysis (g3_analyze.py)
+
+== 0. runs: jobs created in the k6 window, attempts, final results
+  g0ka5: window 16:34:00-16:49:00 (900 s), jobs 28, attempts 28, final {'COMPLETED': 28}, attempts {'COMPLETED': 28}, k6 rtt healthz p50 153.594 ms
+  g0ka75: window 16:52:34-17:07:47 (914 s), jobs 30, attempts 30, final {'COMPLETED': 30}, attempts {'COMPLETED': 30}, k6 rtt healthz p50 156.656 ms
+  g0th8: window 17:09:33-17:24:33 (900 s), jobs 30, attempts 30, final {'COMPLETED': 30}, attempts {'COMPLETED': 30}, k6 rtt healthz p50 142.639 ms
+  g2c2a: window 17:26:31-17:48:40 (1329 s), jobs 188, attempts 188, final {'COMPLETED': 188}, attempts {'COMPLETED': 188}, k6 rtt healthz p50 155.688 ms
+  f2r1: window 17:50:32-18:10:35 (1203 s), jobs 52, attempts 53, final {'COMPLETED': 52}, attempts {'COMPLETED': 52, 'FAILED:INFERENCE_UNAVAILABLE': 1}, k6 rtt healthz p50 145.999 ms
+  f1br1: window 18:12:07-18:22:22 (615 s), jobs 33, attempts 66, final {'FAILED:INFERENCE_TIMEOUT': 33}, attempts {'FAILED:INFERENCE_TIMEOUT': 66}, k6 rtt healthz p50 157.209 ms
+  f1ar1: window 18:24:45-18:39:45 (900 s), jobs 39, attempts 39, final {'COMPLETED': 39}, attempts {'COMPLETED': 39}, k6 rtt healthz p50 146.326 ms
+  f1ar2: window 18:41:27-18:56:32 (905 s), jobs 40, attempts 47, final {'COMPLETED': 39, 'FAILED:INFERENCE_FAILED': 1}, attempts {'FAILED:INFERENCE_FAILED': 8, 'COMPLETED': 39}, k6 rtt healthz p50 156.478 ms
+
+== 1. G0: server values (ms -> s). 'clean' = jobs not touched by an inference-service DOWN (queuedMs < 10 s and processingMs < 20 s)
+  g0r1: completed 31, hit by DOWN 0 
+    [all] processing n 31 mean 10.40 p50 9.89 p95 14.36 min 8.57 max 18.88
+    [all] infer      n 31 mean 4.07 p50 4.01 p95 4.54 min 3.70 max 4.67
+    [all] convert    n 31 mean 0.91 p50 0.88 p95 1.11 min 0.70 max 1.15
+    [all] transfer   n 31 mean 5.43 p50 4.73 p95 9.41 min 4.12 max 14.06
+    [clean] processing n 31 mean 10.40 p50 9.89 p95 14.36 min 8.57 max 18.88
+    [clean] infer      n 31 mean 4.07 p50 4.01 p95 4.54 min 3.70 max 4.67
+    [clean] convert    n 31 mean 0.91 p50 0.88 p95 1.11 min 0.70 max 1.15
+    [clean] transfer   n 31 mean 5.43 p50 4.73 p95 9.41 min 4.12 max 14.06
+    [clean] queued n 31 mean 2.49 p50 2.52 p95 2.68 min 2.18 max 2.70; h = queued - preprocess n 31 mean 0.493 p50 0.557 p95 0.649 min 0.285 max 0.736
+    [clean] S0 = mean processing + 2 x median h = 11.52 s
+    connections (port of GET base.glb), all jobs: new 31, reused 0, distinct ports 31
+    connections, clean jobs: new 31, reused 0; transfer mean new 5.43 s, reused nan s
+    k6 load_waitMs: med 13.05 s p95 17.33 s max 21.66 s (count 31)
+    k6 load_flowMs: med 14.79 s p95 19.06 s max 23.42 s (count 31)
+  g0ka5: completed 28, hit by DOWN 2 d54d4889 created 16:38:01 queued 87.2 s processing 9.1 s, 626b3760 created 16:39:02 queued 35.8 s processing 8.2 s
+    [all] processing n 28 mean 9.38 p50 9.09 p95 11.40 min 8.24 max 12.48
+    [all] infer      n 28 mean 3.79 p50 3.79 p95 4.04 min 3.42 max 4.14
+    [all] convert    n 28 mean 0.84 p50 0.85 p95 0.90 min 0.72 max 0.92
+    [all] transfer   n 28 mean 4.75 p50 4.38 p95 6.70 min 3.64 max 7.81
+    [clean] processing n 26 mean 9.44 p50 9.09 p95 11.43 min 8.32 max 12.48
+    [clean] infer      n 26 mean 3.78 p50 3.79 p95 4.00 min 3.42 max 4.04
+    [clean] convert    n 26 mean 0.85 p50 0.85 p95 0.90 min 0.72 max 0.92
+    [clean] transfer   n 26 mean 4.81 p50 4.41 p95 6.73 min 3.87 max 7.81
+    [clean] queued n 26 mean 2.53 p50 2.49 p95 2.97 min 2.15 max 3.09; h = queued - preprocess n 26 mean 0.493 p50 0.551 p95 0.570 min 0.283 max 0.571
+    [clean] S0 = mean processing + 2 x median h = 10.54 s
+    connections (port of GET base.glb), all jobs: new 27, reused 1, distinct ports 27
+    connections, clean jobs: new 26, reused 0; transfer mean new 4.81 s, reused nan s
+    k6 load_waitMs: med 13.12 s p95 35.00 s max 96.93 s (count 28)
+    k6 load_flowMs: med 15.53 s p95 39.53 s max 98.69 s (count 28)
+  g0ka75: completed 30, hit by DOWN 2 c6d056e1 created 16:59:34 queued 2.1 s processing 71.5 s, e4b3c3de created 17:00:35 queued 13.4 s processing 9.2 s
+    [all] processing n 30 mean 10.57 p50 8.22 p95 11.36 min 7.88 max 71.55
+    [all] infer      n 30 mean 3.88 p50 3.77 p95 4.15 min 3.53 max 6.33
+    [all] convert    n 30 mean 0.88 p50 0.88 p95 0.97 min 0.71 max 1.04
+    [all] transfer   n 30 mean 5.81 p50 3.56 p95 5.27 min 3.54 max 66.89
+    [clean] processing n 28 mean 8.44 p50 8.22 p95 9.17 min 7.88 max 13.10
+    [clean] infer      n 28 mean 3.88 p50 3.77 p95 4.16 min 3.53 max 6.33
+    [clean] convert    n 28 mean 0.88 p50 0.88 p95 0.98 min 0.71 max 1.04
+    [clean] transfer   n 28 mean 3.68 p50 3.56 p95 4.03 min 3.54 max 5.81
+    [clean] queued n 28 mean 2.26 p50 2.17 p95 2.82 min 2.11 max 2.94; h = queued - preprocess n 28 mean 0.282 p50 0.280 p95 0.288 min 0.274 max 0.297
+    [clean] S0 = mean processing + 2 x median h = 9.00 s
+    connections (port of GET base.glb), all jobs: new 1, reused 29, distinct ports 1
+    connections, clean jobs: new 1, reused 27; transfer mean new 5.81 s, reused 3.60 s
+    k6 load_waitMs: med 10.96 s p95 21.01 s max 75.72 s (count 30)
+    k6 load_flowMs: med 12.83 s p95 33.89 s max 77.56 s (count 30)
+  g0th8: completed 30, hit by DOWN 0 
+    [all] processing n 30 mean 8.40 p50 8.09 p95 9.40 min 7.67 max 14.01
+    [all] infer      n 30 mean 3.86 p50 3.67 p95 4.58 min 3.37 max 6.97
+    [all] convert    n 30 mean 0.84 p50 0.85 p95 1.01 min 0.71 max 1.15
+    [all] transfer   n 30 mean 3.69 p50 3.59 p95 3.81 min 3.56 max 6.14
+    [clean] processing n 30 mean 8.40 p50 8.09 p95 9.40 min 7.67 max 14.01
+    [clean] infer      n 30 mean 3.86 p50 3.67 p95 4.58 min 3.37 max 6.97
+    [clean] convert    n 30 mean 0.84 p50 0.85 p95 1.01 min 0.71 max 1.15
+    [clean] transfer   n 30 mean 3.69 p50 3.59 p95 3.81 min 3.56 max 6.14
+    [clean] queued n 30 mean 2.21 p50 2.19 p95 2.32 min 2.14 max 2.40; h = queued - preprocess n 30 mean 0.284 p50 0.281 p95 0.288 min 0.277 max 0.388
+    [clean] S0 = mean processing + 2 x median h = 8.96 s
+    connections (port of GET base.glb), all jobs: new 1, reused 29, distinct ports 1
+    connections, clean jobs: new 1, reused 29; transfer mean new 6.14 s, reused 3.61 s
+    k6 load_waitMs: med 10.87 s p95 13.02 s max 17.31 s (count 30)
+    k6 load_flowMs: med 12.62 s p95 14.77 s max 19.70 s (count 30)
+  ka5 -> ka75 clean median processing: 9.094 -> 8.216 s (diff -0.877 s, -9.6 %)
+  ka5 -> ka75 clean median transfer: 4.405 -> 3.563 s (diff -0.842 s, -19.1 %)
+  ka5 -> ka75 clean median infer: 3.787 -> 3.768 s (diff -0.018 s, -0.5 %)
+  ka75 -> th8 clean infer: median 3.768 -> 3.670 s, mean 3.883 -> 3.860 s
+  ka75 -> th8 clean convert: median 0.878 -> 0.849 s, mean 0.879 -> 0.844 s
+  ka75 -> th8 clean processing: median 8.216 -> 8.088 s, mean 8.439 -> 8.397 s
+
+== 2. pod CPU: cgroup v1 quota 7.65 cores per 100 ms period; sys.txt 5 s rows in each k6 window (throttle counters are deltas)
+   nr_throttled = 100 ms periods in which the group hit its quota; nr_throttled / (window / 0.1 s) is the wall-clock upper bound of throttling.
+   throttled_ms (cgroup v1 throttled_time) is summed over the per-CPU run queues, so it is NOT wall-clock time (one 5 s row can hold > 5,000 ms).
+  g0ka5: rows 180, rows with throttling 27, throttled periods 63 of 9010 (0.70 %), CPU-summed throttled_ms 130120 (2.07 s per throttled period), container cores max 1.54, mean in rows whose 5 s centre is inside a predict 0.96 (n 19), host load1 5.5-17.3
+  g0ka75: rows 182, rows with throttling 32, throttled periods 46 of 9100 (0.51 %), CPU-summed throttled_ms 86164 (1.87 s per throttled period), container cores max 1.51, mean in rows whose 5 s centre is inside a predict 1.01 (n 28), host load1 12.1-65.3
+  g0th8: rows 180, rows with throttling 0, throttled periods 0 of 9000 (0.00 %), CPU-summed throttled_ms 0 (0.00 s per throttled period), container cores max 0.84, mean in rows whose 5 s centre is inside a predict 0.67 (n 9), host load1 11.1-25.1
+  g2c2a: rows 266, rows with throttling 170, throttled periods 287 of 13310 (2.16 %), CPU-summed throttled_ms 472613 (1.65 s per throttled period), container cores max 1.99, mean in rows whose 5 s centre is inside a predict 1.28 (n 152), host load1 9.9-42.0
+  f2r1: rows 241, rows with throttling 63, throttled periods 122 of 12050 (1.01 %), CPU-summed throttled_ms 264054 (2.16 s per throttled period), container cores max 4.55, mean in rows whose 5 s centre is inside a predict 1.04 (n 35), host load1 8.0-26.6
+  f1br1: rows 123, rows with throttling 64, throttled periods 104 of 6150 (1.69 %), CPU-summed throttled_ms 200371 (1.93 s per throttled period), container cores max 1.30, mean in rows whose 5 s centre is inside a predict nan (n 0), host load1 6.6-19.5
+
+== 3. G2 (c=2) vs round-2 c=1 overload
+  jobs 188, k6 meta measuredJobsPerHour 564 (arrival window 1200 s), requested 517
+  processing: n 188 mean 12.88 p50 13.03 p95 13.91 min 8.39 max 16.90
+  infer: n 188 mean 3.86 p50 3.80 p95 4.19 min 3.43 max 6.80
+  convert: n 188 mean 0.90 p50 0.88 p95 1.06 min 0.70 max 1.35
+  transfer+lock wait: n 188 mean 8.12 p50 8.39 p95 8.79 min 3.63 max 12.00
+  queued: n 188 mean 73.21 p50 75.30 p95 127.27 min 2.18 max 141.87
+  total: n 188 mean 86.09 p50 88.62 p95 139.95 min 10.73 max 154.84
+  max jobs in system 23 on the 1 s grid, 24 exact (event sweep); max waiting for a slot 21, max processing at once 2
+  saturated stretch (someone waits for a slot) 90-1310 s after start (1220 s): 181 processing ends -> 534 jobs/h; share of the stretch with 2 jobs processing 91.4 %
+  processing start-to-start inside the stretch: mean 6.77 s (x2 slots -> per-slot cycle 13.53 s), p50 6.62 s
+  jobs in system slope over the arrival window: 0.83 /min; measured arrivals 564/h -> capacity = arrivals - slope = 514/h
+  second half only: slope 1.03 /min, arrivals 570/h -> capacity 508/h
+  pod predicts 188; next predict started within 0.25 s of the previous predict's end (waited for MODEL_LOCK; stamps 0..0.2 s late) 90 of 187 (48 %); gaps < -0.25 s (would be real overlap) 0, min gap -0.10 s
+  MODEL_LOCK busy share in the stretch 56.8 %
+  GPU util mean 32.6 % (n 265), memory max 9490 MiB
+  k6 asset download: {'p(95)': 6448.646962850006, 'p(99)': 7521.707194949996, 'max': 8948.783408, 'count': 188, 'min': 980.665251, 'med': 1080.8438825, 'avg': 1517.6672842287232, 'p(90)': 2004.547499}
+  round-2 g3r13 c=1 S_busy: see 2026-11-18_vm-2nd-analysis/trace-g3r13.json busy_start_to_start_ms
+    mean 9.06 s -> 397 jobs/h
+  round-2 g3r165 c=1 S_busy: see 2026-11-18_vm-2nd-analysis/trace-g3r165.json busy_start_to_start_ms
+    mean 8.81 s -> 409 jobs/h
+  round-2 g3r165 connections: new 2 reused 159
+  g2c2a connections: new 2 reused 186 ports 2
+  VM system_cpu mean 28.6 % max 75.4 %, JVM process_cpu mean 26.1 %; VM core-s/job 4.04
+
+== 4. F2-real: kill -9 of the inference service, restart after 90 s
+  kill 17:56:35.646, backend DOWN +1.32 s, restart +90.1 s, LOADING +115.0 s, pod healthz ok +141.7 s, backend UP +146.7 s
+  failed attempt 3126a292 #1 FAILED:INFERENCE_UNAVAILABLE at 17:56:35.822 (+0.18 s after kill); later attempts: #2 COMPLETED created +3.4 s queued 166.2 s
+  final results {'COMPLETED': 52}
+  completed attempts that were in the system between kill and UP: 9, their queued n 9 mean 134.6 p50 150.3 p95 171.6 min 84.7 max 175.1
+  first completion after UP: +160.6 s after kill (13.9 s after UP)
+  slot queue empty again at +222 s after kill (75 s after UP); max queued 175.1 s
+  processing before kill n 14 mean 8.30 p50 8.12 p95 9.26 min 7.80 max 11.10; after UP (created after) n 29 mean 8.15 p50 8.15 p95 8.30 min 7.71 max 8.37
+  pod 'model loaded' lines in window: ['model loaded in 44.1s on cuda (animallif']
+  k6 flowOkRatio {'rate': 1, 'passes': 52, 'fails': 0}, flowTimeoutRatio {'rate': 0, 'passes': 0, 'fails': 52}
+
+== 5. F1b-real: inference.timeout-ms = 5000 with the real model
+  jobs 33, attempts 66 {'FAILED:INFERENCE_TIMEOUT': 66}; processing n 66 mean 5.010 p50 5.007 p95 5.014 min 5.004 max 5.098; queued n 66 mean 5.52 p50 2.29 p95 19.46 min 0.28 max 25.90; queued - preprocess n 66 mean 4.52 p50 1.90 p95 19.46 min 0.28 max 25.78
+  pod: predict+convert finished 0, conversion crashed 61, DELETE 66 (status [204, 500]), POST /infer/upload answered 0
+  jobs by number of crash lines {2: 29, 0: 1, 1: 3}; missing file of the crashes {'base.glb': 50, 'raw/hair.npz': 4, 'hair_length.png': 7}
+  DELETE 500 at 18:14:11.392 for 9c79b2cc; its crashes [('18:14:11.397', 'raw/hair.npz'), ('18:14:29.103', 'base.glb')]
+  leftover 531a0da0: DELETEs at ['18:16:15.754', '18:16:27.425'], crashes after the last DELETE [('+0.39 s', 'raw/hair.npz')], base.glb mtime 18:16:29 (volume clock, whole seconds)
+  leftover 79428395: DELETEs at ['18:17:51.450', '18:18:01.519'], crashes after the last DELETE [('+0.40 s', 'raw/hair.npz')], base.glb mtime 18:18:03 (volume clock, whole seconds)
+  leftover db21bb34: DELETEs at ['18:19:22.730', '18:19:32.820'], crashes after the last DELETE [('+0.20 s', 'raw/hair.npz')], base.glb mtime 18:19:35 (volume clock, whole seconds)
+  GPU util mean 17.9 %, memory 1281-9453 MiB; f1b-check: 2026-11-18T18:12:16Z | before F1b-real | 1281 MiB, 0 % | 2026-11-18T18:22:55Z | after F1b-real (+15 s) | 1281 MiB, 0 % | workdir entries: 3 | 531a0da0-4624-45b5-a1d2-bd939a7a6332
+
+== 6. F1a: passthrough stub on the same pod
+  f1ar1: jobs 39, attempts 39, failed attempts 0 (0.000, 95 % 0.000-0.090) [], final {'COMPLETED': 39}
+    completed: inferMs [1, 2], glbBytes [1500000], processing n 39 mean 3.57 p50 3.54 p95 3.56 min 3.51 max 4.65, transfer n 39 mean 3.56 p50 3.54 p95 3.56 min 3.51 max 4.65
+    retried attempts completed 0 of 0
+    k6 flowOkRatio {'rate': 1, 'passes': 39, 'fails': 0}
+  f1ar2: jobs 40, attempts 47, failed attempts 8 (0.170, 95 % 0.089-0.301) ['FAILED:INFERENCE_FAILED'], final {'COMPLETED': 39, 'FAILED:INFERENCE_FAILED': 1}
+    completed: inferMs [4600], glbBytes [1500000], processing n 39 mean 8.17 p50 8.12 p95 8.14 min 8.10 max 10.02, transfer n 39 mean 3.57 p50 3.52 p95 3.54 min 3.50 max 5.42
+    job a3e5b9c9 final FAILED:INFERENCE_FAILED after 2 attempts
+    retried attempts completed 6 of 7
+    k6 flowOkRatio {'rate': 0.975, 'passes': 39, 'fails': 1}
+
+== 7. inference service health on the VM (backend log), whole session
+  16:33:16.105 UNKNOWN -> UP (ok)
+  16:38:05.755 UP -> DOWN (HttpTimeoutException)
+  16:39:20.285 DOWN -> UP (ok) (+74.5 s)
+  16:39:23.209 UP -> DOWN (HttpTimeoutException)
+  16:39:28.774 DOWN -> UP (ok) (+5.6 s)
+  16:49:55.826 UP -> DOWN (ConnectException)
+  16:50:11.367 DOWN -> LOADING (no model loaded) (+15.5 s)
+  16:50:57.186 LOADING -> UP (ok) (+61.4 s)
+  16:59:53.411 UP -> DOWN (HttpTimeoutException)
+  17:00:42.966 DOWN -> UP (ok) (+49.6 s)
+  17:08:38.214 UP -> DOWN (HttpTimeoutException)
+  17:08:53.756 DOWN -> LOADING (no model loaded) (+15.5 s)
+  17:09:24.311 LOADING -> UP (ok) (+46.1 s)
+  17:24:56.384 UP -> DOWN (ConnectException)
+  17:26:18.902 UNKNOWN -> UP (ok) (+82.5 s)
+  17:50:22.961 UNKNOWN -> UP (ok)
+  17:56:36.963 UP -> DOWN (ConnectException)
+  17:58:30.692 DOWN -> LOADING (no model loaded) (+113.7 s)
+  17:59:02.338 LOADING -> UP (ok) (+145.4 s)
+  18:11:52.404 UNKNOWN -> UP (ok)
+  18:24:24.004 UNKNOWN -> UP (ok)
+  18:41:12.782 UP -> DOWN (ConnectException)
+  18:41:28.328 DOWN -> UP (ok) (+15.5 s)
+
+== 8. VM CPU per job (Prometheus, window (startedAt, endedAt], 2 vCPU)
+  g0ka5: completed 28, system_cpu mean 7.5 % max 16.5 % -> VM 4.81 core-s/job; JVM 4.07 core-s/job
+  g0ka75: completed 30, system_cpu mean 6.9 % max 17.5 % -> VM 4.22 core-s/job; JVM 3.56 core-s/job
+  g0th8: completed 30, system_cpu mean 7.0 % max 13.1 % -> VM 4.18 core-s/job; JVM 3.53 core-s/job
+  g2c2a: completed 188, system_cpu mean 28.6 % max 75.4 % -> VM 4.04 core-s/job; JVM 3.70 core-s/job
+  f2r1: completed 52, system_cpu mean 10.3 % max 44.7 % -> VM 4.78 core-s/job; JVM 3.94 core-s/job
+
+== 9. pod volume write probe (1 MB write + fsync, 5 s) and GPU util per run
+  g0ka5: volume_ms n 179 mean 17 p50 14 p95 36 min 10 max 96; GPU util mean 13.3 % max 100 %, memory max 9720 MiB
+  g0ka75: volume_ms n 182 mean 17 p50 13 p95 28 min 7 max 300; GPU util mean 5.2 % max 100 %, memory max 9453 MiB
+  g0th8: volume_ms n 178 mean 16 p50 13 p95 29 min 9 max 47; GPU util mean 5.5 % max 100 %, memory max 9453 MiB
+  g2c2a: volume_ms n 264 mean 14 p50 13 p95 24 min 8 max 101; GPU util mean 32.6 % max 100 %, memory max 9490 MiB
+  f2r1: volume_ms n 239 mean 14 p50 13 p95 25 min 8 max 34; GPU util mean 8.2 % max 100 %, memory max 9463 MiB
+  f1br1: volume_ms n 122 mean 14 p50 12 p95 23 min 10 max 38; GPU util mean 19.5 % max 100 %, memory max 9453 MiB
+  f1ar1: volume_ms n 179 mean 15 p50 13 p95 26 min 9 max 34; GPU util mean 0.0 % max 0 %, memory max 0 MiB
+  f1ar2: volume_ms n 180 mean 14 p50 12 p95 27 min 9 max 41; GPU util mean 0.0 % max 0 %, memory max 3 MiB
+
+== 10. where the slot time goes: VM processing start -> pod predict start (upload, + MODEL_LOCK wait) and pod predict end -> VM processing end
+   (VM stamp = created + queuedMs; pod predict start/end from the 'infer N ms, convert M ms' line, 0..0.2 s late; VM-pod clock offset not measured)
+  g0ka75 [free for the lock]: n 28; to predict start n 28 mean 1.76 p50 1.67 p95 2.08 min 1.56 max 3.71 s; after convert to processing end n 28 mean 1.91 p50 1.90 p95 2.01 min 1.80 max 2.10 s
+  g0th8 [free for the lock]: n 30; to predict start n 30 mean 1.75 p50 1.67 p95 1.92 min 1.60 max 3.87 s; after convert to processing end n 30 mean 1.94 p50 1.94 p95 1.99 min 1.83 max 2.27 s
+  g2c2a [waited for the lock]: n 90; to predict start n 90 mean 3.84 p50 4.02 p95 4.52 min 1.65 max 4.86 s; after convert to processing end n 90 mean 4.44 p50 4.33 p95 4.94 min 1.94 max 9.97 s
+  g2c2a [free for the lock]: n 98; to predict start n 98 mean 1.71 p50 1.68 p95 1.80 min 1.57 max 4.23 s; after convert to processing end n 98 mean 6.26 p50 6.69 p95 6.83 min 1.83 max 8.92 s
+
+== 11. API status codes on the VM (Prometheus http_rps_by_status series in the window) and k6 unexpected responses
+  g0ka5: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 2
+  g0ka75: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 1
+  g0th8: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 0
+  g2c2a: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 2
+  f2r1: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 0
+  f1br1: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 0
+  f1ar1: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 0
+  f1ar2: statuses ['status=200', 'status=202']; 5xx ratio points 0 max 0; k6 unexpected 0, checks failed 0, dropped 0
+
+== 12. slow model jobs (round-2 rule: inferMs > 6000 or convertMs > 2000), real-model runs
+  g0ka5: 0 of 28 
+  g0ka75: 1 of 30 09d64756 infer 6327 convert 961
+  g0th8: 1 of 30 1fee9f8d infer 6970 convert 903
+  g2c2a: 1 of 188 04b461b3 infer 6801 convert 863
+  f2r1: 1 of 52 64fd1362 infer 6471 convert 919
+
+== 13. G2r: what the post-convert window (pod predict end + convert -> VM processing end) of each job overlaps
+  [waited for the lock] n 90: window n 90 mean 4.44 p50 4.33 p95 4.94 min 1.94 max 9.97 s; share overlapping another job's predict p50 0 %, its convert p50 0 %, its own post-convert window (concurrent response/download) p50 65 %; jobs with no overlap with another predict 80, max predict overlap 75 %
+  [free for the lock] n 98: window n 98 mean 6.26 p50 6.69 p95 6.83 min 1.83 max 8.92 s; share overlapping another job's predict p50 44 %, its convert p50 12 %, its own post-convert window (concurrent response/download) p50 43 %; jobs with no overlap with another predict 4, max predict overlap 100 %

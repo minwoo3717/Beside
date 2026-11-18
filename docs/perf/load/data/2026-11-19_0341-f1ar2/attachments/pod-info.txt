@@ -1,0 +1,16 @@
+pod 4vh9x6broleb2z (created 2026-11-18T16:29:02Z, EU-SE-1, secure cloud, image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, network volume z4kgw4v5zi at /workspace)
+dc EU-SE-1
+2026-11-18T16:31:58Z
+name, driver_version, memory.total [MiB], vbios_version, pcie.link.gen.current, pcie.link.width.current, power.limit [W]
+NVIDIA A40, 595.112.07, 46068 MiB, 94.02.5C.00.03, 4, 16, 300.00 W
+| NVIDIA-SMI 595.112.07             Driver Version: 595.112.07     CUDA Version: 13.2     |
+cpus visible 96, cgroup v1 cpu quota 765000/100000 us
+               total        used        free      shared  buff/cache   available
+Mem:             503          61         191           2         251         436
+workspace fs: mfs#eu-se-1.runpod.net:9421 type fuse
+repo deploy/gcp ee030f2f4fc1affe9bcfd847a26db203fc08ad9b
+AnimalLift 5d364cfc06d65e18cfa18f94a5883641075d862f
+python 3.10.20 torch 2.4.0+cu124 cuda 12.4 uvicorn 0.54.0
+mode model
+model loaded in 56.1s on cuda (animallift-baseline@5d364cf:latest via animallift_runner:AnimalLiftRunner)
+{"status":"ok","device":"cuda","modelLoaded":true,"passthrough":false}

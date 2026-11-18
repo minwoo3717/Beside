@@ -1,0 +1,785 @@
+2026-11-18T18:11:19.212Z INFO:     127.0.0.1:35384 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:11:52.211Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:11:54.619Z INFO:     127.0.0.1:38200 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:07.682Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:17.335Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:22.975Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:22.979Z job 0c34dd1e-9d73-4f75-87c5-cbf544675b37: work folder deleted
+2026-11-18T18:12:22.986Z INFO:     127.0.0.1:49020 - "DELETE /artifacts/0c34dd1e-9d73-4f75-87c5-cbf544675b37 HTTP/1.1" 204 No Content
+2026-11-18T18:12:23.375Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:28.800Z job d4780bab-94d3-4bcd-a334-159117ab6567: work folder deleted
+2026-11-18T18:12:28.803Z INFO:     127.0.0.1:49036 - "DELETE /artifacts/d4780bab-94d3-4bcd-a334-159117ab6567 HTTP/1.1" 204 No Content
+2026-11-18T18:12:29.000Z job d4780bab-94d3-4bcd-a334-159117ab6567: conversion crashed
+2026-11-18T18:12:29.114Z Traceback (most recent call last):
+2026-11-18T18:12:29.118Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:12:29.121Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:12:29.124Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:12:29.127Z     with open(out_path, "wb") as f:
+2026-11-18T18:12:29.130Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d4780bab-94d3-4bcd-a334-159117ab6567/base.glb'
+2026-11-18T18:12:29.202Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:34.832Z job 0c34dd1e-9d73-4f75-87c5-cbf544675b37: work folder deleted
+2026-11-18T18:12:34.837Z INFO:     127.0.0.1:52348 - "DELETE /artifacts/0c34dd1e-9d73-4f75-87c5-cbf544675b37 HTTP/1.1" 204 No Content
+2026-11-18T18:12:34.843Z job 0c34dd1e-9d73-4f75-87c5-cbf544675b37: conversion crashed
+2026-11-18T18:12:34.847Z Traceback (most recent call last):
+2026-11-18T18:12:34.850Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:12:34.853Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:12:34.856Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:12:34.858Z     with open(out_path, "wb") as f:
+2026-11-18T18:12:34.861Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/0c34dd1e-9d73-4f75-87c5-cbf544675b37/base.glb'
+2026-11-18T18:12:35.032Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:38.257Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:40.669Z job d4780bab-94d3-4bcd-a334-159117ab6567: work folder deleted
+2026-11-18T18:12:40.672Z INFO:     127.0.0.1:52352 - "DELETE /artifacts/d4780bab-94d3-4bcd-a334-159117ab6567 HTTP/1.1" 204 No Content
+2026-11-18T18:12:40.870Z job d4780bab-94d3-4bcd-a334-159117ab6567: conversion crashed
+2026-11-18T18:12:40.874Z Traceback (most recent call last):
+2026-11-18T18:12:40.877Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:12:40.881Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:12:40.889Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:12:40.892Z     with open(out_path, "wb") as f:
+2026-11-18T18:12:40.894Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d4780bab-94d3-4bcd-a334-159117ab6567/base.glb'
+2026-11-18T18:12:53.545Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:12:59.012Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:04.638Z job 5eefa5d4-152d-42d8-9959-a711f8dade49: work folder deleted
+2026-11-18T18:13:04.641Z INFO:     127.0.0.1:42452 - "DELETE /artifacts/5eefa5d4-152d-42d8-9959-a711f8dade49 HTTP/1.1" 204 No Content
+2026-11-18T18:13:04.839Z job 5eefa5d4-152d-42d8-9959-a711f8dade49: conversion crashed
+2026-11-18T18:13:04.843Z Traceback (most recent call last):
+2026-11-18T18:13:04.849Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:13:04.952Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:13:04.957Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:13:04.960Z     with open(out_path, "wb") as f:
+2026-11-18T18:13:04.964Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/5eefa5d4-152d-42d8-9959-a711f8dade49/base.glb'
+2026-11-18T18:13:04.968Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:08.861Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:10.467Z job a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6: work folder deleted
+2026-11-18T18:13:10.471Z INFO:     127.0.0.1:42464 - "DELETE /artifacts/a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6 HTTP/1.1" 204 No Content
+2026-11-18T18:13:10.669Z job a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6: conversion crashed
+2026-11-18T18:13:10.672Z Traceback (most recent call last):
+2026-11-18T18:13:10.777Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:13:10.781Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:13:10.787Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:13:10.791Z     with open(out_path, "wb") as f:
+2026-11-18T18:13:10.795Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6/base.glb'
+2026-11-18T18:13:10.872Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:16.321Z job 5eefa5d4-152d-42d8-9959-a711f8dade49: work folder deleted
+2026-11-18T18:13:16.324Z INFO:     127.0.0.1:50584 - "DELETE /artifacts/5eefa5d4-152d-42d8-9959-a711f8dade49 HTTP/1.1" 204 No Content
+2026-11-18T18:13:16.521Z job 5eefa5d4-152d-42d8-9959-a711f8dade49: conversion crashed
+2026-11-18T18:13:16.624Z Traceback (most recent call last):
+2026-11-18T18:13:16.628Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:13:16.632Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:13:16.635Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:13:16.638Z     with open(out_path, "wb") as f:
+2026-11-18T18:13:16.641Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/5eefa5d4-152d-42d8-9959-a711f8dade49/base.glb'
+2026-11-18T18:13:16.723Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:22.142Z job a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6: work folder deleted
+2026-11-18T18:13:22.145Z INFO:     127.0.0.1:58254 - "DELETE /artifacts/a318fcbd-5cbd-4d7e-abe0-19aa7c38e4d6 HTTP/1.1" 204 No Content
+2026-11-18T18:13:24.152Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:39.238Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:53.303Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:54.709Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:13:58.926Z job dd9087b1-ec5c-4f08-9327-0b375792a597: work folder deleted
+2026-11-18T18:13:58.928Z INFO:     127.0.0.1:58696 - "DELETE /artifacts/dd9087b1-ec5c-4f08-9327-0b375792a597 HTTP/1.1" 204 No Content
+2026-11-18T18:13:59.728Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:05.361Z job d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728: work folder deleted
+2026-11-18T18:14:05.366Z INFO:     127.0.0.1:54836 - "DELETE /artifacts/d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728 HTTP/1.1" 204 No Content
+2026-11-18T18:14:05.562Z job d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728: conversion crashed
+2026-11-18T18:14:05.566Z Traceback (most recent call last):
+2026-11-18T18:14:05.569Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:05.572Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:05.575Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:14:05.578Z     with open(out_path, "wb") as f:
+2026-11-18T18:14:05.585Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728/base.glb'
+2026-11-18T18:14:05.764Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:09.980Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:11.392Z INFO:     127.0.0.1:54842 - "DELETE /artifacts/9c79b2cc-b1a4-401a-aa7a-95b8d87195d7 HTTP/1.1" 500 Internal Server Error
+2026-11-18T18:14:11.397Z job 9c79b2cc-b1a4-401a-aa7a-95b8d87195d7: conversion crashed
+2026-11-18T18:14:11.400Z Traceback (most recent call last):
+2026-11-18T18:14:11.403Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:11.408Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:11.412Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:14:11.415Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:14:11.418Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 132, in hair_to_maps
+2026-11-18T18:14:11.421Z     d = np.load(npz_path)
+2026-11-18T18:14:11.424Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+2026-11-18T18:14:11.427Z     fid = stack.enter_context(open(os.fspath(file), "rb"))
+2026-11-18T18:14:11.430Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/9c79b2cc-b1a4-401a-aa7a-95b8d87195d7/raw/hair.npz'
+2026-11-18T18:14:11.433Z ERROR:    Exception in ASGI application
+2026-11-18T18:14:11.437Z Traceback (most recent call last):
+2026-11-18T18:14:11.440Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+2026-11-18T18:14:11.443Z     result = await app(  # type: ignore[func-returns-value]
+2026-11-18T18:14:11.446Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+2026-11-18T18:14:11.449Z     return await self.app(scope, receive, send)
+2026-11-18T18:14:11.452Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/applications.py", line 1194, in __call__
+2026-11-18T18:14:11.455Z     await super().__call__(scope, receive, send)
+2026-11-18T18:14:11.458Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/applications.py", line 96, in __call__
+2026-11-18T18:14:11.461Z     await self.middleware_stack(scope, receive, send)
+2026-11-18T18:14:11.464Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/errors.py", line 186, in __call__
+2026-11-18T18:14:11.467Z     raise exc
+2026-11-18T18:14:11.471Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/errors.py", line 164, in __call__
+2026-11-18T18:14:11.474Z     await self.app(scope, receive, _send)
+2026-11-18T18:14:11.477Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/telemetry/_asgi.py", line 151, in __call__
+2026-11-18T18:14:11.480Z     await self.app(scope, receive, send)
+2026-11-18T18:14:11.487Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/base.py", line 197, in __call__
+2026-11-18T18:14:11.490Z     response = await self.dispatch_func(request, call_next)
+2026-11-18T18:14:11.493Z   File "/workspace/Beside/generation/inference_service/app.py", line 116, in _check_token
+2026-11-18T18:14:11.496Z     return await call_next(request)
+2026-11-18T18:14:11.498Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/base.py", line 173, in call_next
+2026-11-18T18:14:11.502Z     raise app_exc from app_exc.__cause__ or app_exc.__context__
+2026-11-18T18:14:11.504Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/base.py", line 149, in coro
+2026-11-18T18:14:11.507Z     await self.app(scope, receive_or_disconnect, send_no_error)
+2026-11-18T18:14:11.509Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+2026-11-18T18:14:11.514Z     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+2026-11-18T18:14:11.618Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+2026-11-18T18:14:11.620Z     raise exc
+2026-11-18T18:14:11.624Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+2026-11-18T18:14:11.629Z     await app(scope, receive, sender)
+2026-11-18T18:14:11.633Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+2026-11-18T18:14:11.636Z     await self.app(scope, receive, send)
+2026-11-18T18:14:11.639Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/routing.py", line 676, in __call__
+2026-11-18T18:14:11.643Z     await self.middleware_stack(scope, receive, send)
+2026-11-18T18:14:11.646Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 2811, in app
+2026-11-18T18:14:11.648Z     await route.handle(scope, receive, send)
+2026-11-18T18:14:11.653Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 1330, in handle
+2026-11-18T18:14:11.656Z     await super().handle(scope, receive, send)
+2026-11-18T18:14:11.659Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/routing.py", line 282, in handle
+2026-11-18T18:14:11.662Z     await self.app(scope, receive, send)
+2026-11-18T18:14:11.665Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 166, in app
+2026-11-18T18:14:11.668Z     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+2026-11-18T18:14:11.672Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+2026-11-18T18:14:11.674Z     raise exc
+2026-11-18T18:14:11.679Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+2026-11-18T18:14:11.688Z     await app(scope, receive, sender)
+2026-11-18T18:14:11.691Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 152, in app
+2026-11-18T18:14:11.695Z     response = await f(request)
+2026-11-18T18:14:11.700Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 745, in app
+2026-11-18T18:14:11.703Z     raw_response = await run_endpoint_function(
+2026-11-18T18:14:11.707Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/routing.py", line 374, in run_endpoint_function
+2026-11-18T18:14:11.711Z     return await run_in_threadpool(
+2026-11-18T18:14:11.714Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/starlette/concurrency.py", line 34, in run_in_threadpool
+2026-11-18T18:14:11.718Z     return await anyio.to_thread.run_sync(func)
+2026-11-18T18:14:11.720Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/anyio/to_thread.py", line 65, in run_sync
+2026-11-18T18:14:11.724Z     return await get_async_backend().run_sync_in_worker_thread(
+2026-11-18T18:14:11.728Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 2779, in run_sync_in_worker_thread
+2026-11-18T18:14:11.731Z     return await future
+2026-11-18T18:14:11.733Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/anyio/_backends/_asyncio.py", line 1124, in run
+2026-11-18T18:14:11.735Z     result = context.run(func, *args)
+2026-11-18T18:14:11.737Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/fastapi/telemetry/_api.py", line 244, in _run_sync_endpoint
+2026-11-18T18:14:11.851Z     return function(**arguments)
+2026-11-18T18:14:11.855Z   File "/workspace/Beside/generation/inference_service/app.py", line 409, in delete_artifacts
+2026-11-18T18:14:11.859Z     shutil.rmtree(job_dir)
+2026-11-18T18:14:11.861Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/shutil.py", line 731, in rmtree
+2026-11-18T18:14:11.864Z     onerror(os.rmdir, path, sys.exc_info())
+2026-11-18T18:14:11.867Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/shutil.py", line 729, in rmtree
+2026-11-18T18:14:11.871Z     os.rmdir(path)
+2026-11-18T18:14:11.873Z OSError: [Errno 39] Directory not empty: '/workspace/beside-work/9c79b2cc-b1a4-401a-aa7a-95b8d87195d7'
+2026-11-18T18:14:11.877Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:17.219Z job dd9087b1-ec5c-4f08-9327-0b375792a597: work folder deleted
+2026-11-18T18:14:17.222Z INFO:     127.0.0.1:40924 - "DELETE /artifacts/dd9087b1-ec5c-4f08-9327-0b375792a597 HTTP/1.1" 204 No Content
+2026-11-18T18:14:17.420Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:23.044Z job d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728: work folder deleted
+2026-11-18T18:14:23.048Z INFO:     127.0.0.1:59708 - "DELETE /artifacts/d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728 HTTP/1.1" 204 No Content
+2026-11-18T18:14:23.245Z job d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728: conversion crashed
+2026-11-18T18:14:23.249Z Traceback (most recent call last):
+2026-11-18T18:14:23.252Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:23.272Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:23.276Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:14:23.279Z     with open(out_path, "wb") as f:
+2026-11-18T18:14:23.286Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d8ee2d8b-c1ec-4fd2-b8a7-565ab042a728/base.glb'
+2026-11-18T18:14:23.446Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:25.289Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:28.902Z job 9c79b2cc-b1a4-401a-aa7a-95b8d87195d7: work folder deleted
+2026-11-18T18:14:28.905Z INFO:     127.0.0.1:59716 - "DELETE /artifacts/9c79b2cc-b1a4-401a-aa7a-95b8d87195d7 HTTP/1.1" 204 No Content
+2026-11-18T18:14:29.103Z job 9c79b2cc-b1a4-401a-aa7a-95b8d87195d7: conversion crashed
+2026-11-18T18:14:29.106Z Traceback (most recent call last):
+2026-11-18T18:14:29.109Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:29.113Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:29.117Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:14:29.222Z     with open(out_path, "wb") as f:
+2026-11-18T18:14:29.225Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/9c79b2cc-b1a4-401a-aa7a-95b8d87195d7/base.glb'
+2026-11-18T18:14:29.304Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:34.742Z job e69f3453-56e3-497b-a1a2-fb955e89e404: work folder deleted
+2026-11-18T18:14:34.745Z INFO:     127.0.0.1:60430 - "DELETE /artifacts/e69f3453-56e3-497b-a1a2-fb955e89e404 HTTP/1.1" 204 No Content
+2026-11-18T18:14:34.748Z job e69f3453-56e3-497b-a1a2-fb955e89e404: conversion crashed
+2026-11-18T18:14:34.751Z Traceback (most recent call last):
+2026-11-18T18:14:34.756Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:34.759Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:34.761Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:14:34.764Z     with open(out_path, "wb") as f:
+2026-11-18T18:14:34.767Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/e69f3453-56e3-497b-a1a2-fb955e89e404/base.glb'
+2026-11-18T18:14:38.571Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:40.378Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:14:44.009Z job e69f3453-56e3-497b-a1a2-fb955e89e404: work folder deleted
+2026-11-18T18:14:44.115Z INFO:     127.0.0.1:57218 - "DELETE /artifacts/e69f3453-56e3-497b-a1a2-fb955e89e404 HTTP/1.1" 204 No Content
+2026-11-18T18:14:44.209Z job e69f3453-56e3-497b-a1a2-fb955e89e404: conversion crashed
+2026-11-18T18:14:44.213Z Traceback (most recent call last):
+2026-11-18T18:14:44.216Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:14:44.221Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:14:44.225Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:14:44.241Z     with open(out_path, "wb") as f:
+2026-11-18T18:14:44.244Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/e69f3453-56e3-497b-a1a2-fb955e89e404/base.glb'
+2026-11-18T18:14:55.667Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:05.713Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:10.997Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:11.398Z job fffa7a07-f472-49d9-9f52-5f0816a1140d: work folder deleted
+2026-11-18T18:15:11.402Z INFO:     127.0.0.1:54218 - "DELETE /artifacts/fffa7a07-f472-49d9-9f52-5f0816a1140d HTTP/1.1" 204 No Content
+2026-11-18T18:15:11.405Z job fffa7a07-f472-49d9-9f52-5f0816a1140d: conversion crashed
+2026-11-18T18:15:11.408Z Traceback (most recent call last):
+2026-11-18T18:15:11.411Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:11.414Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:11.417Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:11.419Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:11.422Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/fffa7a07-f472-49d9-9f52-5f0816a1140d/base.glb'
+2026-11-18T18:15:13.005Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:18.630Z job bd0ad320-97bf-45aa-82b0-68d141d16837: work folder deleted
+2026-11-18T18:15:18.634Z INFO:     127.0.0.1:48076 - "DELETE /artifacts/bd0ad320-97bf-45aa-82b0-68d141d16837 HTTP/1.1" 204 No Content
+2026-11-18T18:15:18.638Z job bd0ad320-97bf-45aa-82b0-68d141d16837: conversion crashed
+2026-11-18T18:15:18.641Z Traceback (most recent call last):
+2026-11-18T18:15:18.644Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:18.648Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:18.652Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:18.654Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:18.659Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/bd0ad320-97bf-45aa-82b0-68d141d16837/base.glb'
+2026-11-18T18:15:18.831Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:24.456Z job fffa7a07-f472-49d9-9f52-5f0816a1140d: work folder deleted
+2026-11-18T18:15:24.459Z INFO:     127.0.0.1:43888 - "DELETE /artifacts/fffa7a07-f472-49d9-9f52-5f0816a1140d HTTP/1.1" 204 No Content
+2026-11-18T18:15:24.464Z job fffa7a07-f472-49d9-9f52-5f0816a1140d: conversion crashed
+2026-11-18T18:15:24.467Z Traceback (most recent call last):
+2026-11-18T18:15:24.471Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:24.474Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:24.478Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:24.480Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:24.487Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/fffa7a07-f472-49d9-9f52-5f0816a1140d/base.glb'
+2026-11-18T18:15:24.657Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:26.264Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:30.281Z job bd0ad320-97bf-45aa-82b0-68d141d16837: work folder deleted
+2026-11-18T18:15:30.287Z INFO:     127.0.0.1:43894 - "DELETE /artifacts/bd0ad320-97bf-45aa-82b0-68d141d16837 HTTP/1.1" 204 No Content
+2026-11-18T18:15:30.482Z job bd0ad320-97bf-45aa-82b0-68d141d16837: conversion crashed
+2026-11-18T18:15:30.487Z Traceback (most recent call last):
+2026-11-18T18:15:30.491Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:30.494Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:30.497Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:30.501Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:30.504Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/bd0ad320-97bf-45aa-82b0-68d141d16837/base.glb'
+2026-11-18T18:15:40.962Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:41.564Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:46.592Z job cea2b75e-0607-443f-8bdc-9fe99325c595: work folder deleted
+2026-11-18T18:15:46.597Z INFO:     127.0.0.1:51334 - "DELETE /artifacts/cea2b75e-0607-443f-8bdc-9fe99325c595 HTTP/1.1" 204 No Content
+2026-11-18T18:15:46.602Z job cea2b75e-0607-443f-8bdc-9fe99325c595: conversion crashed
+2026-11-18T18:15:46.606Z Traceback (most recent call last):
+2026-11-18T18:15:46.609Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:46.613Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:46.617Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:46.620Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:46.625Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/cea2b75e-0607-443f-8bdc-9fe99325c595/base.glb'
+2026-11-18T18:15:46.793Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:52.422Z job ea74ee8d-fc46-498f-b6a4-5eea129d002d: work folder deleted
+2026-11-18T18:15:52.426Z INFO:     127.0.0.1:55608 - "DELETE /artifacts/ea74ee8d-fc46-498f-b6a4-5eea129d002d HTTP/1.1" 204 No Content
+2026-11-18T18:15:52.429Z job ea74ee8d-fc46-498f-b6a4-5eea129d002d: conversion crashed
+2026-11-18T18:15:52.433Z Traceback (most recent call last):
+2026-11-18T18:15:52.438Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:52.442Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:52.445Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:52.448Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:52.451Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/ea74ee8d-fc46-498f-b6a4-5eea129d002d/base.glb'
+2026-11-18T18:15:52.623Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:56.843Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:15:58.250Z job cea2b75e-0607-443f-8bdc-9fe99325c595: work folder deleted
+2026-11-18T18:15:58.253Z INFO:     127.0.0.1:55622 - "DELETE /artifacts/cea2b75e-0607-443f-8bdc-9fe99325c595 HTTP/1.1" 204 No Content
+2026-11-18T18:15:58.257Z job cea2b75e-0607-443f-8bdc-9fe99325c595: conversion crashed
+2026-11-18T18:15:58.261Z Traceback (most recent call last):
+2026-11-18T18:15:58.264Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:15:58.267Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:15:58.372Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:15:58.375Z     with open(out_path, "wb") as f:
+2026-11-18T18:15:58.378Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/cea2b75e-0607-443f-8bdc-9fe99325c595/base.glb'
+2026-11-18T18:15:58.451Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:04.080Z job ea74ee8d-fc46-498f-b6a4-5eea129d002d: work folder deleted
+2026-11-18T18:16:04.087Z INFO:     127.0.0.1:37534 - "DELETE /artifacts/ea74ee8d-fc46-498f-b6a4-5eea129d002d HTTP/1.1" 204 No Content
+2026-11-18T18:16:04.280Z job ea74ee8d-fc46-498f-b6a4-5eea129d002d: conversion crashed
+2026-11-18T18:16:04.287Z Traceback (most recent call last):
+2026-11-18T18:16:04.292Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:04.295Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:04.298Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:16:04.301Z     with open(out_path, "wb") as f:
+2026-11-18T18:16:04.305Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/ea74ee8d-fc46-498f-b6a4-5eea129d002d/base.glb'
+2026-11-18T18:16:04.308Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:09.925Z job d7691881-9153-4d6e-89de-43d57a809dd7: work folder deleted
+2026-11-18T18:16:09.928Z INFO:     127.0.0.1:37536 - "DELETE /artifacts/d7691881-9153-4d6e-89de-43d57a809dd7 HTTP/1.1" 204 No Content
+2026-11-18T18:16:10.125Z job d7691881-9153-4d6e-89de-43d57a809dd7: conversion crashed
+2026-11-18T18:16:10.128Z Traceback (most recent call last):
+2026-11-18T18:16:10.130Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:10.133Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:10.135Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:16:10.138Z     with open(out_path, "wb") as f:
+2026-11-18T18:16:10.141Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d7691881-9153-4d6e-89de-43d57a809dd7/base.glb'
+2026-11-18T18:16:10.143Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:12.133Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:15.750Z job 531a0da0-4624-45b5-a1d2-bd939a7a6332: work folder deleted
+2026-11-18T18:16:15.754Z INFO:     127.0.0.1:37148 - "DELETE /artifacts/531a0da0-4624-45b5-a1d2-bd939a7a6332 HTTP/1.1" 204 No Content
+2026-11-18T18:16:16.151Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:21.591Z job d7691881-9153-4d6e-89de-43d57a809dd7: work folder deleted
+2026-11-18T18:16:21.608Z INFO:     127.0.0.1:50642 - "DELETE /artifacts/d7691881-9153-4d6e-89de-43d57a809dd7 HTTP/1.1" 204 No Content
+2026-11-18T18:16:21.794Z job d7691881-9153-4d6e-89de-43d57a809dd7: conversion crashed
+2026-11-18T18:16:21.798Z Traceback (most recent call last):
+2026-11-18T18:16:21.803Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:21.807Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:21.810Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:16:21.813Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:16:21.815Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:16:21.819Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:16:21.822Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:16:21.825Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:16:21.828Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/d7691881-9153-4d6e-89de-43d57a809dd7/hair_length.png'
+2026-11-18T18:16:21.995Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:27.418Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:27.420Z job 531a0da0-4624-45b5-a1d2-bd939a7a6332: work folder deleted
+2026-11-18T18:16:27.425Z INFO:     127.0.0.1:50644 - "DELETE /artifacts/531a0da0-4624-45b5-a1d2-bd939a7a6332 HTTP/1.1" 204 No Content
+2026-11-18T18:16:27.819Z job 531a0da0-4624-45b5-a1d2-bd939a7a6332: conversion crashed
+2026-11-18T18:16:27.922Z Traceback (most recent call last):
+2026-11-18T18:16:27.939Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:27.942Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:27.946Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:16:27.948Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:16:27.951Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 132, in hair_to_maps
+2026-11-18T18:16:27.954Z     d = np.load(npz_path)
+2026-11-18T18:16:27.958Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+2026-11-18T18:16:27.962Z     fid = stack.enter_context(open(os.fspath(file), "rb"))
+2026-11-18T18:16:27.965Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/531a0da0-4624-45b5-a1d2-bd939a7a6332/raw/hair.npz'
+2026-11-18T18:16:27.968Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:33.460Z job 70463c69-175c-4782-a430-2b0b8bddd7c4: work folder deleted
+2026-11-18T18:16:33.463Z INFO:     127.0.0.1:54806 - "DELETE /artifacts/70463c69-175c-4782-a430-2b0b8bddd7c4 HTTP/1.1" 204 No Content
+2026-11-18T18:16:33.466Z job 70463c69-175c-4782-a430-2b0b8bddd7c4: conversion crashed
+2026-11-18T18:16:33.469Z Traceback (most recent call last):
+2026-11-18T18:16:33.471Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:33.474Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:33.499Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:16:33.502Z     with open(out_path, "wb") as f:
+2026-11-18T18:16:33.505Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/70463c69-175c-4782-a430-2b0b8bddd7c4/base.glb'
+2026-11-18T18:16:37.676Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:42.704Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:43.306Z job 70463c69-175c-4782-a430-2b0b8bddd7c4: work folder deleted
+2026-11-18T18:16:43.309Z INFO:     127.0.0.1:51522 - "DELETE /artifacts/70463c69-175c-4782-a430-2b0b8bddd7c4 HTTP/1.1" 204 No Content
+2026-11-18T18:16:43.313Z job 70463c69-175c-4782-a430-2b0b8bddd7c4: conversion crashed
+2026-11-18T18:16:43.316Z Traceback (most recent call last):
+2026-11-18T18:16:43.428Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:16:43.432Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:16:43.436Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:16:43.441Z     with open(out_path, "wb") as f:
+2026-11-18T18:16:43.445Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/70463c69-175c-4782-a430-2b0b8bddd7c4/base.glb'
+2026-11-18T18:16:57.970Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:16:58.772Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:04.395Z job e32b56c3-5f8b-4a42-8818-342ad40586c0: work folder deleted
+2026-11-18T18:17:04.398Z INFO:     127.0.0.1:45402 - "DELETE /artifacts/e32b56c3-5f8b-4a42-8818-342ad40586c0 HTTP/1.1" 204 No Content
+2026-11-18T18:17:04.595Z job e32b56c3-5f8b-4a42-8818-342ad40586c0: conversion crashed
+2026-11-18T18:17:04.614Z Traceback (most recent call last):
+2026-11-18T18:17:04.617Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:17:04.620Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:17:04.622Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:17:04.624Z     with open(out_path, "wb") as f:
+2026-11-18T18:17:04.627Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/e32b56c3-5f8b-4a42-8818-342ad40586c0/base.glb'
+2026-11-18T18:17:08.814Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:13.233Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:14.236Z job e32b56c3-5f8b-4a42-8818-342ad40586c0: work folder deleted
+2026-11-18T18:17:14.239Z INFO:     127.0.0.1:50266 - "DELETE /artifacts/e32b56c3-5f8b-4a42-8818-342ad40586c0 HTTP/1.1" 204 No Content
+2026-11-18T18:17:14.439Z job e32b56c3-5f8b-4a42-8818-342ad40586c0: conversion crashed
+2026-11-18T18:17:14.444Z Traceback (most recent call last):
+2026-11-18T18:17:14.447Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:17:14.450Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:17:14.452Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:17:14.456Z     with open(out_path, "wb") as f:
+2026-11-18T18:17:14.459Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/e32b56c3-5f8b-4a42-8818-342ad40586c0/base.glb'
+2026-11-18T18:17:28.518Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:29.526Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:35.150Z job 6f6f97a4-31f4-4b64-aea2-2acfe129341b: work folder deleted
+2026-11-18T18:17:35.154Z INFO:     127.0.0.1:34896 - "DELETE /artifacts/6f6f97a4-31f4-4b64-aea2-2acfe129341b HTTP/1.1" 204 No Content
+2026-11-18T18:17:35.351Z job 6f6f97a4-31f4-4b64-aea2-2acfe129341b: conversion crashed
+2026-11-18T18:17:35.356Z Traceback (most recent call last):
+2026-11-18T18:17:35.360Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:17:35.365Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:17:35.368Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:17:35.372Z     with open(out_path, "wb") as f:
+2026-11-18T18:17:35.376Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/6f6f97a4-31f4-4b64-aea2-2acfe129341b/base.glb'
+2026-11-18T18:17:39.591Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:43.811Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:45.217Z job 6f6f97a4-31f4-4b64-aea2-2acfe129341b: work folder deleted
+2026-11-18T18:17:45.220Z INFO:     127.0.0.1:35962 - "DELETE /artifacts/6f6f97a4-31f4-4b64-aea2-2acfe129341b HTTP/1.1" 204 No Content
+2026-11-18T18:17:45.419Z job 6f6f97a4-31f4-4b64-aea2-2acfe129341b: conversion crashed
+2026-11-18T18:17:45.442Z Traceback (most recent call last):
+2026-11-18T18:17:45.446Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:17:45.449Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:17:45.453Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:17:45.456Z     with open(out_path, "wb") as f:
+2026-11-18T18:17:45.459Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/6f6f97a4-31f4-4b64-aea2-2acfe129341b/base.glb'
+2026-11-18T18:17:45.821Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:51.446Z job 79428395-9f32-4a20-825d-b31344dbfae2: work folder deleted
+2026-11-18T18:17:51.450Z INFO:     127.0.0.1:35036 - "DELETE /artifacts/79428395-9f32-4a20-825d-b31344dbfae2 HTTP/1.1" 204 No Content
+2026-11-18T18:17:51.646Z job 79428395-9f32-4a20-825d-b31344dbfae2: conversion crashed
+2026-11-18T18:17:51.651Z Traceback (most recent call last):
+2026-11-18T18:17:51.654Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:17:51.657Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:17:51.761Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:17:51.764Z     with open(out_path, "wb") as f:
+2026-11-18T18:17:51.767Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/79428395-9f32-4a20-825d-b31344dbfae2/base.glb'
+2026-11-18T18:17:56.074Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:17:59.101Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:01.515Z job 79428395-9f32-4a20-825d-b31344dbfae2: work folder deleted
+2026-11-18T18:18:01.519Z INFO:     127.0.0.1:53874 - "DELETE /artifacts/79428395-9f32-4a20-825d-b31344dbfae2 HTTP/1.1" 204 No Content
+2026-11-18T18:18:01.919Z job 79428395-9f32-4a20-825d-b31344dbfae2: conversion crashed
+2026-11-18T18:18:01.924Z Traceback (most recent call last):
+2026-11-18T18:18:01.928Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:01.931Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:01.945Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:18:01.951Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:18:01.956Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 132, in hair_to_maps
+2026-11-18T18:18:01.960Z     d = np.load(npz_path)
+2026-11-18T18:18:01.964Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+2026-11-18T18:18:01.968Z     fid = stack.enter_context(open(os.fspath(file), "rb"))
+2026-11-18T18:18:01.972Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/79428395-9f32-4a20-825d-b31344dbfae2/raw/hair.npz'
+2026-11-18T18:18:14.294Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:20.531Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:25.973Z job b243eb93-959f-402a-8a02-a386a8858ccd: work folder deleted
+2026-11-18T18:18:25.977Z INFO:     127.0.0.1:43714 - "DELETE /artifacts/b243eb93-959f-402a-8a02-a386a8858ccd HTTP/1.1" 204 No Content
+2026-11-18T18:18:26.175Z job b243eb93-959f-402a-8a02-a386a8858ccd: conversion crashed
+2026-11-18T18:18:26.178Z Traceback (most recent call last):
+2026-11-18T18:18:26.181Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:26.188Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:26.191Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:26.194Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:26.203Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/b243eb93-959f-402a-8a02-a386a8858ccd/base.glb'
+2026-11-18T18:18:26.978Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:29.600Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:32.414Z job dcfaa388-b655-44c3-b330-105314cbe41e: work folder deleted
+2026-11-18T18:18:32.419Z INFO:     127.0.0.1:50096 - "DELETE /artifacts/dcfaa388-b655-44c3-b330-105314cbe41e HTTP/1.1" 204 No Content
+2026-11-18T18:18:32.615Z job dcfaa388-b655-44c3-b330-105314cbe41e: conversion crashed
+2026-11-18T18:18:32.618Z Traceback (most recent call last):
+2026-11-18T18:18:32.622Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:32.625Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:32.629Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:32.633Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:32.637Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/dcfaa388-b655-44c3-b330-105314cbe41e/base.glb'
+2026-11-18T18:18:32.817Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:38.248Z job b243eb93-959f-402a-8a02-a386a8858ccd: work folder deleted
+2026-11-18T18:18:38.251Z INFO:     127.0.0.1:50098 - "DELETE /artifacts/b243eb93-959f-402a-8a02-a386a8858ccd HTTP/1.1" 204 No Content
+2026-11-18T18:18:38.449Z job b243eb93-959f-402a-8a02-a386a8858ccd: conversion crashed
+2026-11-18T18:18:38.452Z Traceback (most recent call last):
+2026-11-18T18:18:38.456Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:38.459Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:38.463Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:38.467Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:38.470Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/b243eb93-959f-402a-8a02-a386a8858ccd/base.glb'
+2026-11-18T18:18:38.650Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:44.281Z job dcfaa388-b655-44c3-b330-105314cbe41e: work folder deleted
+2026-11-18T18:18:44.287Z INFO:     127.0.0.1:37548 - "DELETE /artifacts/dcfaa388-b655-44c3-b330-105314cbe41e HTTP/1.1" 204 No Content
+2026-11-18T18:18:44.290Z job dcfaa388-b655-44c3-b330-105314cbe41e: conversion crashed
+2026-11-18T18:18:44.293Z Traceback (most recent call last):
+2026-11-18T18:18:44.296Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:44.299Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:44.301Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:44.304Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:44.307Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/dcfaa388-b655-44c3-b330-105314cbe41e/base.glb'
+2026-11-18T18:18:44.482Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:44.896Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:50.125Z job 544d7ab1-7a8c-4c91-847a-a1a7cf327c60: work folder deleted
+2026-11-18T18:18:50.129Z INFO:     127.0.0.1:37558 - "DELETE /artifacts/544d7ab1-7a8c-4c91-847a-a1a7cf327c60 HTTP/1.1" 204 No Content
+2026-11-18T18:18:50.326Z job 544d7ab1-7a8c-4c91-847a-a1a7cf327c60: conversion crashed
+2026-11-18T18:18:50.332Z Traceback (most recent call last):
+2026-11-18T18:18:50.335Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:50.350Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:50.355Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:50.359Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:50.363Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/544d7ab1-7a8c-4c91-847a-a1a7cf327c60/base.glb'
+2026-11-18T18:18:53.339Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:18:58.997Z job 544d7ab1-7a8c-4c91-847a-a1a7cf327c60: work folder deleted
+2026-11-18T18:18:59.000Z INFO:     127.0.0.1:40948 - "DELETE /artifacts/544d7ab1-7a8c-4c91-847a-a1a7cf327c60 HTTP/1.1" 204 No Content
+2026-11-18T18:18:59.003Z job 544d7ab1-7a8c-4c91-847a-a1a7cf327c60: conversion crashed
+2026-11-18T18:18:59.007Z Traceback (most recent call last):
+2026-11-18T18:18:59.010Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:18:59.013Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:18:59.016Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:18:59.019Z     with open(out_path, "wb") as f:
+2026-11-18T18:18:59.022Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/544d7ab1-7a8c-4c91-847a-a1a7cf327c60/base.glb'
+2026-11-18T18:18:59.198Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:00.201Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:04.819Z job dc5a1ba6-f31e-4af5-af16-d37db517491e: work folder deleted
+2026-11-18T18:19:04.823Z INFO:     127.0.0.1:42068 - "DELETE /artifacts/dc5a1ba6-f31e-4af5-af16-d37db517491e HTTP/1.1" 204 No Content
+2026-11-18T18:19:05.020Z job dc5a1ba6-f31e-4af5-af16-d37db517491e: conversion crashed
+2026-11-18T18:19:05.023Z Traceback (most recent call last):
+2026-11-18T18:19:05.025Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:19:05.028Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:19:05.032Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:19:05.035Z     with open(out_path, "wb") as f:
+2026-11-18T18:19:05.039Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/dc5a1ba6-f31e-4af5-af16-d37db517491e/base.glb'
+2026-11-18T18:19:08.838Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:14.480Z job dc5a1ba6-f31e-4af5-af16-d37db517491e: work folder deleted
+2026-11-18T18:19:14.487Z INFO:     127.0.0.1:43400 - "DELETE /artifacts/dc5a1ba6-f31e-4af5-af16-d37db517491e HTTP/1.1" 204 No Content
+2026-11-18T18:19:14.681Z job dc5a1ba6-f31e-4af5-af16-d37db517491e: conversion crashed
+2026-11-18T18:19:14.688Z Traceback (most recent call last):
+2026-11-18T18:19:14.690Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:19:14.693Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:19:14.696Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:19:14.698Z     with open(out_path, "wb") as f:
+2026-11-18T18:19:14.702Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/dc5a1ba6-f31e-4af5-af16-d37db517491e/base.glb'
+2026-11-18T18:19:15.490Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:17.096Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:22.725Z job db21bb34-2f05-486b-80fc-72b3b613bcda: work folder deleted
+2026-11-18T18:19:22.730Z INFO:     127.0.0.1:55218 - "DELETE /artifacts/db21bb34-2f05-486b-80fc-72b3b613bcda HTTP/1.1" 204 No Content
+2026-11-18T18:19:22.925Z job db21bb34-2f05-486b-80fc-72b3b613bcda: conversion crashed
+2026-11-18T18:19:22.932Z Traceback (most recent call last):
+2026-11-18T18:19:22.951Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:19:22.954Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:19:22.957Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:19:22.967Z     with open(out_path, "wb") as f:
+2026-11-18T18:19:22.970Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/db21bb34-2f05-486b-80fc-72b3b613bcda/base.glb'
+2026-11-18T18:19:27.173Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:30.795Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:32.816Z job db21bb34-2f05-486b-80fc-72b3b613bcda: work folder deleted
+2026-11-18T18:19:32.820Z INFO:     127.0.0.1:54964 - "DELETE /artifacts/db21bb34-2f05-486b-80fc-72b3b613bcda HTTP/1.1" 204 No Content
+2026-11-18T18:19:33.019Z job db21bb34-2f05-486b-80fc-72b3b613bcda: conversion crashed
+2026-11-18T18:19:33.022Z Traceback (most recent call last):
+2026-11-18T18:19:33.025Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:19:33.028Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:19:33.030Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:19:33.033Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:19:33.035Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 132, in hair_to_maps
+2026-11-18T18:19:33.038Z     d = np.load(npz_path)
+2026-11-18T18:19:33.040Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+2026-11-18T18:19:33.043Z     fid = stack.enter_context(open(os.fspath(file), "rb"))
+2026-11-18T18:19:33.045Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/db21bb34-2f05-486b-80fc-72b3b613bcda/raw/hair.npz'
+2026-11-18T18:19:46.079Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:19:55.743Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:01.375Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:01.382Z job b1b0393e-9e88-4261-9f2d-7fe2d6c52176: work folder deleted
+2026-11-18T18:20:01.389Z INFO:     127.0.0.1:35530 - "DELETE /artifacts/b1b0393e-9e88-4261-9f2d-7fe2d6c52176 HTTP/1.1" 204 No Content
+2026-11-18T18:20:01.574Z job b1b0393e-9e88-4261-9f2d-7fe2d6c52176: conversion crashed
+2026-11-18T18:20:01.578Z Traceback (most recent call last):
+2026-11-18T18:20:01.581Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:01.586Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:01.589Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:20:01.591Z     with open(out_path, "wb") as f:
+2026-11-18T18:20:01.593Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/b1b0393e-9e88-4261-9f2d-7fe2d6c52176/base.glb'
+2026-11-18T18:20:05.816Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:11.494Z job b1b0393e-9e88-4261-9f2d-7fe2d6c52176: work folder deleted
+2026-11-18T18:20:11.597Z INFO:     127.0.0.1:39678 - "DELETE /artifacts/b1b0393e-9e88-4261-9f2d-7fe2d6c52176 HTTP/1.1" 204 No Content
+2026-11-18T18:20:11.695Z job b1b0393e-9e88-4261-9f2d-7fe2d6c52176: conversion crashed
+2026-11-18T18:20:11.698Z Traceback (most recent call last):
+2026-11-18T18:20:11.701Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:11.704Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:11.707Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:20:11.710Z     with open(out_path, "wb") as f:
+2026-11-18T18:20:11.712Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/b1b0393e-9e88-4261-9f2d-7fe2d6c52176/base.glb'
+2026-11-18T18:20:11.716Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:16.524Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:17.327Z job 1a4341ad-6da3-4c89-87f9-39b77279039a: work folder deleted
+2026-11-18T18:20:17.333Z INFO:     127.0.0.1:46994 - "DELETE /artifacts/1a4341ad-6da3-4c89-87f9-39b77279039a HTTP/1.1" 204 No Content
+2026-11-18T18:20:17.528Z job 1a4341ad-6da3-4c89-87f9-39b77279039a: conversion crashed
+2026-11-18T18:20:17.532Z Traceback (most recent call last):
+2026-11-18T18:20:17.636Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:17.639Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:17.742Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:20:17.746Z     with open(out_path, "wb") as f:
+2026-11-18T18:20:17.750Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/1a4341ad-6da3-4c89-87f9-39b77279039a/base.glb'
+2026-11-18T18:20:21.966Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:27.490Z job 1a4341ad-6da3-4c89-87f9-39b77279039a: work folder deleted
+2026-11-18T18:20:27.493Z INFO:     127.0.0.1:37226 - "DELETE /artifacts/1a4341ad-6da3-4c89-87f9-39b77279039a HTTP/1.1" 204 No Content
+2026-11-18T18:20:27.691Z job 1a4341ad-6da3-4c89-87f9-39b77279039a: conversion crashed
+2026-11-18T18:20:27.695Z Traceback (most recent call last):
+2026-11-18T18:20:27.698Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:27.701Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:27.704Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:20:27.707Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:20:27.710Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:20:27.714Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:20:27.716Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:20:27.718Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:20:27.721Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/1a4341ad-6da3-4c89-87f9-39b77279039a/hair_length.png'
+2026-11-18T18:20:31.316Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:31.920Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:36.747Z job 4a85fe23-851a-4ff2-a9d6-7aca1c6f0789: work folder deleted
+2026-11-18T18:20:36.750Z INFO:     127.0.0.1:51100 - "DELETE /artifacts/4a85fe23-851a-4ff2-a9d6-7aca1c6f0789 HTTP/1.1" 204 No Content
+2026-11-18T18:20:36.949Z job 4a85fe23-851a-4ff2-a9d6-7aca1c6f0789: conversion crashed
+2026-11-18T18:20:36.951Z Traceback (most recent call last):
+2026-11-18T18:20:36.955Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:36.957Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:36.959Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:20:36.964Z     with open(out_path, "wb") as f:
+2026-11-18T18:20:36.968Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/4a85fe23-851a-4ff2-a9d6-7aca1c6f0789/base.glb'
+2026-11-18T18:20:41.178Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:46.806Z job 4a85fe23-851a-4ff2-a9d6-7aca1c6f0789: work folder deleted
+2026-11-18T18:20:46.809Z INFO:     127.0.0.1:48370 - "DELETE /artifacts/4a85fe23-851a-4ff2-a9d6-7aca1c6f0789 HTTP/1.1" 204 No Content
+2026-11-18T18:20:46.812Z job 4a85fe23-851a-4ff2-a9d6-7aca1c6f0789: conversion crashed
+2026-11-18T18:20:46.815Z Traceback (most recent call last):
+2026-11-18T18:20:46.819Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:20:46.822Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:20:46.826Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:20:46.829Z     with open(out_path, "wb") as f:
+2026-11-18T18:20:46.833Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/4a85fe23-851a-4ff2-a9d6-7aca1c6f0789/base.glb'
+2026-11-18T18:20:47.207Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:20:57.459Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:02.505Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:03.107Z job 82a86a32-55d3-4490-a036-e86be4fc1d60: work folder deleted
+2026-11-18T18:21:03.110Z INFO:     127.0.0.1:59324 - "DELETE /artifacts/82a86a32-55d3-4490-a036-e86be4fc1d60 HTTP/1.1" 204 No Content
+2026-11-18T18:21:03.113Z job 82a86a32-55d3-4490-a036-e86be4fc1d60: conversion crashed
+2026-11-18T18:21:03.116Z Traceback (most recent call last):
+2026-11-18T18:21:03.120Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:03.123Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:03.125Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:03.128Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:03.131Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/82a86a32-55d3-4490-a036-e86be4fc1d60/base.glb'
+2026-11-18T18:21:07.327Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:12.951Z job 0e42369a-2b51-4dd0-aaa8-3bdcce08a45d: work folder deleted
+2026-11-18T18:21:12.956Z INFO:     127.0.0.1:50360 - "DELETE /artifacts/0e42369a-2b51-4dd0-aaa8-3bdcce08a45d HTTP/1.1" 204 No Content
+2026-11-18T18:21:13.152Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:13.156Z job 0e42369a-2b51-4dd0-aaa8-3bdcce08a45d: conversion crashed
+2026-11-18T18:21:13.160Z Traceback (most recent call last):
+2026-11-18T18:21:13.164Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:13.167Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:13.170Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:21:13.194Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:21:13.198Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:21:13.202Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:21:13.205Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:21:13.209Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:21:13.212Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/0e42369a-2b51-4dd0-aaa8-3bdcce08a45d/hair_length.png'
+2026-11-18T18:21:17.586Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:18.795Z job 82a86a32-55d3-4490-a036-e86be4fc1d60: work folder deleted
+2026-11-18T18:21:18.798Z INFO:     127.0.0.1:50372 - "DELETE /artifacts/82a86a32-55d3-4490-a036-e86be4fc1d60 HTTP/1.1" 204 No Content
+2026-11-18T18:21:18.801Z job 82a86a32-55d3-4490-a036-e86be4fc1d60: conversion crashed
+2026-11-18T18:21:18.803Z Traceback (most recent call last):
+2026-11-18T18:21:18.806Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:18.809Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:18.813Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:21:18.815Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:21:18.818Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:21:18.820Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:21:18.824Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:21:18.827Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:21:18.829Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/82a86a32-55d3-4490-a036-e86be4fc1d60/hair_length.png'
+2026-11-18T18:21:18.994Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:24.618Z job fe601235-394a-4475-b5ec-c5a667ca1e7c: work folder deleted
+2026-11-18T18:21:24.621Z INFO:     127.0.0.1:58994 - "DELETE /artifacts/fe601235-394a-4475-b5ec-c5a667ca1e7c HTTP/1.1" 204 No Content
+2026-11-18T18:21:24.624Z job fe601235-394a-4475-b5ec-c5a667ca1e7c: conversion crashed
+2026-11-18T18:21:24.627Z Traceback (most recent call last):
+2026-11-18T18:21:24.629Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:24.632Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:24.635Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:24.637Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:24.640Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/fe601235-394a-4475-b5ec-c5a667ca1e7c/base.glb'
+2026-11-18T18:21:24.818Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:30.253Z job 889ac237-81b2-4fe9-b8c5-900ef716bdfc: work folder deleted
+2026-11-18T18:21:30.257Z INFO:     127.0.0.1:59010 - "DELETE /artifacts/889ac237-81b2-4fe9-b8c5-900ef716bdfc HTTP/1.1" 204 No Content
+2026-11-18T18:21:30.455Z job 889ac237-81b2-4fe9-b8c5-900ef716bdfc: conversion crashed
+2026-11-18T18:21:30.457Z Traceback (most recent call last):
+2026-11-18T18:21:30.460Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:30.464Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:30.478Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:30.480Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:30.488Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/889ac237-81b2-4fe9-b8c5-900ef716bdfc/base.glb'
+2026-11-18T18:21:30.656Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:32.867Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:36.105Z job 8b2dfc6e-a336-4694-9de8-cabd14d5e9a8: work folder deleted
+2026-11-18T18:21:36.108Z INFO:     127.0.0.1:57230 - "DELETE /artifacts/8b2dfc6e-a336-4694-9de8-cabd14d5e9a8 HTTP/1.1" 204 No Content
+2026-11-18T18:21:36.305Z job 8b2dfc6e-a336-4694-9de8-cabd14d5e9a8: conversion crashed
+2026-11-18T18:21:36.308Z Traceback (most recent call last):
+2026-11-18T18:21:36.312Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:36.314Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:36.319Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:36.322Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:36.324Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/8b2dfc6e-a336-4694-9de8-cabd14d5e9a8/base.glb'
+2026-11-18T18:21:36.506Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:42.004Z job 0e42369a-2b51-4dd0-aaa8-3bdcce08a45d: work folder deleted
+2026-11-18T18:21:42.008Z INFO:     127.0.0.1:51086 - "DELETE /artifacts/0e42369a-2b51-4dd0-aaa8-3bdcce08a45d HTTP/1.1" 204 No Content
+2026-11-18T18:21:42.205Z job 0e42369a-2b51-4dd0-aaa8-3bdcce08a45d: conversion crashed
+2026-11-18T18:21:42.208Z Traceback (most recent call last):
+2026-11-18T18:21:42.211Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:42.214Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:42.219Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:42.221Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:42.225Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/0e42369a-2b51-4dd0-aaa8-3bdcce08a45d/base.glb'
+2026-11-18T18:21:42.227Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:47.827Z job fe601235-394a-4475-b5ec-c5a667ca1e7c: work folder deleted
+2026-11-18T18:21:47.838Z INFO:     127.0.0.1:51094 - "DELETE /artifacts/fe601235-394a-4475-b5ec-c5a667ca1e7c HTTP/1.1" 204 No Content
+2026-11-18T18:21:47.842Z job fe601235-394a-4475-b5ec-c5a667ca1e7c: conversion crashed
+2026-11-18T18:21:47.845Z Traceback (most recent call last):
+2026-11-18T18:21:47.848Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:47.851Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:47.854Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:21:47.857Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:21:47.860Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:21:47.864Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:21:47.880Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:21:47.896Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:21:47.918Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/fe601235-394a-4475-b5ec-c5a667ca1e7c/hair_length.png'
+2026-11-18T18:21:48.029Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:48.432Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:53.653Z job ec513479-13ef-464d-a0f3-b765af459381: work folder deleted
+2026-11-18T18:21:53.657Z INFO:     127.0.0.1:55058 - "DELETE /artifacts/ec513479-13ef-464d-a0f3-b765af459381 HTTP/1.1" 204 No Content
+2026-11-18T18:21:53.853Z job ec513479-13ef-464d-a0f3-b765af459381: conversion crashed
+2026-11-18T18:21:53.855Z Traceback (most recent call last):
+2026-11-18T18:21:53.858Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:53.861Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:53.864Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:21:53.868Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:21:53.870Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:21:53.873Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:21:53.875Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:21:53.878Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:21:53.880Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/ec513479-13ef-464d-a0f3-b765af459381/hair_length.png'
+2026-11-18T18:21:53.887Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:21:59.489Z job 889ac237-81b2-4fe9-b8c5-900ef716bdfc: work folder deleted
+2026-11-18T18:21:59.492Z INFO:     127.0.0.1:55062 - "DELETE /artifacts/889ac237-81b2-4fe9-b8c5-900ef716bdfc HTTP/1.1" 204 No Content
+2026-11-18T18:21:59.690Z job 889ac237-81b2-4fe9-b8c5-900ef716bdfc: conversion crashed
+2026-11-18T18:21:59.695Z Traceback (most recent call last):
+2026-11-18T18:21:59.702Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:21:59.707Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:21:59.713Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:21:59.718Z     with open(out_path, "wb") as f:
+2026-11-18T18:21:59.720Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/889ac237-81b2-4fe9-b8c5-900ef716bdfc/base.glb'
+2026-11-18T18:21:59.724Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:03.707Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:05.316Z job 018b6f13-7e8a-4085-a5a9-f137a864f00d: work folder deleted
+2026-11-18T18:22:05.320Z INFO:     127.0.0.1:59120 - "DELETE /artifacts/018b6f13-7e8a-4085-a5a9-f137a864f00d HTTP/1.1" 204 No Content
+2026-11-18T18:22:05.542Z job 018b6f13-7e8a-4085-a5a9-f137a864f00d: conversion crashed
+2026-11-18T18:22:05.548Z Traceback (most recent call last):
+2026-11-18T18:22:05.551Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:22:05.555Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:22:05.558Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 118, in convert
+2026-11-18T18:22:05.560Z     fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+2026-11-18T18:22:05.563Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 146, in hair_to_maps
+2026-11-18T18:22:05.566Z     Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
+2026-11-18T18:22:05.568Z   File "/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/PIL/Image.py", line 2706, in save
+2026-11-18T18:22:05.571Z     fp = builtins.open(filename, "w+b")
+2026-11-18T18:22:05.574Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/018b6f13-7e8a-4085-a5a9-f137a864f00d/hair_length.png'
+2026-11-18T18:22:05.577Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:11.174Z job 8b2dfc6e-a336-4694-9de8-cabd14d5e9a8: work folder deleted
+2026-11-18T18:22:11.178Z INFO:     127.0.0.1:59128 - "DELETE /artifacts/8b2dfc6e-a336-4694-9de8-cabd14d5e9a8 HTTP/1.1" 204 No Content
+2026-11-18T18:22:11.376Z job 8b2dfc6e-a336-4694-9de8-cabd14d5e9a8: conversion crashed
+2026-11-18T18:22:11.380Z Traceback (most recent call last):
+2026-11-18T18:22:11.389Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:22:11.393Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:22:11.396Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:22:11.421Z     with open(out_path, "wb") as f:
+2026-11-18T18:22:11.425Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/8b2dfc6e-a336-4694-9de8-cabd14d5e9a8/base.glb'
+2026-11-18T18:22:11.577Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:17.031Z job ec513479-13ef-464d-a0f3-b765af459381: work folder deleted
+2026-11-18T18:22:17.035Z INFO:     127.0.0.1:43846 - "DELETE /artifacts/ec513479-13ef-464d-a0f3-b765af459381 HTTP/1.1" 204 No Content
+2026-11-18T18:22:17.231Z job ec513479-13ef-464d-a0f3-b765af459381: conversion crashed
+2026-11-18T18:22:17.235Z Traceback (most recent call last):
+2026-11-18T18:22:17.238Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:22:17.240Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:22:17.243Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:22:17.246Z     with open(out_path, "wb") as f:
+2026-11-18T18:22:17.249Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/ec513479-13ef-464d-a0f3-b765af459381/base.glb'
+2026-11-18T18:22:17.252Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:18.838Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:22.855Z job 018b6f13-7e8a-4085-a5a9-f137a864f00d: work folder deleted
+2026-11-18T18:22:22.858Z INFO:     127.0.0.1:54506 - "DELETE /artifacts/018b6f13-7e8a-4085-a5a9-f137a864f00d HTTP/1.1" 204 No Content
+2026-11-18T18:22:23.056Z job 018b6f13-7e8a-4085-a5a9-f137a864f00d: conversion crashed
+2026-11-18T18:22:23.060Z Traceback (most recent call last):
+2026-11-18T18:22:23.062Z   File "/workspace/Beside/generation/inference_service/app.py", line 290, in _run
+2026-11-18T18:22:23.065Z     m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+2026-11-18T18:22:23.087Z   File "/workspace/Beside/generation/tools/convert_asset.py", line 105, in convert
+2026-11-18T18:22:23.090Z     with open(out_path, "wb") as f:
+2026-11-18T18:22:23.093Z FileNotFoundError: [Errno 2] No such file or directory: '/workspace/beside-work/018b6f13-7e8a-4085-a5a9-f137a864f00d/base.glb'
+2026-11-18T18:22:34.117Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:49.432Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:22:55.664Z INFO:     127.0.0.1:56556 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T18:23:04.715Z INFO:     127.0.0.1:38196 - "GET /healthz HTTP/1.1" 200 OK

@@ -55,10 +55,10 @@
 | 4 | 실기기 실제 모델 AR(영상) | [ ] | — | UN · GPU PC |
 | 4 | `events.jsonl` 10건 이상 [실험 결과] | [x] | 2차 부하 시험 539건(2026-11-18, VM 업로드 모드 + Runpod A40, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 사진 10장 이상은 exp-01 다음 [계획] | BE+GEN |
 | 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). Runpod A40 연결(2026-11-17), 실제 모델 539건(2026-11-18 2차 부하 시험) | BE |
-| 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치(이 브랜치의 PR 로 main 병합, 그 전까지 VM 에는 로컬 수정으로 적용) | BE |
+| 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치에서 PR #5 로 main 에 병합됐다(2026-11-18). VM 은 main `b6c0e6c` 이고 Caddyfile 로컬 수정은 되돌렸다 | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
 | 4b | 실측 10건 이상 | [x] | VM + Runpod A40 에서 539건(2026-11-18 2차 부하 시험, 사진 1장 반복) | BE+GEN |
-| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) [실험 결과]([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
+| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) **[실험 결과]**([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))와 3차(2026-11-19, 슬롯 2개·장애 F1a·F1b·F2) **[실험 결과]**([perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
 | 5 | 리허설 1회, 보고서 초안 리뷰 | [ ] | 날짜 미정 | 전원 |
 | 5 | "Animation·Rigging 은 향후 과제로만" | 충돌 | 리깅·애니메이션 5종이 #1 로 이미 머지됨 → 보고서에서 어떻게 쓸지 결정 | 전원 · 팀 결정 |
 | 5 | 데모 영상 | [ ] | — | 전원 |
@@ -71,7 +71,7 @@
 - [ ] 0 B `sample-dog.glb` 교체(GEN 과 함께, 라이선스 문제없는 모델).
 - [x] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인 — 2026-11-13 GCP, 감사에서 나온 우회 4가지도 막음([deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)).
 - [ ] GCP 첫 배포 감사의 남은 것 [계획]: 지금 VM 의 기본 서비스 계정 떼기·`default-allow-rdp` 지우기(사용자, Cloud Shell — deploy/README 'GCP 메인 서버'), 공개 400 메시지의 Java 예외 클래스 이름 지우기, prod 이미지에서 springdoc UI 빼기(지금은 Caddy 가 `/webjars` 를 막음), `Idempotency-Key` 가 같은 작업 id 를 돌려주는 범위(키 만료·내용 무시 — 계약 안건), Docker 수동 업데이트, 백업을 같은 디스크 밖으로(개발 PC 복사·스냅샷 일정), Caddy 정지 10초 초과(SIGKILL), 컨테이너 pids 제한. 공개 업로드 요청 수 제한은 범위 밖으로 두고 부하 시험 때 다시 본다.
-- [ ] `deploy/gcp` 브랜치(create_vm.sh, Caddy 강화, set_basic_auth.sh, 문서) push 와 PR 결정 — VM 의 `deploy/Caddyfile` 로컬 수정은 그 뒤 정리. (BE)
+- [x] `deploy/gcp` 브랜치(create_vm.sh, Caddy 강화, set_basic_auth.sh, 문서) push 와 PR 결정 — PR #5 로 main 에 병합(2026-11-18). VM 은 main `b6c0e6c` 로 바꾸고 `deploy/Caddyfile` 로컬 수정은 되돌렸다. (BE)
 - [ ] 남은 낮은 위험(10-30 검토): retry 를 동시에 두 번 누르는 경합, GPU 오프라인 대기가 N건이면 N×30분, V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
 - [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
@@ -143,15 +143,28 @@
   - 대기는 실제 도착으로 다시 돌린 FIFO 재현과 평균 3~6 % 안에서 맞았다 [계산].
   - 포화에서도 GPU 사용률 평균은 23 % 였다.
 - [ ] 2차에서 남은 것 **[계획]**: (BE, F 는 GEN 함께)
-  - G2r(A40 한 대에 슬롯 2개)·F2-real·F1b-real(τ 5 s)·F1a. A40 6시간 상한으로 하지 못했다.
-  - 정리 `DELETE` 가 실패하면 Pod 작업 폴더가 남는다(539건 중 1건, "header parser received no bytes"). 재시도나 Pod 쪽 정리가 필요하다.
-  - Pod uvicorn 의 유휴 연결 5초 때문에 부하가 낮을 때 전송이 길어지는지 확인한다(연결 재사용 [가설]).
-  - G1r ρ0.7 의 느린 작업 14건(추론 12건·변환 11건)의 원인을 가린다(Pod CPU·볼륨 지연 기록).
-  - 작업당 VM CPU 가 약 3.6~4.5 코어·초라 2 vCPU VM 은 T3(초당 1건)를 감당하지 못한다 [계산]. 대부분이 크롭이라는 것은 [가설]이다. VM 크기나 크롭 위치를 정한다.
+  - ~~G2r(A40 한 대에 슬롯 2개)·F2-real·F1b-real(τ 5 s)·F1a~~ — 2026-11-19 3차에서 했다(아래).
+  - 정리 `DELETE` 가 실패하면 Pod 작업 폴더가 남는다(539건 중 1건, "header parser received no bytes"). 재시도나 Pod 쪽 정리가 필요하다. 연결 오류 재시도는 PR #8(`fix/inference-delete-retry`). 3차 F1b-real 에서 재시도로 막지 못하는 경우를 더 찾았다(아래).
+  - ~~Pod uvicorn 의 유휴 연결 5초 때문에 부하가 낮을 때 전송이 길어지는지 확인한다~~ — 3차에서 확인했다. 75 s 로 처리 중앙값 −0.88 s **[계산]**.
+  - G1r ρ0.7 의 느린 작업 14건(추론 12건·변환 11건)의 원인을 가린다(Pod CPU·볼륨 지연 기록). 3차는 두 기록을 모든 실행에 남겼고 이런 묶음이 없었다(모델을 다시 올린 뒤 첫 추론 4건만 6.3~7.0 s). 2차의 원인은 가리지 못한 채 남는다.
+  - 작업당 VM CPU 가 약 3.6~4.5 코어·초라 2 vCPU VM 은 T3(초당 1건)를 감당하지 못한다 [계산]. 대부분이 크롭이라는 것은 [가설]이다. VM 크기나 크롭 위치를 정한다. 3차 G2r 은 4.04 코어·초(70 % 상한 약 1,250건/h)였다.
+- [x] 3차 실제 GPU(G2r·F2-real·F1b-real·F1a, 유휴 연결·스레드 G0 비교)를 VM + Runpod A40 에서 — 2026-11-19 **[실험 결과]**([perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md)). (BE)
+  - 슬롯 2개: 처리 용량 약 510~530건/h, 슬롯 1개의 약 1.3배 [계산]. 늘어난 시간은 주로 변환 뒤 응답·내려받기다 [계산]. 원인(동시 전송이 Pod 의 보내는 경로를 나눠 씀·CPU 다툼)은 [가설].
+  - F2-real: 잃은 작업 0(처리 중이던 1건은 클라이언트 retry 로 살아남), kill → UP 146.7 s(DOWN → UP 145.4 s), 5xx 0.
+  - F1b-real: 모든 시도가 시간 초과(예상한 결과). 버려진 변환이 정리 뒤 작업 폴더 3개를 남겼다.
+  - F1a(같은 Pod 를 스텁으로): 시도 실패율 0.17, 40건 중 39건이 마지막 COMPLETED, 5xx 0.
+  - uvicorn 유휴 연결 75 s: 처리 중앙값 −0.88 s, S0 9.0 s. 스레드 8: Pod CPU 한도에 걸린 100 ms 주기 0(기본 스레드 0.5 %), 추론 −2.6 %.
+  - 계획 밖 경로 끊김 2번(약 83 s·50 s). 오프라인 대기로 잃은 작업은 0 이었다.
+- [ ] 3차에서 남은 것 **[계획]**: (BE, GEN 함께)
+  - 추론 서비스: `DELETE` 를 받은 작업은 변환·쓰기를 하지 않게 하고(변환의 `os.makedirs` 가 지운 폴더를 다시 만든다), 오래된 작업 폴더를 지운다.
+  - Pod 시작 기본값에 유휴 연결 75 s·스레드 8 을 둘지 정한다(운영 Pod 는 지금 5 s·기본 스레드).
+  - Pod 에서 요청마다 처리 시간을 남기고 G2r 을 다시 돌려 내려받기 가설을 가린다(스레드 8 도 함께). 같은 Pod 에서 c=1 과부하도 함께.
+  - Pod tailscaled 로그도 남기고, 운영 끊김 알림 유예(45 s)를 이번 끊김 길이(50~83 s)와 맞춰 본다.
+  - 앱 '다시 시도'가 F2 의 처리 중 실패(`INFERENCE_UNAVAILABLE`)에서 동작하는지 확인한다. (UN)
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
 - [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 표·#21 고치기는 계약 회의 뒤.
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 3차의 슬롯 2개(510~530건/h)면 T3 는 10~11대다 **[계산]**([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)). 표·#21 고치기는 계약 회의 뒤.
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
   - ~~실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지~~ — 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).
@@ -160,12 +173,12 @@
   - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(로컬 측정: 개발 PC·k6 v2.3.0, `api_staged.js` 를 `PRE_VUS`=`MAX_VUS` 20 과 300 으로 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`, 루프백 mock jar) 돌려 k6 프로세스의 최대 작업 집합 83.9 MB·393.2 MB 를 비교한 값, VU 마다 0.4 MB 사진 사본 포함). A1 기본 `MAX_VUS` 3,300(흐름 VU. 시작 때는 사전 할당 450 만 만들고 나머지는 흐름이 길어질 때 생기므로 최악)이면 초기화만 약 3.6 GB, 흐름을 돈 VU 마다 0.8 MB 본문(실패 주입 흐름을 돈 VU 는 0.8 MB 더)이 붙어 약 6.3~8.9 GB [파생], 둘러보기 VU(최대 200)가 약 0.2 GB 더. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB, 업로드가 길어져 기본 `MAX_VUS` 600 까지 늘면 약 15 GB [파생]. 시험 중 k6 메모리를 CPU 와 함께 본다. 2026-11-18 VM 1차(Runpod Pod, Linux k6)에서는 A1 `PRE_VUS` 2,000(VU 2,017)에 k6 RSS 최대 6,662 MB, A2 VU 2,000 에 2,201 MB 였다 **[실험 결과]**(각 실행 `client-cpu.csv`).
 - [ ] 판정 기준 결정 — 지금 코드의 동작은 **[구현됨]**, 바꿀지는 미정. (BE, 첫째는 계약 회의)
   - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #19·#20 과 함께 정한다.
-  - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다.
+  - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다. 3차 F1a(`f1ar2`)는 0.975(40건 중 1건이 두 번 실패)로 통과했다.
   - `collect.py` 의 `http_5xx_ratio` 질의에 `or vector(0)` 을 붙일지: 서버가 뜬 뒤 5xx 를 한 번도 내지 않아 5xx 시계열이 없으면 머리줄만 있는 CSV 와 'no data: http_5xx_ratio' 가 된다(Prometheus 대역에서 봄).
 - [ ] 찾은 개선 **[계획]**. (BE)
   - Grafana 'Beside 운영' 의 'JVM 힙' 패널(단위 bytes)이 'GC 뒤 살아 있는 데이터' 선을 `jvm_gc_live_data_size_bytes` 로 그려 G1 GC 에서는 0 이나 옛 값에 머문다(mock jar 로컬 k6 실행, 1.5 GB 힙에서 내내 0) → `max(jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"})`(0~1)를 기준선 0.75 와 함께 비율 패널로 따로 그린다(`deploy/monitoring/grafana/dashboards/beside-ops.json`).
   - `collect.py` 는 실행 구간 안의 서버 재시작을 알아보지 못한다: 오류 기준으로 멈춘 실행(run.json `outcome.ended` = `ruleStop`)은 지금 `vm/backend.log`·k6 출력으로 손으로 확인한다. `process_start_time_seconds` 를 19번째 CSV 로 더하면 재시작이 보인다(README 의 CSV 수와 `test_collect.py` 도 함께 바꿈).
-- [ ] F2 는 `gpu_queue.js` 에 `-e SCENARIO=F2` 를 붙여 돌리고, k6 가 끝날 때 내는 보고의 첫 줄(`== beside load: gpu_queue.js (F2) ...`)과 k6-summary.json `meta.scenario`(run.json 에서는 `k6.meta.scenario`)가 F2 이고 `meta.recompute` 가 null 인지 확인한다 **[계획]**(VM). run.json 맨 위 `scenario` 는 `collect.py --scenario` 로 준 값이 우선이라(배포 절차는 늘 준다) 이 확인에 쓰지 못한다. 이름 없이 돌린 F2 실행은 늘 G1 으로 적히고, 오프라인 대기 안에 스텁이 돌아와 FAILED 작업이 하나도 없으면 retry 도 없어 큐 재계산(`meta.recompute`)까지 남는다(`gpu_queue.js` 머리말). 빠뜨렸으면 run.json 의 `k6.meta.scenario`·`k6.meta.recompute` 는 쓰지 않는다. (BE)
+- [x] F2 는 `gpu_queue.js` 에 `-e SCENARIO=F2` 를 붙여 돌리고, k6 가 끝날 때 내는 보고의 첫 줄(`== beside load: gpu_queue.js (F2) ...`)과 k6-summary.json `meta.scenario`(run.json 에서는 `k6.meta.scenario`)가 F2 이고 `meta.recompute` 가 null 인지 확인한다 — 2026-11-19 3차 `f2r1` 에서 확인했다(k6.log 첫 줄 `(F2)`, `meta.scenario` F2, `meta.recompute` null) **[실험 결과]**(VM). run.json 맨 위 `scenario` 는 `collect.py --scenario` 로 준 값이 우선이라(배포 절차는 늘 준다) 이 확인에 쓰지 못한다. 이름 없이 돌린 F2 실행은 늘 G1 으로 적히고, 오프라인 대기 안에 스텁이 돌아와 FAILED 작업이 하나도 없으면 retry 도 없어 큐 재계산(`meta.recompute`)까지 남는다(`gpu_queue.js` 머리말). 빠뜨렸으면 run.json 의 `k6.meta.scenario`·`k6.meta.recompute` 는 쓰지 않는다. (BE)
 
 ## 6. 문서 불일치
 

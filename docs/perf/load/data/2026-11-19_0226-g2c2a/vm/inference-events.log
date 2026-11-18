@@ -1,0 +1,1 @@
+backend-1  | 2026-11-18T17:26:18.902Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)

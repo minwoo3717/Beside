@@ -1,0 +1,5 @@
+2026-11-18T16:49:47.688Z stop model pid 218 for keep-alive 75
+2026-11-18T16:49:48.703Z restart MODE=model UVICORN_TIMEOUT_KEEP_ALIVE=75
+2026-11-18T16:52:17.456Z probe after restart: same connection after 8 s: reused, status 200
+2026-11-18T17:08:21.149Z stop model pid 2608 for threads 8
+2026-11-18T17:08:22.163Z restart MODE=model UVICORN_TIMEOUT_KEEP_ALIVE=75 OMP/MKL/OPENBLAS_NUM_THREADS=8

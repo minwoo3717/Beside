@@ -1,0 +1,18 @@
+2026-11-18T16:29:54Z
+total 7866
+drwxrwxrwx  3 root root 2002046 2026-11-18T11:57:28 .
+drwxrwxrwx 11 root root 3000910 2026-11-18T10:35:42 ..
+-rw-rw-rw-  1 root root 1048576 2026-11-18T15:29:49 .ioprobe
+drwxrwxrwx  4 root root 2001946 2026-11-18T11:19:54 c5ca36f3-4366-4505-9b87-af5e15e7004c
+25480704	/workspace/beside-work/c5ca36f3-4366-4505-9b87-af5e15e7004c
+25M	/workspace/beside-work/c5ca36f3-4366-4505-9b87-af5e15e7004c
+c5ca36f3-4366-4505-9b87-af5e15e7004c/base.metrics.json
+c5ca36f3-4366-4505-9b87-af5e15e7004c/hair_maps.json
+c5ca36f3-4366-4505-9b87-af5e15e7004c/hair_flow.png
+c5ca36f3-4366-4505-9b87-af5e15e7004c/hair_length.png
+c5ca36f3-4366-4505-9b87-af5e15e7004c/base.glb
+c5ca36f3-4366-4505-9b87-af5e15e7004c/raw/mesh.obj
+c5ca36f3-4366-4505-9b87-af5e15e7004c/raw/hair.npz
+c5ca36f3-4366-4505-9b87-af5e15e7004c/raw/uv.png
+c5ca36f3-4366-4505-9b87-af5e15e7004c/input/00_lt-g3r13-gq-1-cutout.png
+removed

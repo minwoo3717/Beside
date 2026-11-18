@@ -1,0 +1,9 @@
+backend-1  | 2026-11-18T16:33:16.105Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+backend-1  | 2026-11-18T16:38:05.755Z  INFO 1 --- [        task-10] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (HttpTimeoutException)
+backend-1  | 2026-11-18T16:38:05.756Z  INFO 1 --- [        task-10] c.e.mockbackend.service.RealJobWorker    : jobId=d54d4889-e454-4476-832e-ffe90e4663a2 waits as PENDING: inference service DOWN (HttpTimeoutException), up to 297 s
+backend-1  | 2026-11-18T16:39:20.285Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> UP (ok)
+backend-1  | 2026-11-18T16:39:23.209Z  INFO 1 --- [        task-10] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (HttpTimeoutException)
+backend-1  | 2026-11-18T16:39:28.774Z  INFO 1 --- [        task-10] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> UP (ok)
+backend-1  | 2026-11-18T16:49:55.826Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (ConnectException)
+backend-1  | 2026-11-18T16:50:11.367Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+backend-1  | 2026-11-18T16:50:57.186Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)

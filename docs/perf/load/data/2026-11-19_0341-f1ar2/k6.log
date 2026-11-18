@@ -1,0 +1,6 @@
+== beside load: gpu_queue.js (F1a) run=f1ar2 base=https://beside-team.duckdns.org
+requests 445 (0.49/s), dropped_iterations 0, vus_max 10
+data sent 0.064 Mbps (whole-run average), received 0.521 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 156.478 ms
+thresholds: all passed
+queue F1a: 40 jobs created in 900 s = 160/h (requested 157/h), 7 retries; fault run, so no queue prediction or recompute

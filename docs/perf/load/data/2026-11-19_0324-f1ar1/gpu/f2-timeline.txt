@@ -1,0 +1,6 @@
+2026-11-18T17:50:35.636Z armed kill_at=+360s restart_after=90s
+2026-11-18T17:56:35.646Z kill -9 6857 (python -m uvicorn app:app --host 127.0.0.1 --port 8002 ) mem_before=1291 MiB
+2026-11-18T17:56:38.686Z after kill: alive=no vram=0 MiB
+2026-11-18T17:58:05.719Z restart MODE=model
+2026-11-18T17:58:25.424Z start_pod.sh returned 0
+2026-11-18T17:58:57.322Z healthz {"status":"ok","device":"cuda","modelLoaded":true,"passthrough":false}

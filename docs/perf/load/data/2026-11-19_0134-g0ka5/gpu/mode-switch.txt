@@ -1,0 +1,2 @@
+2026-11-18T16:49:47.688Z stop model pid 218 for keep-alive 75
+2026-11-18T16:49:48.703Z restart MODE=model UVICORN_TIMEOUT_KEEP_ALIVE=75

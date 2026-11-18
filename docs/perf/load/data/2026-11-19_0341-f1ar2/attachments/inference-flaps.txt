@@ -1,0 +1,1 @@
+UP->DOWN 1  DOWN->UP 2

@@ -1,0 +1,6 @@
+backend-1  | 2026-11-18T17:50:22.961Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+backend-1  | 2026-11-18T17:56:35.865Z  WARN 1 --- [        task-15] c.e.mockbackend.service.RealJobWorker    : jobId=3126a292-d1f0-4e0e-86a4-dadb057292eb stage=FAILED code=INFERENCE_UNAVAILABLE Inference service unreachable (IOException) [POST http://100.83.86.62:8002/infer/upload: java.io.IOException: HTTP/1.1 header parser received no bytes]
+backend-1  | 2026-11-18T17:56:36.963Z  INFO 1 --- [        task-16] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (ConnectException)
+backend-1  | 2026-11-18T17:56:36.964Z  INFO 1 --- [        task-16] c.e.mockbackend.service.RealJobWorker    : jobId=64fd1362-f6b5-47ee-a885-f6a566831740 waits as PENDING: inference service DOWN (ConnectException), up to 1799 s
+backend-1  | 2026-11-18T17:58:30.692Z  INFO 1 --- [        task-16] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+backend-1  | 2026-11-18T17:59:02.338Z  INFO 1 --- [        task-16] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)

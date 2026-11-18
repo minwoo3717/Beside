@@ -22,7 +22,7 @@
 | Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). VM ↔ Pod 는 아직 DERP 중계(왕복 약 300 ms). 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 실제로 이어지는지는 **[계획]** |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4) 2026-11-18 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md) |
 
@@ -37,7 +37,7 @@
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
-| 코드 | VM 의 `~/Beside` 는 `feat/preprocess`(PR #4) + 감사 뒤 강화한 Caddyfile(로컬 수정). `deploy/gcp` → `main` PR 이 병합되면 `main` 으로 바꾼다(아래 '지금 상태'의 절차) |
+| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-18 PR #5 병합 뒤 `b6c0e6c`). 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -329,7 +329,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 4. Pod 안에서 실행한다. **토큰 줄은 사람이 웹 터미널이나 SSH 에서** 한다: 개발 PC 에서 `ssh beside-gcp "grep ^INFERENCE_TOKEN= ~/Beside/deploy/.env"` 로 직접 꺼내 `=` 뒤의 값만 붙인다(이름·따옴표가 들어가면 스크립트가 거부한다). 채팅·문서·셸 기록에 남지 않게 파일로 둔다. exec 도구(Runpod MCP `exec-pod`)는 입력(stdin)이 없어 이 줄을 할 수 없고, 토큰을 명령이나 env 로 넘기면 도구 호출 기록에 남는다. 나머지 줄(clone, mkdir, nohup)은 exec 도구로 해도 된다. exec 도구는 MCP 에 연결된 Runpod 계정의 Pod 에만 닿으므로, 크레딧이 있는 계정으로 연결돼 있어야 한다.
 
    ```bash
-   git clone -b deploy/gcp https://github.com/minwoo3717/Beside.git /workspace/Beside   # main 에 병합된 뒤에는 -b 없이
+   git clone https://github.com/minwoo3717/Beside.git /workspace/Beside   # main(deploy/gcp 는 2026-11-18 PR #5 로 병합됨)
    (umask 077; cat > /workspace/beside-token)    # 토큰을 붙이고 Enter, Ctrl-D
    mkdir -p /workspace/beside-logs
    nohup bash /workspace/Beside/deploy/runpod/start_pod.sh > /workspace/beside-logs/start.log 2>&1 &

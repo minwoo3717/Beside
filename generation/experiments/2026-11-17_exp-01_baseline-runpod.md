@@ -4,7 +4,7 @@
 |---|---|
 | 날짜 | 2026-11-17 |
 | 담당 | Backend(배포·측정). 3D 트랙 검토 필요 |
-| 코드 커밋 | Beside `deploy/gcp`(서비스 코드는 main 과 같음), AnimalLift `5d364cf`(github.com/Chuny1/AnimalLift), 체크포인트 `Chunyi99/AnimalLift` `latest.pt`(2,317,900,684 B) |
+| 코드 커밋 | Beside `deploy/gcp`(볼륨의 리포는 2026-11-18 확인 때 `ee030f2`. 모델 경로는 main 과 같고, main 의 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 없다 — [vm-3rd 7절](../../docs/perf/load/2026-11-19_vm-3rd.md)), AnimalLift `5d364cf`(github.com/Chuny1/AnimalLift), 체크포인트 `Chunyi99/AnimalLift` `latest.pt`(2,317,900,684 B) |
 | 환경 | Runpod Pod, Secure, EU-SE-1, NVIDIA A40 48GB(드라이버 595.112.07, 호스트 CUDA 13.2), 이미지 `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, conda Python 3.10.20, torch 2.4.0+cu124, 배치 1, 사진 1장/작업, 리깅 끔, `/workspace` 는 네트워크 볼륨(fuse) |
 | 입력 데이터 | `backend/src/test/resources/photos/` 의 `dog.jpg`(169,451 B), `dog-single-black.jpg`(205,402 B), `dog-single-edge.jpg`(193,464 B) — 출처는 같은 폴더 `SOURCES.md`, 각 1마리. VM 을 거친 3건은 Spring 이 만든 크롭+배경 제거 PNG 가 첫 사진으로 들어갔다 |
 | 상태 | **[실험 결과]** 시간·메모리·출력 크기(표본 4건). 2026-11-18 2차 부하 시험에서 `dog.jpg` 반복 539건을 더했다(6절). 품질 점수는 **[계획]**(평가자 2명 이상) |

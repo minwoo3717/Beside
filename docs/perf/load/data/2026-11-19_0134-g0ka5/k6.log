@@ -1,0 +1,7 @@
+== beside load: smoke.js (A0) run=g0ka5 base=https://beside-team.duckdns.org
+requests 336 (0.37/s), dropped_iterations 2, vus_max 3
+data sent 0.044 Mbps (whole-run average), received 0.332 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 153.594 ms
+thresholds: 1 failed
+  FAIL dropped_iterations count==0
+time="2026-11-18T16:49:01Z" level=error msg="thresholds on metrics 'dropped_iterations' have been crossed"

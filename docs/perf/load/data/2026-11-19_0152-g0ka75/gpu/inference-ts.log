@@ -1,0 +1,312 @@
+2026-11-18T16:51:42.990Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:51:58.273Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:09.533Z INFO:     127.0.0.1:49266 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:09.537Z INFO:     127.0.0.1:49268 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:13.547Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:17.564Z INFO:     127.0.0.1:49268 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:17.568Z INFO:     127.0.0.1:56784 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:25.604Z INFO:     127.0.0.1:56784 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:28.828Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:37.861Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:41.871Z INFO:     127.0.0.1:37014 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:42.271Z INFO:     127.0.0.1:37016 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:42.873Z INFO:     127.0.0.1:37026 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:43.475Z INFO:     127.0.0.1:37028 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:43.875Z INFO:     127.0.0.1:37032 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:44.076Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:44.477Z INFO:     127.0.0.1:37042 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:45.088Z INFO:     127.0.0.1:37056 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:45.489Z INFO:     127.0.0.1:37070 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:46.089Z INFO:     127.0.0.1:37078 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:46.692Z INFO:     127.0.0.1:37084 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:47.293Z INFO:     127.0.0.1:37092 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:47.696Z INFO:     127.0.0.1:37106 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:48.301Z INFO:     127.0.0.1:37116 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:48.907Z job 09d64756-a8b3-4016-af7c-979b2c36b056: infer 6327 ms, convert 961 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:52:48.909Z job 09d64756-a8b3-4016-af7c-979b2c36b056: upload mode, 1 photo(s) in, /workspace/beside-work/09d64756-a8b3-4016-af7c-979b2c36b056/base.glb out
+2026-11-18T16:52:48.912Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:52:48.915Z INFO:     127.0.0.1:37124 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:49.105Z INFO:     127.0.0.1:55522 - "GET /artifacts/09d64756-a8b3-4016-af7c-979b2c36b056/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:52:49.304Z INFO:     127.0.0.1:37128 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:49.905Z INFO:     127.0.0.1:37130 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:50.506Z INFO:     127.0.0.1:37144 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:51.108Z INFO:     127.0.0.1:37146 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:51.310Z job 09d64756-a8b3-4016-af7c-979b2c36b056: work folder deleted
+2026-11-18T16:52:51.312Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/09d64756-a8b3-4016-af7c-979b2c36b056 HTTP/1.1" 204 No Content
+2026-11-18T16:52:51.509Z INFO:     127.0.0.1:52698 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:52.110Z INFO:     127.0.0.1:52700 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:52:59.361Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:07.204Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:13.626Z job 18df7407-bcc7-4681-829c-5662c34dcf59: infer 3856 ms, convert 935 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:53:13.629Z job 18df7407-bcc7-4681-829c-5662c34dcf59: upload mode, 1 photo(s) in, /workspace/beside-work/18df7407-bcc7-4681-829c-5662c34dcf59/base.glb out
+2026-11-18T16:53:13.631Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:53:13.829Z INFO:     127.0.0.1:55522 - "GET /artifacts/18df7407-bcc7-4681-829c-5662c34dcf59/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:53:14.630Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:15.834Z job 18df7407-bcc7-4681-829c-5662c34dcf59: work folder deleted
+2026-11-18T16:53:15.837Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/18df7407-bcc7-4681-829c-5662c34dcf59 HTTP/1.1" 204 No Content
+2026-11-18T16:53:29.900Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:37.125Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:43.148Z job dca4c2ed-da26-4b7d-bc71-ddfb7a409e36: infer 3534 ms, convert 935 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:53:43.152Z job dca4c2ed-da26-4b7d-bc71-ddfb7a409e36: upload mode, 1 photo(s) in, /workspace/beside-work/dca4c2ed-da26-4b7d-bc71-ddfb7a409e36/base.glb out
+2026-11-18T16:53:43.155Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:53:43.550Z INFO:     127.0.0.1:55522 - "GET /artifacts/dca4c2ed-da26-4b7d-bc71-ddfb7a409e36/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:53:45.155Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:53:45.355Z job dca4c2ed-da26-4b7d-bc71-ddfb7a409e36: work folder deleted
+2026-11-18T16:53:45.358Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/dca4c2ed-da26-4b7d-bc71-ddfb7a409e36 HTTP/1.1" 204 No Content
+2026-11-18T16:54:00.417Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:54:07.050Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:54:13.292Z job 782c84d6-90af-443d-9932-34c50b021e60: infer 3673 ms, convert 890 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:54:13.295Z job 782c84d6-90af-443d-9932-34c50b021e60: upload mode, 1 photo(s) in, /workspace/beside-work/782c84d6-90af-443d-9932-34c50b021e60/base.glb out
+2026-11-18T16:54:13.302Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:54:13.492Z INFO:     127.0.0.1:55522 - "GET /artifacts/782c84d6-90af-443d-9932-34c50b021e60/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:54:15.499Z job 782c84d6-90af-443d-9932-34c50b021e60: work folder deleted
+2026-11-18T16:54:15.509Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/782c84d6-90af-443d-9932-34c50b021e60 HTTP/1.1" 204 No Content
+2026-11-18T16:54:15.703Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:54:30.987Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:54:37.054Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:54:43.307Z job 8beca8fe-12e7-4631-9196-37c1dbc1fbd2: infer 3680 ms, convert 878 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:54:43.309Z job 8beca8fe-12e7-4631-9196-37c1dbc1fbd2: upload mode, 1 photo(s) in, /workspace/beside-work/8beca8fe-12e7-4631-9196-37c1dbc1fbd2/base.glb out
+2026-11-18T16:54:43.311Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:54:43.512Z INFO:     127.0.0.1:55522 - "GET /artifacts/8beca8fe-12e7-4631-9196-37c1dbc1fbd2/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:54:45.335Z job 8beca8fe-12e7-4631-9196-37c1dbc1fbd2: work folder deleted
+2026-11-18T16:54:45.347Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/8beca8fe-12e7-4631-9196-37c1dbc1fbd2 HTTP/1.1" 204 No Content
+2026-11-18T16:54:46.138Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:01.421Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:07.047Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:13.472Z job 3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691: infer 3725 ms, convert 904 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:55:13.478Z job 3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691: upload mode, 1 photo(s) in, /workspace/beside-work/3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691/base.glb out
+2026-11-18T16:55:13.487Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:55:13.673Z INFO:     127.0.0.1:55522 - "GET /artifacts/3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:55:15.479Z job 3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691: work folder deleted
+2026-11-18T16:55:15.486Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/3b0c30a1-c8c5-4fc4-9a3d-df1b3e85e691 HTTP/1.1" 204 No Content
+2026-11-18T16:55:16.702Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:32.001Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:37.042Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:55:43.475Z job 12497c29-575b-4d10-977d-867de3f59beb: infer 3783 ms, convert 927 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:55:43.479Z job 12497c29-575b-4d10-977d-867de3f59beb: upload mode, 1 photo(s) in, /workspace/beside-work/12497c29-575b-4d10-977d-867de3f59beb/base.glb out
+2026-11-18T16:55:43.487Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:55:43.677Z INFO:     127.0.0.1:55522 - "GET /artifacts/12497c29-575b-4d10-977d-867de3f59beb/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:55:45.689Z job 12497c29-575b-4d10-977d-867de3f59beb: work folder deleted
+2026-11-18T16:55:45.694Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/12497c29-575b-4d10-977d-867de3f59beb HTTP/1.1" 204 No Content
+2026-11-18T16:55:47.309Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:02.564Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:06.980Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:13.225Z job 05636b71-4767-435b-9d98-04c94dc070bf: infer 3647 ms, convert 841 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:56:13.230Z job 05636b71-4767-435b-9d98-04c94dc070bf: upload mode, 1 photo(s) in, /workspace/beside-work/05636b71-4767-435b-9d98-04c94dc070bf/base.glb out
+2026-11-18T16:56:13.233Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:56:13.426Z INFO:     127.0.0.1:55522 - "GET /artifacts/05636b71-4767-435b-9d98-04c94dc070bf/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:56:15.436Z job 05636b71-4767-435b-9d98-04c94dc070bf: work folder deleted
+2026-11-18T16:56:15.438Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/05636b71-4767-435b-9d98-04c94dc070bf HTTP/1.1" 204 No Content
+2026-11-18T16:56:17.843Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:33.140Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:36.951Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:56:43.409Z job b0f04efc-b92f-483a-b148-63412bd8a17e: infer 3750 ms, convert 915 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:56:43.412Z job b0f04efc-b92f-483a-b148-63412bd8a17e: upload mode, 1 photo(s) in, /workspace/beside-work/b0f04efc-b92f-483a-b148-63412bd8a17e/base.glb out
+2026-11-18T16:56:43.415Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:56:43.611Z INFO:     127.0.0.1:55522 - "GET /artifacts/b0f04efc-b92f-483a-b148-63412bd8a17e/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:56:45.621Z job b0f04efc-b92f-483a-b148-63412bd8a17e: work folder deleted
+2026-11-18T16:56:45.625Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/b0f04efc-b92f-483a-b148-63412bd8a17e HTTP/1.1" 204 No Content
+2026-11-18T16:56:48.429Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:03.701Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:07.119Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:13.347Z job 5059ad7f-64ab-4ead-92e4-db743e7fdc39: infer 3768 ms, convert 833 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:57:13.350Z job 5059ad7f-64ab-4ead-92e4-db743e7fdc39: upload mode, 1 photo(s) in, /workspace/beside-work/5059ad7f-64ab-4ead-92e4-db743e7fdc39/base.glb out
+2026-11-18T16:57:13.354Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:57:13.547Z INFO:     127.0.0.1:55522 - "GET /artifacts/5059ad7f-64ab-4ead-92e4-db743e7fdc39/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:57:15.555Z job 5059ad7f-64ab-4ead-92e4-db743e7fdc39: work folder deleted
+2026-11-18T16:57:15.559Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/5059ad7f-64ab-4ead-92e4-db743e7fdc39 HTTP/1.1" 204 No Content
+2026-11-18T16:57:18.966Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:34.241Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:37.052Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:57:43.300Z job 8ede4e64-5295-410a-a374-592e5508ad5b: infer 3768 ms, convert 878 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:57:43.501Z job 8ede4e64-5295-410a-a374-592e5508ad5b: upload mode, 1 photo(s) in, /workspace/beside-work/8ede4e64-5295-410a-a374-592e5508ad5b/base.glb out
+2026-11-18T16:57:43.504Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:57:43.702Z INFO:     127.0.0.1:55522 - "GET /artifacts/8ede4e64-5295-410a-a374-592e5508ad5b/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:57:45.506Z job 8ede4e64-5295-410a-a374-592e5508ad5b: work folder deleted
+2026-11-18T16:57:45.509Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/8ede4e64-5295-410a-a374-592e5508ad5b HTTP/1.1" 204 No Content
+2026-11-18T16:57:49.521Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:04.681Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:07.109Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:13.351Z job 2e379308-aa29-47ed-a102-20a1ae63060e: infer 3714 ms, convert 914 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:58:13.354Z job 2e379308-aa29-47ed-a102-20a1ae63060e: upload mode, 1 photo(s) in, /workspace/beside-work/2e379308-aa29-47ed-a102-20a1ae63060e/base.glb out
+2026-11-18T16:58:13.359Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:58:13.751Z INFO:     127.0.0.1:55522 - "GET /artifacts/2e379308-aa29-47ed-a102-20a1ae63060e/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:58:15.564Z job 2e379308-aa29-47ed-a102-20a1ae63060e: work folder deleted
+2026-11-18T16:58:15.571Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/2e379308-aa29-47ed-a102-20a1ae63060e HTTP/1.1" 204 No Content
+2026-11-18T16:58:19.994Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:35.264Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:37.071Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:58:43.509Z job 7415334f-77f6-4b61-9de9-de53f9c4db18: infer 4003 ms, convert 852 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:58:43.513Z job 7415334f-77f6-4b61-9de9-de53f9c4db18: upload mode, 1 photo(s) in, /workspace/beside-work/7415334f-77f6-4b61-9de9-de53f9c4db18/base.glb out
+2026-11-18T16:58:43.516Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:58:43.910Z INFO:     127.0.0.1:55522 - "GET /artifacts/7415334f-77f6-4b61-9de9-de53f9c4db18/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:58:45.717Z job 7415334f-77f6-4b61-9de9-de53f9c4db18: work folder deleted
+2026-11-18T16:58:45.721Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/7415334f-77f6-4b61-9de9-de53f9c4db18 HTTP/1.1" 204 No Content
+2026-11-18T16:58:50.545Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:59:05.847Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:59:07.054Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:59:13.305Z job 79508829-1ef3-4068-acec-ecfc5cef2877: infer 3729 ms, convert 782 ms, 7774 tris, 1326748 bytes
+2026-11-18T16:59:13.409Z job 79508829-1ef3-4068-acec-ecfc5cef2877: upload mode, 1 photo(s) in, /workspace/beside-work/79508829-1ef3-4068-acec-ecfc5cef2877/base.glb out
+2026-11-18T16:59:13.412Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T16:59:13.506Z INFO:     127.0.0.1:55522 - "GET /artifacts/79508829-1ef3-4068-acec-ecfc5cef2877/base.glb HTTP/1.1" 200 OK
+2026-11-18T16:59:15.313Z job 79508829-1ef3-4068-acec-ecfc5cef2877: work folder deleted
+2026-11-18T16:59:15.316Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/79508829-1ef3-4068-acec-ecfc5cef2877 HTTP/1.1" 204 No Content
+2026-11-18T16:59:21.151Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:59:36.436Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T16:59:37.037Z INFO:     127.0.0.1:39194 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:00:42.912Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:00:46.727Z job c6d056e1-ed76-4742-8e09-d7beab511f13: infer 3793 ms, convert 859 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:00:46.730Z job c6d056e1-ed76-4742-8e09-d7beab511f13: upload mode, 1 photo(s) in, /workspace/beside-work/c6d056e1-ed76-4742-8e09-d7beab511f13/base.glb out
+2026-11-18T17:00:46.735Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:00:46.927Z INFO:     127.0.0.1:55522 - "GET /artifacts/c6d056e1-ed76-4742-8e09-d7beab511f13/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:00:48.935Z job c6d056e1-ed76-4742-8e09-d7beab511f13: work folder deleted
+2026-11-18T17:00:48.939Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/c6d056e1-ed76-4742-8e09-d7beab511f13 HTTP/1.1" 204 No Content
+2026-11-18T17:00:49.137Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:00:56.574Z job e4b3c3de-b190-4753-a1af-65b18ad03cc1: infer 3792 ms, convert 828 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:00:56.577Z job e4b3c3de-b190-4753-a1af-65b18ad03cc1: upload mode, 1 photo(s) in, /workspace/beside-work/e4b3c3de-b190-4753-a1af-65b18ad03cc1/base.glb out
+2026-11-18T17:00:56.580Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:00:56.775Z INFO:     127.0.0.1:55522 - "GET /artifacts/e4b3c3de-b190-4753-a1af-65b18ad03cc1/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:00:58.182Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:00:58.787Z job e4b3c3de-b190-4753-a1af-65b18ad03cc1: work folder deleted
+2026-11-18T17:00:58.806Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/e4b3c3de-b190-4753-a1af-65b18ad03cc1 HTTP/1.1" 204 No Content
+2026-11-18T17:01:08.048Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:01:13.500Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:01:15.308Z job ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5: infer 4085 ms, convert 1038 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:01:15.311Z job ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5: upload mode, 1 photo(s) in, /workspace/beside-work/ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5/base.glb out
+2026-11-18T17:01:15.314Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:01:15.709Z INFO:     127.0.0.1:55522 - "GET /artifacts/ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:01:17.521Z job ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5: work folder deleted
+2026-11-18T17:01:17.525Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/ee50fc30-d763-4df4-b2fd-9d97cc4d4bf5 HTTP/1.1" 204 No Content
+2026-11-18T17:01:28.769Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:01:38.050Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:01:44.077Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:01:45.282Z job 288c9e39-bca6-47f2-8174-ca750ceab47a: infer 4198 ms, convert 986 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:01:45.288Z job 288c9e39-bca6-47f2-8174-ca750ceab47a: upload mode, 1 photo(s) in, /workspace/beside-work/288c9e39-bca6-47f2-8174-ca750ceab47a/base.glb out
+2026-11-18T17:01:45.291Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:01:45.487Z INFO:     127.0.0.1:55522 - "GET /artifacts/288c9e39-bca6-47f2-8174-ca750ceab47a/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:01:47.508Z job 288c9e39-bca6-47f2-8174-ca750ceab47a: work folder deleted
+2026-11-18T17:01:47.511Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/288c9e39-bca6-47f2-8174-ca750ceab47a HTTP/1.1" 204 No Content
+2026-11-18T17:01:59.358Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:08.399Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:14.667Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:14.673Z job 790b1317-695d-43cd-9ba7-6366db570ef4: infer 3837 ms, convert 826 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:02:14.676Z job 790b1317-695d-43cd-9ba7-6366db570ef4: upload mode, 1 photo(s) in, /workspace/beside-work/790b1317-695d-43cd-9ba7-6366db570ef4/base.glb out
+2026-11-18T17:02:14.679Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:02:15.068Z INFO:     127.0.0.1:55522 - "GET /artifacts/790b1317-695d-43cd-9ba7-6366db570ef4/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:02:16.875Z job 790b1317-695d-43cd-9ba7-6366db570ef4: work folder deleted
+2026-11-18T17:02:16.878Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/790b1317-695d-43cd-9ba7-6366db570ef4 HTTP/1.1" 204 No Content
+2026-11-18T17:02:29.948Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:37.189Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:43.832Z job 67433b18-8ca6-441e-83e8-1704f5010445: infer 3998 ms, convert 941 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:02:43.836Z job 67433b18-8ca6-441e-83e8-1704f5010445: upload mode, 1 photo(s) in, /workspace/beside-work/67433b18-8ca6-441e-83e8-1704f5010445/base.glb out
+2026-11-18T17:02:43.839Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:02:44.031Z INFO:     127.0.0.1:55522 - "GET /artifacts/67433b18-8ca6-441e-83e8-1704f5010445/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:02:45.238Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:02:45.840Z job 67433b18-8ca6-441e-83e8-1704f5010445: work folder deleted
+2026-11-18T17:02:45.844Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/67433b18-8ca6-441e-83e8-1704f5010445 HTTP/1.1" 204 No Content
+2026-11-18T17:03:00.523Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:03:07.152Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:03:13.380Z job dcd9eaf5-16b6-404c-92cd-cd43541cbd6b: infer 3619 ms, convert 883 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:03:13.387Z job dcd9eaf5-16b6-404c-92cd-cd43541cbd6b: upload mode, 1 photo(s) in, /workspace/beside-work/dcd9eaf5-16b6-404c-92cd-cd43541cbd6b/base.glb out
+2026-11-18T17:03:13.390Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:03:13.781Z INFO:     127.0.0.1:55522 - "GET /artifacts/dcd9eaf5-16b6-404c-92cd-cd43541cbd6b/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:03:15.593Z job dcd9eaf5-16b6-404c-92cd-cd43541cbd6b: work folder deleted
+2026-11-18T17:03:15.597Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/dcd9eaf5-16b6-404c-92cd-cd43541cbd6b HTTP/1.1" 204 No Content
+2026-11-18T17:03:15.793Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:03:31.079Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:03:37.125Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:03:42.993Z job b935bdfe-e358-4cfe-af19-85222878774c: infer 3553 ms, convert 713 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:03:42.999Z job b935bdfe-e358-4cfe-af19-85222878774c: upload mode, 1 photo(s) in, /workspace/beside-work/b935bdfe-e358-4cfe-af19-85222878774c/base.glb out
+2026-11-18T17:03:43.002Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:03:43.394Z INFO:     127.0.0.1:55522 - "GET /artifacts/b935bdfe-e358-4cfe-af19-85222878774c/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:03:45.202Z job b935bdfe-e358-4cfe-af19-85222878774c: work folder deleted
+2026-11-18T17:03:45.205Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/b935bdfe-e358-4cfe-af19-85222878774c HTTP/1.1" 204 No Content
+2026-11-18T17:03:46.207Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:01.490Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:07.325Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:13.978Z job 00ce2c28-8785-4a3f-b8b4-f810a7450f92: infer 4000 ms, convert 880 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:04:13.982Z job 00ce2c28-8785-4a3f-b8b4-f810a7450f92: upload mode, 1 photo(s) in, /workspace/beside-work/00ce2c28-8785-4a3f-b8b4-f810a7450f92/base.glb out
+2026-11-18T17:04:13.987Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:04:14.178Z INFO:     127.0.0.1:55522 - "GET /artifacts/00ce2c28-8785-4a3f-b8b4-f810a7450f92/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:04:15.988Z job 00ce2c28-8785-4a3f-b8b4-f810a7450f92: work folder deleted
+2026-11-18T17:04:15.992Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/00ce2c28-8785-4a3f-b8b4-f810a7450f92 HTTP/1.1" 204 No Content
+2026-11-18T17:04:16.792Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:32.107Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:37.133Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:04:43.413Z job 8dcadf49-c249-4bd6-a1e8-eed240bbe37b: infer 3746 ms, convert 825 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:04:43.417Z job 8dcadf49-c249-4bd6-a1e8-eed240bbe37b: upload mode, 1 photo(s) in, /workspace/beside-work/8dcadf49-c249-4bd6-a1e8-eed240bbe37b/base.glb out
+2026-11-18T17:04:43.419Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:04:43.613Z INFO:     127.0.0.1:55522 - "GET /artifacts/8dcadf49-c249-4bd6-a1e8-eed240bbe37b/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:04:45.636Z job 8dcadf49-c249-4bd6-a1e8-eed240bbe37b: work folder deleted
+2026-11-18T17:04:45.640Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/8dcadf49-c249-4bd6-a1e8-eed240bbe37b HTTP/1.1" 204 No Content
+2026-11-18T17:04:47.445Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:02.739Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:07.359Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:13.814Z job b5db80d1-bc87-4c23-b25d-fd0e55b4db8d: infer 3926 ms, convert 824 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:05:13.817Z job b5db80d1-bc87-4c23-b25d-fd0e55b4db8d: upload mode, 1 photo(s) in, /workspace/beside-work/b5db80d1-bc87-4c23-b25d-fd0e55b4db8d/base.glb out
+2026-11-18T17:05:13.820Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:05:14.015Z INFO:     127.0.0.1:55522 - "GET /artifacts/b5db80d1-bc87-4c23-b25d-fd0e55b4db8d/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:05:15.840Z job b5db80d1-bc87-4c23-b25d-fd0e55b4db8d: work folder deleted
+2026-11-18T17:05:15.844Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/b5db80d1-bc87-4c23-b25d-fd0e55b4db8d HTTP/1.1" 204 No Content
+2026-11-18T17:05:17.850Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:33.145Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:37.162Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:05:43.408Z job 0bd71e6e-bb3a-420c-9ca6-89117910819c: infer 3713 ms, convert 812 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:05:43.413Z job 0bd71e6e-bb3a-420c-9ca6-89117910819c: upload mode, 1 photo(s) in, /workspace/beside-work/0bd71e6e-bb3a-420c-9ca6-89117910819c/base.glb out
+2026-11-18T17:05:43.419Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:05:43.608Z INFO:     127.0.0.1:55522 - "GET /artifacts/0bd71e6e-bb3a-420c-9ca6-89117910819c/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:05:45.615Z job 0bd71e6e-bb3a-420c-9ca6-89117910819c: work folder deleted
+2026-11-18T17:05:45.619Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/0bd71e6e-bb3a-420c-9ca6-89117910819c HTTP/1.1" 204 No Content
+2026-11-18T17:05:48.432Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:03.780Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:07.610Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:13.834Z job 0529fdcb-0932-4453-9fcf-c7dd42bd375e: infer 3754 ms, convert 875 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:06:13.839Z job 0529fdcb-0932-4453-9fcf-c7dd42bd375e: upload mode, 1 photo(s) in, /workspace/beside-work/0529fdcb-0932-4453-9fcf-c7dd42bd375e/base.glb out
+2026-11-18T17:06:13.842Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:06:14.236Z INFO:     127.0.0.1:55522 - "GET /artifacts/0529fdcb-0932-4453-9fcf-c7dd42bd375e/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:06:16.043Z job 0529fdcb-0932-4453-9fcf-c7dd42bd375e: work folder deleted
+2026-11-18T17:06:16.047Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/0529fdcb-0932-4453-9fcf-c7dd42bd375e HTTP/1.1" 204 No Content
+2026-11-18T17:06:19.055Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:34.356Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:37.167Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:06:43.420Z job 51776f5e-926a-4ec7-8cb8-546976f2dc82: infer 3769 ms, convert 844 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:06:43.423Z job 51776f5e-926a-4ec7-8cb8-546976f2dc82: upload mode, 1 photo(s) in, /workspace/beside-work/51776f5e-926a-4ec7-8cb8-546976f2dc82/base.glb out
+2026-11-18T17:06:43.427Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:06:43.839Z INFO:     127.0.0.1:55522 - "GET /artifacts/51776f5e-926a-4ec7-8cb8-546976f2dc82/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:06:45.647Z job 51776f5e-926a-4ec7-8cb8-546976f2dc82: work folder deleted
+2026-11-18T17:06:45.650Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/51776f5e-926a-4ec7-8cb8-546976f2dc82 HTTP/1.1" 204 No Content
+2026-11-18T17:06:49.464Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:04.736Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:07.545Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:13.971Z job 12fed34c-d9e8-4ae0-8c04-0a344b5393e1: infer 3788 ms, convert 871 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:07:13.977Z job 12fed34c-d9e8-4ae0-8c04-0a344b5393e1: upload mode, 1 photo(s) in, /workspace/beside-work/12fed34c-d9e8-4ae0-8c04-0a344b5393e1/base.glb out
+2026-11-18T17:07:13.981Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:07:14.173Z INFO:     127.0.0.1:55522 - "GET /artifacts/12fed34c-d9e8-4ae0-8c04-0a344b5393e1/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:07:16.180Z job 12fed34c-d9e8-4ae0-8c04-0a344b5393e1: work folder deleted
+2026-11-18T17:07:16.187Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/12fed34c-d9e8-4ae0-8c04-0a344b5393e1 HTTP/1.1" 204 No Content
+2026-11-18T17:07:20.006Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:35.323Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:37.331Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:07:43.559Z job 999bd7ca-cd91-462d-9c23-94222abc1092: infer 3790 ms, convert 862 ms, 7774 tris, 1326748 bytes
+2026-11-18T17:07:43.564Z job 999bd7ca-cd91-462d-9c23-94222abc1092: upload mode, 1 photo(s) in, /workspace/beside-work/999bd7ca-cd91-462d-9c23-94222abc1092/base.glb out
+2026-11-18T17:07:43.568Z INFO:     127.0.0.1:55522 - "POST /infer/upload HTTP/1.1" 200 OK
+2026-11-18T17:07:43.959Z INFO:     127.0.0.1:55522 - "GET /artifacts/999bd7ca-cd91-462d-9c23-94222abc1092/base.glb HTTP/1.1" 200 OK
+2026-11-18T17:07:45.768Z job 999bd7ca-cd91-462d-9c23-94222abc1092: work folder deleted
+2026-11-18T17:07:45.774Z INFO:     127.0.0.1:55522 - "DELETE /artifacts/999bd7ca-cd91-462d-9c23-94222abc1092 HTTP/1.1" 204 No Content
+2026-11-18T17:07:50.606Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:08:05.894Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:08:21.190Z INFO:     127.0.0.1:47172 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-18T17:08:21.394Z INFO:     Shutting down
+2026-11-18T17:08:21.399Z INFO:     Waiting for application shutdown.
+2026-11-18T17:08:21.403Z INFO:     Application shutdown complete.
+2026-11-18T17:08:21.406Z INFO:     Finished server process [2608]
+2026-11-18T17:08:22.798Z 
+2026-11-18T17:08:22.800Z === 2026-11-18T17:08:22Z start_pod.sh ===
+2026-11-18T17:08:26.611Z AnimalLift: /workspace/AnimalLift | work: /workspace/beside-work | listen: 127.0.0.1:8002
+2026-11-18T17:08:26.615Z token: set (X-Inference-Token required on /infer, /infer/upload, /artifacts)
+2026-11-18T17:08:26.619Z rigging: off (no template at /workspace/beside-rig/template-rigged.glb)
+2026-11-18T17:08:26.622Z wait for: 'model loaded ... on cuda'   (stop: Ctrl+C)
+2026-11-18T17:08:31.243Z INFO:     Started server process [4997]
+2026-11-18T17:08:31.246Z INFO:     Waiting for application startup.
+2026-11-18T17:08:31.249Z INFO:     Application startup complete.
+2026-11-18T17:08:31.253Z INFO:     Uvicorn running on http://127.0.0.1:8002 (Press CTRL+C to quit)
