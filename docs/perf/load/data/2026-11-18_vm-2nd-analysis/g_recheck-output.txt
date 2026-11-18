@@ -1,0 +1,41 @@
+== 1. connection reuse from pod access-log ports (job port = port of its GET /artifacts/<job>/base.glb)
+  g0r1: jobs 31 with port 31, distinct ports 31, new 31 reused 0, xfer mean new 5.43 s reused nan s
+  g1r05: jobs 72 with port 72, distinct ports 35, new 35 reused 37, xfer mean new 4.82 s reused 3.85 s
+  g1r07: jobs 125 with port 125, distinct ports 31, new 31 reused 94, xfer mean new 4.99 s reused 3.69 s
+  g3r13: jobs 150 with port 150, distinct ports 12, new 12 reused 138, xfer mean new 4.27 s reused 3.78 s
+  g3r165: jobs 161 with port 161, distinct ports 2, new 2 reused 159, xfer mean new 4.68 s reused 3.51 s
+== 2. G1r rho0.7: P-K without the 14 slow jobs, replay with them normalised, conditioned Monte Carlo
+  P-K all: mean slot 10.670 cv 0.322 rho 0.741 Wq 16.84 s
+  P-K without slow: mean slot 9.611 cv 0.120 rho 0.667 Wq 9.78 s
+  replay as run 8.43 s; slow slots -> 9.61 s: 7.09 s
+  conditioned on n=125: percentile of 8.087 s = 3.2, 5-95 % 8.57-24.31 s
+  random slot order on actual arrivals: mean 10.59 s, actual order percentile 1.1
+== 3. replay with mean handover instead of median
+  g1r05 median handover 833.7: replay mean 3.461 s
+  g1r05 mean handover 794.7: replay mean 3.433 s
+  g1r07 median handover 836.7: replay mean 8.426 s
+  g1r07 mean handover 762.1: replay mean 8.163 s
+== 4. CPU per job from Prometheus (window (startedAt, endedAt])
+  g0r1: system_cpu 7.6% -> VM 4.50 core-s/job; process_cpu 6.3% -> JVM 3.74 core-s/job
+  g1r05: system_cpu 9.2% -> VM 3.83 core-s/job; process_cpu 8.0% -> JVM 3.33 core-s/job
+  g1r07: system_cpu 12.3% -> VM 3.58 core-s/job; process_cpu 11.0% -> JVM 3.20 core-s/job
+  g3r13: system_cpu 18.9% -> VM 3.80 core-s/job; process_cpu 17.0% -> JVM 3.43 core-s/job
+  g3r165: system_cpu 21.0% -> VM 3.76 core-s/job; process_cpu 18.8% -> JVM 3.37 core-s/job
+== 5. GPU utilisation inside inference intervals (pod stamps lag 0..1 s)
+  g1r07 lag 0.0: inside n 118 mean 46.6%, outside n 245 mean 3.2%
+  g1r07 lag 1.0: inside n 121 mean 45.8%, outside n 242 mean 3.1%
+  g3r13 lag 0.0: inside n 107 mean 48.1%, outside n 195 mean 6.2%
+  g3r13 lag 1.0: inside n 111 mean 48.5%, outside n 191 mean 5.1%
+  g3r165 lag 0.0: inside n 118 mean 47.6%, outside n 170 mean 5.5%
+  g3r165 lag 1.0: inside n 114 mean 51.0%, outside n 174 mean 4.2%
+== 6. host loadavg (1 min) per run window
+  g0r1: min 5.10 max 15.88 n 182
+  g1r05: min 3.22 max 12.69 n 299
+  g1r07: min 3.29 max 10.46 n 363
+  g3r13: min 4.70 max 18.91 n 302
+  g3r165: min 4.58 max 18.81 n 288
+== 7. G0r upload estimate for all jobs (PROCESSING log -> pod inference start)
+  n 31 min 1.94 median 2.50 max 2.81 s (upper bound: pod stamps lag 0..1 s)
+== 8. g3r165 slope window details
+  arrivals 120-1200 s: 146 (486.7/h), finishes 122 (406.7/h), N(120)=4 N(1200)=28, arrivals 120-660 71 vs 660-1200 75
+  max waiting for the slot: 26

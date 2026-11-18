@@ -127,14 +127,14 @@ DoD:
 | `RealJobWorker`: 추론 슬롯 대기(`inference.max-concurrency=1`) → PROCESSING → `/infer` 호출·타임아웃 → 오류 코드 매핑 → GLB 헤더 확인·복사 → `JobFinisher` | **[구현됨]** 2026-10-04 (선행) | `InferenceClientTest` 18개·`RealJobWorkerTest` 5개(가짜 `/infer`). 실제 FastAPI 스텁으로 패스스루 COMPLETED(48바이트 최소 GLB), 501·꺼짐 → `INFERENCE_UNAVAILABLE`, 0바이트 GLB → `CONVERSION_FAILED` 확인 |
 | 실행별 측정 `job_runs`(서버 타이밍 + `/infer` 수치 + `passthrough`·`modelVersion`·`glbBytes`), `events.jsonl` 19 필드 | **[구현됨]** 2026-10-06 | `JobPersistenceTest`·`JobEventsTest`·`RealJobWorkerTest`. 측정표는 real 프로파일 h2-console 에서 `CSVWRITE`(METRICS §1.1). `/infer` 선택 필드 `modelVersion` 추가(내부 계약) |
 | 배포 구성 | **결정됨** 2026-10-05 + 절차 **[구현됨]** 2026-10-06 | 팀원 GPU PC 한 대에 Spring + 추론 서비스(같은 호스트, #6 (a) 제안). `scripts/run_real.ps1`, [backend/README](../backend/README.md) 'GPU PC 에 real 배치'. 실제 설치는 10-20 주 **직접 할 일**. 바이너리 전송으로 바뀌면 `InferenceClient` 만 교체 |
-| 실제 AnimalLift 모델로 전체 흐름 | **[계획]** — 모델 연결 코드는 #1 로 머지됨, 실제 사진으로 돌린 기록(job_runs·exp-02)은 아직 없음 | VM 배치는 업로드 모드(4b S2)로 같은 흐름 |
+| 실제 AnimalLift 모델로 전체 흐름 | **[실험 결과]** — VM 업로드 모드(4b S2) + Runpod A40 으로 exp-01(2026-11-17, VM 경유 3건(사진 3장) + Pod 직접 1건)과 2차 부하 시험(2026-11-18, 539건, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 사진 10장 이상·품질 채점(exp-02)은 [계획] | 모델 연결 코드는 #1 로 머지됨 |
 | Unity 에서 real 프로파일 전체 흐름 | **[계획]** — 600초 대기·`progress` null 처리는 앱(#1)에 있음, 실기기 real 흐름 기록 없음 | |
 
 DoD:
 - [ ] `--spring.profiles.active=real` 로 `e2e_mock.ps1` 이 실제 생성 GLB 를 받는다 (패스스루 샘플로는 2026-10-04 확인)
 - [x] 실패 경로 4종(`INFERENCE_FAILED / INFERENCE_TIMEOUT / INFERENCE_UNAVAILABLE / CONVERSION_FAILED`) 테스트 — 2026-10-04 `RealJobWorkerTest`(가짜 `/infer`), 실제 스텁으로 `INFERENCE_UNAVAILABLE`·`CONVERSION_FAILED` 재확인
 - [ ] Unity 실기기에서 실제 모델 AR 배치 (영상)
-- [ ] `events.jsonl` 작업 10건 이상 **[실험 결과]**
+- [x] `events.jsonl` 작업 10건 이상 **[실험 결과]** — 2026-11-18 2차 부하 시험 539건(사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))
 
 ## 4b단계 — 배포·확장 (2026-10-30 ~ 11-22)
 
@@ -156,9 +156,9 @@ DoD:
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
 | S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |
 | S9 | 반려동물 보관함(웹) | openapi 추가 | 〃 |
-| S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | 문서 동기화 **[구현됨]**, 실측 10건+ **[계획]**(VM·Runpod Pod 연결 뒤) |
+| S10 | 문서 동기화(#1 머지 반영), 실측 10건+ | 없음 | 문서 동기화 **[구현됨]**, 실측 10건+ **[실험 결과]**(2026-11-18, 539건, 사진 1장 반복. 사진 10장 이상은 [계획]) |
 
-직접 할 일: ~~VM 생성, 도메인, `deploy/.env`~~(2026-11-13 GCP e2-standard-2·50GB, Ubuntu 24.04 로 끝남), ~~Runpod 크레딧 구매 → Tailscale 계정과 로그인 승인(VM·Pod) → Pod 에서 `deploy/runpod/start_pod.sh` → AnimalLift 설치·모델 모드 1건~~(2026-11-17 끝남, exp-01). 남은 것: Runpod Secret 값에서 `INFERENCE_TOKEN=` 떼기, 폰 앱으로 1건, 실측 10건+.
+직접 할 일: ~~VM 생성, 도메인, `deploy/.env`~~(2026-11-13 GCP e2-standard-2·50GB, Ubuntu 24.04 로 끝남), ~~Runpod 크레딧 구매 → Tailscale 계정과 로그인 승인(VM·Pod) → Pod 에서 `deploy/runpod/start_pod.sh` → AnimalLift 설치·모델 모드 1건~~(2026-11-17 끝남, exp-01). 남은 것: Runpod Secret 값에서 `INFERENCE_TOKEN=` 떼기, 폰 앱으로 1건, 사진 10장 이상(같은 사진 539건은 2026-11-18 2차 부하 시험).
 
 ### 부하·운영 — 쏘카 수준 목표 (2026-11-01 추가)
 
@@ -172,9 +172,9 @@ DoD:
 | B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | **[구현됨]** 〃 — 실제 Tomcat 에서 다운로드 중간 끊기 시험 포함 |
 | B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 파일 **[구현됨]** 〃. 이 PC 에 Docker 가 없어 compose·Caddy·Grafana 실행은 CI 첫 실행과 VM 에서 처음 확인 **[계획]** |
 | B5 | 추론 스텁 패스스루 설정(지연·슬롯·실패율·느린 요청, 기본 꺼짐) — Generation 리뷰 | 없음 | **[구현됨]** 〃 — `test_app.py` 8개 추가, 3D 담당 리뷰 전 |
-| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). A3 large·G·F·A5·A6 **[계획]** |
+| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). 2차(실제 A40, G0r·G1r·G3r) 같은 날 **[실험 결과]** — [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md). A3 large·스텁 G1·G2·G3·실제 GPU G2r·F(스텁 F1~F5, 실제 F1b-real·F2-real)·A5·A6 **[계획]** |
 | B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 82개. 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 1차 2026-11-18 **[실험 결과]**(B6) |
-| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18), G1·G2·F1~F4·A5·A6·G3·F5 **[계획]** |
+| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G0r·G1r·G3r 2차 **[실험 결과]**(2026-11-18). 스텁 G1·G2·G3, F1~F5, A5·A6, 실제 GPU 의 G2r·F1b-real·F2-real **[계획]** |
 | R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #21·#22, 결정 전에는 검토 브랜치에만 |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
 

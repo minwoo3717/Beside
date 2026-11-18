@@ -23,7 +23,7 @@
 막는 범위가 큰 것부터.
 
 1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 23개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#19 큐 상한(503 `QUEUE_FULL`)·#20 요청 제한(429 `RATE_LIMITED`)·#21 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
-2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 2026-11-17 Runpod A40 에 AnimalLift 설치·모델 모드 실행, 1건 시간·GPU 메모리·출력 크기를 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md) 에 기록(inferMs 약 4 s, gpuPeakMB 5,120, 표본 4건). 남은 것: 품질 채점, 10건 이상 반복. 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
+2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 2026-11-17 Runpod A40 에 AnimalLift 설치·모델 모드 실행, 1건 시간·GPU 메모리·출력 크기를 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md) 에 기록(inferMs 약 4 s, gpuPeakMB 5,120, 표본 4건). 2026-11-18 2차 부하 시험에서 같은 사진으로 539건을 더 쟀다(exp-01 6절). 남은 것: 품질 채점, 사진 10장 이상. 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [x] **`deploy/vm-4b` → main PR 열기** — CI 가 main push(`af4a747`)와 PR #4 에서 Docker 이미지 빌드·Caddy 경로 시험까지 통과했다. (BE)
 4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13). 2026-11-17 Runpod 크레딧 결제, VM·Pod Tailscale 연결, 공개 주소 → VM → Pod 사진 1건 성공(패스스루), 같은 날 Pod 에 AnimalLift 를 설치해 실제 모델로 3건 성공([deploy/2026-11-17_runpod-connect.md](deploy/2026-11-17_runpod-connect.md)). 남은 것: 폰 앱으로 1건. (BE+GEN)
 5. [ ] **Unity 1단계 DoD 증빙** — 실기기 Mock 전체 흐름(영상 + `adb logcat`), `fail` 사진 → FAILED → retry, `metrics.csv` 10회. (UN)
@@ -50,15 +50,15 @@
 | 3 | 베이스라인 수치·환경 | [ ] | 측정 0건 | GEN |
 | 3 | 품질 6항목(평가자 2명 이상) baseline vs 개선 | [ ] | 0건. 정면·측면·위 렌더 필요. 평가 입력 화면은 `review/api-v1.1` 에만 있음 | GEN+전원 |
 | 3 | GLB_SPEC 통과 GLB 3개, gltf-validator 오류 0 | [ ] | 변환기 테스트·검증 기록 없음. 실제 출력(리깅)이 GLB_SPEC("스킨 없음")과 다름 → 안건 #14 | GEN · 회의 |
-| 4 | real 에서 실제 생성 GLB 수신 | [ ] | 패스스루로만 확인 | BE+GEN · GPU PC |
+| 4 | real 에서 실제 생성 GLB 수신 | [x] | exp-01(2026-11-17, VM 경유 3건)과 2차 부하 시험(2026-11-18, k6 가 539건을 받음). `e2e_mock.ps1`·폰 앱으로는 아직 | BE+GEN · GPU PC |
 | 4 | 실패 경로 4종 | [x] | — | — |
 | 4 | 실기기 실제 모델 AR(영상) | [ ] | — | UN · GPU PC |
-| 4 | `events.jsonl` 10건 이상 [실험 결과] | [ ] | 실측 0건 | BE+GEN |
-| 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). GPU PC 연결에서는 아직 | BE |
+| 4 | `events.jsonl` 10건 이상 [실험 결과] | [x] | 2차 부하 시험 539건(2026-11-18, VM 업로드 모드 + Runpod A40, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 사진 10장 이상은 exp-01 다음 [계획] | BE+GEN |
+| 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). Runpod A40 연결(2026-11-17), 실제 모델 539건(2026-11-18 2차 부하 시험) | BE |
 | 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치(이 브랜치의 PR 로 main 병합, 그 전까지 VM 에는 로컬 수정으로 적용) | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
-| 4b | 실측 10건 이상 | [ ] | VM·GPU PC 준비 뒤 | BE+GEN |
-| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론·앱 측정 모두 0건(VM·GPU·기기). 백엔드 단독 성능(개발 PC 루프백)만 [실험 결과] [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
+| 4b | 실측 10건 이상 | [x] | VM + Runpod A40 에서 539건(2026-11-18 2차 부하 시험, 사진 1장 반복) | BE+GEN |
+| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) [실험 결과]([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
 | 5 | 리허설 1회, 보고서 초안 리뷰 | [ ] | 날짜 미정 | 전원 |
 | 5 | "Animation·Rigging 은 향후 과제로만" | 충돌 | 리깅·애니메이션 5종이 #1 로 이미 머지됨 → 보고서에서 어떻게 쓸지 결정 | 전원 · 팀 결정 |
 | 5 | 데모 영상 | [ ] | — | 전원 |
@@ -123,7 +123,7 @@
 - [ ] 아직 남은 v1.1 비용 [계획]: PENDING 조회 +74 %(조회 두 개를 문장 하나로, pending_poll 워밍업 늘려 정상 상태 측정), 썸네일 일과 CPU 공유(작은 업로드 +38 %, 동시 E2E −26 %: EXIF 읽기 생략·writer 재사용, 가짜 사진 대조 측정), 결과 GLB 크기 저장(항목당 `File.length` 약 0.1 ms, v1 부터 있던 비용). (BE)
 - [ ] 2026-11-01 실행에서 다른 작업과 겹친 반복(v2p 2회차 등 13:30~13:46)을 다시 잴지 결정 — 결론은 바뀌지 않았다. (BE)
 - [ ] VM(HTTPS·Caddy·Tailscale) 위에서 같은 시나리오 재측정 — GCP VM 은 준비됨(2026-11-13, e2-standard-2 8GB. 부하 문서의 "2 vCPU·4GB" 전제는 2026-11-18 에 고쳤고 deploy/README '메모리 (4GB VM)' 절 제목만 남음), 동작 확인 수치만 [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md). 2026-11-18 에 VM 위 부하 1차(A0~A4, 아래 '부하 시험')를 했다. 그중 A2 폴링 포화가 이 항목의 폴링 처리량에 가장 가깝다(VM·Caddy·TLS 에서 규칙상 마지막 통과 300 RPS, 900 RPS 는 지연 기준 안에서 유지했지만 drop 509·VM CPU 85.8 %, 1,200 붕괴, [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md)). 루프백 벤치마크 시나리오 그대로의 VM 재측정은 아직이다. (BE)
-- [ ] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. (BE+GEN)
+- [x] 실제 GPU 로 `job_runs` 실측 10건 — 백엔드 단독 벤치마크와 별개로 METRICS §1.1 표를 채운다. 2차 부하 시험(2026-11-18)에서 539건 **[실험 결과]**. `job_runs` 와 같은 값이 실행 폴더의 `vm/events.jsonl` 에 있다. `job_runs` CSV 는 내보내지 않았고, 시험 볼륨(H2)은 시험 뒤 지웠다(운영 기록). 사진 1장 반복이라 사진 10장 이상은 exp-01 다음 [계획]. (BE+GEN)
 - [ ] v1.1 을 병합하거나 다음 버전이 생기면 `versions.json` 에 한 줄 더해 같은 명령으로 재측정([perf/notes/20-next-version.md](perf/notes/20-next-version.md)). (BE)
 
 ### 부하 시험 — 쏘카 수준 목표 (2026-11-01 추가)
@@ -136,11 +136,22 @@
   - 한국·일본 리전 부하 발생기로 A1·A3·A4 다시 — asset 전체 시간·서버 `uploadMs` 기준은 153 ms 경로가 섞여 판정하지 못했고(경로 탓이라는 것은 [가설]), A4 는 미리 잰 경로 상한(약 210 Mbps) 때문에 서버 송신 상한까지 가지 못했다.
   - `api_staged.js` 의 browse 시나리오 `preAllocatedVUs`(고정 5)를 환경변수로 — A1 의 drop 12 는 모두 browse 에서 났고 `PRE_VUS` 로는 없어지지 않는다.
   - Caddy: 실행마다 Caddy 네트워크 이름공간의 연결 수·`nstat` 을 남긴다(호스트 nstat 은 Caddy 연결을 보지 못함). A1 에서 2,246 MiB 까지 늘어난 메모리의 원인을 유휴 시간 A/B 로 가린 뒤 `mem_limit` 을 정한다. A2 가 무너질 때 VM CPU 를 가장 많이 쓴 것은 Caddy 였다. A2 붕괴 단계의 오류 7,298건은 상태 코드가 남지 않아(Caddy 의 502·504 로 보임 [가설]) 다음에는 k6 에 상태별 카운터를 둔다.
-  - A3 large, A5·A6, G·F 시리즈(2차).
+  - A3 large, A5·A6. 실제 GPU 의 G·F 는 아래 2차.
+- [x] 2차 실제 GPU 대기열(G0r·G1r·G3r)을 VM + Runpod A40 에서 — 2026-11-18 **[실험 결과]**([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). (BE)
+  - 조건: 실제 AnimalLift, 사진 1장, 전처리 켬. 539건 모두 COMPLETED.
+  - 슬롯 1개·이 경로에서 A40 한 대 앞의 처리 용량은 약 400건/h 였다(연속 처리 간격 8.8~9.1 s) [계산].
+  - 대기는 실제 도착으로 다시 돌린 FIFO 재현과 평균 3~6 % 안에서 맞았다 [계산].
+  - 포화에서도 GPU 사용률 평균은 23 % 였다.
+- [ ] 2차에서 남은 것 **[계획]**: (BE, F 는 GEN 함께)
+  - G2r(A40 한 대에 슬롯 2개)·F2-real·F1b-real(τ 5 s)·F1a. A40 6시간 상한으로 하지 못했다.
+  - 정리 `DELETE` 가 실패하면 Pod 작업 폴더가 남는다(539건 중 1건, "header parser received no bytes"). 재시도나 Pod 쪽 정리가 필요하다.
+  - Pod uvicorn 의 유휴 연결 5초 때문에 부하가 낮을 때 전송이 길어지는지 확인한다(연결 재사용 [가설]).
+  - G1r ρ0.7 의 느린 작업 14건(추론 12건·변환 11건)의 원인을 가린다(Pod CPU·볼륨 지연 기록).
+  - 작업당 VM CPU 가 약 3.6~4.5 코어·초라 2 vCPU VM 은 T3(초당 1건)를 감당하지 못한다 [계산]. 대부분이 크롭이라는 것은 [가설]이다. VM 크기나 크롭 위치를 정한다.
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
 - [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 표·#21 고치기는 exp-01 10건 뒤.
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 표·#21 고치기는 계약 회의 뒤.
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
   - ~~실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지~~ — 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).

@@ -7,18 +7,18 @@
 | 항목 | 상태 |
 |---|---|
 | [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI 가 확인하도록 넣었지만 아직 돌지 않았다(이 PC 에 Docker 없음) |
-| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·G·F·A3 large·A5·A6 은 **[계획]** |
+| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 실제 GPU 의 G0r·G1r·G3r 는 2026-11-18 2차 **[실험 결과]** — [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·스텁 G·F·실제 GPU 의 G2r·F1b-real·F2-real·A3 large·A5·A6 은 **[계획]** |
 | 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | 1~7번을 2026-11-18 main `b6c0e6c` 의 VM 에서 처음 실행했다(A 시리즈, 02:54~06:3x UTC). 운영 H2 sha256 이 백업 때와 같았고 6번 (2) 의 H2 Shell 조회가 VM 컨테이너에서 `LT_JOBS = 0` 을 냈다. 공개 경로 시험 61개(Caddy 404·401 규칙을 공개 주소로 확인하는 세션 스크립트) 통과. 이 셋의 원본 출력은 리포에 없다(백업·해시는 VM 과 개발 PC). 이번에 달리 한 것: k6 를 개발 PC 가 아니라 Runpod CPU Pod 에서 돌려 가드(`PROM_URL`)를 쓰지 않았고, Grafana 는 띄우지 않았다. G 시리즈(스텁)·F 시리즈 절차는 **[계획]** |
 
 ## 지키는 것
 
 - **다른 측정 중에는 하지 않는다.** 개발 PC 의 `scripts/perf`·다른 벤치마크, GPU PC 의 실제 생성 실험(exp-01·02), 시연·발표 리허설과 겹치지 않게 잡는다. 부하를 거는 개발 PC 에서 게임·빌드도 하지 않는다.
 - **실제 GPU PC 를 부르지 않는다.** 덮어쓰기의 추론 주소 기본값은 아무 데도 닿지 않는 `http://127.0.0.1:9` 이고, 운영 `INFERENCE_TOKEN` 도 넘기지 않는다. G 시리즈는 스텁 주소만 넣는다.
-  - **예외: 2차 실제 GPU 실행**(아래 '실제 GPU(Runpod A40) 실행', 2026-11-18 계획). 다음 조건을 모두 지킬 때만 Runpod A40 Pod(AnimalLift 모델)를 부른다.
+  - **예외: 실제 GPU 실행**(아래 '실제 GPU(Runpod A40) 실행', 2026-11-18 2차에서 G0r·G1r·G3r 를 돌렸다). 다음 조건을 모두 지킬 때만 Runpod A40 Pod(AnimalLift 모델)를 부른다.
     - 운영 backend 가 멈춘 동안에만 부른다(1번 백업 뒤 ~ 6번 복구 전).
     - 토큰은 VM 에서 `deploy/.env` 의 `INFERENCE_TOKEN` 을 셸 변수로 읽기만 하고 출력하지 않는다. env 확인은 값을 가리고, `docker compose ... config` 는 쓰지 않는다.
     - 토큰은 k6 부하 PC·리포·결과 폴더·로그에 넣지 않고 끝나면 `unset` 한다. 한 번이라도 출력되면 토큰을 바꾼다.
-    - Pod 는 켠 뒤 6시간 안에 다시 정지한다.
+    - Pod 는 켠 뒤 6시간 안에 다시 정지한다. 시험이 멈춘 동안(확인을 기다리는 동안 등)에도 시간은 흐른다. 2차는 11:44 UTC 에 계획 검토로 멈췄고(돌던 실행은 11:57 에 끝남) 15:28 UTC 에 이어 갔다. 그때 상한(15:44 UTC)까지 16분만 남아 G2r·F 를 하지 못했다.
 - **공개 경로만** 부른다(Basic 인증 경로 제외). 사진 파일명은 `lt-<runId>-` 로 시작하고 `Idempotency-Key` 를 붙인다(k6 스크립트가 한다). 파일명에 `fail` 이 들어가면 mock 워커가 일부러 `INFERENCE_FAILED` 로 끝낸다(A1·A5·A6 의 `FAIL_RATIO` 흐름이 retry 경로를 돌게). 그래서 `RUN_ID` 에 `fail` 을 넣지 않는다(k6 와 `f3_throttled.py` 가 거부한다).
 - prod 프로파일이 켜져 있어 사진 시그니처를 검사한다: k6 사진은 진짜 PNG/JPEG 여야 한다.
 - **`docker compose ... down -v` 를 쓰지 않는다.** 운영 볼륨 `beside-storage`(H2 DB·사진·GLB)까지 지워진다. 지우는 볼륨은 이름을 정확히 쓴다: `docker volume rm beside-loadtest-storage`.
@@ -67,12 +67,28 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **실행 이름(`meta.scenario`)**: `SCENARIO` 를 주면 그 이름(G1·G2·G3·F1a·F1b·F2, G 이름에 `FAIL_RATIO` > 0 이나 `FAIL_RATIO` 없는 F1b 는 k6 가 거부한다)이고, 없으면 k6 값으로 정한다: `FAIL_RATIO` > 0 이면 `FAIL_TOKEN=slow` 일 때 F1b(아래 'F1b 명령'), 다른 토큰이면 F1a, 아니면 G3(`RHO` ≥ 1.5)·G2(`SLOTS` > 1)·G1. F1a·F2 는 스텁·VM 쪽만 다르고 k6 값은 G1 과 같아 k6 가 구분하지 못하므로, G1 의 `gpu_queue.js` 명령에 **`-e SCENARIO=F1a`·`-e SCENARIO=F2`** 를 붙인다. 붙이지 않으면 요약과 첫 줄에 G1 로 적힌다. retry 가 하나라도 있는 G 실행은 재계산이 빠지지만(`N retries: failures were injected or occurred (an F1a/F2 run without SCENARIO?), so no recompute`), 이름 없이 돌린 F2 중 실패한 작업이 없는 실행(모든 작업이 스텁 중단을 기다려 넘긴 실행)은 retry 도 없어 G1 의 큐 재계산까지 남는다. F 실행(F1a·F1b·F2)은 `meta.recompute` 가 null 이다.
 - **F1a 의 k6 기준**: k6 는 F1a 에서 실패를 주입하지 않으므로(`FAIL_RATIO` 0) 두 번 다 실패한 작업(0.2 × 0.2 = 약 4 %)의 흐름이 `load_flowOkRatio` 를 약 0.96 으로 내려, `rate>=0.95` 기준이 우연에 따라 통과·실패한다(실패면 k6 종료 코드 99) [파생]. F1a 는 이 k6 기준이 아니라 TRAFFIC_MODEL 9절의 F1a 항목(`INFERENCE_FAILED` → retry 성공, API 5xx 0)으로 본다.
 
-### 실제 GPU(Runpod A40) 실행 — 2차 [계획]
+### 실제 GPU(Runpod A40) 실행 — 2차 2026-11-18 (G0r·G1r·G3r [실험 결과], G2r·F [계획])
 
-스텁 대신 Runpod A40 Pod(`pzcls7d82ffens`, EU-SE-1, AnimalLift 모델 모드, Tailscale `100.83.86.62:8002`, DERP 중계)를 부른다. 위 '지키는 것' 의 예외 조건을 지킨다.
+스텁 대신 Runpod A40 Pod(EU-SE-1, AnimalLift 모델 모드, Tailscale `100.83.86.62:8002`)를 부른다. 위 '지키는 것' 의 예외 조건을 지킨다. 2차 결과는 [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md) 에 있다.
 
 - 백엔드 슬롯(`inference.max-concurrency`)과 추론 서비스의 `MODEL_LOCK`(`predict` 만 잠금)이 둘 다 한 번에 추론 1건이다. 그래서 이 실행은 "A40 한 대 앞의 대기열"을 잰다.
-- 결과는 "실제 생성, A40 EU-SE-1, DERP 중계, 작업당 사진 1장, 전처리 켬"이라는 조건을 붙여 적는다.
+- 결과는 "실제 생성, A40 EU-SE-1, 경로(직접 연결/DERP), 작업당 사진 1장, 전처리 켬"이라는 조건을 붙여 적는다.
+
+**2차에서 배운 것** (다음 실행 전에 읽는다):
+- **멈춘 Pod 가 GPU 를 못 받을 수 있다.**
+  - 2차에서 `pzcls7d82ffens` 는 두 번 모두 "not enough free GPUs on the host machine" 였다. 그래서 같은 데이터센터·네트워크 볼륨(`z4kgw4v5zi`)·Secret 으로 새 Pod `yq8zyoibhf15l5` 를 만들었다.
+  - Tailscale 상태가 볼륨에 있어 같은 주소로 붙는다. 두 Pod 를 동시에 켜지 않는다(같은 노드 키).
+  - 새 Pod 의 모델 로드는 73 s 였다(11-17 첫 Pod 는 설치 직후 31 s). 새 호스트에서 볼륨 파일 읽기가 캐시되지 않은 탓으로 본다 [가설].
+- **경로**: 2차는 Tailscale 직접 연결이었다(11-17 은 DERP). 왕복은 268 ms 로 비슷했다. 실행마다 `tailscale ping` 과 `/healthz` 20회를 남긴다.
+- **S0 로 과부하 `RHO` 를 정하지 않는다.**
+  - 빈 큐 S0(11.5 s)보다 부하가 있을 때의 슬롯이 짧다(`g3r13` 평균 슬롯 9.14 s·연속 처리 간격 9.06 s, `g3r165` 8.81 s). 그래서 S0 기준 `RHO=1.3`(요청 407건/h)은 요청 λ 로도 ρ 1.03 에 그쳤고, 실제 도착이 360건/h 라 실제 ρ 는 0.91 이었다.
+  - 과부하는 G1 이나 앞 실행에서 잰 슬롯 기준으로 `RHO` 를 정한다. 2차 재실행은 `RHO=1.65`(요청 517건/h, 잰 483건/h, 실제 ρ 1.19)였다.
+- **GPU Pod 로그**: Pod 안 `127.0.0.1:8003` 에 `python -m http.server` 로 두고 VM 에서 Tailscale 주소로 받는다. 공개 포트·Runpod 프록시는 쓰지 않는다.
+  - 남긴 것: `nvidia-smi … -l 5`, `/proc/loadavg`(호스트 전체 값이다), 시각을 붙인 추론 로그, 볼륨 1 MB fsync 시간.
+- **k6 Pod 샘플러**: Runpod CPU Pod 에서 `os.cpu_count()` 는 호스트 CPU(256)를 준다(2차 때 관찰, 원본 출력은 리포 밖). CPU 비율은 `len(os.sched_getaffinity(0))` 로 나눈다.
+- **정리 `DELETE` 실패**: 539건 중 1건이 실패해 Pod 볼륨에 작업 폴더가 남았다(15:29 UTC 에 25 MB 확인, 출력은 리포 밖). 시험 뒤 `/workspace/beside-work/` 를 확인한다.
+- **Pod 로그 시각**: 추론 로그 사본에 붙인 UTC 시각은 로그를 약 1초마다 읽으며 붙인 것이라 0~1 s 늦다. 업로드·내려받기를 Pod 시각으로 나눌 때는 그만큼을 오차로 둔다.
+- **연결 재사용**: Pod 접근 로그의 클라이언트 포트(127.0.0.1:포트)로 새 연결과 이어 쓴 연결을 셀 수 있다(tailscaled userspace 는 들어온 연결마다 루프백 연결 하나를 연다).
 
 ```bash
 # VM: 토큰을 출력 없이 셸 변수로 읽는다(값은 화면에 내지 않는다)
@@ -88,11 +104,11 @@ unset LOADTEST_INFERENCE_TOKEN
 |---|---|---|
 | B1 | — (c=1, 타임아웃 120 s, 오프라인 대기 300 s) | G0, G1, 과부하(G3) |
 | B2 | `LOADTEST_INFERENCE_MAX_CONCURRENCY=2` | G2(A40 한 대에서 슬롯 2개) |
-| B3 | `LOADTEST_INFERENCE_TIMEOUT_MS=<τ>`(G0 에서 정함) | F1b-real |
+| B3 | `LOADTEST_INFERENCE_TIMEOUT_MS=<τ>`(G0 에서 정함. 2차 G0 기준 5000: 업로드(31건 상한 1.9~2.8 s)가 끝나고 추론(3.7~4.7 s)이 도는 동안. 여유가 작다) | F1b-real |
 | B4 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | F2, F1a(스텁으로 바꾼 Pod) |
 
 **k6 공통 값**: `-e PHOTOS=<리포>/backend/src/test/resources/photos/dog.jpg -e RTT_BASE_MS=<G0 의 healthz p50> -e T_SEC=<S0>`.
-- `PHOTOS` 에 적은 파일은 모두 각 작업에 들어간다. 모델·검사·크롭은 첫 장만 쓰지만 나머지도 DERP 로 보내져 슬롯이 길어지므로 1장만 준다.
+- `PHOTOS` 에 적은 파일은 모두 각 작업에 들어간다. 모델·검사·크롭은 첫 장만 쓰지만 나머지도 Pod 로 보내져 슬롯이 길어지므로 1장만 준다.
 - k6 는 이름을 `.png`·`image/png` 로 붙이지만 서버는 바이트 시그니처로 JPEG 를 받는다.
 
 **S0**: G0(`smoke.js SMOKE_EVERY_S=30`, 대기열 없음)의 평균 `processingMs` + 2·h0 를 0.5 s 단위로 맞춘 값이다. h0 는 `queuedMs − preprocessMs` 의 중앙값(healthz 확인)이다.
@@ -103,7 +119,7 @@ unset LOADTEST_INFERENCE_TOKEN
 
 **F2**: 추론 서비스를 `kill -9 $(cat /var/run/beside/inference.pid)` 로 죽인다. SIGTERM 은 처리 중인 요청을 마치므로 쓰지 않는다. 90 s 뒤 `MODE=model` 로 다시 띄운다.
 
-**F1a**: 같은 Pod 를 패스스루로 바꿔 돈다(`kill` → 합성 1.5 MB GLB → `MODE=passthrough BESIDE_SAMPLE_GLB=… BESIDE_PASSTHROUGH_DELAY_MS=<G0 의 추론+변환 중앙값> BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_FAIL_RATE=0.2`). 이 실행만 `stub-glb.sha256` 를 첨부한다.
+**F1a**: 같은 Pod 를 패스스루로 바꿔 돈다(`kill` → 합성 1.5 MB GLB → `MODE=passthrough BESIDE_SAMPLE_GLB=… BESIDE_PASSTHROUGH_DELAY_MS=<G0 의 추론+변환 중앙값, 2차는 4,008 + 884 ≈ 4900> BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_FAIL_RATE=0.2`). 이 실행만 `stub-glb.sha256` 를 첨부한다.
 
 스텁의 `BESIDE_PASSTHROUGH_*` 설정은 기본값이 모두 꺼져 있다(같은 W1 의 B5). 스텁은 실제 GPU PC 가 아닌 PC(예: 개발 PC)에서 Tailscale 주소에 띄운다. 스텁이 돌려줄 GLB(`BESIDE_SAMPLE_GLB`)는 **스텁 PC 에** 있어야 한다. VM 에 만든 파일(3번)은 스텁 PC 에서 보이지 않으므로, 같은 합성 GLB(아래 '합성 GLB 는 하나')를 스텁 PC 에서 따로 만든다:
 
@@ -310,7 +326,7 @@ wait $F3T; echo "f3_throttled exit $?"
 | 6 | A4 (작업 10건) | 0.1 GB 미만 | 0.1 GB 미만 |
 | 7 | G1 (ρ 4개, 594건) · G2 (c 3개, 882건) | 약 1.4 + 2.0 GB (작업당 2.3 MB) | 약 3.4 GB |
 | 8 | F1a·F1b(+ 뒤의 G1)·F2(스텁), F3·F4(mock) | 약 1 GB | 약 4.4 GB |
-| 2차 | 실제 GPU(G0·G1·과부하·G2·F1b-real·F2, 약 600건)와 F1a(스텁) | 약 1.5 GB (작업당 사진 0.17~0.21 MB + 크롭 PNG + GLB 약 1.32 MB) [파생] | 약 1.5 GB |
+| 2차 | 실제 GPU(G0·G1·과부하·G2·F1b-real·F2, 약 600건)와 F1a(스텁) | 약 1.5 GB (작업당 사진 0.17~0.21 MB + 크롭 PNG + GLB 약 1.32 MB) [파생]. 2026-11-18 실제: 540건(G0·G1·과부하 둘·준비 1건)에 디스크 사용 1.18 GB 증가(작업당 약 2.2 MB, 로그·Prometheus 포함) [실험 결과](`docs/perf/load/data/` 각 실행의 `vm/docker-stats-series.jsonl` df, 09:49→11:59 UTC) | 약 1.5 GB |
 
 - **실행마다 먼저 본다**: `df -h /` 의 사용량 + 그 실행의 예상 업로드가 23 GB(30 GB 의 80 % − 1 GB, 로그·H2·`events.jsonl` 몫. 지금 48 GB 디스크면 약 37 GB)를 넘으면 표와 상관없이 먼저 비운다. 예를 들어 30 GB 디스크에서 A1 + A2(약 8.3 GB)를 잇달아 돌리려면 세션 시작 사용률이 약 49 % 이하여야 한다(48 GB 면 약 60 % 이하. 2026-11-18 에는 A1 뒤 비우지 않고 A2 를 돌려 최대 약 38 % 였다). 아니면 A2 앞에서도 비운다(A2 는 시드 실행이 자기 작업을 만들므로 빈 볼륨에서도 돈다. 비우기는 COMPLETED 시드 전에 한다).
 - **반복 사이에도 비운다.** 주요 단계를 3회 반복할 때(TRAFFIC_MODEL §9) A1 은 한 번에 약 6.7 GB 라 30 GB 디스크에서는 두 번이면 남은 여유를 넘는다(48 GB 면 시작 사용률에 따라 들어간다).

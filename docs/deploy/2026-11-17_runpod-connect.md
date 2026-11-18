@@ -4,7 +4,7 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
 
 - **[구현됨]** VM·Pod 가 같은 tailnet 에 있고, 공개 주소 → VM → Pod(패스스루) → GLB 까지 사진 1건이 끝났다. 같은 날 Pod 에 AnimalLift 를 설치해 실제 모델로 3건이 끝났다(아래 '모델 모드'). Pod 의 추론 서비스는 127.0.0.1:8002 에만 열려 있고 Pod 에 공개 포트는 없다.
 - **[실험 결과]** 아래 수치는 표본 1~4건이다. 동작 확인용이며 성능 측정이 아니다.
-- **[계획]** VM ↔ Pod 직접 연결(지금은 DERP 중계), Unity 앱 시험, Pod 를 지우고 다시 만들었을 때 같은 100.x 유지 확인.
+- **[계획]** Unity 앱 시험, Pod 를 지운 뒤 같은 100.x 유지 확인(새 Pod 로 같은 100.x 에 붙는 것은 2026-11-18 에 확인). VM ↔ Pod 직접 연결은 2026-11-18 에 됐다(아래 '2026-11-18 2차 부하 시험 때 바뀐 것').
 
 ## 구성
 
@@ -63,8 +63,24 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
    ```
 3. VM 이 15초마다 `/healthz` 를 읽어 `DOWN -> LOADING -> UP` 이 되고 디스코드에 🟡·🟢 메시지가 간다. 기다리던 작업은 UP 이 되면 이어서 처리된다.
 
+## 2026-11-18 2차 부하 시험 때 바뀐 것
+
+결과 문서는 [docs/perf/load/2026-11-18_vm-2nd.md](../perf/load/2026-11-18_vm-2nd.md) 다.
+
+- **새 Pod**:
+  - `beside-gpu`(`pzcls7d82ffens`)를 09:41·09:44 UTC 에 켜 보았지만 두 번 모두 "There are not enough free GPUs on the host machine to start this pod" 였다. 위 '다시 켜는 순서'의 대안대로 같은 이미지·A40·EU-SE-1·볼륨 `z4kgw4v5zi`·Secret 으로 새 Pod `beside-gpu2`(`yq8zyoibhf15l5`)를 만들었다.
+  - 볼륨의 Tailscale 상태로 **같은 `100.83.86.62` 로 붙었고**, VM `.env` 는 바꾸지 않았다. `start_pod.sh` 는 "this Tailscale state was last used by Pod pzcls7d82ffens" 라고 알렸다.
+  - 새 Pod 의 모델 로드는 73.2 s 였다 [실험 결과](`gpu/pod-info.txt`). 새 호스트에서 볼륨 파일 읽기가 캐시되지 않은 탓으로 본다 [가설].
+- **경로**: 방화벽을 바꾸지 않았는데 이날은 VM ↔ Pod 가 **직접 연결**이었다(`tailscale ping` 268~269 ms, 6번 확인) [실험 결과](각 실행의 `vm/derp-rtt.txt`). 왕복이 DERP(약 300 ms)와 비슷해 전송 시간은 크게 줄지 않은 것으로 본다 [가설].
+- **두 Pod 모두 정지**(15:29 UTC, EXITED 확인). 다음에 켤 때:
+  1. 둘 중 하나를 Start 한다. 같은 노드 키라 **둘을 동시에 켜지 않는다**.
+  2. 켜지지 않으면 다른 하나를 켠다.
+  3. 둘 다 안 되면 같은 값으로 새 Pod 를 만든다.
+- 쓰지 않는 Pod 하나는 지워도 된다(볼륨은 남는다). 어느 쪽을 남길지는 팀이 정한다 [계획].
+- 2차 시험 동안 13:09:57 UTC 에 16초 동안 `UP -> DOWN (HttpConnectTimeoutException)` 이 한 번 있었다(부하 없던 때) [실험 결과](`vm/backend.log`). 11-17 의 15초 끊김과 같은 모양이다.
+
 ## 남은 것 [계획]
 
-- VM ↔ Pod 직접 연결: GCP 방화벽에 UDP 41641 을 열면 DERP 를 거치지 않을 수 있다(Tailscale GCE 안내). 큰 사진 업로드 시간을 재 보고 정한다.
+- VM ↔ Pod 직접 연결: 2026-11-18 에는 방화벽을 바꾸지 않고도 직접 연결이었다(위). 날마다 다를 수 있으므로 GCP 방화벽 UDP 41641 은 DERP 로 돌아갈 때 다시 본다.
 - Unity 앱으로 `https://beside-team.duckdns.org` 시험(지금 결과는 삼각형이라 모양 확인용은 아님).
-- 쓰지 않을 때 Pod 를 지우고(볼륨은 남음) 다시 만들어 같은 100.x 로 돌아오는지 확인.
+- 쓰지 않을 때 Pod 를 지우고(볼륨은 남음) 다시 만들어 같은 100.x 로 돌아오는지 확인 — 새 Pod 로 같은 100.x 에 붙는 것은 2026-11-18 에 확인했다(위). 지운 Pod 의 노드를 Tailscale 관리 화면에서 지울 필요가 있는지는 아직 보지 않았다.

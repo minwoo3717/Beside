@@ -1,0 +1,9 @@
+== beside load: gpu_queue.js (G3) run=g3r13 base=https://beside-team.duckdns.org
+requests 5258 (3.48/s), dropped_iterations 0, vus_max 140
+data sent 0.144 Mbps (whole-run average), received 1.073 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 152.093 ms
+thresholds: 1 failed
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+queue G3: 150 jobs created in 1500 s = 360/h (requested 407/h), 0 retries; mean slot (server processingMs) 8310 ms, mean queuedMs 57604 ms
+  recompute: python scripts/load/model.py --queue-rate-per-h 360 --queue-service-s 8.31 --queue-slots 1
+time="2026-11-18T11:31:49Z" level=error msg="thresholds on metrics 'http_req_duration{endpoint:asset}' have been crossed"

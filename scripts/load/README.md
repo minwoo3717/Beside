@@ -5,7 +5,7 @@
 **상태**
 - 스크립트: **[구현됨]**. 단위 테스트(Python 84개, Node 82개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
 - 트래픽 모델: **[파생]** — `tiers.json` 의 **[가정]** 으로 계산한 값이다. 측정값이 아니다.
-- 측정(A0~A6, G1~G3, F1~F5): **[계획]**. VM·Caddy·실제 Prometheus·Docker·GPU 에서는 아직 한 번도 돌리지 않았다.
+- 측정: A0~A4 는 2026-11-18 VM 1차, 실제 GPU 의 G0r·G1r·G3r 는 같은 날 2차 **[실험 결과]**(`docs/perf/load/2026-11-18_vm-1st.md`, `2026-11-18_vm-2nd.md`). A5·A6, 스텁 G1~G3, F1~F5, 실제 GPU 의 G2r·F1b-real·F2-real 은 **[계획]**.
 
 ## 파일
 
@@ -190,6 +190,22 @@ for rho in 0.5 0.7 0.9 1.2; do
 done
 #   G2 는 c 마다 스텁 BESIDE_PASSTHROUGH_SLOTS·backend LOADTEST_INFERENCE_MAX_CONCURRENCY 를 c 로 다시 띄우고
 #   -e SCENARIO=G2 -e RHO=0.7 -e SLOTS=<c> (SLOTS=1 은 SCENARIO 가 없으면 G1 으로 적힌다). G3 는 -e RHO=1.5 (G3 로 적힌다).
+
+# 실제 GPU(Runpod A40) — 2차(2026-11-18)에 쓴 명령. VM 설정은 deploy/loadtest/README.md '실제 GPU(Runpod A40) 실행',
+#   결과는 docs/perf/load/2026-11-18_vm-2nd.md. PHOTOS 에 파일 하나면 작업당 사진 1장이다(쉼표로 여럿을 주면 모두 한 작업에
+#   들어가 Pod 로 보내진다). G0r 는 smoke.js 라 요약의 meta.scenario 가 A0 이므로 collect.py 에 --scenario G0 를 준다.
+P=$PWD/backend/src/test/resources/photos/dog.jpg   # Git Bash 면 $(cygpath -m "$PWD")/backend/…
+newrun g0r1; k6 run -e RUN_ID=$RUN_ID -e PHOTOS=$P -e SMOKE_EVERY_S=30 -e SMOKE_DURATION_S=900 -e SMOKE_VUS=1 -e SMOKE_MAX_VUS=3 \
+  -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/smoke.js
+#   S0 = 평균 processingMs + 2·h0(h0 = queuedMs − preprocessMs 의 중앙값), 0.5 s 단위. 2차는 11.5 s. RTT_BASE_MS 는 G0r 의 healthz p50
+newrun g1r05; k6 run -e RUN_ID=$RUN_ID -e PHOTOS=$P -e RTT_BASE_MS=<p50> -e RHO=0.5 -e SLOTS=1 -e T_SEC=11.5 -e DURATION_S=1500 \
+  -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
+#   과부하의 RHO 는 S0 가 아니라 잰 슬롯 기준으로 정한다: 부하가 있으면 슬롯이 짧아져(g3r13 9.1 s, g3r165 8.8 s) S0 기준 RHO=1.3(407건/h)은
+#   요청 λ 로도 ρ 1.03 이었고, 실제 도착이 360건/h 라 0.91 이었다
+newrun g3r165; k6 run -e RUN_ID=$RUN_ID -e PHOTOS=$P -e RTT_BASE_MS=<p50> -e SCENARIO=G3 -e RHO=1.65 -e SLOTS=1 -e T_SEC=11.5 \
+  -e DURATION_S=1200 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
+#   대기 분석: 실제 도착·처리 시간으로 다시 돌린 FIFO 재현과 유한 실행 몬테카를로(docs/perf/load/data/2026-11-18_vm-2nd-analysis/ 의
+#   g_trace.py·g_sim.py). 25~30분 실행에는 meta.prediction(정상 상태 M/D/1·M/M/1)을 그대로 비교하지 않는다
 
 # F1b 타임아웃 — 스텁: BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_SLOW_TOKEN=slow
 #   BESIDE_PASSTHROUGH_SLOW_MS=30000 (BESIDE_PASSTHROUGH_FAIL_TOKEN 은 설정하지 않는다), backend LOADTEST_INFERENCE_TIMEOUT_MS=20000.

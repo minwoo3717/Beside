@@ -1,0 +1,7 @@
+== beside load: gpu_queue.js (G3) run=g3r165 base=https://beside-team.duckdns.org
+requests 8834 (6.13/s), dropped_iterations 0, vus_max 173
+data sent 0.162 Mbps (whole-run average), received 1.214 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 155.059 ms
+thresholds: all passed
+queue G3: 161 jobs created in 1200 s = 483/h (requested 517/h), 0 retries; mean slot (server processingMs) 8059 ms, mean queuedMs 100582 ms
+  recompute: python scripts/load/model.py --queue-rate-per-h 483 --queue-service-s 8.059 --queue-slots 1
