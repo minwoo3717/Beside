@@ -5,7 +5,7 @@
 // plus the stage/phase tags the caller's ctx.tags() returns at the moment of the request.
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { classify } from './classify.js';
+import { classify, statusClass } from './classify.js';
 import { uuid4 } from './config.js';
 import * as m from './metrics.js';
 
@@ -31,7 +31,8 @@ export function makeContext(opts) {
   };
 }
 
-// One request: sends it, records load_errorRatio / unexpected / rejected and returns { res, kind, tags }.
+// One request: sends it, records load_errorRatio / unexpected / rejected and the response's status class (status 0,
+// 4xx, 5xx: load_status*Count with status=<code>) and returns { res, kind, tags }.
 export function call(ctx, endpoint, name, method, url, body, opts) {
   const o = opts || {};
   const expected = o.expected || [200];
@@ -46,6 +47,8 @@ export function call(ctx, endpoint, name, method, url, body, opts) {
   const res = http.request(method, url, body === undefined ? null : body, params);
   const kind = classify(res.status, expected, typeof res.body === 'string' ? res.body : null);
   m.errorRatio.add(kind === 'error' ? 1 : 0, tags);
+  const cls = statusClass(res.status);
+  if (cls !== null) m.statusCounts[cls].add(1, Object.assign({ status: String(res.status) }, tags));
   if (kind === 'unexpected') m.unexpectedCount.add(1, Object.assign({ status: String(res.status) }, tags));
   if (kind === 'rejected') m.rejectedCount.add(1, tags);
   const checks = {};

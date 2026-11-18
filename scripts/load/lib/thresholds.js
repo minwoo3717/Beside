@@ -1,6 +1,7 @@
 // Pass criteria of docs/perf/load/TRAFFIC_MODEL.md §8 [제안값 — 계약 회의 전] as k6 thresholds. Pure module.
 // Latency limits are relative to RTT_base (the healthz p50 that smoke.js measured), scoped by the endpoint tag and,
 // where the script has stages, by the stage/phase tags so each level's hold part is judged on its own.
+import { STATUS_5XX_CODES, STATUS_CLASSES, STATUS_METRIC } from './classify.js';
 
 export function criteria(rttMs) {
   const rtt = Number(rttMs) || 0;
@@ -71,11 +72,24 @@ export function droppedReportThresholds(scenarioNames) {
   return out;
 }
 
+// No-op thresholds whose only job is to keep the status-class counters (lib/metrics.js statusCounts:
+// load_status0Count, load_status4xxCount, load_status5xxCount) in the summary for a scope (null = the whole run, or e.g.
+// "stage:3,phase:hold"), and for the whole run also each 5xx code of classify.js STATUS_5XX_CODES
+// (load_status5xxCount{status:502}). k6 keeps a tag-filtered submetric only when a threshold names it, so a stage keeps
+// its classes only. lib/summary.js reads them into verdict.httpStatus and verdict.stages[].httpStatus.
+export function statusCountThresholds(scope) {
+  const out = {};
+  STATUS_CLASSES.forEach((cls) => { out[key(STATUS_METRIC[cls], null, scope)] = ['count>=0']; });
+  if (!scope) STATUS_5XX_CODES.forEach((code) => { out[key(STATUS_METRIC['5xx'], null, `status:${code}`)] = ['count>=0']; });
+  return out;
+}
+
 // Error budget and the abort rule. k6 thresholds are cumulative, so "errors > 5 % for one minute" is approximated
 // by the cumulative rate evaluated only after the first minute; lib/guard.js adds the real one-minute window from
-// Prometheus when PROM_URL is set.
+// Prometheus when PROM_URL is set. The status-class counters of the same scope come along (statusCountThresholds), so
+// every script and stage whose errors are judged also keeps what came back (status 0, 4xx, 5xx).
 export function errorThresholds(scope, withAbort) {
-  const out = {};
+  const out = statusCountThresholds(scope);
   const list = ['rate<0.005'];
   if (withAbort) list.push({ threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '1m' });
   out[key('load_errorRatio', null, scope)] = list;

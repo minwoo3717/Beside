@@ -22,10 +22,15 @@
 // flows whose outcome is missing. Those are the slowest flows (the timeouts of an overloaded level), so a run with
 // any is not a pass, and a hold whose own flows were cut off reads "incomplete" even when the hold itself ran to its end.
 
+import { STATUS_5XX_CODES, STATUS_CLASSES, STATUS_METRIC } from './classify.js';
 import { abortRules, parseMetricName } from './thresholds.js';
 
 // A load that ended more than this before its planned end was cut short (scheduling slack of a normal end).
 const END_SLACK_S = 1;
+
+// load_status0Count -> '0', ... (lib/classify.js STATUS_METRIC the other way round)
+const CLASS_OF_METRIC = {};
+STATUS_CLASSES.forEach((cls) => { CLASS_OF_METRIC[STATUS_METRIC[cls]] = cls; });
 
 function failedThresholds(metrics) {
   const out = [];
@@ -68,18 +73,27 @@ function droppedFor(metrics, scenario) {
   return { count: (m.values && m.values.count) || 0, failed: Object.keys(th).some((expr) => th[expr] && th[expr].ok === false) };
 }
 
+// { "0": n, "4xx": n, "5xx": n } from counts by class; a class the summary has no counter for counts 0.
+function classCounts(byClass) {
+  const out = {};
+  STATUS_CLASSES.forEach((cls) => { out[cls] = byClass[cls] || 0; });
+  return out;
+}
+
 // One entry per stage index that has a hold part: ok when every threshold scoped to that hold passed, "not_run"
 // when none of its scoped metrics got a sample (the run stopped earlier). A stage whose own scenario dropped
 // iterations is "fail" (README: a stage with dropped iterations is not "pass"). k6 keeps a thresholded submetric that
 // got no sample in the summary with every value 0 and count 0: that endpoint gets no latency entry ("no data", not 0 ms).
 // heldS: the hold's seconds (holdS; buildReport shortens it for a hold an aborted run cut), null for "not_run".
+// httpStatus: the hold's responses by status class (load_status*Count{stage:N,phase:hold}), null for "not_run" and
+// for data without those submetrics.
 export function stageVerdicts(metrics, stages) {
   const byStage = {};
   Object.keys(metrics).forEach((name) => {
     const parsed = parseMetricName(name);
     if (parsed.tags.phase !== 'hold' || parsed.tags.stage === undefined) return;
     const idx = parsed.tags.stage;
-    if (!byStage[idx]) byStage[idx] = { names: [], ok: true, samples: 0, latency: {} };
+    if (!byStage[idx]) byStage[idx] = { names: [], ok: true, samples: 0, latency: {}, status: null };
     const entry = byStage[idx];
     entry.names.push(name);
     const m = metrics[name];
@@ -90,6 +104,11 @@ export function stageVerdicts(metrics, stages) {
     if (parsed.metric === 'http_req_duration' && parsed.tags.endpoint && m.values && m.values.count !== 0) {
       entry.latency[parsed.tags.endpoint] = { med: round(m.values.med), p95: round(m.values['p(95)']), p99: round(m.values['p(99)']),
         count: m.values.count === undefined ? null : m.values.count };
+    }
+    const cls = CLASS_OF_METRIC[parsed.metric];
+    if (cls !== undefined && parsed.tags.status === undefined) {
+      if (entry.status === null) entry.status = {};
+      entry.status[cls] = (m.values && m.values.count) || 0;
     }
   });
   const info = {};
@@ -103,8 +122,29 @@ export function stageVerdicts(metrics, stages) {
     if (drop && (drop.failed || drop.count > 0)) status = 'fail';
     const holdS = s.holdS === undefined ? null : s.holdS;
     return { stage: i, label: s.label || '', users: s.users === undefined ? null : s.users, target: s.target === undefined ? null : s.target,
-      holdS, heldS: status === 'not_run' ? null : holdS, status, dropped: drop ? drop.count : null, latency: e ? e.latency : {} };
+      holdS, heldS: status === 'not_run' ? null : holdS, status, dropped: drop ? drop.count : null, latency: e ? e.latency : {},
+      httpStatus: status === 'not_run' || !e || e.status === null ? null : classCounts(e.status) };
   });
+}
+
+// verdict.httpStatus: the whole run's responses by raw status class (lib/metrics.js statusCounts: "0" no response,
+// "4xx", "5xx"; 2xx/3xx are not counted) and, of the 5xx, the codes lib/thresholds.js keeps one by one ("5xxByCode":
+// 500, 502, 503, 504, "other" = the rest). null when the summary has none of the counters (data from before them, an
+// A2 SEED_ONLY run).
+export function httpStatusCounts(metrics) {
+  if (!STATUS_CLASSES.some((cls) => metrics[STATUS_METRIC[cls]])) return null;
+  const byClass = {};
+  STATUS_CLASSES.forEach((cls) => { byClass[cls] = value(metrics, STATUS_METRIC[cls], 'count') || 0; });
+  const out = classCounts(byClass);
+  const byCode = {};
+  let listed = 0;
+  STATUS_5XX_CODES.forEach((code) => {
+    byCode[code] = value(metrics, `${STATUS_METRIC['5xx']}{status:${code}}`, 'count') || 0;
+    listed += byCode[code];
+  });
+  byCode.other = Math.max(0, out['5xx'] - listed);
+  out['5xxByCode'] = byCode;
+  return out;
 }
 
 // dropped_iterations{scenario:<name>} of every scenario whose submetric the summary keeps (a threshold names it: the
@@ -393,6 +433,8 @@ export function buildReport(data, info, cfg, endedAt) {
     checksFailed: value(metrics, 'checks', 'fails') || 0,
     checksPassed: value(metrics, 'checks', 'passes') || 0,
     unexpectedCount: value(metrics, 'load_unexpectedCount', 'count') || 0,
+    // responses by status class over the whole run, 5xx also by code (null: the counters are not in the summary)
+    httpStatus: httpStatusCounts(metrics),
     vusMax: value(metrics, 'vus_max', 'max') || value(metrics, 'vus_max', 'value'),
     dataSentMbps: round(sentMbps, 3),
     dataReceivedMbps: round(recvMbps, 3),
@@ -455,11 +497,19 @@ export function textReport(report) {
   }
   if (v.checksFailed > 0) lines.push(`checks: ${v.checksFailed} failed of ${v.checksFailed + v.checksPassed}`);
   if (v.unexpectedCount > 0) lines.push(`unexpected responses (load_unexpectedCount): ${v.unexpectedCount}`);
+  const hs = v.httpStatus;
+  if (hs && hs['0'] + hs['4xx'] + hs['5xx'] > 0) {
+    const codes = Object.keys(hs['5xxByCode']).filter((c) => hs['5xxByCode'][c] > 0).map((c) => `${c} ${hs['5xxByCode'][c]}`).join(', ');
+    lines.push(`responses by status (load_status*Count): 0 (no response) ${hs['0']}, 4xx ${hs['4xx']}, 5xx ${hs['5xx']}` +
+      (codes ? ` (${codes})` : ''));
+  }
   if (v.stages.length) {
     lines.push('stage  users     target   status     latency p95 (ms)');
     v.stages.forEach((s) => {
       const lat = Object.keys(s.latency).sort().map((ep) => `${ep}=${orDash(s.latency[ep].p95)}`).join(' ') || '-';
-      lines.push(`${pad(s.stage, 6)} ${pad(orDash(s.users), 9)} ${pad(orDash(s.target), 8)} ${pad(s.status, 10)} ${lat}`);
+      const http = s.httpStatus ? STATUS_CLASSES.filter((c) => s.httpStatus[c] > 0).map((c) => `${c}=${s.httpStatus[c]}`).join(' ') : '';
+      lines.push(`${pad(s.stage, 6)} ${pad(orDash(s.users), 9)} ${pad(orDash(s.target), 8)} ${pad(s.status, 10)} ${lat}` +
+        (http ? `  http ${http}` : ''));
     });
     const bp = v.breakingPoint;
     if (bp === null) {

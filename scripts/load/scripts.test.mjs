@@ -69,6 +69,30 @@ test('api_staged.js refuses a remote target without RTT_BASE_MS', async () => {
   await assert.rejects(load('api_staged.js', { BASE_URL: 'https://beside.example.org' }), /RTT_BASE_MS/);
 });
 
+test('scripts: every script keeps the status classes for each scope it judges errors in, the 5xx codes for the run', async () => {
+  const th = async (rel, env, extra) => (await load(rel, Object.assign({ RTT_BASE_MS: '20' }, env || {}), extra)).options.thresholds;
+  const perStage = (t) => Object.keys(t).filter((k) => /^load_status\w+\{stage:/.test(k));
+  const a1 = await th('api_staged.js');
+  assert.deepEqual(a1['load_status0Count{stage:7,phase:hold}'], ['count>=0']);
+  assert.equal(perStage(a1).length, 3 * 8);
+  const a2 = await th('poll_saturation.js');
+  assert.deepEqual(a2['load_status5xxCount{stage:4,phase:hold}'], ['count>=0']); // the 1,200 RPS step of 2026-11-18
+  assert.equal(perStage(a2).length, 3 * 6);
+  assert.equal(perStage(await th('upload.js')).length, 3 * 6);
+  assert.equal(perStage(await th('asset.js')).length, 3 * 6);
+  const scripts = [['smoke.js'], ['api_staged.js'], ['poll_saturation.js'], ['upload.js'], ['asset.js'], ['gpu_queue.js'],
+    ['failure/f3_uploads.js', {}, { openBase: join(HERE, 'failure') }]];
+  for (const [rel, env, extra] of scripts) {
+    const t = await th(rel, env, extra);
+    for (const name of ['load_status0Count', 'load_status4xxCount', 'load_status5xxCount', 'load_status5xxCount{status:502}', 'load_status5xxCount{status:504}']) {
+      assert.deepEqual(t[name], ['count>=0'], `${rel} ${name}`);
+    }
+  }
+  // scripts without stages keep the run's counts only
+  assert.deepEqual(perStage(await th('smoke.js')), []);
+  assert.deepEqual(perStage(await th('gpu_queue.js')), []);
+});
+
 test('poll_saturation.js A2: one constant-arrival-rate scenario per step', async () => {
   const mod = await load('poll_saturation.js', { RTT_BASE_MS: '20' });
   const names = Object.keys(mod.options.scenarios);
