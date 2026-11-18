@@ -341,8 +341,8 @@ node --test "scripts/load/*.test.mjs"                             # k6 스크립
 - Caddy·TLS 경로: 원격 `RTT_BASE_MS` 기준, F3 의 30 MB 본문에 프록시가 413 을 주는지(로컬 Spring 은 21·30 MB 를 `Content-Length` 만 보고 바로 413 으로 끊었다), 느린 업로드가 Caddy 를 지나 202 인지, F4 의 끊김이 backend 에 `client_abort` 로 닿는지.
 - 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다), `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열(`jvm_heap_after_gc` 의 원천, 로컬 `/actuator/prometheus` 에서만 이름을 봤다).
 - 컨테이너 경로: F3 남은 파일 확인 명령의 `/app/storage/uploads`·`/tmp/tomcat.8080.*`(Dockerfile·설정에서 추론했고 컨테이너에서 돌리지 않았다).
-- A1 browse 의 `BROWSE_PRE_VUS` 기본값(9,000명 단계 200)으로 2차 A1 의 `verdict.droppedByScenario.browse` 가 0 인지.
-- 2차 A2 의 붕괴 단계(1,200·1,800 RPS) 오류가 `verdict.stages[].httpStatus` 로 상태 0 과 5xx 로 갈리는지, 5xx 가 `5xxByCode` 의 어느 코드인지(1차의 "Caddy 의 502·504" [가설]을 확인하거나 버린다).
+- A1 을 VM 에서 다시 돌릴 때: browse 의 `BROWSE_PRE_VUS` 기본값(9,000명 단계 200)으로 `verdict.droppedByScenario.browse` 가 0 인지.
+- A2 를 VM 에서 다시 돌릴 때: 붕괴 단계(1,200·1,800 RPS) 오류가 `verdict.stages[].httpStatus` 로 상태 0 과 5xx 로 갈리는지, 5xx 가 `5xxByCode` 의 어느 코드인지(2026-11-18 1차의 "Caddy 의 502·504" [가설]을 확인하거나 버린다).
 - 전체 길이와 기본 VU: A1 의 3,500 VU(흐름 3,300 + browse 200)·A3 large 의 600 VU 까지의 클라이언트 메모리·CPU, 1,323초 드레인, 업링크 포화와 A4 최고 단계의 내려받기 대역(약 480 Mbps [파생]), 전체 길이 G1 의 도착 간격(`k6 run --out json=<파일>` 로 `endpoint=create` 요청 시각을 본다)과 `dropped_iterations`.
 
 ## 트래픽 모델 메모

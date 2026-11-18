@@ -371,7 +371,7 @@ kill $CADDY_NS
 ```
 
 - **가져오기.** `caddy-*` 파일은 아래 `scp` 로 `$RUN/vm/` 에 같이 온다. 결과 문서에 인용할 파일은 `collect.py --attach` 로 run.json 에 붙인다.
-- **2차에서 볼 것.**
+- **A 시리즈를 VM 에서 다시 돌릴 때 볼 것.**
   - A2 붕괴 단계: `estab443`·`TcpExtListenOverflows`·`TcpExtListenDrops` 의 증가를 k6 의 `verdict.stages[].httpStatus`(상태 0·5xx, [scripts/load/README.md](../../scripts/load/README.md) '상태 계열')와 같은 시각으로 맞춰 본다.
   - A1: Caddy 메모리(1차 최대 2,246 MiB)가 열린 연결 수를 따라가는지 본다. 1차는 흐름 기록으로 연결 수를 다시 만든 모형이었다 [가설].
 
