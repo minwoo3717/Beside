@@ -64,6 +64,42 @@ test('flow: a 5xx while polling is an error and ends the flow', async () => {
   assert.equal(samples('load_flowMs')[0].tags.outcome, 'error');
 });
 
+test('flow: every response is counted by its raw status class with its code and the request tags (2xx not)', async () => {
+  const isPoll = (req) => req.method === 'GET' && /^\/api\/v1\/jobs\/[^/]+$/.test(new URL(req.url).pathname);
+  const counted = () => ['load_status0Count', 'load_status4xxCount', 'load_status5xxCount']
+    .map((metric) => samples(metric).map((s) => [metric, s.value, s.tags.status, s.tags.endpoint]))
+    .reduce((all, list) => all.concat(list), []);
+  // a 502 while polling (A2's collapse: a proxy answer) -> 5xx; healthz 200 and create 202 are not counted
+  const proxy = await load('smoke.js', {}, { clock: 0 });
+  state.handler = fakeServer({ pollStatus: 502 });
+  proxy.flow();
+  assert.deepEqual(counted(), [['load_status5xxCount', 1, '502', 'poll']]);
+  // no HTTP response (connection refused, reset or timed out: status 0) -> '0', also a load_errorRatio error
+  const dropped = await load('smoke.js', {}, { clock: 0 });
+  const server = fakeServer();
+  state.handler = (req) => (isPoll(req) ? null : server(req));
+  dropped.flow();
+  assert.deepEqual(counted(), [['load_status0Count', 1, '0', 'poll']]);
+  assert.deepEqual(samples('load_errorRatio').map((s) => s.value), [0, 0, 1]);
+  // a 404 is a 4xx here and "unexpected" for the verdict (classify decides that, not the class)
+  const missing = await load('smoke.js', {}, { clock: 0 });
+  const other = fakeServer();
+  state.handler = (req) => (isPoll(req) ? { status: 404, body: '{"error":{"code":"JOB_NOT_FOUND","message":"x"}}' } : other(req));
+  missing.flow();
+  assert.deepEqual(counted(), [['load_status4xxCount', 1, '404', 'poll']]);
+  assert.equal(samples('load_unexpectedCount')[0].tags.status, '404');
+  // a whole flow that went well counts nothing
+  const fine = await load('smoke.js', {}, { clock: 0 });
+  state.handler = fakeServer({ completeAfterPolls: 1 });
+  fine.flow();
+  assert.deepEqual(counted(), []);
+  // staged scripts: the stage/phase tags of the moment come along, so each hold keeps its own counts
+  const staged = await load('api_staged.js', { RTT_BASE_MS: '20' }, { clock: 61000, scenarioStartTime: 0 });
+  state.handler = fakeServer({ pollStatus: 504 });
+  staged.flow();
+  assert.deepEqual(samples('load_status5xxCount').map((s) => [s.tags.status, s.tags.stage, s.tags.phase]), [['504', '0', 'hold']]);
+});
+
 test('flow: an asset whose size differs from job.asset.bytes fails the flow', async () => {
   const mod = await load('smoke.js', { MIN_ASSET_BYTES: '2000000' }, { clock: 0 });
   state.handler = fakeServer({ completeAfterPolls: 0 });

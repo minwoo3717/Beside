@@ -1,6 +1,7 @@
 // Custom k6 metrics. Names use the load_ prefix (the "load.*" values of docs/perf/load/TRAFFIC_MODEL.md §11; k6
 // forbids dots). They are perf-only like bench.* and are not registered in docs/METRICS.md (agenda #15).
 import { Counter, Gauge, Rate, Trend } from 'k6/metrics';
+import { STATUS_CLASSES, STATUS_METRIC } from './classify.js';
 
 export const healthzMs = new Trend('load_healthzMs', true);
 export const postMs = new Trend('load_postMs', true);
@@ -30,6 +31,12 @@ export const flowEnded = new Counter('load_flowEnded');
 
 export const unexpectedCount = new Counter('load_unexpectedCount');
 export const rejectedCount = new Counter('load_rejectedCount');
+// Per response, by raw status class (lib/classify.js statusClass): load_status0Count (no response), load_status4xxCount,
+// load_status5xxCount, tagged like the request plus status=<code>; 2xx and 3xx are not counted. load_errorRatio says how
+// many requests failed, these say what came back. Every script keeps them in the summary overall and per judged stage
+// (no-op thresholds, lib/thresholds.js statusCountThresholds through errorThresholds): verdict.httpStatus.
+export const statusCounts = {};
+STATUS_CLASSES.forEach((cls) => { statusCounts[cls] = new Counter(STATUS_METRIC[cls]); });
 export const assetBytes = new Counter('load_assetBytes');
 // Upload body bytes of POST /api/v1/jobs that got 202 (a lower bound: a refused, reset or timed-out upload sent an
 // unknown part of its body and is left out, lib/flow.js createJob), tagged like the request, so the uplink use of each

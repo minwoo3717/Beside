@@ -53,6 +53,15 @@ test('classify: errors, intended rejections and unexpected statuses', async () =
   assert.equal(c.classify(413, [413], null), 'ok');
 });
 
+test('classify: the raw status class every response is counted in (0, 4xx, 5xx; 2xx and 3xx are not counted)', async () => {
+  const c = await lib('classify.js');
+  const statuses = [0, 200, 202, 302, 399, 400, 404, 413, 429, 499, 500, 502, 503, 504, 599, 600];
+  assert.deepEqual(statuses.map((st) => c.statusClass(st)),
+    ['0', null, null, null, null, '4xx', '4xx', '4xx', '4xx', '4xx', '5xx', '5xx', '5xx', '5xx', '5xx', null]);
+  assert.deepEqual(c.STATUS_METRIC, { 0: 'load_status0Count', '4xx': 'load_status4xxCount', '5xx': 'load_status5xxCount' });
+  assert.deepEqual(c.STATUS_5XX_CODES, ['500', '502', '503', '504']);
+});
+
 test('multipart: two photos under one field, exact bytes', async () => {
   const mp = await lib('multipart.js');
   const a = new Uint8Array([1, 2, 3]);

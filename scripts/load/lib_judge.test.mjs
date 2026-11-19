@@ -101,6 +101,112 @@ test('summary: dropped iterations that no stage can own make the staged result i
   assert.equal(ok.verdict.breakingPoint.lastPassingStage, 1);
 });
 
+test('summary: drops per scenario name the browse scenario of api_staged.js (BROWSE_PRE_VUS, not PRE_VUS)', async () => {
+  const s = await lib('summary.js');
+  const th = await lib('thresholds.js');
+  assert.deepEqual(th.droppedReportThresholds(['flows', 'browse']),
+    { 'dropped_iterations{scenario:flows}': ['count>=0'], 'dropped_iterations{scenario:browse}': ['count>=0'] });
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<120': { ok: true } } };
+  const kept = (count) => ({ values: { count, rate: 0 }, thresholds: { 'count>=0': { ok: true } } });
+  const metrics = {
+    'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'http_req_duration{endpoint:poll,stage:1,phase:hold}': pass,
+    dropped_iterations: { values: { count: 12, rate: 0.01 }, thresholds: { 'count==0': { ok: false } } },
+    'dropped_iterations{scenario:browse}': kept(12),
+    'dropped_iterations{scenario:flows}': kept(0),
+  };
+  const stages = [0, 1].map((i) => ({ index: i, users: [7200, 9000][i], target: i, holdS: 480, label: '' }));
+  const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  const v = report.verdict;
+  assert.deepEqual(v.droppedByScenario, { browse: 12, flows: 0 });
+  assert.deepEqual(v.stages.map((x) => x.status), ['invalid', 'invalid']); // still no stage can own them
+  assert.equal(v.breakingPoint, null);
+  assert.match(v.breakingPointNote, /^dropped_iterations 12 > 0 \(browse 12, flows 0\) and k6 cannot tie them to a stage/);
+  assert.match(v.breakingPointNote, /the browse drops need BROWSE_PRE_VUS \(api_staged\.js: PRE_VUS sizes the flows scenario only\)/);
+  assert.match(s.textReport(report), /dropped_iterations 12 \(browse 12, flows 0\), vus_max/);
+  // drops of the flows only: no BROWSE_PRE_VUS hint
+  metrics['dropped_iterations{scenario:browse}'] = kept(0);
+  metrics['dropped_iterations{scenario:flows}'] = kept(12);
+  const flows = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.doesNotMatch(flows.verdict.breakingPointNote, /BROWSE_PRE_VUS/);
+  // data without the per-scenario submetrics (before api_staged.js kept them, gpu_queue.js): null and the old wording
+  delete metrics['dropped_iterations{scenario:browse}'];
+  delete metrics['dropped_iterations{scenario:flows}'];
+  const old = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'api_staged.js', scenario: 'A1', stages }, cfg, 'T1');
+  assert.equal(old.verdict.droppedByScenario, null);
+  assert.match(old.verdict.breakingPointNote, /^dropped_iterations 12 > 0 and k6 cannot tie them/);
+  assert.match(s.textReport(old), /dropped_iterations 12, vus_max/);
+  // a one-level-per-scenario script keeps its count==0 submetrics: they are listed too, and its drops stay with their stage
+  const a2 = s.buildReport({ metrics: { 'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'dropped_iterations{scenario:rps0}': { values: { count: 3 }, thresholds: { 'count==0': { ok: false } } },
+    dropped_iterations: { values: { count: 3 }, thresholds: { 'count==0': { ok: false } } } }, setup_data: {}, state: {} },
+  { script: 'poll_saturation.js', scenario: 'A2', stages: [{ index: 0, target: 100, holdS: 300, label: '', scenario: 'rps0' }] }, cfg, 'T1');
+  assert.deepEqual(a2.verdict.droppedByScenario, { rps0: 3 });
+  assert.deepEqual(a2.verdict.stages.map((x) => [x.status, x.dropped]), [['fail', 3]]);
+});
+
+test('thresholds: the status-class counters stay in the summary per judged scope, the 5xx codes for the whole run', async () => {
+  const th = await lib('thresholds.js');
+  assert.deepEqual(th.statusCountThresholds('stage:3,phase:hold'), {
+    'load_status0Count{stage:3,phase:hold}': ['count>=0'],
+    'load_status4xxCount{stage:3,phase:hold}': ['count>=0'],
+    'load_status5xxCount{stage:3,phase:hold}': ['count>=0'],
+  });
+  assert.deepEqual(Object.keys(th.statusCountThresholds(null)), ['load_status0Count', 'load_status4xxCount', 'load_status5xxCount',
+    'load_status5xxCount{status:500}', 'load_status5xxCount{status:502}', 'load_status5xxCount{status:503}', 'load_status5xxCount{status:504}']);
+  // errorThresholds brings them along (every script judges errors), they never fail and never abort
+  const hold = th.errorThresholds('stage:3,phase:hold', false);
+  assert.deepEqual(hold['load_status5xxCount{stage:3,phase:hold}'], ['count>=0']);
+  assert.equal(hold['load_status5xxCount{status:502}'], undefined);
+  assert.deepEqual(hold['load_errorRatio{stage:3,phase:hold}'], ['rate<0.005']);
+  const all = th.errorThresholds(null, true);
+  assert.deepEqual(all['load_status5xxCount{status:504}'], ['count>=0']);
+  assert.deepEqual(th.abortRules(all), [{ metric: 'load_errorRatio', threshold: 'rate<0.05' }]);
+});
+
+test('summary: responses by status class per stage and overall, the 5xx by code (A2 collapse)', async () => {
+  const s = await lib('summary.js');
+  const pass = { values: { count: 10, med: 5, 'p(95)': 9, 'p(99)': 12 }, thresholds: { 'p(95)<120': { ok: true } } };
+  const slow = { values: { count: 10, med: 5000, 'p(95)': 6300, 'p(99)': 8300 }, thresholds: { 'p(95)<120': { ok: false } } };
+  const kept = (count) => ({ values: { count, rate: 0 }, thresholds: { 'count>=0': { ok: true } } });
+  const perStage = (i, c0, c4, c5) => ({ [`load_status0Count{stage:${i},phase:hold}`]: kept(c0),
+    [`load_status4xxCount{stage:${i},phase:hold}`]: kept(c4), [`load_status5xxCount{stage:${i},phase:hold}`]: kept(c5) });
+  const metrics = Object.assign({
+    'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass,
+    'http_req_duration{endpoint:poll,stage:1,phase:hold}': slow,
+    load_status0Count: kept(12), load_status4xxCount: kept(0), load_status5xxCount: kept(7286),
+    'load_status5xxCount{status:500}': kept(0), 'load_status5xxCount{status:502}': kept(7000),
+    'load_status5xxCount{status:503}': kept(0), 'load_status5xxCount{status:504}': kept(280),
+  }, perStage(0, 0, 0, 0), perStage(1, 12, 0, 7286), perStage(2, 0, 0, 0));
+  const stages = [0, 1, 2].map((i) => ({ index: i, users: null, target: [900, 1200, 1800][i], holdS: 300, label: '' }));
+  const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };
+  const report = s.buildReport({ metrics, setup_data: {}, state: {} }, { script: 'poll_saturation.js', scenario: 'A2', stages }, cfg, 'T1');
+  const v = report.verdict;
+  // 7,286 - 7,000 - 280 = 6 other 5xx (e.g. 501): kept apart, not lost
+  assert.deepEqual(v.httpStatus, { 0: 12, '4xx': 0, '5xx': 7286, '5xxByCode': { 500: 0, 502: 7000, 503: 0, 504: 280, other: 6 } });
+  // the no-op counters do not decide anything: the stage that did not run stays "not_run", with no counts (not zeros)
+  assert.deepEqual(v.stages.map((x) => [x.status, x.httpStatus]),
+    [['pass', { 0: 0, '4xx': 0, '5xx': 0 }], ['fail', { 0: 12, '4xx': 0, '5xx': 7286 }], ['not_run', null]]);
+  assert.equal(v.thresholdsOk, false);
+  assert.deepEqual(v.failedThresholds, [{ metric: 'http_req_duration{endpoint:poll,stage:1,phase:hold}', threshold: 'p(95)<120' }]);
+  const text = s.textReport(report);
+  assert.match(text, /responses by status \(load_status\*Count\): 0 \(no response\) 12, 4xx 0, 5xx 7286 \(502 7000, 504 280, other 6\)\n/);
+  assert.match(text, /\n1 +- +1200 +fail +poll=6300  http 0=12 5xx=7286\n/);
+  assert.doesNotMatch(text, /\n0 [^\n]*http /);
+  // data from before the counters (or an A2 SEED_ONLY run): null, not zeros, and no line
+  const old = s.buildReport({ metrics: { 'http_req_duration{endpoint:poll,stage:0,phase:hold}': pass }, setup_data: {}, state: {} },
+    { script: 'poll_saturation.js', scenario: 'A2', stages: stages.slice(0, 1) }, cfg, 'T1');
+  assert.equal(old.verdict.httpStatus, null);
+  assert.equal(old.verdict.stages[0].httpStatus, null);
+  assert.doesNotMatch(s.textReport(old), /responses by status/);
+  // a clean run keeps the zeros and prints no line
+  const clean = s.buildReport({ metrics: { load_status0Count: kept(0), load_status4xxCount: kept(0), load_status5xxCount: kept(0) },
+    setup_data: {}, state: {} }, { script: 'smoke.js', scenario: 'A0', stages: [] }, cfg, 'T1');
+  assert.deepEqual(clean.verdict.httpStatus, { 0: 0, '4xx': 0, '5xx': 0, '5xxByCode': { 500: 0, 502: 0, 503: 0, 504: 0, other: 0 } });
+  assert.doesNotMatch(s.textReport(clean), /responses by status/);
+});
+
 test('summary: failed checks and unexpected responses are counted and printed', async () => {
   const s = await lib('summary.js');
   const cfg = { runId: 'r', baseUrl: 'b', rttBaseMs: 20, uplinkMbps: null, tier: '' };

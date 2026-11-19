@@ -35,8 +35,62 @@ test('api_staged.js A5 spike and A6 soak follow tiers.json', async () => {
   assert.equal(soak.options.scenarios.guard.executor, 'per-vu-iterations');
 });
 
+test('api_staged.js: browse pre-allocates the top browse rate x 10 s (BROWSE_PRE_VUS), its drops are kept apart', async () => {
+  // On the VM (2026-11-18) the fixed 5 browse VUs dropped 12 healthz at 9,000 users; PRE_VUS only sizes the flows.
+  const browseVus = (mod) => [mod.options.scenarios.browse.preAllocatedVUs, mod.options.scenarios.browse.maxVUs];
+  const a1 = await load('api_staged.js', { RTT_BASE_MS: '20' });
+  assert.deepEqual(browseVus(a1), [200, 200]); // 9,000 users -> 20/s x 10 s; maxVUs keeps its 200
+  assert.deepEqual(browseVus(await load('api_staged.js', { RTT_BASE_MS: '20', SCENARIO: 'spike' })), [120, 200]); // 5,400 -> 12/s
+  assert.deepEqual(browseVus(await load('api_staged.js', { RTT_BASE_MS: '20', SCENARIO: 'soak' })), [40, 200]); // 1,800 -> 4/s
+  assert.deepEqual(browseVus(await load('api_staged.js', { RTT_BASE_MS: '20', USERS: '25' })), [5, 200]); // never below 5
+  assert.deepEqual(browseVus(await load('api_staged.js', { RTT_BASE_MS: '20', BROWSE_PRE_VUS: '300' })), [300, 300]);
+  assert.deepEqual(browseVus(await load('api_staged.js', { RTT_BASE_MS: '20', BROWSE_PRE_VUS: '50', BROWSE_MAX_VUS: '80' })), [50, 80]);
+  // an explicit BROWSE_MAX_VUS below the pre-allocation is refused, not clamped (k6 would refuse maxVUs < preAllocatedVUs)
+  await assert.rejects(load('api_staged.js', { RTT_BASE_MS: '20', BROWSE_MAX_VUS: '100' }),
+    /BROWSE_PRE_VUS 200 > BROWSE_MAX_VUS 100; raise BROWSE_MAX_VUS or lower BROWSE_PRE_VUS/);
+  await assert.rejects(load('api_staged.js', { RTT_BASE_MS: '20', BROWSE_PRE_VUS: '2.5' }), /BROWSE_PRE_VUS 2\.5 must be a whole number of at least 1/);
+  await assert.rejects(load('api_staged.js', { RTT_BASE_MS: '20', BROWSE_PRE_VUS: '0' }), /BROWSE_PRE_VUS 0 must be/);
+  // the flows keep PRE_VUS / MAX_VUS; meta.vus shows both scenarios
+  const summary = (mod) => JSON.parse(mod.handleSummary({ metrics: {}, setup_data: {}, state: {} })[BASE_ENV.SUMMARY_PATH]);
+  assert.deepEqual(summary(a1).meta.vus, { preAllocated: 450, max: 3300, browse: { preAllocated: 200, max: 200 } });
+  assert.equal(a1.options.scenarios.flows.preAllocatedVUs, 450);
+  // report-only drops per scenario (verdict.droppedByScenario); the whole-run count==0 still judges
+  assert.deepEqual(a1.options.thresholds['dropped_iterations{scenario:flows}'], ['count>=0']);
+  assert.deepEqual(a1.options.thresholds['dropped_iterations{scenario:browse}'], ['count>=0']);
+  assert.deepEqual(a1.options.thresholds.dropped_iterations, ['count==0']);
+  // BROWSE=0: no browse scenario, its VU settings are not checked
+  const off = await load('api_staged.js', { RTT_BASE_MS: '20', BROWSE: '0', BROWSE_MAX_VUS: '1' });
+  assert.equal(off.options.scenarios.browse, undefined);
+  assert.equal(off.options.thresholds['dropped_iterations{scenario:browse}'], undefined);
+  assert.equal(summary(off).meta.vus.browse, null);
+});
+
 test('api_staged.js refuses a remote target without RTT_BASE_MS', async () => {
   await assert.rejects(load('api_staged.js', { BASE_URL: 'https://beside.example.org' }), /RTT_BASE_MS/);
+});
+
+test('scripts: every script keeps the status classes for each scope it judges errors in, the 5xx codes for the run', async () => {
+  const th = async (rel, env, extra) => (await load(rel, Object.assign({ RTT_BASE_MS: '20' }, env || {}), extra)).options.thresholds;
+  const perStage = (t) => Object.keys(t).filter((k) => /^load_status\w+\{stage:/.test(k));
+  const a1 = await th('api_staged.js');
+  assert.deepEqual(a1['load_status0Count{stage:7,phase:hold}'], ['count>=0']);
+  assert.equal(perStage(a1).length, 3 * 8);
+  const a2 = await th('poll_saturation.js');
+  assert.deepEqual(a2['load_status5xxCount{stage:4,phase:hold}'], ['count>=0']); // the 1,200 RPS step of 2026-11-18
+  assert.equal(perStage(a2).length, 3 * 6);
+  assert.equal(perStage(await th('upload.js')).length, 3 * 6);
+  assert.equal(perStage(await th('asset.js')).length, 3 * 6);
+  const scripts = [['smoke.js'], ['api_staged.js'], ['poll_saturation.js'], ['upload.js'], ['asset.js'], ['gpu_queue.js'],
+    ['failure/f3_uploads.js', {}, { openBase: join(HERE, 'failure') }]];
+  for (const [rel, env, extra] of scripts) {
+    const t = await th(rel, env, extra);
+    for (const name of ['load_status0Count', 'load_status4xxCount', 'load_status5xxCount', 'load_status5xxCount{status:502}', 'load_status5xxCount{status:504}']) {
+      assert.deepEqual(t[name], ['count>=0'], `${rel} ${name}`);
+    }
+  }
+  // scripts without stages keep the run's counts only
+  assert.deepEqual(perStage(await th('smoke.js')), []);
+  assert.deepEqual(perStage(await th('gpu_queue.js')), []);
 });
 
 test('poll_saturation.js A2: one constant-arrival-rate scenario per step', async () => {
