@@ -64,7 +64,8 @@ RUNNER_SPEC = os.environ.get("BESIDE_RUNNER", "animallift_runner:AnimalLiftRunne
 MODEL_NAME = os.environ.get("BESIDE_MODEL_NAME", "animallift-baseline")      # goes into modelVersion / job_runs
 FORWARD_AXIS = os.environ.get("BESIDE_FORWARD_AXIS", "+x")                   # head axis of the model's OBJ output
 # Optional: rigged template GLB (SMAL-derived, keep out of git). When set, every result gets its skeleton + clips
-# (tools/rig_transfer.py). If the transfer fails the static GLB is delivered, the job does not fail.
+# (tools/rig_transfer.py). If the transfer fails or the rigged GLB is over the GLB_SPEC §1 size limit, the static GLB
+# is delivered, the job does not fail.
 RIG_TEMPLATE = os.environ.get("BESIDE_RIG_TEMPLATE")
 
 # Spring on Windows + this service in WSL2 Ubuntu on the same PC: translate paths both ways.
@@ -164,7 +165,9 @@ def _startup() -> None:
 
 
 class InferOptions(BaseModel):
-    hair: bool = Field(default=False, description="Also produce the hair variant (hair.npz -> {jobId}/hair.glb)")
+    hair: bool = Field(default=False, description="Hair variant ({jobId}/hair.glb) is [계획]: accepted but ignored today. "
+                       "The hair_length/flow PNGs are written next to base.glb whenever the model writes hair.npz "
+                       "(AnimalLift: every job), whatever this flag")
 
 
 class InferRequest(BaseModel):
@@ -188,7 +191,8 @@ class InferMetrics(BaseModel):
 
 class InferResponse(BaseModel):
     glbPath: str = Field(..., description="Absolute path of {jobId}/base.glb (same host as Spring, which copies it to storage/results/{jobId}/base.glb)")
-    hairGlbPath: Optional[str] = Field(default=None, description="Absolute path of {jobId}/hair.glb when options.hair")
+    hairGlbPath: Optional[str] = Field(default=None, description="Always null today: the hair variant GLB "
+                                       "({jobId}/hair.glb for options.hair) is [계획]")
     metrics: InferMetrics
     passthrough: bool = Field(default=False, description="True when the sample GLB was returned instead of a real result")
     modelVersion: Optional[str] = Field(
@@ -603,6 +607,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
 
     rigged = False
     if RIG_TEMPLATE:
+        from convert_asset import MAX_GLB_BYTES
         from rig_transfer import RigError, transfer
 
         _stop_if_cancelled(attempt, "before rigging")
@@ -610,6 +615,9 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
         tmp = job_dir / "base.rigged.glb"
         try:
             info = transfer(str(glb), str(pred.uv_png), RIG_TEMPLATE, str(tmp))
+            # the rigged file (template skin + clips + raw uv.png) never went through convert's size check
+            if info["bytes"] > MAX_GLB_BYTES:
+                raise RigError(f"rigged GLB {info['bytes']} bytes > limit {MAX_GLB_BYTES}")
             os.replace(tmp, glb)
             m["bytes"] = info["bytes"]
             m["convertMs"] += int((time.perf_counter() - rig_started) * 1000)
@@ -619,6 +627,12 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
             log.warning("job %s: rig transfer skipped: %s", job_id, e)
             if tmp.exists():
                 tmp.unlink()
+        if rigged:   # base.metrics.json describes the GLB served (GLB_SPEC §5); convert wrote the static one's
+            try:
+                with open(job_dir / "base.metrics.json", "w") as f:   # no makedirs: a DELETEd folder stays gone
+                    json.dump(m, f)
+            except OSError as e:   # folder removed meanwhile: _stop_if_cancelled below answers
+                log.warning("job %s: could not rewrite base.metrics.json after rigging: %s", job_id, e)
 
     _stop_if_cancelled(attempt, "before answering")   # the GLB it would point to is gone or is the retry's
     log.warning("job %s: infer %d ms, convert %d ms, %d tris, %d bytes", job_id, pred.infer_ms, m["convertMs"], m["triangles"], m["bytes"])
