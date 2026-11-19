@@ -340,6 +340,8 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 **다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside pull --ff-only origin main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. 3차 끝(2026-11-18 18:58 UTC) 때 리포는 `b6c0e6c` 였고, 2026-11-19 병합한 PR #11(DELETE 취소)은 이렇게 당겨야 Pod 에 들어간다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
 
+**추론 서비스 기본값**(2026-11-20): `start_pod.sh` 는 uvicorn 유휴 연결 75 s(`UVICORN_TIMEOUT_KEEP_ALIVE`)와 torch·BLAS 스레드 8(`THREADS` → `OMP/MKL/OPENBLAS_NUM_THREADS`)로 서비스를 띄운다 **[구현됨]**. 근거는 3차 부하 시험 2절이다: 처리 중앙값 −0.88 s, Pod CPU 한도에 걸린 100 ms 주기 0. 8 은 A40 Pod 의 cgroup CPU 한도(7.65 코어)에 맞춘 값이다. 다른 Pod 종류면 `THREADS` 를 그 Pod 의 cgroup CPU 한도(`cpu.cfs_quota_us / cpu.cfs_period_us` 또는 `cpu.max`, 반올림)로 준다. 콘솔이 보여 주는 vCPU 수(이 A40 Pod 는 9)가 아니다. `THREADS=default` 면 스레드 변수를 넣지 않는다(3차 G2r·F 와 같은 라이브러리 기본). backend 의 HttpClient 는 유휴 연결을 60 s 에 놓는다(`backend/Dockerfile` 의 `jdk.httpclient.keepalive.timeout`, JDK 기본 1200 s). 서비스(75 s)보다 먼저 놓아야, 이미 닫힌 연결로 `POST /infer/upload` 를 보내지 않는다. 값은 서비스를 띄울 때만 들어간다. 이미 떠 있는 서비스가 다른 값이면 `[4/4]` 줄 다음에 NOTE 가 나오므로, 그 pid 를 `kill` 하고 다시 실행한다. `[4/4]` 줄에는 서비스 프로세스가 실제로 받은 값(`/proc/<pid>/environ`)이 나온다. 실제 Pod 에서 확인하는 것은 4차 부하 시험 **[계획]**.
+
 **네트워크 볼륨이 아니라 Pod 볼륨 디스크로 만든 Pod 를 Terminate 했을 때**는 `/workspace` 가 지워져 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤, VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
 
 | `MODE` | 하는 일 |

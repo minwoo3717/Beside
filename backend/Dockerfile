@@ -36,4 +36,7 @@ EXPOSE 8080
 # Heap follows the container memory limit (mem_limit in deploy/docker-compose.yml): 40 %, because the preprocessing
 # models (ONNX Runtime, mounted at /app/models) live outside the heap. Extra JVM flags: JAVA_TOOL_OPTIONS (a flag
 # given here wins over it, so change this line to change the share). ONNX Runtime unpacks its native library to /tmp.
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=40", "-jar", "/app/app.jar"]
+# jdk.httpclient.keepalive.timeout=60: the JDK HttpClient keeps an idle connection for 1200 s by default, longer than
+# the Runpod inference service's 75 s (deploy/runpod/start_pod.sh). The client must give a connection up first, or a
+# POST /infer/upload can go out on one the Pod already closed (or lost when the Pod stopped without a FIN).
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=40", "-Djdk.httpclient.keepalive.timeout=60", "-jar", "/app/app.jar"]

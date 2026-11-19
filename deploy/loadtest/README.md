@@ -98,11 +98,11 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
   - 3차 중에 main `b6c0e6c` 로 바꿨다. F1a 전에는 스텁이 실제로 기다리는지 작업 1건으로 확인한다(`inferMs` ≈ 지연).
   - PR #11 은 그 뒤 main 에 들어가 3차 끝의 Pod 리포(`b6c0e6c`)에는 없다. 다음 시험 전에 `git -C /workspace/Beside pull --ff-only origin main` 하고 `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. `pod-info.txt` 는 당긴 뒤에 다시 만든다(3차 `f1ar2` 에 첨부한 `pod-info.txt` 는 Pod 시작 때 만든 것이라 바꾸기 전의 `deploy/gcp` `ee030f2` 를 그대로 담았다).
 - **uvicorn 유휴 연결**:
-  - 추론 서비스를 `UVICORN_TIMEOUT_KEEP_ALIVE=75` 와 함께 띄우면(uvicorn 0.54 는 `UVICORN_` 환경변수를 읽는다) 30초 간격에서도 연결을 이어 써 처리가 약 0.9 s 줄었다.
+  - 추론 서비스를 `UVICORN_TIMEOUT_KEEP_ALIVE=75` 와 함께 띄우면(uvicorn 0.54 는 `UVICORN_` 환경변수를 읽는다) 30초 간격에서도 연결을 이어 써 처리가 약 0.9 s 줄었다. 2026-11-20 부터는 `start_pod.sh` 의 기본값이다. 5 s 와 비교하려면 `UVICORN_TIMEOUT_KEEP_ALIVE=5` 로 띄운다.
   - 재시작하는 스크립트(`f2_kill.sh`·`pt_switch.sh`)에도 같은 값을 넘긴다. 실행 기록에 이 값을 적는다.
 - **Pod CPU 한도**:
   - Pod 컨테이너는 cgroup v1 이고(`cpu.max` 없음) 한도는 `cpu.cfs_quota_us` 765000 / `cpu.cfs_period_us` 100000 = 7.65 코어다. 보이는 CPU 는 96개다.
-  - torch 기본 스레드로는 100 ms 주기의 0.5~2.2 % 에서 한도에 걸렸다. `OMP/MKL/OPENBLAS_NUM_THREADS=8` 이면 0 이었다.
+  - torch 기본 스레드로는 100 ms 주기의 0.5~2.2 % 에서 한도에 걸렸다. `OMP/MKL/OPENBLAS_NUM_THREADS=8` 이면 0 이었다. 2026-11-20 부터는 `start_pod.sh` 의 기본값이다(`THREADS`). 기본 스레드와 비교하려면 `THREADS=default` 로 띄운다.
   - `cpu.stat` 의 `throttled_time` 은 CPU 실행 큐마다 더한 값이라 벽시계 시간이 아니다. 벽시계 비율은 `nr_throttled`(걸린 주기 수)로 본다.
   - 샘플러는 `cpuacct.usage` 와 `cpu.stat` 의 `nr_throttled`·`throttled_time` 을 읽는다.
 - **Pod 로그 시각**: `tail -s 0.2` 로 붙여 0~0.2 s 늦다(2차는 0~1 s).

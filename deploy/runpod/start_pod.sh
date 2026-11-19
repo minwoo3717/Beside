@@ -28,7 +28,9 @@
 # default: model when $ANIMALLIFT_DIR exists, otherwise passthrough.
 # Overrides: WORKSPACE (/workspace), PORT (8002), TS_HOSTNAME (beside-gpu), RUN_DIR (/var/run/beside: socket, pids),
 #   TOKEN_FILE (/workspace/beside-token), ANIMALLIFT_DIR, CONDA_HOME, CONDA_ENV, WORK_DIR, RIG_TEMPLATE, SAMPLE_GLB,
-#   HF_HOME, TORCH_HOME (model caches, default under /workspace/.cache), ALLOW_NO_GPU=1, TS_VERSION + TS_SHA256
+#   HF_HOME, TORCH_HOME (model caches, default under /workspace/.cache), ALLOW_NO_GPU=1, TS_VERSION + TS_SHA256,
+#   UVICORN_TIMEOUT_KEEP_ALIVE (75 s), THREADS (8: OMP/MKL/OPENBLAS_NUM_THREADS; "default" leaves them unset) - both
+#   apply when the service starts
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -46,6 +48,17 @@ TOKEN_FILE="${TOKEN_FILE:-$WS/beside-token}"
 ANIMALLIFT_DIR="${ANIMALLIFT_DIR:-$WS/AnimalLift}"
 MODE="${MODE:-}"
 SERVE="uvicorn app:app --host 127.0.0.1 --port $PORT"   # also how a running service is recognised
+# Service defaults measured on the A40 Pod (2026-11-19 load test round 3, docs/perf/load/2026-11-19_vm-3rd.md 2절):
+# - uvicorn closes an idle connection after 5 s by default, so with jobs more than 5 s apart Spring opened a new
+#   VM <-> Pod connection for every job; 75 s keeps it (processing median 9.09 -> 8.22 s at one job per 30 s).
+#   The backend's HttpClient drops idle connections after 60 s (backend/Dockerfile), before this side does.
+# - With the libraries' default thread pools (count not measured; the report's hypothesis: sized to the 96 host CPUs
+#   the container sees) 0.5 % of the 100 ms CPU-quota periods were throttled (quota 7.65 cores on that Pod);
+#   8 threads made it 0 (inference median -2.6 %). On another Pod type set THREADS to its cgroup CPU quota
+#   (cpu.cfs_quota_us / cpu.cfs_period_us, or cpu.max), rounded - not the vCPU count the console shows.
+#   THREADS=default starts with the libraries' own choice (the round-3 G2r/F baseline).
+KEEP_ALIVE_S="${UVICORN_TIMEOUT_KEEP_ALIVE:-75}"
+THREADS="${THREADS:-8}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 stamp() { printf '\n=== %s start_pod.sh ===\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$1"; }   # logs are appended
@@ -53,6 +66,9 @@ port_busy() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }   # something ac
 
 [[ -d "$WS" ]] || die "$WS not found - run this inside the Runpod Pod (or set WORKSPACE)"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || die "PORT must be a number (got: $PORT)"
+[[ "$KEEP_ALIVE_S" =~ ^[1-9][0-9]{0,3}$ ]] || die "UVICORN_TIMEOUT_KEEP_ALIVE must be seconds, 1-9999 (got: $KEEP_ALIVE_S)"
+[[ "$THREADS" =~ ^[1-9][0-9]{0,2}$ || "$THREADS" == default ]] ||
+  die "THREADS must be a number of threads, 1-999, or default (got: $THREADS)"
 if [[ -z "${BESIDE_INFERENCE_TOKEN:-}" && -r "$TOKEN_FILE" ]]; then
   BESIDE_INFERENCE_TOKEN="$(cat "$TOKEN_FILE")"
   perms="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || echo unknown)"
@@ -87,6 +103,18 @@ running_pid() {
 }
 
 ts() { "$TS_BIN/tailscale" --socket="$SOCK" "$@"; }
+
+# Keep-alive and thread count the service process really got (its environment), for the [4/4] line.
+THREADS_LABEL="$THREADS"; [[ "$THREADS" == default ]] && THREADS_LABEL="library default (not set)"
+WANTED_SETTINGS="keep-alive $KEEP_ALIVE_S s, threads $THREADS_LABEL"
+service_settings() {
+  local env ka th
+  env="$(tr '\0' '\n' 2>/dev/null < "/proc/$1/environ")" || { echo "settings unknown (cannot read /proc/$1/environ)"; return 0; }
+  ka="$(sed -n 's/^UVICORN_TIMEOUT_KEEP_ALIVE=//p' <<< "$env")"
+  th="$(sed -n 's/^OMP_NUM_THREADS=//p' <<< "$env")"
+  if [[ -n "$ka" ]]; then ka="$ka s"; else ka="5 s (uvicorn default)"; fi
+  echo "keep-alive $ka, threads ${th:-library default (not set)}"
+}
 
 mkdir -p "$TS_DIR/state" "$RUN_DIR" "$LOG_DIR"
 # One run at a time: an exec tool that stops waiting does not stop the command, so a retry could overlap it.
@@ -145,6 +173,12 @@ TS_IP="$(ts ip -4)"
 
 # 4. The inference service, loopback only (tailscaled forwards tailnet connections to it).
 export HF_HOME="${HF_HOME:-$WS/.cache/huggingface}" TORCH_HOME="${TORCH_HOME:-$WS/.cache/torch}"  # SD VAE, DINOv2
+export UVICORN_TIMEOUT_KEEP_ALIVE="$KEEP_ALIVE_S"   # uvicorn reads its UVICORN_* settings (both modes run python -m uvicorn)
+if [[ "$THREADS" == default ]]; then
+  unset OMP_NUM_THREADS MKL_NUM_THREADS OPENBLAS_NUM_THREADS
+else
+  export OMP_NUM_THREADS="$THREADS" MKL_NUM_THREADS="$THREADS" OPENBLAS_NUM_THREADS="$THREADS"
+fi
 if pid="$(running_pid "$RUN_DIR/inference.pid" "$SERVE")"; then
   # The same uvicorn command line serves both modes: after installing AnimalLift on a Pod that still runs the
   # passthrough test, the old service must not be taken for the model.
@@ -153,7 +187,11 @@ if pid="$(running_pid "$RUN_DIR/inference.pid" "$SERVE")"; then
     die "the inference service (pid $pid) runs in $running_mode mode, MODE is $MODE - kill $pid and run this again"
   curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$PORT/healthz" 2>/dev/null ||
     die "the inference service (pid $pid) does not answer /healthz - see $LOG_DIR/inference.log, kill $pid and run this again"
-  echo "[4/4] inference service already running ($MODE, pid $pid, stop: kill $pid)"
+  settings="$(service_settings "$pid")"
+  echo "[4/4] inference service already running ($MODE, pid $pid, $settings, stop: kill $pid)"
+  if [[ "$settings" != "$WANTED_SETTINGS" && "$settings" != "settings unknown"* ]]; then
+    echo "NOTE: it was started with other settings; kill $pid and run this again for $WANTED_SETTINGS"
+  fi
 else
   port_busy "$PORT" && die "127.0.0.1:$PORT is already in use by something this script did not start - stop it or set PORT (and the VM's INFERENCE_BASE_URL)"
   if [[ "$MODE" == passthrough ]]; then
@@ -215,7 +253,7 @@ PY
   done
   [[ $up == 1 ]] && kill -0 "$svpid" 2>/dev/null ||
     { tail -n 30 "$LOG_DIR/inference.log" >&2; die "inference service did not answer /healthz ($LOG_DIR/inference.log)"; }
-  echo "[4/4] inference service up ($MODE, 127.0.0.1:$PORT, X-Inference-Token required)"
+  echo "[4/4] inference service up ($MODE, 127.0.0.1:$PORT, X-Inference-Token required, $(service_settings "$svpid"))"
 fi
 
 echo
