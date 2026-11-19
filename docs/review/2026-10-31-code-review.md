@@ -48,7 +48,7 @@
 | `run_real.sh stop` 이 서버를 멈추지 못함 | 중간·확인 | **[구현됨]** `c2469bc` WSL 에서 이전·새 방식 비교 확인 |
 | 경로 모드 `/infer` 의 jobId 미검증(WORK_DIR 밖에 씀) | 낮음·확인 | **[구현됨]** `ed37f40` 422, `generation/inference_service/test_app.py` |
 | 폰 세로 사진의 EXIF 방향 무시(누운 채 모델로) | 중간·확인 | **[구현됨]** `ed37f40` `load_rgb` |
-| 포기된 `/infer` 가 MODEL_LOCK 을 쥐고 다음 작업의 timeout 을 깎음 | 낮음·확인 | **[계획]** 설계 결정이 필요(busy 신호 또는 끊긴 요청 건너뛰기, 3D·Backend). README 의 틀린 문장은 `d493612` 에서 고침 |
+| 포기된 `/infer` 가 MODEL_LOCK 을 쥐고 다음 작업의 timeout 을 깎음 | 낮음·확인 | 일부 **[구현됨]**(2026-11-19 PR #11): 업로드 모드에서 정리 `DELETE` 가 그 작업의 실행을 취소해, 잠금을 기다리던 요청은 모델을 돌리지 않는다. 이미 도는 predict 와 경로 모드는 **[계획]**(busy 신호 등 설계 결정, 3D·Backend). README 의 틀린 문장은 `d493612` 에서 고침 |
 | `run_real.ps1` 이 모델 없이도 말없이 뜸, 기다릴 로그 문구가 틀림 | 낮음·확인 | **[구현됨]** `c2469bc` |
 | macOS `date` 에서 e2e_mock.sh 중단 | 낮음·그럴 수 있음 | **[구현됨]** `eaf9026` |
 | C:\beside 클론이면 WSL 작업 폴더가 git 에 무시되지 않음 | 낮음·그럴 수 있음 | **[구현됨]** `c2469bc` 기본 위치를 무시되는 폴더로, `.gitignore` 에 `/work/`·`*.pt` |

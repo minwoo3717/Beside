@@ -2,7 +2,7 @@
 
 Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는 호출하지 않는다. 담당은 3D Generation 트랙, `/infer` 계약 변경은 Backend 와 합의한다.
 
-상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다 — 실측 기록(exp-01: 1건 시간·VRAM)은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정', VM 부하 시험에 쓰는 것은 [계획]).
+상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다 — 실측 기록(exp-01: 1건 시간·VRAM)은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정'). VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다 [실험 결과].
 
 ## GPU 서버 실행
 
@@ -46,7 +46,7 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 
 > **3D Generation 담당 리뷰 필요.** 부하 계획 B5 로 Backend 트랙이 넣은 변경이다. 패스스루 분기와, 모델 실패 응답을 한 곳에서 만드는 헬퍼 `_inference_failed`(기존 `raise` 한 줄을 이 헬퍼로 바꿈 — 응답은 같다)만 건드렸고 모델 모드 동작은 바뀌지 않는다. 담당이 확인한 뒤 머지한다.
 
-상태: 코드와 테스트 **[구현됨]** 2026-11-01. VM 부하 시험(G1~G3, F1a·F1b)에서 Tailscale 너머 스텁으로 쓰는 것은 **[계획]** — 아직 돌리지 않았다.
+상태: 코드와 테스트 **[구현됨]** 2026-11-01. VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다: Runpod Pod 를 지연 4,600 ms·실패율 0.2·`SLOTS=1` 로 띄웠다 [실험 결과]([docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md) 7절). G1~G3·F1b 의 스텁 실행은 **[계획]**.
 
 패스스루(`BESIDE_SAMPLE_GLB`)일 때만 읽는다. 샘플을 즉시 돌려주는 대신 GPU 를 흉내 내는 스텁으로 만들어, 실제 GPU PC 없이 Spring real 워커의 큐(대기·처리 시간), 실패 → retry, 타임아웃을 시험한다. 요청마다 환경변수를 다시 읽는다(테스트가 바꿀 수 있게; 띄운 서비스에서는 재시작해서 바꾼다). **모두 비어 있으면 sleep 도 슬롯 대기도 없이 지금과 같은 즉시 응답**이다. `scripts/perf` 는 `BESIDE_*` 를 지운 환경에서 스텁을 띄우므로 그 측정에는 영향이 없다.
 
@@ -71,7 +71,7 @@ Swagger: http://localhost:8001/docs (FastAPI 자동 생성). Spring 쪽 설정�
 - 업로드 모드에서는 Spring 이 시간 초과 뒤 정리로 `DELETE /artifacts/{jobId}` 를 보내 sleep 중인 작업 폴더가 지워진다. sleep 이 끝나 샘플을 복사하려 할 때 폴더가 없으면 경고 로그 `job <id>: work folder deleted during the run …` 를 남기고 위와 같은 500 `INFERENCE_FAILED` 로 답한다(아무도 읽지 않는 답이지만 처리하지 않은 예외 트레이스백 대신). 폴더는 다시 만들지 않는다.
 - 동기 엔드포인트는 스레드 풀(anyio 기본 40)에서 돌고 슬롯을 기다리는 요청도 스레드를 하나 잡는다. Spring 은 `inference.max-concurrency` 건만 보내므로 보통은 문제없지만, 직접 40건 넘게 몰아넣으면 그 너머는 스레드 풀에서 기다린다.
 
-부하 시험(VM)에서 쓰는 스텁 명령 — 절차이며 아직 돌리지 않았다 **[계획]**. 시리즈별 VM·스텁 값의 기준은 [deploy/loadtest/README.md](../../deploy/loadtest/README.md) '시리즈별 값' 표다.
+부하 시험(VM)에서 쓰는 스텁 명령이다. 아래 명령(T=10초)은 아직 돌리지 않았다 **[계획]**. F1a 는 3차에서 Pod 에 다른 지연(4,600 ms)으로 돌렸다. 시리즈별 VM·스텁 값의 기준은 [deploy/loadtest/README.md](../../deploy/loadtest/README.md) '시리즈별 값' 표다.
 
 ```bash
 # 0. 샘플 GLB 를 스텁을 띄울 같은 Linux·WSL 셸에서 만든다(부하 시험의 합성 GLB 하나: 1,500,000 바이트, seed 14).
@@ -195,9 +195,9 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 ### `DELETE /artifacts/{jobId}`
 
-그 작업 폴더 `{BESIDE_WORK_DIR}/{jobId}`(업로드 사진·모델 중간 산출물·결과 GLB)를 지운다. 없어도 204(멱등), `jobId` 가 패턴 밖이면 404. Spring 은 업로드 모드에서 GLB 를 저장한 뒤(작업 성공·실패 모두) 부르고, 이 호출이 실패해도 로그만 남긴다(작업 결과는 바뀌지 않는다). 그래서 업로드 모드에서는 GPU PC 에 작업 파일이 남지 않는다 — 실험용 중간 산출물이 필요하면 경로 모드로 돌린다.
+그 작업 폴더 `{BESIDE_WORK_DIR}/{jobId}`(업로드 사진·모델 중간 산출물·결과 GLB)를 지운다. 없어도 204(멱등), `jobId` 가 패턴 밖이면 404. Spring 은 업로드 모드에서 GLB 를 저장한 뒤(작업 성공·실패 모두) 부른다. 응답 없는 연결 오류면 한 번 더 보내고(2026-11-19, 시간 초과는 다시 보내지 않음), 그래도 실패하면 로그만 남긴다(작업 결과는 바뀌지 않는다). 그래서 업로드 모드에서는 보통 GPU PC 에 작업 파일이 남지 않는다. `DELETE` 가 끝내 닿지 않았거나 서비스가 실행 중에 죽어 남은 폴더는 아래 `BESIDE_WORK_SWEEP_MINUTES` 로 지운다 — 실험용 중간 산출물이 필요하면 경로 모드로 돌린다.
 
-같은 `jobId` 의 실행이 아직 돌고 있으면(Spring 이 시간 초과로 포기한 작업) **취소**한다 **[구현됨]** 2026-11-19: `MODEL_LOCK` 을 기다리던 실행은 모델을 돌리지 않고, `predict` 중이던 실행은 끝난 뒤 변환하지 않으며(`predict` 자체는 중간에 멈출 수 없다), 둘 다 500 `INFERENCE_FAILED`(아무도 읽지 않는 답)로 끝나며 DELETE 뒤에 쓴 파일까지 지운다. 변환은 작업 폴더를 다시 만들지 않고(`convert(make_dirs=False)`), 쓰는 중인 실행과 겹친 `rmtree` 는 세 번까지 다시 해 204 로 답한다. 같은 `jobId` 로 다시 오는 `POST /infer/upload`(retry)는 새 실행으로 등록되어 그대로 돈다. retry 가 먼저 끝나도 그 앞의 실행은 끝날 때 폴더를 지우지 않는다(retry 의 `base.glb` 를 Spring 이 아직 받지 않았을 수 있다). 끝날 때 폴더를 지우는 것은 `DELETE` 를 받은 뒤 retry 가 오지 않은 실행뿐이다. 선택: `BESIDE_WORK_SWEEP_MINUTES=N`(기본 꺼짐)이면 시작할 때와 min(N, 10)분마다, 돌고 있는 실행이 없고 N분 동안 바뀌지 않은 작업 폴더를 지운다(서비스가 실행 중에 죽어 남은 폴더용; 실험용 산출물을 남기는 경로 모드에서는 켜지 않는다). 확인: `test_app.py` 의 `CancelOnDeleteTest`·`RealConversionCancelTest`·`WorkSweepTest`.
+같은 `jobId` 의 실행이 아직 돌고 있으면(Spring 이 시간 초과로 포기한 작업) **취소**한다 **[구현됨]** 2026-11-19: `MODEL_LOCK` 을 기다리던 실행은 모델을 돌리지 않고, `predict` 중이던 실행은 끝난 뒤 변환하지 않으며(`predict` 자체는 중간에 멈출 수 없다), 둘 다 500 `INFERENCE_FAILED`(아무도 읽지 않는 답)로 끝나며 DELETE 뒤에 쓴 파일까지 지운다. 변환은 작업 폴더를 다시 만들지 않고(`convert(make_dirs=False)`), 쓰는 중인 실행과 겹친 `rmtree` 는 세 번까지 시도해 204 로 답한다. 같은 `jobId` 로 다시 오는 `POST /infer/upload`(retry)는 새 실행으로 등록되어 그대로 돈다. retry 가 먼저 끝나도 그 앞의 실행은 끝날 때 폴더를 지우지 않는다(retry 의 `base.glb` 를 Spring 이 아직 받지 않았을 수 있다). 끝날 때 폴더를 지우는 것은 `DELETE` 를 받은 뒤 retry 가 오지 않은 실행뿐이다. 선택: `BESIDE_WORK_SWEEP_MINUTES=N`(기본 꺼짐)이면 시작할 때와 min(N, 10)분마다, 돌고 있는 실행이 없고 N분 동안 바뀌지 않은 작업 폴더를 지운다(서비스가 실행 중에 죽어 남은 폴더용; 실험용 산출물을 남기는 경로 모드에서는 켜지 않는다). 확인: `test_app.py` 의 `CancelOnDeleteTest`·`RealConversionCancelTest`·`WorkSweepTest`.
 
 ### 인증: `X-Inference-Token` (두 모드 공통)
 

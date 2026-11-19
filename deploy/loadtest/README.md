@@ -6,7 +6,7 @@
 
 | 항목 | 상태 |
 |---|---|
-| [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI 가 확인하도록 넣었지만 아직 돌지 않았다(이 PC 에 Docker 없음) |
+| [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI(PR #3)에서 확인했고, 2026-11-18~19 VM 1·2·3차에서 실제로 썼다 |
 | k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 실제 GPU 의 G0r·G1r·G3r 는 2026-11-18 2차 **[실험 결과]** — [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md). G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로)는 2026-11-19 3차 **[실험 결과]** — [docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·스텁 G·스텁 F1~F5·A3 large·A5·A6 은 **[계획]** |
 | 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | 1~7번을 2026-11-18 main `b6c0e6c` 의 VM 에서 처음 실행했다(A 시리즈, 02:54~06:3x UTC). 운영 H2 sha256 이 백업 때와 같았고 6번 (2) 의 H2 Shell 조회가 VM 컨테이너에서 `LT_JOBS = 0` 을 냈다. 공개 경로 시험 61개(Caddy 404·401 규칙을 공개 주소로 확인하는 세션 스크립트) 통과. 이 셋의 원본 출력은 리포에 없다(백업·해시는 VM 과 개발 PC). 이번에 달리 한 것: k6 를 개발 PC 가 아니라 Runpod CPU Pod 에서 돌려 가드(`PROM_URL`)를 쓰지 않았고, Grafana 는 띄우지 않았다. 실제 GPU 절차(아래 '실제 GPU(Runpod A40) 실행')는 2차·3차에서 실행했다. 스텁 G 시리즈·스텁 F1~F5 절차는 **[계획]** |
 
@@ -86,16 +86,17 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **GPU Pod 로그**: Pod 안 `127.0.0.1:8003` 에 `python -m http.server` 로 두고 VM 에서 Tailscale 주소로 받는다. 공개 포트·Runpod 프록시는 쓰지 않는다.
   - 남긴 것: `nvidia-smi … -l 5`, `/proc/loadavg`(호스트 전체 값이다), 시각을 붙인 추론 로그, 볼륨 1 MB fsync 시간.
 - **k6 Pod 샘플러**: Runpod CPU Pod 에서 `os.cpu_count()` 는 호스트 CPU(256)를 준다(2차 때 관찰, 원본 출력은 리포 밖). CPU 비율은 `len(os.sched_getaffinity(0))` 로 나눈다.
-- **정리 `DELETE` 실패**: 539건 중 1건이 실패해 Pod 볼륨에 작업 폴더가 남았다(15:29 UTC 에 25 MB 확인, 출력은 리포 밖). 시험 뒤 `/workspace/beside-work/` 를 확인한다.
+- **정리 `DELETE` 실패**: 539건 중 1건이 실패해 Pod 볼륨에 작업 폴더가 남았다(15:29 UTC 에 25 MB 확인, 출력은 리포 밖). backend 는 2026-11-19 PR #8 부터 응답 없는 연결 오류면 한 번 더 보낸다. 그래도 시험 뒤 `/workspace/beside-work/` 를 확인한다.
 - **Pod 로그 시각**: 추론 로그 사본에 붙인 UTC 시각은 로그를 약 1초마다 읽으며 붙인 것이라 0~1 s 늦다. 업로드·내려받기를 Pod 시각으로 나눌 때는 그만큼을 오차로 둔다.
 - **연결 재사용**: Pod 접근 로그의 클라이언트 포트(127.0.0.1:포트)로 새 연결과 이어 쓴 연결을 셀 수 있다(tailscaled userspace 는 들어온 연결마다 루프백 연결 하나를 연다).
 
 **3차에서 배운 것**:
 - **3차에도 멈춘 Pod 두 개가 GPU 를 못 받았다**("not enough free GPUs on the host machine"). 같은 볼륨으로 새 Pod `4vh9x6broleb2z` 를 만들었다(모델 로드 56.1 s). 끝난 뒤 A40 Pod 세 개가 모두 EXITED 다.
 - **Pod 리포의 코드를 먼저 본다.**
-  - 볼륨의 `/workspace/Beside` 는 3차 18:40 UTC 까지(3차의 모델 실행 G0·G2r·F2·F1b 포함) `deploy/gcp` `ee030f2` 였다. 여기에는 스텁 설정(`BESIDE_PASSTHROUGH_*`, main `8092be0`)이 없다. 모델 경로는 main 과 같다.
+  - 볼륨의 `/workspace/Beside` 는 3차 18:40 UTC 까지(3차의 모델 실행 G0·G2r·F2·F1b 포함) `deploy/gcp` `ee030f2` 였다. 여기에는 스텁 설정(`BESIDE_PASSTHROUGH_*`, main `8092be0`)이 없다. 모델 경로는 그때 main(`b6c0e6c`)과 같았다. 2026-11-19 PR #11 로 main 의 모델 경로가 바뀌었다(`DELETE` 가 실행을 취소).
   - 그래서 첫 F1a(`f1ar1`)는 지연·실패 없이 돌아 무효였다.
   - 3차 중에 main `b6c0e6c` 로 바꿨다. F1a 전에는 스텁이 실제로 기다리는지 작업 1건으로 확인한다(`inferMs` ≈ 지연).
+  - PR #11 은 그 뒤 main 에 들어가 3차 끝의 Pod 리포(`b6c0e6c`)에는 없다. 다음 시험 전에 `git -C /workspace/Beside pull --ff-only origin main` 하고 `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. `pod-info.txt` 는 당긴 뒤에 다시 만든다(3차 `f1ar2` 에 첨부한 `pod-info.txt` 는 Pod 시작 때 만든 것이라 바꾸기 전의 `deploy/gcp` `ee030f2` 를 그대로 담았다).
 - **uvicorn 유휴 연결**:
   - 추론 서비스를 `UVICORN_TIMEOUT_KEEP_ALIVE=75` 와 함께 띄우면(uvicorn 0.54 는 `UVICORN_` 환경변수를 읽는다) 30초 간격에서도 연결을 이어 써 처리가 약 0.9 s 줄었다.
   - 재시작하는 스크립트(`f2_kill.sh`·`pt_switch.sh`)에도 같은 값을 넘긴다. 실행 기록에 이 값을 적는다.
@@ -108,7 +109,7 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **경로 끊김**:
   - 계획 밖에서 두 번 끊겼다(약 83 s·50 s, `HttpTimeoutException`). 오프라인 대기가 작업을 붙잡았다.
   - VM `journalctl -u tailscaled` 를 그 구간만 키·주소를 가려 실행 폴더 `vm/` 에 둔다. Pod 쪽 tailscaled 로그도 남긴다 [계획].
-- **F1b-real 뒤 남은 폴더**: 버려진 변환이 정리 `DELETE` 뒤 작업 폴더를 다시 만들어(`convert_asset.py` 의 `os.makedirs`) `/workspace/beside-work/` 에 폴더 3개(`base.glb` 만)를 남겼다. 끝나면 목록을 남기고 지운다.
+- **F1b-real 뒤 남은 폴더**: 버려진 변환이 정리 `DELETE` 뒤 작업 폴더를 다시 만들어(`convert_asset.py` 의 `os.makedirs`) `/workspace/beside-work/` 에 폴더 3개(`base.glb` 만)를 남겼다. 끝나면 목록을 남기고 지운다. PR #11 이 Pod 에 들어가면 변환이 폴더를 다시 만들지 않는다. Pod 에서 확인하는 것은 **[계획]**.
 
 ```bash
 # VM: 토큰을 출력 없이 셸 변수로 읽는다(값은 화면에 내지 않는다)

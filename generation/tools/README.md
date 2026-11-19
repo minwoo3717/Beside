@@ -1,6 +1,6 @@
 # tools — 에셋 변환 도구 (3D Generation 트랙)
 
-상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 이 리포에는 이 도구의 자동 테스트가 없고, 실제 사진으로 만든 GLB 의 측정 기록(convertMs·삼각형 수·gltf-validator 결과)도 아직 없다 — **[계획]** (exp-01·02).
+상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 변환기만 따로 보는 자동 테스트는 없다. 추론 서비스 시험 `RealConversionCancelTest`(2026-11-19)가 합성 출력으로 `convert()` 를 실제로 돌려 쓰기 위치와 `make_dirs=False`(출력 폴더를 만들지 않고, 없으면 `ConversionError`. 추론 서비스가 쓴다. CLI 는 지금처럼 만든다)를 본다. convertMs·삼각형 수는 [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md) 에 있다 [실험 결과]. gltf-validator 결과는 **[계획]** (exp-02).
 
 의존성: [requirements.txt](requirements.txt) (numpy, pillow, trimesh, scipy). 추론 서비스와 같은 env 에 설치한다.
 

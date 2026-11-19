@@ -47,7 +47,7 @@ cd C:\beside\Beside
 - `http://127.0.0.1:8001/healthz` 의 `modelLoaded: true` 로도 확인한다. 로드 실패 원인은 추론 창 로그에 있다.
 - 단독 실행: `$env:BESIDE_ANIMALLIFT_DIR='C:\beside\AnimalLift'; python -m uvicorn app:app --host 127.0.0.1 --port 8001` (animallift env 의 python).
 
-선택 환경 변수: `BESIDE_ANIMALLIFT_CKPT`, `BESIDE_DEVICE`(cuda), `BESIDE_NFE`, `BESIDE_CFG_SCALE`(기본은 체크포인트 값), `BESIDE_WORK_DIR`, `BESIDE_VAE_LOCAL_PATH`.
+선택 환경 변수: `BESIDE_ANIMALLIFT_CKPT`, `BESIDE_DEVICE`(cuda), `BESIDE_NFE`, `BESIDE_CFG_SCALE`(기본은 체크포인트 값), `BESIDE_WORK_DIR`, `BESIDE_VAE_LOCAL_PATH`, `BESIDE_WORK_SWEEP_MINUTES`(기본 꺼짐, 오래된 작업 폴더 정리 — README 'DELETE /artifacts').
 
 ## 3. 확인 순서
 

@@ -105,7 +105,7 @@ winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget   # 확인한
 k6 version          # Windows 는 "k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)" 처럼 나온다
 ```
 
-Linux(두 번째 VM 등)는 k6 문서의 apt 저장소 절차를 따른다([계획], 아직 설치하지 않았다). 설치한 버전은 `collect.py --k6-version "$(k6 version)"` 로 run.json 에 남긴다.
+Linux 의 k6 v2.3.0(linux/amd64)은 2026-11-18~19 VM 1·2·3차에서 Runpod CPU Pod 에 두고 썼다([vm-1st](../../docs/perf/load/2026-11-18_vm-1st.md) 1절). 새로 설치할 때는 k6 문서의 apt 저장소 절차를 따른다. 설치한 버전은 `collect.py --k6-version "$(k6 version)"` 로 run.json 에 남긴다.
 
 ## 준비
 
@@ -355,9 +355,9 @@ node --test "scripts/load/*.test.mjs"                             # k6 스크립
 
 ### VM 에서 확인할 것 [계획]
 
-- Linux 의 k6(두 번째 VM 에서 걸 때): `open()` 의 오류 글(코드는 폴더 오류의 `can't be used with directories` 만 맞춘다)과 경로.
+- Linux 의 k6(Runpod CPU Pod 등 Linux 부하 PC, 1~3차는 이 오류 경로를 확인하지 않았다): `open()` 의 오류 글(코드는 폴더 오류의 `can't be used with directories` 만 맞춘다)과 경로.
 - Caddy·TLS 경로: 원격 `RTT_BASE_MS` 기준, F3 의 30 MB 본문에 프록시가 413 을 주는지(로컬 Spring 은 21·30 MB 를 `Content-Length` 만 보고 바로 413 으로 끊었다), 느린 업로드가 Caddy 를 지나 202 인지, F4 의 끊김이 backend 에 `client_abort` 로 닿는지.
-- 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다), `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열(`jvm_heap_after_gc` 의 원천, 로컬 `/actuator/prometheus` 에서만 이름을 봤다).
+- 실제 Prometheus: 가드의 디스크 기준과 `env="loadtest"`·`PROM_ENV` 레이블, 서버가 죽은 뒤의 staleness(대역 Prometheus 는 마지막 값을 계속 답했다), `process_files_open_files`(Micrometer 가 Unix 에서만 내므로 Windows 에서는 없었다). 1~3차는 k6 를 Runpod CPU Pod 에서 돌려 가드를 쓰지 않았다. `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열(`jvm_heap_after_gc` 의 원천)은 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).
 - 컨테이너 경로: F3 남은 파일 확인 명령의 `/app/storage/uploads`·`/tmp/tomcat.8080.*`(Dockerfile·설정에서 추론했고 컨테이너에서 돌리지 않았다).
 - A1 을 VM 에서 다시 돌릴 때: browse 의 `BROWSE_PRE_VUS` 기본값(9,000명 단계 200)으로 `verdict.droppedByScenario.browse` 가 0 인지.
 - A2 를 VM 에서 다시 돌릴 때: 붕괴 단계(1,200·1,800 RPS) 오류가 `verdict.stages[].httpStatus` 로 상태 0 과 5xx 로 갈리는지, 5xx 가 `5xxByCode` 의 어느 코드인지(2026-11-18 1차의 "Caddy 의 502·504" [가설]을 확인하거나 버린다).

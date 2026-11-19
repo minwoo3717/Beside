@@ -19,12 +19,12 @@
 | `backend/Dockerfile`, 이 폴더의 `docker-compose.yml`·`Caddyfile`·`.env.example`·`test_caddy_routes.sh`, [scripts/deploy_vm.sh](../scripts/deploy_vm.sh), CI [backend-ci.yml](../.github/workflows/backend-ci.yml) | **[구현됨]** CI(backend-ci)가 main push(`af4a747`, 2026-11-01)와 PR #4(`ad0c3f6`)에서 이미지 빌드·compose/Caddy 검증·경로 시험까지 통과했다. GCP VM 에서 빌드·기동·`deploy_vm.sh`·재부팅 복구를 확인했다(2026-11-13) |
 | 환경변수 `INFERENCE_BASEURL` → `inference.base-url` | **[구현됨]** bootJar 를 환경변수로 띄워 확인 |
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
-| Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). VM ↔ Pod 는 아직 DERP 중계(왕복 약 300 ms). 폰 앱 시험은 **[계획]** |
+| Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). 그날 VM ↔ Pod 는 DERP 중계(왕복 약 300 ms)였고, 2026-11-18·19 2·3차 부하 시험 때는 직접 연결(`tailscale ping` 263~269 ms)이었다 **[실험 결과]**. 날마다 바뀔 수 있다. 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
-| 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4) 2026-11-18 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md) |
+| 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4, mock) 2026-11-18, 2차(실제 A40, G0r·G1r·G3r) 2026-11-18, 3차(G2r·F2-real·F1b-real·F1a) 2026-11-19 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [1차](../docs/perf/load/2026-11-18_vm-1st.md)·[2차](../docs/perf/load/2026-11-18_vm-2nd.md)·[3차](../docs/perf/load/2026-11-19_vm-3rd.md) |
 
 ## GCP 메인 서버 (2026-11-13)
 
@@ -37,7 +37,7 @@
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
-| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-18 PR #5 병합 뒤 `b6c0e6c`). 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
+| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-19 PR #6~#11 병합 뒤 `1c87da5`, 11:04 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 배포). 추론 서비스 변경(PR #11)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -299,7 +299,7 @@ $C start backend
 
 ### 부하 시험
 
-VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.loadtest.yml](docker-compose.loadtest.yml) 로 부하용 backend(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `env=loadtest`)를 대신 띄운 뒤, 끝나면 운영으로 되돌린다. 팀 공지 → 운영 백업 → 띄우기 → 합성 GLB → k6 → 수집 → 복구 → 확인 순서와 중단 조건은 [loadtest/README.md](loadtest/README.md) **[계획]**. 다른 측정 중에는 하지 않는다.
+VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.loadtest.yml](docker-compose.loadtest.yml) 로 부하용 backend(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `env=loadtest`)를 대신 띄운 뒤, 끝나면 운영으로 되돌린다. 팀 공지 → 운영 백업 → 띄우기 → 합성 GLB → k6 → 수집 → 복구 → 확인 순서와 중단 조건은 [loadtest/README.md](loadtest/README.md) 에 있다. 2026-11-18~19 에 세 번 실행했다 **[실험 결과]**. 다른 측정 중에는 하지 않는다.
 
 ## Runpod Pod 쪽
 
@@ -338,7 +338,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 5. 첫 실행은 Tailscale 1.104.6 을 `/workspace/tailscale` 에 받고(sha256 고정) 로그인 링크를 `/workspace/beside-logs/tailscale-up.log` 에 쓴다. 그 링크를 승인하면 `start.log` 끝에 `INFERENCE_BASE_URL=http://100.x.y.z:8002` 가 나온다. 터미널을 보고 있다면 `nohup ... &` 없이 실행해도 같은 내용이 화면에 나온다.
 6. VM: `deploy/.env` 의 `INFERENCE_BASE_URL` 을 그 값으로 바꾸고 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 를 실행한다. 확인은 `/healthz` 만이 아니라 실제 사진 1건(`scripts/e2e_mock.sh https://<도메인> <사진>`)으로 한다 — tailnet 의 MTU 가 작아 큰 업로드만 막히는 경우를 healthz 는 잡지 못한다. 끝나면 `docker rm -f beside-stub`.
 
-**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 4번의 마지막 두 줄만 실행한다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
+**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside pull --ff-only origin main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. 3차 끝(2026-11-18 18:58 UTC) 때 리포는 `b6c0e6c` 였고, 2026-11-19 병합한 PR #11(DELETE 취소)은 이렇게 당겨야 Pod 에 들어간다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
 
 **네트워크 볼륨이 아니라 Pod 볼륨 디스크로 만든 Pod 를 Terminate 했을 때**는 `/workspace` 가 지워져 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤, VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
 
@@ -355,7 +355,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | `/workspace/beside-token` | 추론 토큰(권한 600). `BESIDE_INFERENCE_TOKEN` 환경 변수가 있으면 그쪽이 먼저다 |
 | `/workspace/.cache/` | SD VAE·DINOv2 가중치 캐시(`HF_HOME`, `TORCH_HOME`). 없으면 컨테이너 디스크에 받아 정지할 때마다 다시 받는다 |
 | `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`. 실행마다 시각 표시를 붙여 이어 쓴다 |
-| `/workspace/beside-work/` | 작업 폴더(Spring 이 GLB 를 받은 뒤 지운다) |
+| `/workspace/beside-work/` | 작업 폴더(Spring 이 GLB 를 받은 뒤 `DELETE` 로 지운다). 남은 폴더는 `BESIDE_WORK_SWEEP_MINUTES` 로 지울 수 있다(`start_pod.sh` 는 켜지 않는다) |
 | `/var/run/beside/` | 소켓과 pid. 정지하면 사라진다 |
 
 **확인한 것**
@@ -373,7 +373,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 - **[구현됨]** 실제 Tailscale 1.104.6 tarball: sha256 이 틀리면 설치하지 않는다. 받기와 설치가 되고, 스크립트가 쓰는 플래그가 실제 CLI 에 모두 있다.
 - **[구현됨]** 2026-11-17 실제 Pod(A40, EU-SE-1, 네트워크 볼륨)에서 실행: 첫 로그인 링크 → 승인 → 패스스루 서비스, VM ↔ Pod 전체 흐름 1건. Pod 의 nginx 8001 점유와 tailnet 연결이 127.0.0.1 로 넘어오는 것을 실제로 확인했다([기록](../docs/deploy/2026-11-17_runpod-connect.md)).
 - **[구현됨]** 같은 날 `install_animallift.sh` 로 설치(497 s) 뒤 `start_pod.sh` 가 패스스루가 떠 있다며 멈추는 것을 확인하고, 그것을 끈 뒤 `model` 모드로 띄워 실제 사진 3건 성공([exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)).
-- **[계획]** Pod 를 지우고 다시 만든 뒤 같은 100.x 유지, VM ↔ Pod 직접 연결(지금은 DERP 중계, 작업마다 전송에 5~7 s).
+- **[계획]** Pod 를 Terminate 한 뒤 같은 100.x 유지. 새로 만든 Pod 가 같은 볼륨으로 같은 100.x 에 붙는 것과 VM ↔ Pod 직접 연결(`tailscale ping` 263~269 ms)은 2026-11-18·19 부하 시험에서 확인했다 **[실험 결과]**. 3차 G0 의 전송 등 중앙값은 4.41 s(Pod keep-alive 75 s 면 3.56 s)였다.
 
 ## GPU PC 쪽 (대안)
 
