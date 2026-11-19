@@ -1,0 +1,8 @@
+== beside load: gpu_queue.js (F1b) run=f1br4 base=https://beside-team.duckdns.org
+requests 632 (1/s), dropped_iterations 0, vus_max 14
+data sent 0.081 Mbps (whole-run average), received 0.005 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 146.159 ms
+thresholds: 1 failed
+  FAIL load_flowOkRatio rate>=0.95
+queue F1b: 37 jobs created in 600 s = 222/h (requested 219/h), 37 retries; fault run, so no queue prediction or recompute
+time="2026-11-19T18:54:57Z" level=error msg="thresholds on metrics 'load_flowOkRatio' have been crossed"

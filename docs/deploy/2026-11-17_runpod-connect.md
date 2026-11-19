@@ -57,9 +57,9 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
 다시 켜는 순서:
 
 1. Runpod 콘솔 → Pods → `beside-gpu` → Start(또는 API `pod-action start`).
-2. RUNNING 이 되면 Pod 의 웹 터미널(Connect → Web Terminal)에서 아래 두 줄. 첫 줄은 볼륨의 리포를 main 에 맞춘다(`start_pod.sh` 는 당기지 않는다. 2026-11-19 병합한 PR #11 은 이렇게 당겨야 Pod 에 들어간다). Pod 의 시작 명령이 비어 있어 서비스가 저절로 뜨지 않는다. `start_pod.sh` 가 `/workspace/AnimalLift` 를 보고 모델 모드로 띄우고, 모델 로드는 약 31 s 다.
+2. RUNNING 이 되면 Pod 의 웹 터미널(Connect → Web Terminal)에서 아래 두 줄. 첫 줄은 볼륨의 리포를 main 에 맞춘다(`start_pod.sh` 는 당기지 않는다. 2026-11-19 병합한 PR #11 은 이렇게 맞춰야 Pod 에 들어간다). 볼륨 리포가 detached HEAD 여도 `main` 브랜치로 돌아오도록 `pull` 대신 `fetch` + `checkout -B` 를 쓴다(4차 때 detached 였다. 이유는 [deploy/README.md](../../deploy/README.md) Runpod 절 '다시 쓸 때마다'). Pod 의 시작 명령이 비어 있어 서비스가 저절로 뜨지 않는다. `start_pod.sh` 가 `/workspace/AnimalLift` 를 보고 모델 모드로 띄우고, 모델 로드는 약 31 s 다.
    ```bash
-   git -C /workspace/Beside pull --ff-only origin main
+   git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main
    nohup bash /workspace/beside-bootstrap.sh > /workspace/beside-logs/start.log 2>&1 &
    ```
 3. VM 이 15초마다 `/healthz` 를 읽어 `DOWN -> LOADING -> UP` 이 되고 디스코드에 🟡·🟢 메시지가 간다. 기다리던 작업은 UP 이 되면 이어서 처리된다.
@@ -79,6 +79,7 @@ GCP VM(Spring) ↔ Runpod Pod(추론 서비스)을 Pod 안 Tailscale(userspace)�
   3. 둘 다 안 되면 같은 값으로 새 Pod 를 만든다.
 - 쓰지 않는 Pod 하나는 지워도 된다(볼륨은 남는다). 어느 쪽을 남길지는 팀이 정한다 [계획].
 - **3차 뒤**: 3차 부하 시험(2026-11-18 16:29 UTC)에서 `4vh9x6broleb2z`(beside-gpu3)를 만들었다. 2026-11-19 07:00:25 UTC 에 `o5rbm1cuv3ae7x`(beside-gpu3-migration)가 만들어졌고, VM backend 로그에는 운영 작업 1건이 있다(07:00:48 생성, 07:11:28 UP, 07:11:45 COMPLETED, 07:13:22 DOWN). 모든 Pod 가 같은 100.x 로 붙어 backend 로그로는 Pod 를 가리지 못하므로, 시각으로 보아 이 Pod 가 처리한 것으로 본다 [가설]. 2026-11-19 상태 읽기로 네 Pod 모두 EXITED, 같은 볼륨이다. 다음에 켤 때는 하나만 Start 한다(같은 노드 키). 쓰지 않는 Pod 는 지워도 된다 [계획].
+- **4차**(2026-11-19 17:18 UTC): 앞의 A40 Pod 3개가 호스트에 빈 GPU 가 없어 켜지지 않았고, 같은 값으로 새 A40 Pod 를 만드는 것도 여러 번 실패했다. GPU 당 최소 vCPU 4·RAM 24 GB 의 배치 조건(`minVcpuCountPerGpu`·`minRamPerGpu`)을 주자 `nsz73mtl802mvw`(beside-gpu4)가 만들어졌다(vCPU 9·RAM 50 GB). 같은 볼륨이라 같은 `100.83.86.62` 로 붙었다. 18:57 에 정지했고 EXITED 를 확인했다. 결과는 [docs/perf/load/2026-11-20_vm-4th.md](../perf/load/2026-11-20_vm-4th.md).
 - 2차 시험 동안 13:09:57 UTC 에 16초 동안 `UP -> DOWN (HttpConnectTimeoutException)` 이 한 번 있었다(부하 없던 때) [실험 결과](`vm/backend.log`). 11-17 의 15초 끊김과 같은 모양이다.
 
 ## 남은 것 [계획]

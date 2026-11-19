@@ -7,8 +7,8 @@
 | 항목 | 상태 |
 |---|---|
 | [docker-compose.loadtest.yml](../docker-compose.loadtest.yml)(backend 덮어쓰기), 이 문서 | 파일 **[구현됨]**. 환경변수 → Spring 속성 대응은 `application*.properties`·`@Value` 이름을 읽어 확인했다. 덮어쓰기 결과(`docker compose ... config`)는 CI(PR #3)에서 확인했고, 2026-11-18~19 VM 1·2·3차에서 실제로 썼다 |
-| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 실제 GPU 의 G0r·G1r·G3r 는 2026-11-18 2차 **[실험 결과]** — [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md). G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로)는 2026-11-19 3차 **[실험 결과]** — [docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·스텁 G·스텁 F1~F5·A3 large·A5·A6 은 **[계획]** |
-| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | 1~7번을 2026-11-18 main `b6c0e6c` 의 VM 에서 처음 실행했다(A 시리즈, 02:54~06:3x UTC). 운영 H2 sha256 이 백업 때와 같았고 6번 (2) 의 H2 Shell 조회가 VM 컨테이너에서 `LT_JOBS = 0` 을 냈다. 공개 경로 시험 61개(Caddy 404·401 규칙을 공개 주소로 확인하는 세션 스크립트) 통과. 이 셋의 원본 출력은 리포에 없다(백업·해시는 VM 과 개발 PC). 이번에 달리 한 것: k6 를 개발 PC 가 아니라 Runpod CPU Pod 에서 돌려 가드(`PROM_URL`)를 쓰지 않았고, Grafana 는 띄우지 않았다. 실제 GPU 절차(아래 '실제 GPU(Runpod A40) 실행')는 2차·3차에서 실행했다. 스텁 G 시리즈·스텁 F1~F5 절차는 **[계획]** |
+| k6 스크립트·`collect.py`·`failure/f3_throttled.py`([scripts/load/](../../scripts/load/)) | **[구현됨]**(단위 테스트는 [scripts/load/README.md](../../scripts/load/README.md) '상태'). 2026-11-18 전까지 실제 k6 는 v2.3.0 하나로, 개발 PC 루프백에서만 돌렸다: 로컬 mock jar, 대역 스텁·대역 Prometheus, 짧게 줄인 단계로 끝난 방식 판정·가드·A2 시드·F3 도우미 등의 동작을 본 것이고 **용량 결과가 아니다**. 2026-11-18 에 VM 에서 처음 돌렸다(A0·A1·A2·A3 small·A4 축소, 부하 발생기는 Runpod CPU Pod, k6 v2.3.0 linux) **[실험 결과]** — [docs/perf/load/2026-11-18_vm-1st.md](../../docs/perf/load/2026-11-18_vm-1st.md). 실제 GPU 의 G0r·G1r·G3r 는 2026-11-18 2차 **[실험 결과]** — [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md). G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로)는 2026-11-19 3차 **[실험 결과]** — [docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md). 새 시작 기본값의 G0r, 같은 Pod 의 c=1 과부하·c=2(Pod 요청별 시간 기록), PR #11 Pod 의 F1b-real 은 2026-11-19 UTC 4차 **[실험 결과]** — [docs/perf/load/2026-11-20_vm-4th.md](../../docs/perf/load/2026-11-20_vm-4th.md). 컨테이너 안 경로(5번의 F3 남은 파일 확인)·스텁 G·스텁 F1~F5·A3 large·A5·A6 은 **[계획]** |
+| 아래 절차 전체(VM 에서 띄우기, 합성 GLB, k6, 수집, 복구, 운영 DB 확인 SQL) | 1~7번을 2026-11-18 main `b6c0e6c` 의 VM 에서 처음 실행했다(A 시리즈, 02:54~06:3x UTC). 운영 H2 sha256 이 백업 때와 같았고 6번 (2) 의 H2 Shell 조회가 VM 컨테이너에서 `LT_JOBS = 0` 을 냈다. 공개 경로 시험 61개(Caddy 404·401 규칙을 공개 주소로 확인하는 세션 스크립트) 통과. 이 셋의 원본 출력은 리포에 없다(백업·해시는 VM 과 개발 PC). 이번에 달리 한 것: k6 를 개발 PC 가 아니라 Runpod CPU Pod 에서 돌려 가드(`PROM_URL`)를 쓰지 않았고, Grafana 는 띄우지 않았다. 실제 GPU 절차(아래 '실제 GPU(Runpod A40) 실행')는 2차·3차·4차에서 실행했다. 스텁 G 시리즈·스텁 F1~F5 절차는 **[계획]** |
 
 ## 지키는 것
 
@@ -18,7 +18,7 @@
     - 운영 backend 가 멈춘 동안에만 부른다(1번 백업 뒤 ~ 6번 복구 전).
     - 토큰은 VM 에서 `deploy/.env` 의 `INFERENCE_TOKEN` 을 셸 변수로 읽기만 하고 출력하지 않는다. env 확인은 값을 가리고, `docker compose ... config` 는 쓰지 않는다.
     - 토큰은 k6 부하 PC·리포·결과 폴더·로그에 넣지 않고 끝나면 `unset` 한다. 한 번이라도 출력되면 토큰을 바꾼다.
-    - Pod 는 켠 뒤 6시간 안에 다시 정지한다. 시험이 멈춘 동안(확인을 기다리는 동안 등)에도 시간은 흐른다. 2차는 11:44 UTC 에 계획 검토로 멈췄고(돌던 실행은 11:57 에 끝남) 15:28 UTC 에 이어 갔다. 그때 상한(15:44 UTC)까지 16분만 남아 G2r·F 를 하지 못했다. 3차(2026-11-18 16:29~18:58 UTC)는 2시간 29분에 끝냈다.
+    - Pod 는 켠 뒤 6시간 안에 다시 정지한다. 시험이 멈춘 동안(확인을 기다리는 동안 등)에도 시간은 흐른다. 2차는 11:44 UTC 에 계획 검토로 멈췄고(돌던 실행은 11:57 에 끝남) 15:28 UTC 에 이어 갔다. 그때 상한(15:44 UTC)까지 16분만 남아 G2r·F 를 하지 못했다. 3차(2026-11-18 16:29~18:58 UTC)는 2시간 29분에 끝냈다. 4차(2026-11-19 17:18~18:57 UTC)는 약 1시간 38분이었다.
 - **공개 경로만** 부른다(Basic 인증 경로 제외). 사진 파일명은 `lt-<runId>-` 로 시작하고 `Idempotency-Key` 를 붙인다(k6 스크립트가 한다). 파일명에 `fail` 이 들어가면 mock 워커가 일부러 `INFERENCE_FAILED` 로 끝낸다(A1·A5·A6 의 `FAIL_RATIO` 흐름이 retry 경로를 돌게). 그래서 `RUN_ID` 에 `fail` 을 넣지 않는다(k6 와 `f3_throttled.py` 가 거부한다).
 - prod 프로파일이 켜져 있어 사진 시그니처를 검사한다: k6 사진은 진짜 PNG/JPEG 여야 한다.
 - **`docker compose ... down -v` 를 쓰지 않는다.** 운영 볼륨 `beside-storage`(H2 DB·사진·GLB)까지 지워진다. 지우는 볼륨은 이름을 정확히 쓴다: `docker volume rm beside-loadtest-storage`.
@@ -67,9 +67,9 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **실행 이름(`meta.scenario`)**: `SCENARIO` 를 주면 그 이름(G1·G2·G3·F1a·F1b·F2, G 이름에 `FAIL_RATIO` > 0 이나 `FAIL_RATIO` 없는 F1b 는 k6 가 거부한다)이고, 없으면 k6 값으로 정한다: `FAIL_RATIO` > 0 이면 `FAIL_TOKEN=slow` 일 때 F1b(아래 'F1b 명령'), 다른 토큰이면 F1a, 아니면 G3(`RHO` ≥ 1.5)·G2(`SLOTS` > 1)·G1. F1a·F2 는 스텁·VM 쪽만 다르고 k6 값은 G1 과 같아 k6 가 구분하지 못하므로, G1 의 `gpu_queue.js` 명령에 **`-e SCENARIO=F1a`·`-e SCENARIO=F2`** 를 붙인다. 붙이지 않으면 요약과 첫 줄에 G1 로 적힌다. retry 가 하나라도 있는 G 실행은 재계산이 빠지지만(`N retries: failures were injected or occurred (an F1a/F2 run without SCENARIO?), so no recompute`), 이름 없이 돌린 F2 중 실패한 작업이 없는 실행(모든 작업이 스텁 중단을 기다려 넘긴 실행)은 retry 도 없어 G1 의 큐 재계산까지 남는다. F 실행(F1a·F1b·F2)은 `meta.recompute` 가 null 이다.
 - **F1a 의 k6 기준**: k6 는 F1a 에서 실패를 주입하지 않으므로(`FAIL_RATIO` 0) 두 번 다 실패한 작업(0.2 × 0.2 = 약 4 %)의 흐름이 `load_flowOkRatio` 를 약 0.96 으로 내려, `rate>=0.95` 기준이 우연에 따라 통과·실패한다(실패면 k6 종료 코드 99) [파생]. F1a 는 이 k6 기준이 아니라 TRAFFIC_MODEL 9절의 F1a 항목(`INFERENCE_FAILED` → retry 성공, API 5xx 0)으로 본다.
 
-### 실제 GPU(Runpod A40) 실행 — 2차 2026-11-18 (G0r·G1r·G3r), 3차 2026-11-19 (G2r·F2-real·F1b-real·F1a) [실험 결과]
+### 실제 GPU(Runpod A40) 실행 — 2차 2026-11-18 (G0r·G1r·G3r), 3차 2026-11-19 (G2r·F2-real·F1b-real·F1a), 4차 2026-11-19 UTC (G0r·G3r·G2r·F1b-real 다시) [실험 결과]
 
-스텁 대신 Runpod A40 Pod(EU-SE-1, AnimalLift 모델 모드, Tailscale `100.83.86.62:8002`)를 부른다. 위 '지키는 것' 의 예외 조건을 지킨다. 2차 결과는 [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md), 3차 결과는 [docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md) 에 있다.
+스텁 대신 Runpod A40 Pod(EU-SE-1, AnimalLift 모델 모드, Tailscale `100.83.86.62:8002`)를 부른다. 위 '지키는 것' 의 예외 조건을 지킨다. 2차 결과는 [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md), 3차 결과는 [docs/perf/load/2026-11-19_vm-3rd.md](../../docs/perf/load/2026-11-19_vm-3rd.md), 4차 결과는 [docs/perf/load/2026-11-20_vm-4th.md](../../docs/perf/load/2026-11-20_vm-4th.md) 에 있다.
 
 - 백엔드 슬롯(`inference.max-concurrency`)과 추론 서비스의 `MODEL_LOCK`(`predict` 만 잠금)이 둘 다 한 번에 추론 1건이다. 그래서 이 실행은 "A40 한 대 앞의 대기열"을 잰다.
 - 결과는 "실제 생성, A40 EU-SE-1, 경로(직접 연결/DERP), 작업당 사진 1장, 전처리 켬"이라는 조건을 붙여 적는다.
@@ -96,7 +96,7 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
   - 볼륨의 `/workspace/Beside` 는 3차 18:40 UTC 까지(3차의 모델 실행 G0·G2r·F2·F1b 포함) `deploy/gcp` `ee030f2` 였다. 여기에는 스텁 설정(`BESIDE_PASSTHROUGH_*`, main `8092be0`)이 없다. 모델 경로는 그때 main(`b6c0e6c`)과 같았다. 2026-11-19 PR #11 로 main 의 모델 경로가 바뀌었다(`DELETE` 가 실행을 취소).
   - 그래서 첫 F1a(`f1ar1`)는 지연·실패 없이 돌아 무효였다.
   - 3차 중에 main `b6c0e6c` 로 바꿨다. F1a 전에는 스텁이 실제로 기다리는지 작업 1건으로 확인한다(`inferMs` ≈ 지연).
-  - PR #11 은 그 뒤 main 에 들어가 3차 끝의 Pod 리포(`b6c0e6c`)에는 없다. 다음 시험 전에 `git -C /workspace/Beside pull --ff-only origin main` 하고 `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. `pod-info.txt` 는 당긴 뒤에 다시 만든다(3차 `f1ar2` 에 첨부한 `pod-info.txt` 는 Pod 시작 때 만든 것이라 바꾸기 전의 `deploy/gcp` `ee030f2` 를 그대로 담았다).
+  - PR #11 은 그 뒤 main 에 들어가 3차 끝의 Pod 리포(`b6c0e6c`)에는 없었다. 시험 전에 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 하고 `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다(`pull` 을 쓰지 않는 이유는 아래 '4차에서 배운 것'). `pod-info.txt` 는 당긴 뒤에 다시 만든다(3차 `f1ar2` 에 첨부한 `pod-info.txt` 는 Pod 시작 때 만든 것이라 바꾸기 전의 `deploy/gcp` `ee030f2` 를 그대로 담았다).
 - **uvicorn 유휴 연결**:
   - 추론 서비스를 `UVICORN_TIMEOUT_KEEP_ALIVE=75` 와 함께 띄우면(uvicorn 0.54 는 `UVICORN_` 환경변수를 읽는다) 30초 간격에서도 연결을 이어 써 처리가 약 0.9 s 줄었다. 2026-11-20 부터는 `start_pod.sh` 의 기본값이다. 5 s 와 비교하려면 `UVICORN_TIMEOUT_KEEP_ALIVE=5` 로 띄운다.
   - 재시작하는 스크립트(`f2_kill.sh`·`pt_switch.sh`)에도 같은 값을 넘긴다. 실행 기록에 이 값을 적는다.
@@ -109,7 +109,47 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **경로 끊김**:
   - 계획 밖에서 두 번 끊겼다(약 83 s·50 s, `HttpTimeoutException`). 오프라인 대기가 작업을 붙잡았다.
   - VM `journalctl -u tailscaled` 를 그 구간만 키·주소를 가려 실행 폴더 `vm/` 에 둔다. Pod 쪽 tailscaled 로그도 남긴다 [계획].
-- **F1b-real 뒤 남은 폴더**: 버려진 변환이 정리 `DELETE` 뒤 작업 폴더를 다시 만들어(`convert_asset.py` 의 `os.makedirs`) `/workspace/beside-work/` 에 폴더 3개(`base.glb` 만)를 남겼다. 끝나면 목록을 남기고 지운다. PR #11 이 Pod 에 들어가면 변환이 폴더를 다시 만들지 않는다. Pod 에서 확인하는 것은 **[계획]**.
+- **F1b-real 뒤 남은 폴더**: 버려진 변환이 정리 `DELETE` 뒤 작업 폴더를 다시 만들어(`convert_asset.py` 의 `os.makedirs`) `/workspace/beside-work/` 에 폴더 3개(`base.glb` 만)를 남겼다. 끝나면 목록을 남기고 지운다. PR #11 이 들어간 Pod 에서는 변환이 폴더를 다시 만들지 않았다: 4차 F1b-real(`f1br4`, 74시도)에서 남은 폴더 0, `DELETE` 5xx 0 **[실험 결과]**.
+
+**4차에서 배운 것** (2026-11-19 UTC, 결과 [docs/perf/load/2026-11-20_vm-4th.md](../../docs/perf/load/2026-11-20_vm-4th.md)):
+- **A40 재고와 배치 조건**:
+  - 앞의 A40 Pod 3개가 모두 켜지지 않았다(호스트에 빈 GPU 없음). 같은 값으로 새 A40 Pod 를 만드는 것도 여러 번 실패했다.
+  - GPU 당 최소 vCPU 4·RAM 24 GB 의 배치 조건(`minVcpuCountPerGpu`·`minRamPerGpu`)을 주자 만들어졌다(`nsz73mtl802mvw`). 그래도 vCPU 9·RAM 50 GB 를 받았다. 이 조건이 왜 통했는지는 모른다.
+  - 새 Pod 의 모델 로드는 70.5 s 였다. 같은 볼륨이라 같은 Tailscale 주소로 붙었다.
+- **Pod 리포가 detached HEAD 였다**:
+  - 볼륨의 `/workspace/Beside` 는 3차 중에 바꾼 `b6c0e6c` 에 detached 로 남아 있었다.
+  - 그래서 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 main `a9aa091` 에 맞췄다. `pull` 은 detached HEAD 에서 `main` 브랜치로 돌려놓지 않는다(자세한 이유는 [deploy/README.md](../README.md) Runpod 절 '다시 쓸 때마다').
+  - 맞춘 뒤 `pod-info.txt` 를 만들었다(`repo main a9aa091`).
+- **시작 기본값 확인**: `start_pod.sh` 의 `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. 새 값을 넣거나 시간 기록을 켜려면 이미 떠 있는 서비스를 `kill` 한 뒤 다시 띄운다(`start_pod.sh` 는 떠 있는 서비스를 다시 띄우지 않는다).
+- **요청별 시간 줄** (`BESIDE_REQUEST_TIMING=1`, 형식은 [generation/inference_service/README.md](../../generation/inference_service/README.md) '요청별 시간 기록'):
+  - 시작 명령 앞에 붙인다: `BESIDE_REQUEST_TIMING=1 bash /workspace/beside-bootstrap.sh`. `inference.log` 에 `timing …` 줄이 uvicorn 접근 줄과 함께 찍힌다.
+  - `body_ms` 는 요청 본문을 다 읽은 때, `start_ms` 는 응답 머리를 넘긴 때, `end_ms` 는 응답 본문을 uvicorn 에 다 넘긴 때다. **`end_ms` 는 바이트가 Pod 를 떠난 때가 아니다**(1.3 MB GLB 는 소켓·tailscaled 버퍼에 다 들어간다). 그래서 GLB 전송 시간은 VM 쪽(작업의 `finishedAt` 또는 `backend.log` 의 `stage=COMPLETED` 시각)에서 `GET` 의 `at` + `end_ms` 를 빼서 구한다. VM·Pod 시계가 섞인 값이다.
+  - `client` 는 `127.0.0.1:<tailscaled 가 연 포트>` 다. 같은 포트면 같은 tailnet 연결이다. 4차 c=2 에서 느린 내려받기가 연결 하나에 몰린 것을 이 포트로 찾았다.
+  - VM 기록과는 경로의 jobId(`GET`·`DELETE`)와 응답 직전의 'upload mode' 줄(`POST`)로 맞춘다. 분석은 `docs/perf/load/data/2026-11-20_vm-4th-analysis/g4_analyze.py`.
+- **`net.txt` 샘플러** (Pod, 0.25 s): 줄마다 `tsd=<tailscaled 누적 CPU 틱, 100/s> svc=<서비스 틱> q=<lport>><rport>:<tx_queue>/<rx_queue>,…` 를 쓴다. 큐는 루프백 `:8002` 소켓의 것이다(`/proc/net/tcp`).
+  - 서비스 쪽 `tx_queue` 나 tailscaled 쪽 `rx_queue` 가 쌓이면 tailscaled 가 늦게 읽는 것이다(Pod CPU). 큐가 비어 있는데 VM 이 아직 받는 중이면 바이트는 tailscaled 안이나 경로에 있다.
+  - 4차에서는 내려받기 구간의 큐가 거의 늘 비어 있었다.
+  - 샘플러(`pod_net_sampler.py`)와 묶음 시작 스크립트(`mon4.sh`)는 리포 밖이다(개발 PC 의 gitignore 된 `scripts/load/out/round4/`).
+- **k6 Pod 결과 경로**: k6 Pod 준비 스크립트(`pod_k6_setup.sh`, 같은 폴더)가 k6 v2.3.0 을 체크섬을 확인해 설치하고, 리포를 받고, `/root/lt/run.sh` 를 만든다. 결과는 `/root/lt/runs/<RID>/`(`k6-summary.json`, `k6.log`, `k6-exit.txt`, `started.txt`)에 쌓인다. 이 폴더를 Pod 의 HTTP 프록시(포트 8000)로 `https://<k6 Pod>-8000.proxy.runpod.net/<토큰>/runs/<RID>/` 아래에서 받는다. 토큰은 추측하기 어려운 경로 이름이고 리포·문서에 적지 않는다.
+- **c=2 는 넘치게 돌린다**: 2·3차와 같은 요청 λ(517건/h)에서 4차 Pod 의 c=2 는 넘치지 않아 용량을 바로 재지 못했다(센 하한 495건/h, 도착 − 기울기 추정 507~516건/h). 다음 c=2 는 도착이 약 690건/h 보다 크게 잡는다.
+- **쓴 명령**:
+
+```bash
+# GPU Pod (웹 터미널 또는 exec): 리포 맞추기 → 시간 기록을 켜고 시작 → 샘플러
+git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main
+BESIDE_REQUEST_TIMING=1 bash /workspace/beside-bootstrap.sh     # [4/4] 줄에서 keep-alive 75 s, threads 8 확인
+bash mon4.sh                                                    # gpu.csv, sys.txt, ioprobe.txt, inference-ts.log, net.txt 를 127.0.0.1:8003 에
+# k6 Pod: 준비 한 번, 그 뒤 실행마다 run.sh <RID> <스크립트> [k6 -e ...] (BASE_URL·RUN_ID·SUMMARY_PATH 는 run.sh 가 붙인다)
+bash pod_k6_setup.sh <리포 SHA> <URL 토큰>
+P=/root/Beside/backend/src/test/resources/photos/dog.jpg
+/root/lt/run.sh g0d4  smoke.js     -e PHOTOS=$P -e SMOKE_EVERY_S=30 -e SMOKE_DURATION_S=900 -e SMOKE_VUS=1
+/root/lt/run.sh g3c1  gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=G3 -e RHO=1.65 -e SLOTS=1 -e T_SEC=11.5 -e DURATION_S=1200
+/root/lt/run.sh g2c2t gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=G2 -e RHO=0.825 -e SLOTS=2 -e T_SEC=11.5 -e DURATION_S=1200
+/root/lt/run.sh f1br4 gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=F1b -e RHO=0.7 -e SLOTS=1 -e T_SEC=11.5 \
+    -e FAIL_TOKEN=slow -e FAIL_RATIO=0.05 -e DURATION_S=600
+# VM: backend 는 g0d4·g3c1 이 B1, g2c2t 가 B2, f1br4 가 B3(아래 표). 실행마다 5번처럼 VM 파일을 모으고,
+#   Pod 파일은 VM 에서 curl http://100.83.86.62:8003/<파일> 로 받아 결과 폴더 gpu/ 에 실행 구간(앞 60 s ~ 뒤 120 s)만 남긴다
+```
 
 ```bash
 # VM: 토큰을 출력 없이 셸 변수로 읽는다(값은 화면에 내지 않는다)
@@ -125,7 +165,7 @@ unset LOADTEST_INFERENCE_TOKEN
 |---|---|---|
 | B1 | — (c=1, 타임아웃 120 s, 오프라인 대기 300 s) | G0, G1, 과부하(G3) |
 | B2 | `LOADTEST_INFERENCE_MAX_CONCURRENCY=2` | G2(A40 한 대에서 슬롯 2개) |
-| B3 | `LOADTEST_INFERENCE_TIMEOUT_MS=<τ>`(G0 에서 정함. 2차 G0 기준 5000: 업로드(31건 상한 1.9~2.8 s)가 끝나고 추론(3.7~4.7 s)이 도는 동안. 여유가 작다. 3차에서 5000 으로 돌려 66시도가 모두 시간 초과였다) | F1b-real |
+| B3 | `LOADTEST_INFERENCE_TIMEOUT_MS=<τ>`(G0 에서 정함. 2차 G0 기준 5000: 업로드(31건 상한 1.9~2.8 s)가 끝나고 추론(3.7~4.7 s)이 도는 동안. 여유가 작다. 3차에서 5000 으로 돌려 66시도가 모두 시간 초과였다. 4차(PR #11 Pod)도 74시도가 모두 시간 초과였다) | F1b-real |
 | B4 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | F2, F1a(스텁으로 바꾼 Pod) |
 
 **k6 공통 값**: `-e PHOTOS=<리포>/backend/src/test/resources/photos/dog.jpg -e RTT_BASE_MS=<G0 의 healthz p50> -e T_SEC=<S0>`.

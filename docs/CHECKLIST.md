@@ -58,7 +58,7 @@
 | 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치에서 PR #5 로 main 에 병합됐다(2026-11-18). Caddyfile 로컬 수정은 되돌렸다. 2026-11-19 PR #6~#11 병합 뒤 VM 을 main `1c87da5` 로 다시 배포했다(11:04 UTC, PR #8 의 정리 재시도 포함) | BE |
 | 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
 | 4b | 실측 10건 이상 | [x] | VM + Runpod A40 에서 539건(2026-11-18 2차 부하 시험, 사진 1장 반복) | BE+GEN |
-| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) **[실험 결과]**([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))와 3차(2026-11-19, 슬롯 2개·장애 F1a·F1b·F2) **[실험 결과]**([perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
+| 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) **[실험 결과]**([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))와 3차(2026-11-19, 슬롯 2개·장애 F1a·F1b·F2) **[실험 결과]**([perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md)), 4차(2026-11-19 UTC, 같은 Pod 의 c=1·c=2, Pod 요청별 시간, F1b 다시) **[실험 결과]**([perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
 | 5 | 리허설 1회, 보고서 초안 리뷰 | [ ] | 날짜 미정 | 전원 |
 | 5 | "Animation·Rigging 은 향후 과제로만" | 충돌 | 리깅·애니메이션 5종이 #1 로 이미 머지됨 → 보고서에서 어떻게 쓸지 결정 | 전원 · 팀 결정 |
 | 5 | 데모 영상 | [ ] | — | 전원 |
@@ -156,15 +156,24 @@
   - uvicorn 유휴 연결 75 s: 처리 중앙값 −0.88 s, S0 9.0 s. 스레드 8: Pod CPU 한도에 걸린 100 ms 주기 0(기본 스레드 0.5 %), 추론 −2.6 %.
   - 계획 밖 경로 끊김 2번(약 83 s·50 s). 오프라인 대기로 잃은 작업은 0 이었다.
 - [ ] 3차에서 남은 것 **[계획]**: (BE, GEN 함께)
-  - ~~추론 서비스: `DELETE` 를 받은 작업은 변환·쓰기를 하지 않게 하고(변환의 `os.makedirs` 가 지운 폴더를 다시 만든다), 오래된 작업 폴더를 지운다~~ — 2026-11-19 PR #11 로 main 에 병합했다 **[구현됨]**. `DELETE` 가 같은 jobId 의 실행을 취소하고, 변환은 작업 폴더를 다시 만들지 않으며(`make_dirs=False`), 겹친 `rmtree` 는 세 번까지 시도한다. 오래된 폴더 정리는 `BESIDE_WORK_SWEEP_MINUTES`(기본 꺼짐)다. 남은 것 **[계획]**: 다음에 Pod 를 켤 때 `/workspace/Beside` 를 main 으로 당기고, Pod 에서 sweep 을 켤지 정하고, F1b-real 을 다시 돌려 남은 폴더 0·`DELETE` 500 0 을 본다. (GEN 함께)
-  - ~~Pod 시작 기본값에 유휴 연결 75 s·스레드 8 을 둘지 정한다~~ — 2026-11-20 `deploy/runpod/start_pod.sh` 의 기본값으로 넣었다(`UVICORN_TIMEOUT_KEEP_ALIVE`·`THREADS` 로 바꿀 수 있다) **[구현됨]**. WSL 에서 가짜 Tailscale 로 스크립트를 끝까지 돌리고, uvicorn 0.54 에서 75 s 면 10초 뒤에도 연결이 이어지는 것을 확인했다. 실제 Pod 에서 확인하는 것은 4차 **[계획]**.
-  - Pod 에서 요청마다 처리 시간을 남기고 G2r 을 다시 돌려 내려받기 가설을 가린다(스레드 8 도 함께). 같은 Pod 에서 c=1 과부하도 함께.
-  - Pod tailscaled 로그도 남기고, 운영 끊김 알림 유예(45 s)를 이번 끊김 길이(50~83 s)와 맞춰 본다.
+  - ~~추론 서비스: `DELETE` 를 받은 작업은 변환·쓰기를 하지 않게 하고(변환의 `os.makedirs` 가 지운 폴더를 다시 만든다), 오래된 작업 폴더를 지운다~~ — 2026-11-19 PR #11 로 main 에 병합했다 **[구현됨]**. `DELETE` 가 같은 jobId 의 실행을 취소하고, 변환은 작업 폴더를 다시 만들지 않으며(`make_dirs=False`), 겹친 `rmtree` 는 세 번까지 시도한다. 오래된 폴더 정리는 `BESIDE_WORK_SWEEP_MINUTES`(기본 꺼짐)다. ~~Pod 리포를 main 으로 맞추고 F1b-real 을 다시 돌린다~~ — 4차(2026-11-19 UTC)에서 Pod 리포를 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 main `a9aa091` 에 맞추고(리포가 detached HEAD 라 `pull` 대신) `f1br4` 를 돌렸다: 74시도 모두 Pod 에서 실행 중 취소, 남은 폴더 0, `DELETE` 204 74번(4차 Pod 로그 전체 436번, 5xx 0), `conversion crashed`·Traceback 0 **[실험 결과]**([perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md) 6절). 남은 것 **[계획]**: Pod 에서 sweep 을 켤지 정한다. (GEN 함께)
+  - ~~Pod 시작 기본값에 유휴 연결 75 s·스레드 8 을 둘지 정한다~~ — 2026-11-20 KST(`3b12c7b`) `deploy/runpod/start_pod.sh` 의 기본값으로 넣었다(`UVICORN_TIMEOUT_KEEP_ALIVE`·`THREADS` 로 바꿀 수 있다) **[구현됨]**. WSL 에서 가짜 Tailscale 로 스크립트를 끝까지 돌리고, uvicorn 0.54 에서 75 s 면 10초 뒤에도 연결이 이어지는 것을 확인했다. 4차에서 실제 Pod 로 확인했다 **[실험 결과]**: `[4/4]` 줄과 `/proc/<pid>/environ` 에 75 s·스레드 8, G0 `g0d4` 에서 Pod CPU 한도에 걸린 주기 0, 처리 중앙값 8.09 s(3차 `g0th8`(같은 두 값, 다른 Pod, JDK 유휴 1200 s)과 −0.004 s), 작업 연결 하나를 31건이 이어 씀([vm-4th 2절](perf/load/2026-11-20_vm-4th.md)).
+  - ~~Pod 에서 요청마다 처리 시간을 남기고 G2r 을 다시 돌려 내려받기 가설을 가린다(스레드 8 도 함께). 같은 Pod 에서 c=1 과부하도 함께.~~ — 4차에서 `BESIDE_REQUEST_TIMING=1` 로 같은 Pod·같은 요청 λ 의 c=1 과부하(`g3c1`)와 c=2(`g2c2t`)를 돌렸다 **[실험 결과]**. 길어진 GLB 구간은 tailnet 연결 하나(74건, 중앙값 4.96 s)에 몰렸고, 겹침·tailscaled CPU·Pod CPU 한도와는 맞지 않았다 **[계산]**. 그래서 3차 가설(동시 전송이 보내는 경로를 나눠 씀·CPU 다툼)은 4차 조건(스레드 8·CPU 한도에 걸린 주기 0)에서 맞지 않았다. 3차(기본 스레드)의 CPU 다툼은 4차로 직접 가리지 못했다. 연결 하나가 느려지는 기제는 **[가설]**([vm-4th 5절](perf/load/2026-11-20_vm-4th.md)).
+  - Pod tailscaled 로그도 남기고, 운영 끊김 알림 유예(45 s)를 이번 끊김 길이(50~83 s)와 맞춰 본다. 4차(약 1.5시간)에는 끊김이 없었다.
   - 앱 '다시 시도'가 F2 의 처리 중 실패(`INFERENCE_UNAVAILABLE`)에서 동작하는지 확인한다. (UN)
+- [x] 4차 실제 GPU(새 시작 기본값 G0r, 같은 Pod 의 c=1 과부하·c=2 와 Pod 요청별 시간, PR #11 Pod 의 F1b-real)를 VM + 새 Runpod A40 Pod 에서 — 2026-11-19 UTC **[실험 결과]**([perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). (BE)
+  - 같은 Pod·같은 요청 λ 에서 c=1 용량 415건/h(S_busy 8.67 s), c=2 는 넘치지 않아 센 하한 495건/h(도착 − 기울기 추정 507~516건/h)·슬롯 시간 식 678~689건/h, 비 1.19~1.66 **[계산]**.
+  - G0: S0 8.64 s, h0 0.293 s **[계산]**. F1b-real: 남은 폴더 0, `DELETE` 5xx 0 **[실험 결과]**.
+  - API 5xx 0, 추론 서비스 DOWN 0, 경로는 확인한 때(17:23, 실행마다 끝) 모두 직접 연결이었다 **[실험 결과]**.
+  - A40 재고: 앞의 Pod 3개가 켜지지 않았고, 새 Pod 는 배치 조건(GPU 당 최소 vCPU 4·RAM 24 GB)을 주고서야 만들어졌다.
+- [ ] 4차에서 남은 것 **[계획]**: (BE, GEN 함께)
+  - c=2 에서 tailnet 연결 하나가 느려지는 기제를 가린다(VM `ss -ti`·Pod tailscaled 지표, 연결 수명을 짧게 한 비교, 긴 c=1).
+  - c=2 를 넘치는 도착(약 690건/h 이상)으로 다시 돌려 용량을 바로 잰다.
+  - τ 가 짧을 때 버려진 predict 가 GPU 를 쓰는 것(4차 F1b 약 270 s **[계산]**)을 줄일지 정한다.
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
 - [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 3차의 슬롯 2개(510~530건/h)면 T3 는 10~11대다 **[계산]**([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)). 표·#21 고치기는 계약 회의 뒤.
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산하고 #21 의 상한 값을 고친다. (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 3차의 슬롯 2개(510~530건/h)면 T3 는 10~11대다 **[계산]**([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)). 4차 Pod 하나에서 잰 값으로는 슬롯 1개 415건/h 면 13대, 슬롯 2개 센 하한 495건/h 면 11대로 3차 범위(10~11대) 안이다. 슬롯 2개가 슬롯 시간 식(678~689건/h)만큼 처리하면 8대지만 넘친 실행으로 확인하지 않았다 **[계산]**([vm-4th 9절](perf/load/2026-11-20_vm-4th.md)). 표·#21 고치기는 계약 회의 뒤.
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
   - ~~실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지~~ — 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).

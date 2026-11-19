@@ -1,0 +1,6 @@
+pod nsz73mtl802mvw (beside-gpu4) created 2026-11-19T17:18:50Z, info at 2026-11-19T17:20:39Z
+GPU 0: NVIDIA A40 (UUID: GPU-0086d5df-e45b-a298-ed39-ffc5c099b899)
+595.112.07, 46068 MiB
+cgroup quota/period 765000/100000 nproc 96
+repo main a9aa091
+AnimalLift 5d364cf

@@ -1,0 +1,620 @@
+2026-11-19T18:43:32.480Z INFO:     127.0.0.1:45124 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:43:32.484Z timing GET /healthz 200 client=127.0.0.1:45124 in=0 body_ms=- start_ms=2.1 end_ms=4.6 gone_ms=- out=70 err=- at=2026-11-19T18:43:32.361Z
+2026-11-19T18:43:47.769Z INFO:     127.0.0.1:45124 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:43:47.776Z timing GET /healthz 200 client=127.0.0.1:45124 in=0 body_ms=- start_ms=2.2 end_ms=3.8 gone_ms=- out=70 err=- at=2026-11-19T18:43:47.642Z
+2026-11-19T18:44:16.604Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:16.607Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:44:16.511Z
+2026-11-19T18:44:18.410Z INFO:     127.0.0.1:35892 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:18.414Z timing GET /healthz 200 client=127.0.0.1:35892 in=0 body_ms=- start_ms=1.9 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:44:18.256Z
+2026-11-19T18:44:31.920Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:31.923Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.5 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:44:31.835Z
+2026-11-19T18:44:44.780Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:44.784Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:44:44.674Z
+2026-11-19T18:44:47.207Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:47.210Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=4.7 end_ms=6.7 gone_ms=- out=70 err=- at=2026-11-19T18:44:47.116Z
+2026-11-19T18:44:50.634Z job 31b58bb5-1e36-44e5-9538-f5ff36b10478: work folder deleted, cancelled the run still in progress
+2026-11-19T18:44:50.638Z INFO:     127.0.0.1:46210 - "DELETE /artifacts/31b58bb5-1e36-44e5-9538-f5ff36b10478 HTTP/1.1" 204 No Content
+2026-11-19T18:44:50.642Z timing DELETE /artifacts/31b58bb5-1e36-44e5-9538-f5ff36b10478 204 client=127.0.0.1:46210 in=0 body_ms=- start_ms=77.9 end_ms=79.5 gone_ms=- out=0 err=- at=2026-11-19T18:44:50.354Z
+2026-11-19T18:44:50.645Z job 31b58bb5-1e36-44e5-9538-f5ff36b10478: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:44:50.648Z timing POST /infer/upload 500 client=127.0.0.1:46206 in=609147 body_ms=1356.9 start_ms=5183.2 end_ms=5183.3 gone_ms=- out=125 err=- at=2026-11-19T18:44:45.252Z
+2026-11-19T18:44:50.834Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:50.837Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:44:50.712Z
+2026-11-19T18:44:56.467Z job 1c0c9907-d5f2-4839-b016-cbe797d67699: work folder deleted, cancelled the run still in progress
+2026-11-19T18:44:56.474Z INFO:     127.0.0.1:49544 - "DELETE /artifacts/1c0c9907-d5f2-4839-b016-cbe797d67699 HTTP/1.1" 204 No Content
+2026-11-19T18:44:56.477Z timing DELETE /artifacts/1c0c9907-d5f2-4839-b016-cbe797d67699 204 client=127.0.0.1:49544 in=0 body_ms=- start_ms=17.4 end_ms=18.6 gone_ms=- out=0 err=- at=2026-11-19T18:44:56.307Z
+2026-11-19T18:44:56.483Z job 1c0c9907-d5f2-4839-b016-cbe797d67699: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:44:56.486Z timing POST /infer/upload 500 client=127.0.0.1:46210 in=609147 body_ms=1354.1 start_ms=5353.1 end_ms=5353.3 gone_ms=- out=125 err=- at=2026-11-19T18:44:51.001Z
+2026-11-19T18:44:56.667Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:44:56.675Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:44:56.606Z
+2026-11-19T18:45:02.296Z job 2f96c8f3-fd7e-469c-a01b-f8f92da5fac9: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:02.299Z INFO:     127.0.0.1:49550 - "DELETE /artifacts/2f96c8f3-fd7e-469c-a01b-f8f92da5fac9 HTTP/1.1" 204 No Content
+2026-11-19T18:45:02.302Z timing DELETE /artifacts/2f96c8f3-fd7e-469c-a01b-f8f92da5fac9 204 client=127.0.0.1:49550 in=0 body_ms=- start_ms=16.2 end_ms=17.5 gone_ms=- out=0 err=- at=2026-11-19T18:45:02.202Z
+2026-11-19T18:45:02.307Z job 2f96c8f3-fd7e-469c-a01b-f8f92da5fac9: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:02.311Z timing POST /infer/upload 500 client=127.0.0.1:49544 in=609147 body_ms=1358.3 start_ms=5371.0 end_ms=5371.2 gone_ms=- out=125 err=- at=2026-11-19T18:44:56.907Z
+2026-11-19T18:45:02.497Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:02.500Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:45:02.403Z
+2026-11-19T18:45:02.697Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:02.700Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:45:02.682Z
+2026-11-19T18:45:08.319Z job 31b58bb5-1e36-44e5-9538-f5ff36b10478: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:08.323Z INFO:     127.0.0.1:56868 - "DELETE /artifacts/31b58bb5-1e36-44e5-9538-f5ff36b10478 HTTP/1.1" 204 No Content
+2026-11-19T18:45:08.327Z timing DELETE /artifacts/31b58bb5-1e36-44e5-9538-f5ff36b10478 204 client=127.0.0.1:56868 in=0 body_ms=- start_ms=26.4 end_ms=27.8 gone_ms=- out=0 err=- at=2026-11-19T18:45:08.258Z
+2026-11-19T18:45:08.519Z job 31b58bb5-1e36-44e5-9538-f5ff36b10478: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:08.524Z timing POST /infer/upload 500 client=127.0.0.1:49550 in=609147 body_ms=1354.9 start_ms=5432.7 end_ms=5432.8 gone_ms=- out=125 err=- at=2026-11-19T18:45:02.983Z
+2026-11-19T18:45:08.720Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:08.723Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:45:08.564Z
+2026-11-19T18:45:14.344Z job 9f2a224a-ffd3-47f1-890b-2d1c182019cf: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:14.347Z INFO:     127.0.0.1:56882 - "DELETE /artifacts/9f2a224a-ffd3-47f1-890b-2d1c182019cf HTTP/1.1" 204 No Content
+2026-11-19T18:45:14.351Z timing DELETE /artifacts/9f2a224a-ffd3-47f1-890b-2d1c182019cf 204 client=127.0.0.1:56882 in=0 body_ms=- start_ms=14.8 end_ms=16.2 gone_ms=- out=0 err=- at=2026-11-19T18:45:14.149Z
+2026-11-19T18:45:14.354Z job 9f2a224a-ffd3-47f1-890b-2d1c182019cf: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:14.357Z timing POST /infer/upload 500 client=127.0.0.1:56868 in=609147 body_ms=1359.2 start_ms=5431.1 end_ms=5431.2 gone_ms=- out=125 err=- at=2026-11-19T18:45:08.854Z
+2026-11-19T18:45:14.545Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:14.550Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:45:14.444Z
+2026-11-19T18:45:17.758Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:17.762Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.7 end_ms=2.8 gone_ms=- out=70 err=- at=2026-11-19T18:45:17.683Z
+2026-11-19T18:45:20.174Z job 1c0c9907-d5f2-4839-b016-cbe797d67699: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:20.177Z INFO:     127.0.0.1:44424 - "DELETE /artifacts/1c0c9907-d5f2-4839-b016-cbe797d67699 HTTP/1.1" 204 No Content
+2026-11-19T18:45:20.181Z timing DELETE /artifacts/1c0c9907-d5f2-4839-b016-cbe797d67699 204 client=127.0.0.1:44424 in=0 body_ms=- start_ms=12.7 end_ms=13.8 gone_ms=- out=0 err=- at=2026-11-19T18:45:20.015Z
+2026-11-19T18:45:20.184Z job 1c0c9907-d5f2-4839-b016-cbe797d67699: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:20.187Z timing POST /infer/upload 500 client=127.0.0.1:56882 in=609147 body_ms=1355.0 start_ms=5347.8 end_ms=5347.9 gone_ms=- out=125 err=- at=2026-11-19T18:45:14.734Z
+2026-11-19T18:45:20.375Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:20.380Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:45:20.304Z
+2026-11-19T18:45:26.004Z job 2f96c8f3-fd7e-469c-a01b-f8f92da5fac9: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:26.008Z INFO:     127.0.0.1:39962 - "DELETE /artifacts/2f96c8f3-fd7e-469c-a01b-f8f92da5fac9 HTTP/1.1" 204 No Content
+2026-11-19T18:45:26.012Z timing DELETE /artifacts/2f96c8f3-fd7e-469c-a01b-f8f92da5fac9 204 client=127.0.0.1:39962 in=0 body_ms=- start_ms=16.5 end_ms=17.8 gone_ms=- out=0 err=- at=2026-11-19T18:45:25.869Z
+2026-11-19T18:45:26.208Z job 2f96c8f3-fd7e-469c-a01b-f8f92da5fac9: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:26.211Z timing POST /infer/upload 500 client=127.0.0.1:44424 in=609147 body_ms=1356.0 start_ms=5568.4 end_ms=5568.5 gone_ms=- out=125 err=- at=2026-11-19T18:45:20.587Z
+2026-11-19T18:45:26.215Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:26.218Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:45:26.162Z
+2026-11-19T18:45:31.828Z job 286f2717-196d-4ebb-a391-1ed8c27a5725: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:31.831Z INFO:     127.0.0.1:39970 - "DELETE /artifacts/286f2717-196d-4ebb-a391-1ed8c27a5725 HTTP/1.1" 204 No Content
+2026-11-19T18:45:31.835Z timing DELETE /artifacts/286f2717-196d-4ebb-a391-1ed8c27a5725 204 client=127.0.0.1:39970 in=0 body_ms=- start_ms=9.5 end_ms=10.5 gone_ms=- out=0 err=- at=2026-11-19T18:45:31.726Z
+2026-11-19T18:45:31.837Z job 286f2717-196d-4ebb-a391-1ed8c27a5725: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:31.840Z timing POST /infer/upload 500 client=127.0.0.1:39962 in=609147 body_ms=1363.2 start_ms=5370.3 end_ms=5370.4 gone_ms=- out=125 err=- at=2026-11-19T18:45:26.445Z
+2026-11-19T18:45:32.030Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:32.033Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.0 gone_ms=- out=70 err=- at=2026-11-19T18:45:32.013Z
+2026-11-19T18:45:33.032Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:33.036Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=3.2 end_ms=4.5 gone_ms=- out=70 err=- at=2026-11-19T18:45:32.961Z
+2026-11-19T18:45:37.663Z job 9f2a224a-ffd3-47f1-890b-2d1c182019cf: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:37.667Z INFO:     127.0.0.1:33696 - "DELETE /artifacts/9f2a224a-ffd3-47f1-890b-2d1c182019cf HTTP/1.1" 204 No Content
+2026-11-19T18:45:37.674Z timing DELETE /artifacts/9f2a224a-ffd3-47f1-890b-2d1c182019cf 204 client=127.0.0.1:33696 in=0 body_ms=- start_ms=15.7 end_ms=16.8 gone_ms=- out=0 err=- at=2026-11-19T18:45:37.586Z
+2026-11-19T18:45:37.864Z job 9f2a224a-ffd3-47f1-890b-2d1c182019cf: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:37.869Z timing POST /infer/upload 500 client=127.0.0.1:39970 in=609147 body_ms=1355.5 start_ms=5514.5 end_ms=5514.6 gone_ms=- out=125 err=- at=2026-11-19T18:45:32.299Z
+2026-11-19T18:45:38.065Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:38.074Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.7 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:45:37.878Z
+2026-11-19T18:45:43.508Z job b117d6c6-53cc-4ab5-af10-ca4017aff8a1: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:43.511Z INFO:     127.0.0.1:33700 - "DELETE /artifacts/b117d6c6-53cc-4ab5-af10-ca4017aff8a1 HTTP/1.1" 204 No Content
+2026-11-19T18:45:43.515Z timing DELETE /artifacts/b117d6c6-53cc-4ab5-af10-ca4017aff8a1 204 client=127.0.0.1:33700 in=0 body_ms=- start_ms=11.4 end_ms=12.4 gone_ms=- out=0 err=- at=2026-11-19T18:45:43.447Z
+2026-11-19T18:45:43.708Z job b117d6c6-53cc-4ab5-af10-ca4017aff8a1: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:43.712Z timing POST /infer/upload 500 client=127.0.0.1:33696 in=609147 body_ms=1352.2 start_ms=5353.6 end_ms=5353.7 gone_ms=- out=125 err=- at=2026-11-19T18:45:38.165Z
+2026-11-19T18:45:43.911Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:43.916Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:45:43.736Z
+2026-11-19T18:45:48.337Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:48.341Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.6 end_ms=4.0 gone_ms=- out=70 err=- at=2026-11-19T18:45:48.244Z
+2026-11-19T18:45:49.549Z job 286f2717-196d-4ebb-a391-1ed8c27a5725: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:49.556Z job 286f2717-196d-4ebb-a391-1ed8c27a5725: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:49.563Z INFO:     127.0.0.1:52828 - "DELETE /artifacts/286f2717-196d-4ebb-a391-1ed8c27a5725 HTTP/1.1" 204 No Content
+2026-11-19T18:45:49.567Z timing DELETE /artifacts/286f2717-196d-4ebb-a391-1ed8c27a5725 204 client=127.0.0.1:52828 in=0 body_ms=- start_ms=73.2 end_ms=75.2 gone_ms=- out=0 err=- at=2026-11-19T18:45:49.334Z
+2026-11-19T18:45:49.580Z timing POST /infer/upload 500 client=127.0.0.1:33700 in=609147 body_ms=1354.3 start_ms=5390.9 end_ms=5392.1 gone_ms=- out=125 err=- at=2026-11-19T18:45:44.019Z
+2026-11-19T18:45:49.751Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:49.754Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=3.9 gone_ms=- out=70 err=- at=2026-11-19T18:45:49.687Z
+2026-11-19T18:45:55.386Z job 4ff5778e-634c-494f-9ce8-ad448fa579b2: work folder deleted, cancelled the run still in progress
+2026-11-19T18:45:55.391Z INFO:     127.0.0.1:42834 - "DELETE /artifacts/4ff5778e-634c-494f-9ce8-ad448fa579b2 HTTP/1.1" 204 No Content
+2026-11-19T18:45:55.395Z timing DELETE /artifacts/4ff5778e-634c-494f-9ce8-ad448fa579b2 204 client=127.0.0.1:42834 in=0 body_ms=- start_ms=16.2 end_ms=16.8 gone_ms=- out=0 err=- at=2026-11-19T18:45:55.258Z
+2026-11-19T18:45:55.587Z job 4ff5778e-634c-494f-9ce8-ad448fa579b2: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:45:55.591Z timing POST /infer/upload 500 client=127.0.0.1:52828 in=609147 body_ms=1360.8 start_ms=5435.3 end_ms=5435.4 gone_ms=- out=125 err=- at=2026-11-19T18:45:49.978Z
+2026-11-19T18:45:55.594Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:45:55.597Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.8 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:45:55.552Z
+2026-11-19T18:46:01.216Z job b117d6c6-53cc-4ab5-af10-ca4017aff8a1: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:01.221Z INFO:     127.0.0.1:42840 - "DELETE /artifacts/b117d6c6-53cc-4ab5-af10-ca4017aff8a1 HTTP/1.1" 204 No Content
+2026-11-19T18:46:01.224Z timing DELETE /artifacts/b117d6c6-53cc-4ab5-af10-ca4017aff8a1 204 client=127.0.0.1:42840 in=0 body_ms=- start_ms=13.8 end_ms=14.9 gone_ms=- out=0 err=- at=2026-11-19T18:46:01.118Z
+2026-11-19T18:46:01.417Z job b117d6c6-53cc-4ab5-af10-ca4017aff8a1: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:01.421Z timing POST /infer/upload 500 client=127.0.0.1:42834 in=609147 body_ms=1358.5 start_ms=5421.1 end_ms=5421.2 gone_ms=- out=125 err=- at=2026-11-19T18:45:55.839Z
+2026-11-19T18:46:01.424Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:01.428Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=2.9 gone_ms=- out=70 err=- at=2026-11-19T18:46:01.406Z
+2026-11-19T18:46:03.534Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:03.538Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.6 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:46:03.523Z
+2026-11-19T18:46:07.170Z job aa690ede-c068-4c6b-94f0-5911962b3f88: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:07.176Z INFO:     127.0.0.1:45208 - "DELETE /artifacts/aa690ede-c068-4c6b-94f0-5911962b3f88 HTTP/1.1" 204 No Content
+2026-11-19T18:46:07.180Z timing DELETE /artifacts/aa690ede-c068-4c6b-94f0-5911962b3f88 204 client=127.0.0.1:45208 in=0 body_ms=- start_ms=41.7 end_ms=43.3 gone_ms=- out=0 err=- at=2026-11-19T18:46:06.965Z
+2026-11-19T18:46:07.184Z job aa690ede-c068-4c6b-94f0-5911962b3f88: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:07.188Z timing POST /infer/upload 500 client=127.0.0.1:42840 in=609147 body_ms=1360.4 start_ms=5428.9 end_ms=5429.1 gone_ms=- out=125 err=- at=2026-11-19T18:46:01.685Z
+2026-11-19T18:46:07.376Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:07.383Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:46:07.283Z
+2026-11-19T18:46:13.009Z job c0068ba5-4732-4836-9a06-eea81efa5a83: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:13.016Z INFO:     127.0.0.1:45210 - "DELETE /artifacts/c0068ba5-4732-4836-9a06-eea81efa5a83 HTTP/1.1" 204 No Content
+2026-11-19T18:46:13.020Z timing DELETE /artifacts/c0068ba5-4732-4836-9a06-eea81efa5a83 204 client=127.0.0.1:45210 in=0 body_ms=- start_ms=38.8 end_ms=40.5 gone_ms=- out=0 err=- at=2026-11-19T18:46:12.853Z
+2026-11-19T18:46:13.026Z job c0068ba5-4732-4836-9a06-eea81efa5a83: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:13.032Z timing POST /infer/upload 500 client=127.0.0.1:45208 in=609147 body_ms=1356.6 start_ms=5405.6 end_ms=5405.8 gone_ms=- out=125 err=- at=2026-11-19T18:46:07.569Z
+2026-11-19T18:46:13.213Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:13.216Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:46:13.171Z
+2026-11-19T18:46:18.876Z job 4ff5778e-634c-494f-9ce8-ad448fa579b2: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:18.883Z INFO:     127.0.0.1:34238 - "DELETE /artifacts/4ff5778e-634c-494f-9ce8-ad448fa579b2 HTTP/1.1" 204 No Content
+2026-11-19T18:46:18.888Z timing DELETE /artifacts/4ff5778e-634c-494f-9ce8-ad448fa579b2 204 client=127.0.0.1:34238 in=0 body_ms=- start_ms=26.5 end_ms=28.0 gone_ms=- out=0 err=- at=2026-11-19T18:46:18.752Z
+2026-11-19T18:46:18.895Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:19.001Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.8 gone_ms=- out=70 err=- at=2026-11-19T18:46:18.803Z
+2026-11-19T18:46:19.080Z job 4ff5778e-634c-494f-9ce8-ad448fa579b2: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:19.086Z timing POST /infer/upload 500 client=127.0.0.1:45210 in=609147 body_ms=1356.9 start_ms=5529.4 end_ms=5529.5 gone_ms=- out=125 err=- at=2026-11-19T18:46:13.458Z
+2026-11-19T18:46:19.279Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:19.285Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=4.0 gone_ms=- out=70 err=- at=2026-11-19T18:46:19.083Z
+2026-11-19T18:46:24.716Z job aa690ede-c068-4c6b-94f0-5911962b3f88: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:24.721Z INFO:     127.0.0.1:48236 - "DELETE /artifacts/aa690ede-c068-4c6b-94f0-5911962b3f88 HTTP/1.1" 204 No Content
+2026-11-19T18:46:24.726Z timing DELETE /artifacts/aa690ede-c068-4c6b-94f0-5911962b3f88 204 client=127.0.0.1:48236 in=0 body_ms=- start_ms=22.4 end_ms=23.8 gone_ms=- out=0 err=- at=2026-11-19T18:46:24.656Z
+2026-11-19T18:46:24.917Z job aa690ede-c068-4c6b-94f0-5911962b3f88: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:24.922Z timing POST /infer/upload 500 client=127.0.0.1:34238 in=609147 body_ms=1357.1 start_ms=5404.9 end_ms=5405.1 gone_ms=- out=125 err=- at=2026-11-19T18:46:19.373Z
+2026-11-19T18:46:25.119Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:25.125Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:46:24.956Z
+2026-11-19T18:46:30.553Z job c0068ba5-4732-4836-9a06-eea81efa5a83: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:30.558Z INFO:     127.0.0.1:48248 - "DELETE /artifacts/c0068ba5-4732-4836-9a06-eea81efa5a83 HTTP/1.1" 204 No Content
+2026-11-19T18:46:30.562Z timing DELETE /artifacts/c0068ba5-4732-4836-9a06-eea81efa5a83 204 client=127.0.0.1:48248 in=0 body_ms=- start_ms=16.9 end_ms=18.1 gone_ms=- out=0 err=- at=2026-11-19T18:46:30.526Z
+2026-11-19T18:46:30.753Z job c0068ba5-4732-4836-9a06-eea81efa5a83: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:30.758Z timing POST /infer/upload 500 client=127.0.0.1:48236 in=609147 body_ms=1360.5 start_ms=5392.7 end_ms=5392.9 gone_ms=- out=125 err=- at=2026-11-19T18:46:25.240Z
+2026-11-19T18:46:30.954Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:30.958Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.7 end_ms=4.3 gone_ms=- out=70 err=- at=2026-11-19T18:46:30.822Z
+2026-11-19T18:46:34.177Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:34.182Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=5.4 end_ms=7.8 gone_ms=- out=70 err=- at=2026-11-19T18:46:34.083Z
+2026-11-19T18:46:36.598Z job 7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:36.604Z INFO:     127.0.0.1:60944 - "DELETE /artifacts/7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b HTTP/1.1" 204 No Content
+2026-11-19T18:46:36.611Z timing DELETE /artifacts/7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b 204 client=127.0.0.1:60944 in=0 body_ms=- start_ms=17.6 end_ms=19.1 gone_ms=- out=0 err=- at=2026-11-19T18:46:36.390Z
+2026-11-19T18:46:36.616Z job 7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:36.622Z timing POST /infer/upload 500 client=127.0.0.1:48248 in=609147 body_ms=1357.6 start_ms=5341.7 end_ms=5341.8 gone_ms=- out=125 err=- at=2026-11-19T18:46:31.108Z
+2026-11-19T18:46:41.028Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:41.034Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.8 end_ms=2.9 gone_ms=- out=70 err=- at=2026-11-19T18:46:40.886Z
+2026-11-19T18:46:46.484Z job 7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b: work folder deleted, cancelled the run still in progress
+2026-11-19T18:46:46.489Z INFO:     127.0.0.1:58028 - "DELETE /artifacts/7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b HTTP/1.1" 204 No Content
+2026-11-19T18:46:46.494Z timing DELETE /artifacts/7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b 204 client=127.0.0.1:58028 in=0 body_ms=- start_ms=22.7 end_ms=24.2 gone_ms=- out=0 err=- at=2026-11-19T18:46:46.451Z
+2026-11-19T18:46:46.686Z job 7f10af16-f3f3-42d6-b9b5-8d8d805e0b1b: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:46:46.691Z timing POST /infer/upload 500 client=127.0.0.1:60944 in=609147 body_ms=1355.7 start_ms=5360.0 end_ms=5360.2 gone_ms=- out=125 err=- at=2026-11-19T18:46:41.169Z
+2026-11-19T18:46:49.502Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:49.505Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.5 end_ms=2.5 gone_ms=- out=70 err=- at=2026-11-19T18:46:49.364Z
+2026-11-19T18:46:56.161Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:46:56.165Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:46:56.148Z
+2026-11-19T18:47:01.794Z job 7f008dcb-4b82-4cf3-8e08-c2adf0c98265: work folder deleted, cancelled the run still in progress
+2026-11-19T18:47:01.798Z INFO:     127.0.0.1:50634 - "DELETE /artifacts/7f008dcb-4b82-4cf3-8e08-c2adf0c98265 HTTP/1.1" 204 No Content
+2026-11-19T18:47:01.802Z timing DELETE /artifacts/7f008dcb-4b82-4cf3-8e08-c2adf0c98265 204 client=127.0.0.1:50634 in=0 body_ms=- start_ms=15.8 end_ms=17.0 gone_ms=- out=0 err=- at=2026-11-19T18:47:01.708Z
+2026-11-19T18:47:01.808Z job 7f008dcb-4b82-4cf3-8e08-c2adf0c98265: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:47:01.810Z timing POST /infer/upload 500 client=127.0.0.1:58028 in=609147 body_ms=1356.5 start_ms=5342.0 end_ms=5342.1 gone_ms=- out=125 err=- at=2026-11-19T18:46:56.430Z
+2026-11-19T18:47:04.806Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:04.811Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=3.8 gone_ms=- out=70 err=- at=2026-11-19T18:47:04.643Z
+2026-11-19T18:47:06.213Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:06.217Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:47:06.075Z
+2026-11-19T18:47:11.845Z job 7f008dcb-4b82-4cf3-8e08-c2adf0c98265: work folder deleted, cancelled the run still in progress
+2026-11-19T18:47:11.851Z INFO:     127.0.0.1:55866 - "DELETE /artifacts/7f008dcb-4b82-4cf3-8e08-c2adf0c98265 HTTP/1.1" 204 No Content
+2026-11-19T18:47:11.856Z timing DELETE /artifacts/7f008dcb-4b82-4cf3-8e08-c2adf0c98265 204 client=127.0.0.1:55866 in=0 body_ms=- start_ms=20.5 end_ms=21.9 gone_ms=- out=0 err=- at=2026-11-19T18:47:11.637Z
+2026-11-19T18:47:11.861Z job 7f008dcb-4b82-4cf3-8e08-c2adf0c98265: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:47:11.865Z timing POST /infer/upload 500 client=127.0.0.1:50634 in=609147 body_ms=1358.6 start_ms=5443.4 end_ms=5443.6 gone_ms=- out=125 err=- at=2026-11-19T18:47:06.355Z
+2026-11-19T18:47:20.083Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:20.089Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.6 end_ms=2.5 gone_ms=- out=70 err=- at=2026-11-19T18:47:19.921Z
+2026-11-19T18:47:25.914Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:25.918Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.6 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:47:25.846Z
+2026-11-19T18:47:31.545Z job 9c4e66d9-26e0-4f66-a3e1-2e142c391371: work folder deleted, cancelled the run still in progress
+2026-11-19T18:47:31.549Z INFO:     127.0.0.1:57236 - "DELETE /artifacts/9c4e66d9-26e0-4f66-a3e1-2e142c391371 HTTP/1.1" 204 No Content
+2026-11-19T18:47:31.552Z timing DELETE /artifacts/9c4e66d9-26e0-4f66-a3e1-2e142c391371 204 client=127.0.0.1:57236 in=0 body_ms=- start_ms=15.3 end_ms=16.6 gone_ms=- out=0 err=- at=2026-11-19T18:47:31.406Z
+2026-11-19T18:47:31.556Z job 9c4e66d9-26e0-4f66-a3e1-2e142c391371: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:47:31.559Z timing POST /infer/upload 500 client=127.0.0.1:55866 in=609147 body_ms=1357.5 start_ms=5357.6 end_ms=5357.7 gone_ms=- out=125 err=- at=2026-11-19T18:47:26.126Z
+2026-11-19T18:47:35.364Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:35.368Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.7 end_ms=4.9 gone_ms=- out=70 err=- at=2026-11-19T18:47:35.198Z
+2026-11-19T18:47:35.971Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:35.975Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=2.9 gone_ms=- out=70 err=- at=2026-11-19T18:47:35.872Z
+2026-11-19T18:47:41.598Z job 9c4e66d9-26e0-4f66-a3e1-2e142c391371: work folder deleted, cancelled the run still in progress
+2026-11-19T18:47:41.602Z INFO:     127.0.0.1:59088 - "DELETE /artifacts/9c4e66d9-26e0-4f66-a3e1-2e142c391371 HTTP/1.1" 204 No Content
+2026-11-19T18:47:41.607Z timing DELETE /artifacts/9c4e66d9-26e0-4f66-a3e1-2e142c391371 204 client=127.0.0.1:59088 in=0 body_ms=- start_ms=18.8 end_ms=19.9 gone_ms=- out=0 err=- at=2026-11-19T18:47:41.445Z
+2026-11-19T18:47:41.610Z job 9c4e66d9-26e0-4f66-a3e1-2e142c391371: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:47:41.614Z timing POST /infer/upload 500 client=127.0.0.1:57236 in=609147 body_ms=1356.7 start_ms=5373.4 end_ms=5373.5 gone_ms=- out=125 err=- at=2026-11-19T18:47:36.159Z
+2026-11-19T18:47:50.634Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:47:50.638Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:47:50.476Z
+2026-11-19T18:48:05.945Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:05.949Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.5 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:48:05.755Z
+2026-11-19T18:48:10.210Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:10.214Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:48:10.135Z
+2026-11-19T18:48:15.842Z job e6d385a2-a993-4730-bf67-4e80478d0a78: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:15.846Z INFO:     127.0.0.1:44436 - "DELETE /artifacts/e6d385a2-a993-4730-bf67-4e80478d0a78 HTTP/1.1" 204 No Content
+2026-11-19T18:48:15.851Z timing DELETE /artifacts/e6d385a2-a993-4730-bf67-4e80478d0a78 204 client=127.0.0.1:44436 in=0 body_ms=- start_ms=21.0 end_ms=22.7 gone_ms=- out=0 err=- at=2026-11-19T18:48:15.699Z
+2026-11-19T18:48:15.856Z job e6d385a2-a993-4730-bf67-4e80478d0a78: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:15.862Z timing POST /infer/upload 500 client=127.0.0.1:59088 in=609147 body_ms=1354.9 start_ms=5416.3 end_ms=5416.5 gone_ms=- out=125 err=- at=2026-11-19T18:48:10.415Z
+2026-11-19T18:48:20.065Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:20.073Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:48:20.037Z
+2026-11-19T18:48:21.074Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:21.078Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:48:21.032Z
+2026-11-19T18:48:25.700Z job e6d385a2-a993-4730-bf67-4e80478d0a78: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:25.704Z INFO:     127.0.0.1:36386 - "DELETE /artifacts/e6d385a2-a993-4730-bf67-4e80478d0a78 HTTP/1.1" 204 No Content
+2026-11-19T18:48:25.707Z timing DELETE /artifacts/e6d385a2-a993-4730-bf67-4e80478d0a78 204 client=127.0.0.1:36386 in=0 body_ms=- start_ms=10.8 end_ms=11.8 gone_ms=- out=0 err=- at=2026-11-19T18:48:25.598Z
+2026-11-19T18:48:25.711Z job e6d385a2-a993-4730-bf67-4e80478d0a78: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:25.716Z timing POST /infer/upload 500 client=127.0.0.1:44436 in=609147 body_ms=1353.8 start_ms=5334.3 end_ms=5334.4 gone_ms=- out=125 err=- at=2026-11-19T18:48:20.319Z
+2026-11-19T18:48:36.347Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:36.351Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.4 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:48:36.271Z
+2026-11-19T18:48:36.750Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:36.754Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=4.1 end_ms=5.7 gone_ms=- out=70 err=- at=2026-11-19T18:48:36.548Z
+2026-11-19T18:48:41.979Z job c963dca5-10a6-45cc-be6d-36b42c4faa39: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:41.982Z INFO:     127.0.0.1:50036 - "DELETE /artifacts/c963dca5-10a6-45cc-be6d-36b42c4faa39 HTTP/1.1" 204 No Content
+2026-11-19T18:48:41.986Z timing DELETE /artifacts/c963dca5-10a6-45cc-be6d-36b42c4faa39 204 client=127.0.0.1:50036 in=0 body_ms=- start_ms=19.8 end_ms=21.0 gone_ms=- out=0 err=- at=2026-11-19T18:48:41.833Z
+2026-11-19T18:48:41.990Z job c963dca5-10a6-45cc-be6d-36b42c4faa39: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:41.993Z timing POST /infer/upload 500 client=127.0.0.1:36386 in=609152 body_ms=1352.9 start_ms=5341.0 end_ms=5341.2 gone_ms=- out=125 err=- at=2026-11-19T18:48:36.554Z
+2026-11-19T18:48:42.181Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:42.184Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:48:42.127Z
+2026-11-19T18:48:47.808Z job a0d6c582-7299-44dc-a734-2ae4b6c12b42: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:47.815Z INFO:     127.0.0.1:34464 - "DELETE /artifacts/a0d6c582-7299-44dc-a734-2ae4b6c12b42 HTTP/1.1" 204 No Content
+2026-11-19T18:48:47.822Z timing DELETE /artifacts/a0d6c582-7299-44dc-a734-2ae4b6c12b42 204 client=127.0.0.1:34464 in=0 body_ms=- start_ms=14.8 end_ms=15.6 gone_ms=- out=0 err=- at=2026-11-19T18:48:47.690Z
+2026-11-19T18:48:47.827Z job a0d6c582-7299-44dc-a734-2ae4b6c12b42: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:47.834Z timing POST /infer/upload 500 client=127.0.0.1:50036 in=609147 body_ms=1355.4 start_ms=5300.9 end_ms=5301.0 gone_ms=- out=125 err=- at=2026-11-19T18:48:42.411Z
+2026-11-19T18:48:48.009Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:48.012Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:48:47.978Z
+2026-11-19T18:48:51.839Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:52.040Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=3.2 end_ms=4.3 gone_ms=- out=70 err=- at=2026-11-19T18:48:51.830Z
+2026-11-19T18:48:53.646Z job c963dca5-10a6-45cc-be6d-36b42c4faa39: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:53.649Z INFO:     127.0.0.1:34468 - "DELETE /artifacts/c963dca5-10a6-45cc-be6d-36b42c4faa39 HTTP/1.1" 204 No Content
+2026-11-19T18:48:53.652Z timing DELETE /artifacts/c963dca5-10a6-45cc-be6d-36b42c4faa39 204 client=127.0.0.1:34468 in=0 body_ms=- start_ms=18.6 end_ms=20.4 gone_ms=- out=0 err=- at=2026-11-19T18:48:53.543Z
+2026-11-19T18:48:53.656Z job c963dca5-10a6-45cc-be6d-36b42c4faa39: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:53.659Z timing POST /infer/upload 500 client=127.0.0.1:34464 in=609152 body_ms=1353.4 start_ms=5317.1 end_ms=5317.2 gone_ms=- out=125 err=- at=2026-11-19T18:48:48.258Z
+2026-11-19T18:48:53.847Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:48:54.048Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:48:53.840Z
+2026-11-19T18:48:59.479Z job a0d6c582-7299-44dc-a734-2ae4b6c12b42: work folder deleted, cancelled the run still in progress
+2026-11-19T18:48:59.483Z INFO:     127.0.0.1:60876 - "DELETE /artifacts/a0d6c582-7299-44dc-a734-2ae4b6c12b42 HTTP/1.1" 204 No Content
+2026-11-19T18:48:59.486Z timing DELETE /artifacts/a0d6c582-7299-44dc-a734-2ae4b6c12b42 204 client=127.0.0.1:60876 in=0 body_ms=- start_ms=14.0 end_ms=15.4 gone_ms=- out=0 err=- at=2026-11-19T18:48:59.407Z
+2026-11-19T18:48:59.489Z job a0d6c582-7299-44dc-a734-2ae4b6c12b42: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:48:59.492Z timing POST /infer/upload 500 client=127.0.0.1:34468 in=609147 body_ms=1356.8 start_ms=5323.3 end_ms=5323.5 gone_ms=- out=125 err=- at=2026-11-19T18:48:54.122Z
+2026-11-19T18:49:07.309Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:07.312Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:49:07.109Z
+2026-11-19T18:49:22.403Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:22.406Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.4 end_ms=3.8 gone_ms=- out=70 err=- at=2026-11-19T18:49:22.387Z
+2026-11-19T18:49:30.037Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:30.043Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.4 end_ms=2.4 gone_ms=- out=70 err=- at=2026-11-19T18:49:29.901Z
+2026-11-19T18:49:35.674Z job f46be79c-7478-4043-91d7-7b4707a9f2af: work folder deleted, cancelled the run still in progress
+2026-11-19T18:49:35.677Z INFO:     127.0.0.1:39238 - "DELETE /artifacts/f46be79c-7478-4043-91d7-7b4707a9f2af HTTP/1.1" 204 No Content
+2026-11-19T18:49:35.682Z timing DELETE /artifacts/f46be79c-7478-4043-91d7-7b4707a9f2af 204 client=127.0.0.1:39238 in=0 body_ms=- start_ms=31.5 end_ms=33.5 gone_ms=- out=0 err=- at=2026-11-19T18:49:35.461Z
+2026-11-19T18:49:35.685Z job f46be79c-7478-4043-91d7-7b4707a9f2af: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:49:35.689Z timing POST /infer/upload 500 client=127.0.0.1:60876 in=609152 body_ms=1354.5 start_ms=5360.0 end_ms=5360.2 gone_ms=- out=125 err=- at=2026-11-19T18:49:30.182Z
+2026-11-19T18:49:37.686Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:37.692Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.8 end_ms=7.3 gone_ms=- out=70 err=- at=2026-11-19T18:49:37.665Z
+2026-11-19T18:49:39.091Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:39.094Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:49:38.972Z
+2026-11-19T18:49:44.712Z job 51884e17-5850-4be2-a747-04ef94177ecb: work folder deleted, cancelled the run still in progress
+2026-11-19T18:49:44.719Z INFO:     127.0.0.1:45276 - "DELETE /artifacts/51884e17-5850-4be2-a747-04ef94177ecb HTTP/1.1" 204 No Content
+2026-11-19T18:49:44.722Z timing DELETE /artifacts/51884e17-5850-4be2-a747-04ef94177ecb 204 client=127.0.0.1:45276 in=0 body_ms=- start_ms=11.3 end_ms=12.3 gone_ms=- out=0 err=- at=2026-11-19T18:49:44.530Z
+2026-11-19T18:49:44.725Z job 51884e17-5850-4be2-a747-04ef94177ecb: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:49:44.729Z timing POST /infer/upload 500 client=127.0.0.1:39238 in=609147 body_ms=1357.9 start_ms=5312.6 end_ms=5312.8 gone_ms=- out=125 err=- at=2026-11-19T18:49:39.251Z
+2026-11-19T18:49:44.912Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:44.915Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:49:44.815Z
+2026-11-19T18:49:50.535Z job f46be79c-7478-4043-91d7-7b4707a9f2af: work folder deleted, cancelled the run still in progress
+2026-11-19T18:49:50.538Z INFO:     127.0.0.1:45282 - "DELETE /artifacts/f46be79c-7478-4043-91d7-7b4707a9f2af HTTP/1.1" 204 No Content
+2026-11-19T18:49:50.542Z timing DELETE /artifacts/f46be79c-7478-4043-91d7-7b4707a9f2af 204 client=127.0.0.1:45282 in=0 body_ms=- start_ms=20.2 end_ms=21.2 gone_ms=- out=0 err=- at=2026-11-19T18:49:50.375Z
+2026-11-19T18:49:50.547Z job f46be79c-7478-4043-91d7-7b4707a9f2af: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:49:50.552Z timing POST /infer/upload 500 client=127.0.0.1:45276 in=609152 body_ms=1354.1 start_ms=5326.9 end_ms=5327.1 gone_ms=- out=125 err=- at=2026-11-19T18:49:45.095Z
+2026-11-19T18:49:50.737Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:50.741Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:49:50.672Z
+2026-11-19T18:49:53.148Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:53.153Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:49:52.947Z
+2026-11-19T18:49:56.361Z job 51884e17-5850-4be2-a747-04ef94177ecb: work folder deleted, cancelled the run still in progress
+2026-11-19T18:49:56.366Z INFO:     127.0.0.1:47124 - "DELETE /artifacts/51884e17-5850-4be2-a747-04ef94177ecb HTTP/1.1" 204 No Content
+2026-11-19T18:49:56.373Z timing DELETE /artifacts/51884e17-5850-4be2-a747-04ef94177ecb 204 client=127.0.0.1:47124 in=0 body_ms=- start_ms=11.7 end_ms=12.6 gone_ms=- out=0 err=- at=2026-11-19T18:49:56.233Z
+2026-11-19T18:49:56.378Z job 51884e17-5850-4be2-a747-04ef94177ecb: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:49:56.381Z timing POST /infer/upload 500 client=127.0.0.1:45282 in=609147 body_ms=1355.1 start_ms=5338.6 end_ms=5338.8 gone_ms=- out=125 err=- at=2026-11-19T18:49:50.951Z
+2026-11-19T18:49:57.569Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:49:57.576Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.5 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:49:57.369Z
+2026-11-19T18:50:03.017Z job 0b6897c0-bb42-41c7-8673-ee03aa4798b2: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:03.022Z INFO:     127.0.0.1:47136 - "DELETE /artifacts/0b6897c0-bb42-41c7-8673-ee03aa4798b2 HTTP/1.1" 204 No Content
+2026-11-19T18:50:03.026Z timing DELETE /artifacts/0b6897c0-bb42-41c7-8673-ee03aa4798b2 204 client=127.0.0.1:47136 in=0 body_ms=- start_ms=14.8 end_ms=16.1 gone_ms=- out=0 err=- at=2026-11-19T18:50:02.935Z
+2026-11-19T18:50:03.217Z job 0b6897c0-bb42-41c7-8673-ee03aa4798b2: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:03.221Z timing POST /infer/upload 500 client=127.0.0.1:47124 in=609147 body_ms=1357.1 start_ms=5361.5 end_ms=5361.6 gone_ms=- out=125 err=- at=2026-11-19T18:49:57.654Z
+2026-11-19T18:50:03.418Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:03.424Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:50:03.226Z
+2026-11-19T18:50:08.242Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:08.245Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=3.5 end_ms=5.7 gone_ms=- out=70 err=- at=2026-11-19T18:50:08.226Z
+2026-11-19T18:50:08.845Z job 3625f4d8-1c60-450b-913e-62cf00bd3c00: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:08.848Z INFO:     127.0.0.1:55694 - "DELETE /artifacts/3625f4d8-1c60-450b-913e-62cf00bd3c00 HTTP/1.1" 204 No Content
+2026-11-19T18:50:08.851Z timing DELETE /artifacts/3625f4d8-1c60-450b-913e-62cf00bd3c00 204 client=127.0.0.1:55694 in=0 body_ms=- start_ms=11.7 end_ms=12.7 gone_ms=- out=0 err=- at=2026-11-19T18:50:08.785Z
+2026-11-19T18:50:08.855Z job 3625f4d8-1c60-450b-913e-62cf00bd3c00: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:08.860Z timing POST /infer/upload 500 client=127.0.0.1:47136 in=609147 body_ms=1357.9 start_ms=5310.0 end_ms=5310.1 gone_ms=- out=125 err=- at=2026-11-19T18:50:03.507Z
+2026-11-19T18:50:09.246Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:09.250Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.4 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:50:09.070Z
+2026-11-19T18:50:14.683Z job 0b6897c0-bb42-41c7-8673-ee03aa4798b2: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:14.688Z job 0b6897c0-bb42-41c7-8673-ee03aa4798b2: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:14.691Z INFO:     127.0.0.1:45312 - "DELETE /artifacts/0b6897c0-bb42-41c7-8673-ee03aa4798b2 HTTP/1.1" 204 No Content
+2026-11-19T18:50:14.695Z timing DELETE /artifacts/0b6897c0-bb42-41c7-8673-ee03aa4798b2 204 client=127.0.0.1:45312 in=0 body_ms=- start_ms=25.5 end_ms=27.4 gone_ms=- out=0 err=- at=2026-11-19T18:50:14.631Z
+2026-11-19T18:50:14.699Z timing POST /infer/upload 500 client=127.0.0.1:55694 in=609147 body_ms=1354.8 start_ms=5308.5 end_ms=5309.2 gone_ms=- out=125 err=- at=2026-11-19T18:50:09.351Z
+2026-11-19T18:50:15.084Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:15.087Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:50:14.932Z
+2026-11-19T18:50:20.719Z job b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:20.723Z INFO:     127.0.0.1:45322 - "DELETE /artifacts/b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0 HTTP/1.1" 204 No Content
+2026-11-19T18:50:20.728Z timing DELETE /artifacts/b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0 204 client=127.0.0.1:45322 in=0 body_ms=- start_ms=23.1 end_ms=24.7 gone_ms=- out=0 err=- at=2026-11-19T18:50:20.493Z
+2026-11-19T18:50:20.732Z job b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:20.836Z timing POST /infer/upload 500 client=127.0.0.1:45312 in=609147 body_ms=1353.5 start_ms=5422.6 end_ms=5422.8 gone_ms=- out=125 err=- at=2026-11-19T18:50:15.210Z
+2026-11-19T18:50:20.922Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:20.926Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:50:20.794Z
+2026-11-19T18:50:23.537Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:23.542Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.6 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:50:23.505Z
+2026-11-19T18:50:26.561Z job 3625f4d8-1c60-450b-913e-62cf00bd3c00: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:26.565Z INFO:     127.0.0.1:45940 - "DELETE /artifacts/3625f4d8-1c60-450b-913e-62cf00bd3c00 HTTP/1.1" 204 No Content
+2026-11-19T18:50:26.572Z timing DELETE /artifacts/3625f4d8-1c60-450b-913e-62cf00bd3c00 204 client=127.0.0.1:45940 in=0 body_ms=- start_ms=29.7 end_ms=31.0 gone_ms=- out=0 err=- at=2026-11-19T18:50:26.358Z
+2026-11-19T18:50:26.575Z job 3625f4d8-1c60-450b-913e-62cf00bd3c00: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:26.579Z timing POST /infer/upload 500 client=127.0.0.1:45322 in=609147 body_ms=1358.2 start_ms=5370.7 end_ms=5370.8 gone_ms=- out=125 err=- at=2026-11-19T18:50:21.077Z
+2026-11-19T18:50:26.777Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:26.782Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:50:26.664Z
+2026-11-19T18:50:32.413Z job b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:32.418Z INFO:     127.0.0.1:45950 - "DELETE /artifacts/b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0 HTTP/1.1" 204 No Content
+2026-11-19T18:50:32.422Z timing DELETE /artifacts/b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0 204 client=127.0.0.1:45950 in=0 body_ms=- start_ms=16.1 end_ms=17.7 gone_ms=- out=0 err=- at=2026-11-19T18:50:32.225Z
+2026-11-19T18:50:32.427Z job b05bb5ac-41b7-4b9e-b16d-f6c4b9d1ecc0: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:32.431Z timing POST /infer/upload 500 client=127.0.0.1:45940 in=609147 body_ms=1360.4 start_ms=5356.8 end_ms=5356.9 gone_ms=- out=125 err=- at=2026-11-19T18:50:26.943Z
+2026-11-19T18:50:32.614Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:32.618Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:50:32.518Z
+2026-11-19T18:50:38.241Z job 571e910b-744a-49af-99d6-f105dcbf3cb7: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:38.246Z INFO:     127.0.0.1:55926 - "DELETE /artifacts/571e910b-744a-49af-99d6-f105dcbf3cb7 HTTP/1.1" 204 No Content
+2026-11-19T18:50:38.251Z timing DELETE /artifacts/571e910b-744a-49af-99d6-f105dcbf3cb7 204 client=127.0.0.1:55926 in=0 body_ms=- start_ms=16.2 end_ms=17.3 gone_ms=- out=0 err=- at=2026-11-19T18:50:38.082Z
+2026-11-19T18:50:38.256Z job 571e910b-744a-49af-99d6-f105dcbf3cb7: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:38.261Z timing POST /infer/upload 500 client=127.0.0.1:45950 in=609147 body_ms=1356.8 start_ms=5363.6 end_ms=5363.8 gone_ms=- out=125 err=- at=2026-11-19T18:50:32.801Z
+2026-11-19T18:50:38.843Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:38.846Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.1 end_ms=2.5 gone_ms=- out=70 err=- at=2026-11-19T18:50:38.782Z
+2026-11-19T18:50:42.059Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:42.062Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:50:42.027Z
+2026-11-19T18:50:47.699Z job 571e910b-744a-49af-99d6-f105dcbf3cb7: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:47.702Z INFO:     127.0.0.1:38496 - "DELETE /artifacts/571e910b-744a-49af-99d6-f105dcbf3cb7 HTTP/1.1" 204 No Content
+2026-11-19T18:50:47.705Z timing DELETE /artifacts/571e910b-744a-49af-99d6-f105dcbf3cb7 204 client=127.0.0.1:38496 in=0 body_ms=- start_ms=12.9 end_ms=13.9 gone_ms=- out=0 err=- at=2026-11-19T18:50:47.588Z
+2026-11-19T18:50:47.709Z job 571e910b-744a-49af-99d6-f105dcbf3cb7: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:47.714Z timing POST /infer/upload 500 client=127.0.0.1:55926 in=609147 body_ms=1354.5 start_ms=5326.7 end_ms=5326.8 gone_ms=- out=125 err=- at=2026-11-19T18:50:42.310Z
+2026-11-19T18:50:47.901Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:47.906Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:50:47.875Z
+2026-11-19T18:50:53.538Z job 978f41cc-43f4-41a8-850b-0c026c8e8002: work folder deleted, cancelled the run still in progress
+2026-11-19T18:50:53.544Z INFO:     127.0.0.1:38504 - "DELETE /artifacts/978f41cc-43f4-41a8-850b-0c026c8e8002 HTTP/1.1" 204 No Content
+2026-11-19T18:50:53.550Z timing DELETE /artifacts/978f41cc-43f4-41a8-850b-0c026c8e8002 204 client=127.0.0.1:38504 in=0 body_ms=- start_ms=20.4 end_ms=21.6 gone_ms=- out=0 err=- at=2026-11-19T18:50:53.444Z
+2026-11-19T18:50:53.556Z job 978f41cc-43f4-41a8-850b-0c026c8e8002: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:50:53.560Z timing POST /infer/upload 500 client=127.0.0.1:38496 in=609147 body_ms=1358.1 start_ms=5341.0 end_ms=5341.1 gone_ms=- out=125 err=- at=2026-11-19T18:50:48.159Z
+2026-11-19T18:50:54.144Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:54.147Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:50:54.058Z
+2026-11-19T18:50:56.559Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:50:56.563Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=4.0 gone_ms=- out=70 err=- at=2026-11-19T18:50:56.425Z
+2026-11-19T18:51:02.196Z job 978f41cc-43f4-41a8-850b-0c026c8e8002: work folder deleted, cancelled the run still in progress
+2026-11-19T18:51:02.200Z INFO:     127.0.0.1:44092 - "DELETE /artifacts/978f41cc-43f4-41a8-850b-0c026c8e8002 HTTP/1.1" 204 No Content
+2026-11-19T18:51:02.204Z timing DELETE /artifacts/978f41cc-43f4-41a8-850b-0c026c8e8002 204 client=127.0.0.1:44092 in=0 body_ms=- start_ms=12.4 end_ms=13.3 gone_ms=- out=0 err=- at=2026-11-19T18:51:01.989Z
+2026-11-19T18:51:02.208Z job 978f41cc-43f4-41a8-850b-0c026c8e8002: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:51:02.212Z timing POST /infer/upload 500 client=127.0.0.1:38504 in=609147 body_ms=1362.1 start_ms=5370.7 end_ms=5370.9 gone_ms=- out=125 err=- at=2026-11-19T18:50:56.709Z
+2026-11-19T18:51:03.804Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:03.808Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:51:03.682Z
+2026-11-19T18:51:09.427Z job c08712b9-8c18-4937-83ea-f70a8bd4bc92: work folder deleted, cancelled the run still in progress
+2026-11-19T18:51:09.432Z INFO:     127.0.0.1:47516 - "DELETE /artifacts/c08712b9-8c18-4937-83ea-f70a8bd4bc92 HTTP/1.1" 204 No Content
+2026-11-19T18:51:09.436Z timing DELETE /artifacts/c08712b9-8c18-4937-83ea-f70a8bd4bc92 204 client=127.0.0.1:47516 in=0 body_ms=- start_ms=17.7 end_ms=18.9 gone_ms=- out=0 err=- at=2026-11-19T18:51:09.241Z
+2026-11-19T18:51:09.440Z job c08712b9-8c18-4937-83ea-f70a8bd4bc92: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:51:09.444Z timing POST /infer/upload 500 client=127.0.0.1:44092 in=609147 body_ms=1358.8 start_ms=5325.8 end_ms=5326.0 gone_ms=- out=125 err=- at=2026-11-19T18:51:03.963Z
+2026-11-19T18:51:09.549Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:09.552Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:51:09.336Z
+2026-11-19T18:51:13.863Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:13.867Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:51:13.674Z
+2026-11-19T18:51:19.289Z job c08712b9-8c18-4937-83ea-f70a8bd4bc92: work folder deleted, cancelled the run still in progress
+2026-11-19T18:51:19.292Z INFO:     127.0.0.1:59024 - "DELETE /artifacts/c08712b9-8c18-4937-83ea-f70a8bd4bc92 HTTP/1.1" 204 No Content
+2026-11-19T18:51:19.295Z timing DELETE /artifacts/c08712b9-8c18-4937-83ea-f70a8bd4bc92 204 client=127.0.0.1:59024 in=0 body_ms=- start_ms=11.4 end_ms=12.4 gone_ms=- out=0 err=- at=2026-11-19T18:51:19.238Z
+2026-11-19T18:51:19.690Z job c08712b9-8c18-4937-83ea-f70a8bd4bc92: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:51:19.694Z timing POST /infer/upload 500 client=127.0.0.1:47516 in=609147 body_ms=1357.4 start_ms=5590.4 end_ms=5590.6 gone_ms=- out=125 err=- at=2026-11-19T18:51:13.961Z
+2026-11-19T18:51:24.722Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:24.725Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:51:24.612Z
+2026-11-19T18:51:40.001Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:40.004Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=4.0 gone_ms=- out=70 err=- at=2026-11-19T18:51:39.889Z
+2026-11-19T18:51:48.857Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:48.862Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:51:48.805Z
+2026-11-19T18:51:54.495Z job 0b6300a6-3a10-4571-8759-608c965bbdad: work folder deleted, cancelled the run still in progress
+2026-11-19T18:51:54.500Z INFO:     127.0.0.1:58056 - "DELETE /artifacts/0b6300a6-3a10-4571-8759-608c965bbdad HTTP/1.1" 204 No Content
+2026-11-19T18:51:54.505Z timing DELETE /artifacts/0b6300a6-3a10-4571-8759-608c965bbdad 204 client=127.0.0.1:58056 in=0 body_ms=- start_ms=17.1 end_ms=17.9 gone_ms=- out=0 err=- at=2026-11-19T18:51:54.368Z
+2026-11-19T18:51:54.509Z job 0b6300a6-3a10-4571-8759-608c965bbdad: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:51:54.512Z timing POST /infer/upload 500 client=127.0.0.1:59024 in=609147 body_ms=1621.1 start_ms=5312.8 end_ms=5313.0 gone_ms=- out=125 err=- at=2026-11-19T18:51:49.088Z
+2026-11-19T18:51:54.697Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:54.700Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:51:54.660Z
+2026-11-19T18:51:55.298Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:51:55.301Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=3.1 end_ms=4.9 gone_ms=- out=70 err=- at=2026-11-19T18:51:55.167Z
+2026-11-19T18:52:00.324Z job 2acd88d2-702d-4f61-a624-63f7d9025f2e: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:00.328Z INFO:     127.0.0.1:58064 - "DELETE /artifacts/2acd88d2-702d-4f61-a624-63f7d9025f2e HTTP/1.1" 204 No Content
+2026-11-19T18:52:00.331Z timing DELETE /artifacts/2acd88d2-702d-4f61-a624-63f7d9025f2e 204 client=127.0.0.1:58064 in=0 body_ms=- start_ms=16.9 end_ms=18.2 gone_ms=- out=0 err=- at=2026-11-19T18:52:00.215Z
+2026-11-19T18:52:00.525Z job 2acd88d2-702d-4f61-a624-63f7d9025f2e: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:00.529Z timing POST /infer/upload 500 client=127.0.0.1:58056 in=609147 body_ms=1359.5 start_ms=5446.4 end_ms=5446.5 gone_ms=- out=125 err=- at=2026-11-19T18:51:54.939Z
+2026-11-19T18:52:00.533Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:00.536Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:52:00.507Z
+2026-11-19T18:52:06.152Z job 0b6300a6-3a10-4571-8759-608c965bbdad: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:06.156Z INFO:     127.0.0.1:34760 - "DELETE /artifacts/0b6300a6-3a10-4571-8759-608c965bbdad HTTP/1.1" 204 No Content
+2026-11-19T18:52:06.159Z timing DELETE /artifacts/0b6300a6-3a10-4571-8759-608c965bbdad 204 client=127.0.0.1:34760 in=0 body_ms=- start_ms=25.3 end_ms=26.5 gone_ms=- out=0 err=- at=2026-11-19T18:52:06.065Z
+2026-11-19T18:52:06.162Z job 0b6300a6-3a10-4571-8759-608c965bbdad: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:06.354Z timing POST /infer/upload 500 client=127.0.0.1:58064 in=609147 body_ms=1360.9 start_ms=5362.2 end_ms=5362.4 gone_ms=- out=125 err=- at=2026-11-19T18:52:00.786Z
+2026-11-19T18:52:06.554Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:06.557Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=7.2 gone_ms=- out=70 err=- at=2026-11-19T18:52:06.365Z
+2026-11-19T18:52:10.589Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:10.593Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=8.7 end_ms=11.8 gone_ms=- out=70 err=- at=2026-11-19T18:52:10.447Z
+2026-11-19T18:52:11.996Z job 2acd88d2-702d-4f61-a624-63f7d9025f2e: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:12.000Z INFO:     127.0.0.1:34768 - "DELETE /artifacts/2acd88d2-702d-4f61-a624-63f7d9025f2e HTTP/1.1" 204 No Content
+2026-11-19T18:52:12.003Z timing DELETE /artifacts/2acd88d2-702d-4f61-a624-63f7d9025f2e 204 client=127.0.0.1:34768 in=0 body_ms=- start_ms=12.4 end_ms=13.5 gone_ms=- out=0 err=- at=2026-11-19T18:52:11.927Z
+2026-11-19T18:52:12.200Z job 2acd88d2-702d-4f61-a624-63f7d9025f2e: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:12.203Z timing POST /infer/upload 500 client=127.0.0.1:34760 in=609147 body_ms=1355.9 start_ms=5348.3 end_ms=5348.4 gone_ms=- out=125 err=- at=2026-11-19T18:52:06.648Z
+2026-11-19T18:52:25.877Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:25.882Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.7 end_ms=4.1 gone_ms=- out=70 err=- at=2026-11-19T18:52:25.732Z
+2026-11-19T18:52:32.514Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:32.519Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:52:32.477Z
+2026-11-19T18:52:38.138Z job 5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:38.146Z INFO:     127.0.0.1:51606 - "DELETE /artifacts/5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c HTTP/1.1" 204 No Content
+2026-11-19T18:52:38.149Z timing DELETE /artifacts/5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c 204 client=127.0.0.1:51606 in=0 body_ms=- start_ms=11.5 end_ms=12.6 gone_ms=- out=0 err=- at=2026-11-19T18:52:38.038Z
+2026-11-19T18:52:38.152Z job 5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:38.155Z timing POST /infer/upload 500 client=127.0.0.1:34768 in=609147 body_ms=1358.0 start_ms=5304.4 end_ms=5304.5 gone_ms=- out=125 err=- at=2026-11-19T18:52:32.756Z
+2026-11-19T18:52:38.339Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:38.344Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:52:38.327Z
+2026-11-19T18:52:41.151Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:41.155Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.4 end_ms=4.2 gone_ms=- out=70 err=- at=2026-11-19T18:52:41.009Z
+2026-11-19T18:52:43.963Z job fff888fe-87d8-414b-9302-d833a349376f: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:43.968Z INFO:     127.0.0.1:51616 - "DELETE /artifacts/fff888fe-87d8-414b-9302-d833a349376f HTTP/1.1" 204 No Content
+2026-11-19T18:52:43.974Z timing DELETE /artifacts/fff888fe-87d8-414b-9302-d833a349376f 204 client=127.0.0.1:51616 in=0 body_ms=- start_ms=20.4 end_ms=21.6 gone_ms=- out=0 err=- at=2026-11-19T18:52:43.893Z
+2026-11-19T18:52:43.979Z job fff888fe-87d8-414b-9302-d833a349376f: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:43.983Z timing POST /infer/upload 500 client=127.0.0.1:51606 in=609147 body_ms=1360.5 start_ms=5319.6 end_ms=5319.8 gone_ms=- out=125 err=- at=2026-11-19T18:52:38.615Z
+2026-11-19T18:52:44.365Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:44.373Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:52:44.190Z
+2026-11-19T18:52:49.802Z job 5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:49.805Z INFO:     127.0.0.1:54880 - "DELETE /artifacts/5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c HTTP/1.1" 204 No Content
+2026-11-19T18:52:49.809Z timing DELETE /artifacts/5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c 204 client=127.0.0.1:54880 in=0 body_ms=- start_ms=21.6 end_ms=23.1 gone_ms=- out=0 err=- at=2026-11-19T18:52:49.752Z
+2026-11-19T18:52:50.014Z job 5e35f93f-43da-43e1-abbe-1ebe6a4cbd9c: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:50.017Z timing POST /infer/upload 500 client=127.0.0.1:51616 in=609147 body_ms=1353.0 start_ms=5347.5 end_ms=5347.6 gone_ms=- out=125 err=- at=2026-11-19T18:52:44.473Z
+2026-11-19T18:52:50.215Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:50.219Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.4 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:52:50.049Z
+2026-11-19T18:52:55.682Z job fff888fe-87d8-414b-9302-d833a349376f: work folder deleted, cancelled the run still in progress
+2026-11-19T18:52:55.686Z INFO:     127.0.0.1:48918 - "DELETE /artifacts/fff888fe-87d8-414b-9302-d833a349376f HTTP/1.1" 204 No Content
+2026-11-19T18:52:55.689Z timing DELETE /artifacts/fff888fe-87d8-414b-9302-d833a349376f 204 client=127.0.0.1:48918 in=0 body_ms=- start_ms=12.1 end_ms=13.3 gone_ms=- out=0 err=- at=2026-11-19T18:52:55.615Z
+2026-11-19T18:52:55.885Z job fff888fe-87d8-414b-9302-d833a349376f: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:52:55.890Z timing POST /infer/upload 500 client=127.0.0.1:54880 in=609147 body_ms=1353.7 start_ms=5354.2 end_ms=5354.4 gone_ms=- out=125 err=- at=2026-11-19T18:52:50.334Z
+2026-11-19T18:52:56.085Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:56.089Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:52:55.910Z
+2026-11-19T18:52:56.488Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:52:56.491Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=2.9 gone_ms=- out=70 err=- at=2026-11-19T18:52:56.286Z
+2026-11-19T18:53:01.535Z job 5b864277-8ce0-4026-a249-dce506a77ef0: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:01.539Z INFO:     127.0.0.1:48924 - "DELETE /artifacts/5b864277-8ce0-4026-a249-dce506a77ef0 HTTP/1.1" 204 No Content
+2026-11-19T18:53:01.545Z timing DELETE /artifacts/5b864277-8ce0-4026-a249-dce506a77ef0 204 client=127.0.0.1:48924 in=0 body_ms=- start_ms=15.8 end_ms=17.1 gone_ms=- out=0 err=- at=2026-11-19T18:53:01.469Z
+2026-11-19T18:53:01.736Z job 5b864277-8ce0-4026-a249-dce506a77ef0: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:01.740Z timing POST /infer/upload 500 client=127.0.0.1:48918 in=609147 body_ms=1353.1 start_ms=5407.4 end_ms=5407.5 gone_ms=- out=125 err=- at=2026-11-19T18:52:56.189Z
+2026-11-19T18:53:04.756Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:04.760Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:53:04.702Z
+2026-11-19T18:53:10.386Z job 5b864277-8ce0-4026-a249-dce506a77ef0: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:10.392Z INFO:     127.0.0.1:39558 - "DELETE /artifacts/5b864277-8ce0-4026-a249-dce506a77ef0 HTTP/1.1" 204 No Content
+2026-11-19T18:53:10.395Z timing DELETE /artifacts/5b864277-8ce0-4026-a249-dce506a77ef0 204 client=127.0.0.1:39558 in=0 body_ms=- start_ms=22.3 end_ms=24.0 gone_ms=- out=0 err=- at=2026-11-19T18:53:10.273Z
+2026-11-19T18:53:10.588Z job 5b864277-8ce0-4026-a249-dce506a77ef0: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:10.593Z timing POST /infer/upload 500 client=127.0.0.1:48924 in=609147 body_ms=1357.1 start_ms=5410.9 end_ms=5411.1 gone_ms=- out=125 err=- at=2026-11-19T18:53:04.984Z
+2026-11-19T18:53:11.190Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:11.196Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:53:11.019Z
+2026-11-19T18:53:11.592Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:11.597Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.3 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:53:11.562Z
+2026-11-19T18:53:16.618Z job 26491e79-627b-4c95-8f47-b7348cbc5183: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:16.621Z INFO:     127.0.0.1:59518 - "DELETE /artifacts/26491e79-627b-4c95-8f47-b7348cbc5183 HTTP/1.1" 204 No Content
+2026-11-19T18:53:16.624Z timing DELETE /artifacts/26491e79-627b-4c95-8f47-b7348cbc5183 204 client=127.0.0.1:59518 in=0 body_ms=- start_ms=12.9 end_ms=14.1 gone_ms=- out=0 err=- at=2026-11-19T18:53:16.579Z
+2026-11-19T18:53:17.019Z job 26491e79-627b-4c95-8f47-b7348cbc5183: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:17.023Z timing POST /infer/upload 500 client=127.0.0.1:39558 in=609147 body_ms=1358.4 start_ms=5529.6 end_ms=5529.8 gone_ms=- out=125 err=- at=2026-11-19T18:53:11.299Z
+2026-11-19T18:53:17.027Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:17.030Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=6.7 gone_ms=- out=70 err=- at=2026-11-19T18:53:16.866Z
+2026-11-19T18:53:22.640Z job d93bbf54-ecb3-45d1-ac93-b30920791d0a: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:22.646Z INFO:     127.0.0.1:59524 - "DELETE /artifacts/d93bbf54-ecb3-45d1-ac93-b30920791d0a HTTP/1.1" 204 No Content
+2026-11-19T18:53:22.649Z timing DELETE /artifacts/d93bbf54-ecb3-45d1-ac93-b30920791d0a 204 client=127.0.0.1:59524 in=0 body_ms=- start_ms=19.8 end_ms=21.3 gone_ms=- out=0 err=- at=2026-11-19T18:53:22.432Z
+2026-11-19T18:53:22.653Z job d93bbf54-ecb3-45d1-ac93-b30920791d0a: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:22.656Z timing POST /infer/upload 500 client=127.0.0.1:59518 in=609147 body_ms=1355.7 start_ms=5379.7 end_ms=5379.9 gone_ms=- out=125 err=- at=2026-11-19T18:53:17.147Z
+2026-11-19T18:53:22.842Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:22.845Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:53:22.729Z
+2026-11-19T18:53:27.062Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:27.067Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:53:26.864Z
+2026-11-19T18:53:28.479Z job 26491e79-627b-4c95-8f47-b7348cbc5183: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:28.482Z INFO:     127.0.0.1:33298 - "DELETE /artifacts/26491e79-627b-4c95-8f47-b7348cbc5183 HTTP/1.1" 204 No Content
+2026-11-19T18:53:28.485Z timing DELETE /artifacts/26491e79-627b-4c95-8f47-b7348cbc5183 204 client=127.0.0.1:33298 in=0 body_ms=- start_ms=11.8 end_ms=13.1 gone_ms=- out=0 err=- at=2026-11-19T18:53:28.285Z
+2026-11-19T18:53:28.488Z job 26491e79-627b-4c95-8f47-b7348cbc5183: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:28.490Z timing POST /infer/upload 500 client=127.0.0.1:59524 in=609147 body_ms=1354.0 start_ms=5386.7 end_ms=5386.9 gone_ms=- out=125 err=- at=2026-11-19T18:53:23.008Z
+2026-11-19T18:53:28.679Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:28.684Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:53:28.570Z
+2026-11-19T18:53:34.307Z job f0bb5513-dc93-4f27-8d38-a0fbaca6b604: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:34.311Z INFO:     127.0.0.1:33306 - "DELETE /artifacts/f0bb5513-dc93-4f27-8d38-a0fbaca6b604 HTTP/1.1" 204 No Content
+2026-11-19T18:53:34.315Z timing DELETE /artifacts/f0bb5513-dc93-4f27-8d38-a0fbaca6b604 204 client=127.0.0.1:33306 in=0 body_ms=- start_ms=12.7 end_ms=13.7 gone_ms=- out=0 err=- at=2026-11-19T18:53:34.129Z
+2026-11-19T18:53:34.509Z job f0bb5513-dc93-4f27-8d38-a0fbaca6b604: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:34.512Z timing POST /infer/upload 500 client=127.0.0.1:33298 in=609147 body_ms=1355.5 start_ms=5515.5 end_ms=5515.7 gone_ms=- out=125 err=- at=2026-11-19T18:53:28.848Z
+2026-11-19T18:53:34.516Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:34.519Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.5 gone_ms=- out=70 err=- at=2026-11-19T18:53:34.417Z
+2026-11-19T18:53:40.132Z job d93bbf54-ecb3-45d1-ac93-b30920791d0a: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:40.137Z INFO:     127.0.0.1:52442 - "DELETE /artifacts/d93bbf54-ecb3-45d1-ac93-b30920791d0a HTTP/1.1" 204 No Content
+2026-11-19T18:53:40.140Z timing DELETE /artifacts/d93bbf54-ecb3-45d1-ac93-b30920791d0a 204 client=127.0.0.1:52442 in=0 body_ms=- start_ms=12.5 end_ms=13.4 gone_ms=- out=0 err=- at=2026-11-19T18:53:39.979Z
+2026-11-19T18:53:40.143Z job d93bbf54-ecb3-45d1-ac93-b30920791d0a: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:40.146Z timing POST /infer/upload 500 client=127.0.0.1:33306 in=609147 body_ms=1357.7 start_ms=5379.4 end_ms=5379.6 gone_ms=- out=125 err=- at=2026-11-19T18:53:34.702Z
+2026-11-19T18:53:40.331Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:40.335Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=7.0 gone_ms=- out=70 err=- at=2026-11-19T18:53:40.264Z
+2026-11-19T18:53:42.338Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:42.342Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=4.2 gone_ms=- out=70 err=- at=2026-11-19T18:53:42.144Z
+2026-11-19T18:53:45.970Z job b8cbe174-12ff-4abd-b441-0c5c25e8e72d: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:45.976Z INFO:     127.0.0.1:60406 - "DELETE /artifacts/b8cbe174-12ff-4abd-b441-0c5c25e8e72d HTTP/1.1" 204 No Content
+2026-11-19T18:53:45.980Z timing DELETE /artifacts/b8cbe174-12ff-4abd-b441-0c5c25e8e72d 204 client=127.0.0.1:60406 in=0 body_ms=- start_ms=12.1 end_ms=13.1 gone_ms=- out=0 err=- at=2026-11-19T18:53:45.830Z
+2026-11-19T18:53:45.984Z job b8cbe174-12ff-4abd-b441-0c5c25e8e72d: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:45.987Z timing POST /infer/upload 500 client=127.0.0.1:52442 in=609147 body_ms=1360.5 start_ms=5368.8 end_ms=5368.9 gone_ms=- out=125 err=- at=2026-11-19T18:53:40.545Z
+2026-11-19T18:53:46.175Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:46.179Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.2 gone_ms=- out=70 err=- at=2026-11-19T18:53:46.118Z
+2026-11-19T18:53:51.797Z job f0bb5513-dc93-4f27-8d38-a0fbaca6b604: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:51.800Z INFO:     127.0.0.1:60422 - "DELETE /artifacts/f0bb5513-dc93-4f27-8d38-a0fbaca6b604 HTTP/1.1" 204 No Content
+2026-11-19T18:53:51.803Z timing DELETE /artifacts/f0bb5513-dc93-4f27-8d38-a0fbaca6b604 204 client=127.0.0.1:60422 in=0 body_ms=- start_ms=15.2 end_ms=16.4 gone_ms=- out=0 err=- at=2026-11-19T18:53:51.691Z
+2026-11-19T18:53:51.998Z job f0bb5513-dc93-4f27-8d38-a0fbaca6b604: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:52.001Z timing POST /infer/upload 500 client=127.0.0.1:60406 in=609147 body_ms=1354.9 start_ms=5532.4 end_ms=5532.6 gone_ms=- out=125 err=- at=2026-11-19T18:53:46.397Z
+2026-11-19T18:53:52.005Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:52.008Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:53:51.981Z
+2026-11-19T18:53:57.641Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:57.645Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=37.8 end_ms=45.1 gone_ms=- out=70 err=- at=2026-11-19T18:53:57.436Z
+2026-11-19T18:53:57.648Z job d65152fa-8543-415d-8b78-39a96d13660e: work folder deleted, cancelled the run still in progress
+2026-11-19T18:53:57.652Z INFO:     127.0.0.1:33938 - "DELETE /artifacts/d65152fa-8543-415d-8b78-39a96d13660e HTTP/1.1" 204 No Content
+2026-11-19T18:53:57.655Z timing DELETE /artifacts/d65152fa-8543-415d-8b78-39a96d13660e 204 client=127.0.0.1:33938 in=0 body_ms=- start_ms=20.5 end_ms=21.5 gone_ms=- out=0 err=- at=2026-11-19T18:53:57.560Z
+2026-11-19T18:53:57.843Z job d65152fa-8543-415d-8b78-39a96d13660e: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:53:57.849Z timing POST /infer/upload 500 client=127.0.0.1:60422 in=609147 body_ms=1361.9 start_ms=5540.8 end_ms=5540.9 gone_ms=- out=125 err=- at=2026-11-19T18:53:52.265Z
+2026-11-19T18:53:58.044Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:53:58.048Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.9 gone_ms=- out=70 err=- at=2026-11-19T18:53:57.860Z
+2026-11-19T18:54:03.670Z job b8cbe174-12ff-4abd-b441-0c5c25e8e72d: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:03.674Z INFO:     127.0.0.1:33950 - "DELETE /artifacts/b8cbe174-12ff-4abd-b441-0c5c25e8e72d HTTP/1.1" 204 No Content
+2026-11-19T18:54:03.678Z timing DELETE /artifacts/b8cbe174-12ff-4abd-b441-0c5c25e8e72d 204 client=127.0.0.1:33950 in=0 body_ms=- start_ms=84.8 end_ms=87.0 gone_ms=- out=0 err=- at=2026-11-19T18:54:03.446Z
+2026-11-19T18:54:03.681Z job b8cbe174-12ff-4abd-b441-0c5c25e8e72d: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:54:03.684Z timing POST /infer/upload 500 client=127.0.0.1:33938 in=609147 body_ms=1361.2 start_ms=5428.9 end_ms=5429.0 gone_ms=- out=125 err=- at=2026-11-19T18:53:58.151Z
+2026-11-19T18:54:03.869Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:03.875Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:54:03.808Z
+2026-11-19T18:54:09.530Z job d1beec56-49aa-40fe-801a-cde94d7df797: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:09.534Z job d1beec56-49aa-40fe-801a-cde94d7df797: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:54:09.538Z INFO:     127.0.0.1:38142 - "DELETE /artifacts/d1beec56-49aa-40fe-801a-cde94d7df797 HTTP/1.1" 204 No Content
+2026-11-19T18:54:09.543Z timing DELETE /artifacts/d1beec56-49aa-40fe-801a-cde94d7df797 204 client=127.0.0.1:38142 in=0 body_ms=- start_ms=24.8 end_ms=26.1 gone_ms=- out=0 err=- at=2026-11-19T18:54:09.448Z
+2026-11-19T18:54:09.547Z timing POST /infer/upload 500 client=127.0.0.1:33950 in=609147 body_ms=1385.6 start_ms=5365.6 end_ms=5366.3 gone_ms=- out=125 err=- at=2026-11-19T18:54:04.109Z
+2026-11-19T18:54:09.931Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:09.935Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.4 end_ms=2.2 gone_ms=- out=70 err=- at=2026-11-19T18:54:09.753Z
+2026-11-19T18:54:12.953Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:12.956Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=4.6 end_ms=6.7 gone_ms=- out=70 err=- at=2026-11-19T18:54:12.759Z
+2026-11-19T18:54:15.566Z job 7ea6a321-2950-4dd0-9246-ddd73004b04c: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:15.573Z INFO:     127.0.0.1:40864 - "DELETE /artifacts/7ea6a321-2950-4dd0-9246-ddd73004b04c HTTP/1.1" 204 No Content
+2026-11-19T18:54:15.578Z timing DELETE /artifacts/7ea6a321-2950-4dd0-9246-ddd73004b04c 204 client=127.0.0.1:40864 in=0 body_ms=- start_ms=28.3 end_ms=29.7 gone_ms=- out=0 err=- at=2026-11-19T18:54:15.337Z
+2026-11-19T18:54:15.765Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:15.773Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=2.9 gone_ms=- out=70 err=- at=2026-11-19T18:54:15.643Z
+2026-11-19T18:54:15.776Z job 7ea6a321-2950-4dd0-9246-ddd73004b04c: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:54:15.780Z timing POST /infer/upload 500 client=127.0.0.1:38142 in=609147 body_ms=1363.0 start_ms=5591.8 end_ms=5591.9 gone_ms=- out=125 err=- at=2026-11-19T18:54:10.062Z
+2026-11-19T18:54:21.392Z job d65152fa-8543-415d-8b78-39a96d13660e: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:21.396Z job d65152fa-8543-415d-8b78-39a96d13660e: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:54:21.399Z INFO:     127.0.0.1:40872 - "DELETE /artifacts/d65152fa-8543-415d-8b78-39a96d13660e HTTP/1.1" 204 No Content
+2026-11-19T18:54:21.402Z timing DELETE /artifacts/d65152fa-8543-415d-8b78-39a96d13660e 204 client=127.0.0.1:40872 in=0 body_ms=- start_ms=13.9 end_ms=15.1 gone_ms=- out=0 err=- at=2026-11-19T18:54:21.221Z
+2026-11-19T18:54:21.405Z timing POST /infer/upload 500 client=127.0.0.1:40864 in=609147 body_ms=1359.6 start_ms=5315.6 end_ms=5315.8 gone_ms=- out=125 err=- at=2026-11-19T18:54:15.921Z
+2026-11-19T18:54:21.592Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:21.596Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:54:21.510Z
+2026-11-19T18:54:27.220Z job fe105632-c093-4ea1-8ce6-eb17cad0c8f3: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:27.223Z INFO:     127.0.0.1:57416 - "DELETE /artifacts/fe105632-c093-4ea1-8ce6-eb17cad0c8f3 HTTP/1.1" 204 No Content
+2026-11-19T18:54:27.226Z timing DELETE /artifacts/fe105632-c093-4ea1-8ce6-eb17cad0c8f3 204 client=127.0.0.1:57416 in=0 body_ms=- start_ms=52.8 end_ms=54.2 gone_ms=- out=0 err=- at=2026-11-19T18:54:27.076Z
+2026-11-19T18:54:27.229Z job fe105632-c093-4ea1-8ce6-eb17cad0c8f3: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:54:27.232Z timing POST /infer/upload 500 client=127.0.0.1:40872 in=609147 body_ms=1353.9 start_ms=5340.1 end_ms=5340.2 gone_ms=- out=125 err=- at=2026-11-19T18:54:21.793Z
+2026-11-19T18:54:27.419Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:27.423Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=3.2 end_ms=5.2 gone_ms=- out=70 err=- at=2026-11-19T18:54:27.404Z
+2026-11-19T18:54:28.222Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:28.227Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.9 end_ms=3.1 gone_ms=- out=70 err=- at=2026-11-19T18:54:28.039Z
+2026-11-19T18:54:33.042Z job 8a55a8cc-2346-4aa0-ad4e-b24dd842c341: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:33.045Z INFO:     127.0.0.1:57432 - "DELETE /artifacts/8a55a8cc-2346-4aa0-ad4e-b24dd842c341 HTTP/1.1" 204 No Content
+2026-11-19T18:54:33.048Z timing DELETE /artifacts/8a55a8cc-2346-4aa0-ad4e-b24dd842c341 204 client=127.0.0.1:57432 in=0 body_ms=- start_ms=15.3 end_ms=16.3 gone_ms=- out=0 err=- at=2026-11-19T18:54:32.961Z
+2026-11-19T18:54:33.245Z job 8a55a8cc-2346-4aa0-ad4e-b24dd842c341: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:54:33.249Z timing POST /infer/upload 500 client=127.0.0.1:57416 in=609147 body_ms=1353.0 start_ms=5392.7 end_ms=5392.8 gone_ms=- out=125 err=- at=2026-11-19T18:54:27.684Z
+2026-11-19T18:54:33.444Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:33.448Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.7 end_ms=2.8 gone_ms=- out=70 err=- at=2026-11-19T18:54:33.250Z
+2026-11-19T18:54:38.879Z job d1beec56-49aa-40fe-801a-cde94d7df797: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:38.882Z job d1beec56-49aa-40fe-801a-cde94d7df797: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:54:38.886Z INFO:     127.0.0.1:56738 - "DELETE /artifacts/d1beec56-49aa-40fe-801a-cde94d7df797 HTTP/1.1" 204 No Content
+2026-11-19T18:54:38.889Z timing DELETE /artifacts/d1beec56-49aa-40fe-801a-cde94d7df797 204 client=127.0.0.1:56738 in=0 body_ms=- start_ms=52.8 end_ms=54.3 gone_ms=- out=0 err=- at=2026-11-19T18:54:38.810Z
+2026-11-19T18:54:38.899Z timing POST /infer/upload 500 client=127.0.0.1:57432 in=609147 body_ms=1356.5 start_ms=5335.8 end_ms=5336.0 gone_ms=- out=125 err=- at=2026-11-19T18:54:33.530Z
+2026-11-19T18:54:39.281Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:39.285Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:54:39.140Z
+2026-11-19T18:54:43.499Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:43.503Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.2 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:54:43.370Z
+2026-11-19T18:54:44.906Z job 7ea6a321-2950-4dd0-9246-ddd73004b04c: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:44.910Z INFO:     127.0.0.1:57610 - "DELETE /artifacts/7ea6a321-2950-4dd0-9246-ddd73004b04c HTTP/1.1" 204 No Content
+2026-11-19T18:54:44.914Z timing DELETE /artifacts/7ea6a321-2950-4dd0-9246-ddd73004b04c 204 client=127.0.0.1:57610 in=0 body_ms=- start_ms=12.9 end_ms=14.0 gone_ms=- out=0 err=- at=2026-11-19T18:54:44.704Z
+2026-11-19T18:54:45.106Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:45.120Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.4 gone_ms=- out=70 err=- at=2026-11-19T18:54:44.995Z
+2026-11-19T18:54:45.124Z job 7ea6a321-2950-4dd0-9246-ddd73004b04c: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:54:45.128Z timing POST /infer/upload 500 client=127.0.0.1:56738 in=609147 body_ms=1356.6 start_ms=5637.9 end_ms=5638.1 gone_ms=- out=125 err=- at=2026-11-19T18:54:39.424Z
+2026-11-19T18:54:50.742Z job fe105632-c093-4ea1-8ce6-eb17cad0c8f3: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:50.747Z INFO:     127.0.0.1:57612 - "DELETE /artifacts/fe105632-c093-4ea1-8ce6-eb17cad0c8f3 HTTP/1.1" 204 No Content
+2026-11-19T18:54:50.751Z timing DELETE /artifacts/fe105632-c093-4ea1-8ce6-eb17cad0c8f3 204 client=127.0.0.1:57612 in=0 body_ms=- start_ms=60.2 end_ms=61.3 gone_ms=- out=0 err=- at=2026-11-19T18:54:50.562Z
+2026-11-19T18:54:50.756Z job fe105632-c093-4ea1-8ce6-eb17cad0c8f3: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before conversion, answering INFERENCE_FAILED
+2026-11-19T18:54:50.759Z timing POST /infer/upload 500 client=127.0.0.1:57610 in=609147 body_ms=1356.2 start_ms=5350.0 end_ms=5350.2 gone_ms=- out=125 err=- at=2026-11-19T18:54:45.280Z
+2026-11-19T18:54:50.943Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:50.947Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.3 gone_ms=- out=70 err=- at=2026-11-19T18:54:50.898Z
+2026-11-19T18:54:56.564Z job 8a55a8cc-2346-4aa0-ad4e-b24dd842c341: work folder deleted, cancelled the run still in progress
+2026-11-19T18:54:56.568Z INFO:     127.0.0.1:54562 - "DELETE /artifacts/8a55a8cc-2346-4aa0-ad4e-b24dd842c341 HTTP/1.1" 204 No Content
+2026-11-19T18:54:56.575Z timing DELETE /artifacts/8a55a8cc-2346-4aa0-ad4e-b24dd842c341 204 client=127.0.0.1:54562 in=0 body_ms=- start_ms=17.6 end_ms=18.2 gone_ms=- out=0 err=- at=2026-11-19T18:54:56.457Z
+2026-11-19T18:54:56.764Z job 8a55a8cc-2346-4aa0-ad4e-b24dd842c341: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping after a conversion error, answering INFERENCE_FAILED
+2026-11-19T18:54:56.768Z timing POST /infer/upload 500 client=127.0.0.1:57612 in=609147 body_ms=1357.0 start_ms=5476.3 end_ms=5476.5 gone_ms=- out=125 err=- at=2026-11-19T18:54:51.178Z
+2026-11-19T18:54:58.781Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:54:58.786Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:54:58.648Z
+2026-11-19T18:55:14.052Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:55:14.056Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.7 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:55:13.924Z
+2026-11-19T18:55:29.342Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:55:29.346Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.1 end_ms=3.0 gone_ms=- out=70 err=- at=2026-11-19T18:55:29.202Z
+2026-11-19T18:55:44.616Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:55:44.620Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.8 end_ms=3.6 gone_ms=- out=70 err=- at=2026-11-19T18:55:44.479Z
+2026-11-19T18:55:59.898Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:55:59.901Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=1.4 end_ms=2.3 gone_ms=- out=70 err=- at=2026-11-19T18:55:59.757Z
+2026-11-19T18:56:15.169Z INFO:     127.0.0.1:35878 - "GET /healthz HTTP/1.1" 200 OK
+2026-11-19T18:56:15.175Z timing GET /healthz 200 client=127.0.0.1:35878 in=0 body_ms=- start_ms=2.0 end_ms=3.7 gone_ms=- out=70 err=- at=2026-11-19T18:56:15.035Z

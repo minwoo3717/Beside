@@ -1,0 +1,5 @@
+== beside load: smoke.js (A0) run=g0d4 base=https://beside-team.duckdns.org
+requests 280 (0.31/s), dropped_iterations 0, vus_max 1
+data sent 0.048 Mbps (whole-run average), received 0.362 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 156.406 ms
+thresholds: all passed

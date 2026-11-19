@@ -1,0 +1,330 @@
+{
+  "schema": "beside-load-run/1",
+  "status": "[실험 결과] 원시 데이터 — 인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다",
+  "resultCandidate": true,
+  "outcome": {
+    "ended": "normal",
+    "abortedBy": null,
+    "reason": null,
+    "guardFailures": null,
+    "guardLastError": null
+  },
+  "scenario": "G0",
+  "tier": null,
+  "runId": "g0d4",
+  "window": {
+    "start": "2026-11-19T17:24:38+00:00",
+    "end": "2026-11-19T17:39:51+00:00",
+    "durationS": 913.0,
+    "padS": 60.0
+  },
+  "target": {
+    "baseUrl": "https://beside-team.duckdns.org",
+    "local": false,
+    "serverSha": "3b12c7b"
+  },
+  "tool": {
+    "gitSha": "8e846efd6f60be788928340d118eff8f047d9def",
+    "scriptsDirty": false,
+    "k6Version": "k6 v2.3.0 (commit/e088784614, go1.26.8, linux/amd64)",
+    "script": "smoke.js"
+  },
+  "vm": {
+    "provider": "GCP",
+    "type": "e2-standard-2",
+    "vcpu": 2.0,
+    "ramGb": 8.0,
+    "diskGb": 48.0,
+    "region": "asia-northeast3-a"
+  },
+  "client": {
+    "uplinkMbps": null,
+    "downlinkMbps": null,
+    "cpuMaxPct": 1.0
+  },
+  "photos": [
+    {
+      "name": "dog.jpg",
+      "bytes": 169451,
+      "sha256": "1379af6a185762c7581af578b91e0eaa0d6482af55c0a26f0eb5721a2d7f998c"
+    }
+  ],
+  "k6": {
+    "file": "k6-summary.json",
+    "meta": {
+      "script": "smoke.js",
+      "scenario": "A0",
+      "tier": "",
+      "runId": "g0d4",
+      "baseUrl": "https://beside-team.duckdns.org",
+      "startedAt": "2026-11-19T17:24:38.946Z",
+      "endedAt": "2026-11-19T17:39:51.949Z",
+      "testRunDurationMs": 913524.137916,
+      "loadPlannedS": 900,
+      "loadRanS": 913,
+      "rttBaseMsUsed": null,
+      "rttBaseMsMeasured": 156.406,
+      "uplinkMbps": null,
+      "stages": [],
+      "status": "[실험 결과] 후보 — 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)은 collect.py 의 run.json 에 붙인다. 로컬 실행은 동작 확인용으로만 쓴다.",
+      "flowEveryS": 30,
+      "durationS": 900,
+      "photos": [
+        "/root/Beside/backend/src/test/resources/photos/dog.jpg"
+      ],
+      "failRatio": 0,
+      "server": {
+        "profile": "real,prod",
+        "workerType": "real"
+      },
+      "note": "RTT_BASE_MS for the other scripts = meta.rttBaseMsMeasured (healthz p50) of an A0 run against the same target."
+    },
+    "verdict": {
+      "thresholdsOk": true,
+      "aborted": null,
+      "unfinishedFlows": 0,
+      "failedThresholds": [],
+      "stages": [],
+      "breakingPoint": {
+        "firstFailingStage": null,
+        "lastPassingStage": null,
+        "lastPassingUsers": null,
+        "operatingLimitUsers": null
+      },
+      "breakingPointNote": null,
+      "guard": null,
+      "httpReqs": 280,
+      "httpReqRate": 0.31,
+      "droppedIterations": 0,
+      "droppedByScenario": null,
+      "checksFailed": 0,
+      "checksPassed": 310,
+      "unexpectedCount": 0,
+      "httpStatus": {
+        "0": 0,
+        "4xx": 0,
+        "5xx": 0,
+        "5xxByCode": {
+          "500": 0,
+          "502": 0,
+          "503": 0,
+          "504": 0,
+          "other": 0
+        }
+      },
+      "vusMax": 1,
+      "dataSentMbps": 0.048,
+      "dataReceivedMbps": 0.362,
+      "peakStage": null,
+      "peakStageSentMbps": null,
+      "uplinkRatio": null,
+      "uplinkRatioWholeRun": null,
+      "uplinkSaturated": null,
+      "honesty": [
+        "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 stages[].users(도착률 환산)로 적는다.",
+        "T3 통과는 T3 단계 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화를 모두 만족할 때만 쓴다."
+      ]
+    }
+  },
+  "prometheus": {
+    "url": "http://127.0.0.1:9090",
+    "env": "loadtest",
+    "step": 15.0,
+    "from": "2026-11-19T17:23:38+00:00",
+    "to": "2026-11-19T17:40:51+00:00",
+    "queries": [
+      {
+        "name": "http_p95_by_uri",
+        "query": "histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p95_by_uri.csv",
+        "series": 4,
+        "points": 260
+      },
+      {
+        "name": "http_p99_by_uri",
+        "query": "histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"loadtest\"}[1m])))",
+        "file": "prometheus/http_p99_by_uri.csv",
+        "series": 4,
+        "points": 260
+      },
+      {
+        "name": "http_rps_by_uri",
+        "query": "sum by (uri) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_uri.csv",
+        "series": 4,
+        "points": 260
+      },
+      {
+        "name": "http_rps_by_status",
+        "query": "sum by (status) (rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/http_rps_by_status.csv",
+        "series": 2,
+        "points": 131
+      },
+      {
+        "name": "http_5xx_ratio",
+        "query": "sum(rate(http_server_requests_seconds_count{env=\"loadtest\",status=~\"5..\"}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{env=\"loadtest\"}[1m])), 1e-9)",
+        "file": "prometheus/http_5xx_ratio.csv",
+        "series": 0,
+        "points": 0
+      },
+      {
+        "name": "jobs_queue",
+        "query": "sum by (state) (beside_jobs_queue{env=\"loadtest\"})",
+        "file": "prometheus/jobs_queue.csv",
+        "series": 2,
+        "points": 134
+      },
+      {
+        "name": "jobs_finished_rate",
+        "query": "sum by (result, code) (rate(beside_jobs_finished_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jobs_finished_rate.csv",
+        "series": 1,
+        "points": 64
+      },
+      {
+        "name": "asset_downloads_rate",
+        "query": "sum by (outcome) (rate(beside_asset_downloads_total{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/asset_downloads_rate.csv",
+        "series": 5,
+        "points": 330
+      },
+      {
+        "name": "process_cpu",
+        "query": "process_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/process_cpu.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "system_cpu",
+        "query": "system_cpu_usage{env=\"loadtest\"}",
+        "file": "prometheus/system_cpu.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "jvm_heap_used",
+        "query": "sum(jvm_memory_used_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_used.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "jvm_heap_max",
+        "query": "sum(jvm_memory_max_bytes{env=\"loadtest\",area=\"heap\"})",
+        "file": "prometheus/jvm_heap_max.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "jvm_heap_after_gc",
+        "query": "max(jvm_memory_usage_after_gc_percent{env=\"loadtest\",area=\"heap\",pool=\"long-lived\"})",
+        "file": "prometheus/jvm_heap_after_gc.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "jvm_gc_pause_rate",
+        "query": "sum(rate(jvm_gc_pause_seconds_sum{env=\"loadtest\"}[1m]))",
+        "file": "prometheus/jvm_gc_pause_rate.csv",
+        "series": 1,
+        "points": 66
+      },
+      {
+        "name": "tomcat_busy",
+        "query": "tomcat_threads_busy_threads{env=\"loadtest\"}",
+        "file": "prometheus/tomcat_busy.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "hikari_pending",
+        "query": "hikaricp_connections_pending{env=\"loadtest\"}",
+        "file": "prometheus/hikari_pending.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "process_open_files",
+        "query": "process_files_open_files{env=\"loadtest\"}",
+        "file": "prometheus/process_open_files.csv",
+        "series": 1,
+        "points": 67
+      },
+      {
+        "name": "disk_free",
+        "query": "disk_free_bytes{env=\"loadtest\"}",
+        "file": "prometheus/disk_free.csv",
+        "series": 1,
+        "points": 67
+      }
+    ]
+  },
+  "attachments": [
+    {
+      "name": "events.jsonl",
+      "bytes": 23541,
+      "sha256": "d8ff62bbd8462921c83704bb5f0e94cc98ac0331c3944b05d76f93c68fb658f8",
+      "file": "attachments/events.jsonl"
+    },
+    {
+      "name": "docker-stats-end.jsonl",
+      "bytes": 1031,
+      "sha256": "726797cf2a458664772c41cfbb408b0aa6676c10b705e21e16a17cb3762b3615",
+      "file": "attachments/docker-stats-end.jsonl"
+    },
+    {
+      "name": "df.txt",
+      "bytes": 89,
+      "sha256": "113df7ba85b4b4add5625622105fd2511c88e18e434a526c0c360536072226ac",
+      "file": "attachments/df.txt"
+    },
+    {
+      "name": "commit.txt",
+      "bytes": 41,
+      "sha256": "31ce1f372a25463a23815bb458cc06047b1144ab93e5a5c785010b879bcd7325",
+      "file": "attachments/commit.txt"
+    },
+    {
+      "name": "prom-up.json",
+      "bytes": 274,
+      "sha256": "e1125955a5a887aa6b7dd7652fdc039c4ac259fa3451f6408fc02492cd07d5cd",
+      "file": "attachments/prom-up.json"
+    },
+    {
+      "name": "tailscale-status.txt",
+      "bytes": 197,
+      "sha256": "1f4516e92333c57e07f2cd2eab6f380a61fb57034470759402575e73a0f5e211",
+      "file": "attachments/tailscale-status.txt"
+    },
+    {
+      "name": "inference-flaps.txt",
+      "bytes": 23,
+      "sha256": "9666ca9caa41a830d601f0b8fe571a3554a99d1e37a6b2b7f4ba20e7601a7170",
+      "file": "attachments/inference-flaps.txt"
+    },
+    {
+      "name": "derp-rtt.txt",
+      "bytes": 783,
+      "sha256": "c68f5ed487ca54569ee3af9b6c16c816d0e792bf812d5429c95e1045620cba70",
+      "file": "attachments/derp-rtt.txt"
+    },
+    {
+      "name": "pod-info.txt",
+      "bytes": 261,
+      "sha256": "a61e3cd2265e4bbb1bce61105ba2a9e91c49bf73b34bcda4a0bf6e7b73092fee",
+      "file": "attachments/pod-info.txt"
+    }
+  ],
+  "note": "client: Runpod CPU pod 2026-11-19 (cpu3g 4 vCPU, US-CA-2); pod CPU max 1% of 4 vCPU; k6 RSS max 48 MB; server: real AnimalLift on Runpod A40 nsz73mtl802mvw (EU-SE-1, network volume z4kgw4v5zi; VM to pod over Tailscale, path in vm/derp-rtt.txt), preprocessing on, 1 CC0 photo per job; meta.stubNote does not apply",
+  "honesty": [
+    "mock 결과는 '생성을 뺀 API 처리량', 스텁 결과는 '큐 동작 검증(생성 시간은 가정 T)'이다.",
+    "k6 VU 수는 동시 사용자 수가 아니다. 사용자 수는 k6.meta.stages[].users(도착률 환산)로 적는다.",
+    "'API 계층이 T3 를 통과했다'는 T3 10분 유지, dropped_iterations 0, 기준 충족, 클라이언트 CPU < 70 %, 업링크 비포화일 때만 쓴다.",
+    "resultCandidate 가 false 인 실행(로컬, 용량과 무관하게 중단된 실행, 끝난 방식을 모르는 요약)은 [실험 결과] 로 인용하지 않는다.",
+    "오류 기준으로 멈춘 실행(outcome.ended = ruleStop)은 후보지만, 그 시각에 서버 재시작·재배포·네트워크 끊김이 없었을 때만 용량 한계로 쓴다.",
+    "GC 뒤 힙 < 75 % 는 prometheus/jvm_heap_after_gc.csv(0~1)로 본다. jvm_heap_used/max 는 Eden 을 포함한 순간값이다."
+  ],
+  "collectedAt": "2026-11-19T17:57:26+00:00"
+}

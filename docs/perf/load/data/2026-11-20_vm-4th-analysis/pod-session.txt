@@ -1,0 +1,33 @@
+Round 4 GPU Pod session facts (read on the Pod with Runpod exec, 2026-11-19 UTC; no secrets)
+
+== Pod
+pod nsz73mtl802mvw (beside-gpu4), NVIDIA A40, EU-SE-1, created 2026-11-19T17:18:50Z (create with gpu.minVcpuCountPerGpu 4 / minRamPerGpu 24 placement filters; the pod still got vCPU 9, RAM 50 GB)
+cgroup v1 quota/period 765000/100000 (7.65 cores), nproc 96, driver 595.112.07, memory.total 46068 MiB
+repo /workspace/Beside: was detached HEAD b6c0e6c; `git fetch -q origin && git checkout -q -B main origin/main` -> main a9aa091
+  (`git pull --ff-only origin main`, as deploy/README.md wrote it before round 4, would have fast-forwarded the detached HEAD to a9aa091, since b6c0e6c is an ancestor of main, but left it detached instead of on the main branch)
+AnimalLift 5d364cf
+
+== start (BESIDE_REQUEST_TIMING=1 bash /workspace/beside-bootstrap.sh, 17:21 UTC)
+[4/4] inference service up (model, 127.0.0.1:8002, X-Inference-Token required, keep-alive 75 s, threads 8)
+service environment (/proc/<pid>/environ):
+  BESIDE_REQUEST_TIMING=1
+  MKL_NUM_THREADS=8
+  OMP_NUM_THREADS=8
+  OPENBLAS_NUM_THREADS=8
+  UVICORN_TIMEOUT_KEEP_ALIVE=75
+model loaded in 70.5s on cuda (animallift-baseline@5d364cf:latest via animallift_runner:AnimalLiftRunner)
+Pod tailnet address 100.83.86.62 (same node state on the volume as rounds 2-3)
+
+== work folder
+before the first run (17:20 UTC): no job folders (only .ioprobe)
+before f1br4 (18:44 UTC, after g0d4 + g3c1 + g2c2t, about 360 jobs): no job folders
+after f1br4 (18:55 UTC + 20 s): no job folders (gpu/workdir-after.txt in the f1br4 run folder)
+
+== f1br4 on the Pod (inference.log of this service run)
+DELETE /artifacts cancelled a run still in progress: 74 (= every attempt: 37 jobs x 2 attempts)
+  stopping before conversion: 6
+  stopping after a conversion error: 68 (conversion with make_dirs=False found no folder, nothing recreated)
+  stopping before the model: 0 (no run was waiting for MODEL_LOCK when its DELETE came)
+POST /infer/upload answered 500 (to nobody): 74 of 74 in the f1br4 window
+DELETE /artifacts status over the whole service run (timing lines): 436 x 204, no 500
+conversion crashed: 0, Traceback: 0

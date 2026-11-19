@@ -5,7 +5,7 @@
 **상태**
 - 스크립트: **[구현됨]**. 단위 테스트(Python 84개, Node 89개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
 - 트래픽 모델: **[파생]** — `tiers.json` 의 **[가정]** 으로 계산한 값이다. 측정값이 아니다.
-- 측정: A0~A4 는 2026-11-18 VM 1차, 실제 GPU 의 G0r·G1r·G3r 는 같은 날 2차, G2r·F1b-real·F2-real 과 F1a(실제 Pod 를 스텁으로)는 2026-11-19 3차 **[실험 결과]**(`docs/perf/load/2026-11-18_vm-1st.md`, `2026-11-18_vm-2nd.md`, `2026-11-19_vm-3rd.md`). A5·A6, 스텁 G1~G3, 스텁 F1~F5 는 **[계획]**.
+- 측정: A0~A4 는 2026-11-18 VM 1차, 실제 GPU 의 G0r·G1r·G3r 는 같은 날 2차, G2r·F1b-real·F2-real 과 F1a(실제 Pod 를 스텁으로)는 2026-11-19 3차, 같은 Pod 의 c=1 과부하·c=2 와 F1b-real 다시(PR #11)·G0r(새 시작 기본값)는 2026-11-19 UTC 4차 **[실험 결과]**(`docs/perf/load/2026-11-18_vm-1st.md`, `2026-11-18_vm-2nd.md`, `2026-11-19_vm-3rd.md`, `2026-11-20_vm-4th.md`). A5·A6, 스텁 G1~G3, 스텁 F1~F5 는 **[계획]**.
 
 ## 파일
 
@@ -105,7 +105,7 @@ winget install --id GrafanaLabs.k6 --version 2.3.0 --source winget   # 확인한
 k6 version          # Windows 는 "k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)" 처럼 나온다
 ```
 
-Linux 의 k6 v2.3.0(linux/amd64)은 2026-11-18~19 VM 1·2·3차에서 Runpod CPU Pod 에 두고 썼다([vm-1st](../../docs/perf/load/2026-11-18_vm-1st.md) 1절). 새로 설치할 때는 k6 문서의 apt 저장소 절차를 따른다. 설치한 버전은 `collect.py --k6-version "$(k6 version)"` 로 run.json 에 남긴다.
+Linux 의 k6 v2.3.0(linux/amd64)은 2026-11-18~19 VM 1~4차에서 Runpod CPU Pod 에 두고 썼다([vm-1st](../../docs/perf/load/2026-11-18_vm-1st.md) 1절). 새로 설치할 때는 k6 문서의 apt 저장소 절차를 따른다. 설치한 버전은 `collect.py --k6-version "$(k6 version)"` 로 run.json 에 남긴다.
 
 ## 준비
 
@@ -211,6 +211,20 @@ newrun g3r165; k6 run -e RUN_ID=$RUN_ID -e PHOTOS=$P -e RTT_BASE_MS=<p50> -e SCE
   -e DURATION_S=1200 -e SUMMARY_PATH=$RUN/k6-summary.json scripts/load/gpu_queue.js
 #   대기 분석: 실제 도착·처리 시간으로 다시 돌린 FIFO 재현과 유한 실행 몬테카를로(docs/perf/load/data/2026-11-18_vm-2nd-analysis/ 의
 #   g_trace.py·g_sim.py). 25~30분 실행에는 meta.prediction(정상 상태 M/D/1·M/M/1)을 그대로 비교하지 않는다
+
+# 실제 GPU 4차(2026-11-19 UTC)에 쓴 명령. k6 는 Runpod CPU Pod 에서 deploy/loadtest/README.md '4차에서 배운 것' 의 run.sh 로 돌렸다
+#   (run.sh 가 BASE_URL·RUN_ID·SUMMARY_PATH 를 붙이고 결과를 /root/lt/runs/<RID>/ 에 쓴다). 같은 Pod 에서 c=1 과부하와 c=2 를 같은
+#   요청 λ(517건/h, 2차 g3r165·3차 g2c2a 와 같음)로 돌렸다. T_SEC 는 λ 를 맞추려고 11.5 그대로다(4차 S0 는 8.64 s).
+#   VM 은 g0d4·g3c1 이 B1, g2c2t 가 B2(LOADTEST_INFERENCE_MAX_CONCURRENCY=2), f1br4 가 B3(LOADTEST_INFERENCE_TIMEOUT_MS=5000).
+#   결과는 docs/perf/load/2026-11-20_vm-4th.md, 분석은 docs/perf/load/data/2026-11-20_vm-4th-analysis/g4_analyze.py
+P=/root/Beside/backend/src/test/resources/photos/dog.jpg
+/root/lt/run.sh g0d4  smoke.js     -e PHOTOS=$P -e SMOKE_EVERY_S=30 -e SMOKE_DURATION_S=900 -e SMOKE_VUS=1
+/root/lt/run.sh g3c1  gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=G3 -e RHO=1.65 -e SLOTS=1 -e T_SEC=11.5 -e DURATION_S=1200
+/root/lt/run.sh g2c2t gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=G2 -e RHO=0.825 -e SLOTS=2 -e T_SEC=11.5 -e DURATION_S=1200
+#   F1b-real: 실제 모델은 slow 이름을 모른다. 모든 시도가 τ 5 s 에 끝나고, k6 는 slow 이름의 흐름만 ok 로 세어 load_flowOkRatio 로 99 다
+/root/lt/run.sh f1br4 gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=144.852 -e SCENARIO=F1b -e RHO=0.7 -e SLOTS=1 -e T_SEC=11.5 \
+  -e FAIL_TOKEN=slow -e FAIL_RATIO=0.05 -e DURATION_S=600
+#   c=2 의 이 λ 는 4차 Pod 에서 넘치지 않았다(센 용량 하한 495건/h, 도착 − 기울기 추정 507~516건/h). c=2 용량을 바로 재려면 도착을 약 690건/h 보다 크게 잡는다
 
 # F1b 타임아웃 — 스텁: BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_SLOW_TOKEN=slow
 #   BESIDE_PASSTHROUGH_SLOW_MS=30000 (BESIDE_PASSTHROUGH_FAIL_TOKEN 은 설정하지 않는다), backend LOADTEST_INFERENCE_TIMEOUT_MS=20000.
