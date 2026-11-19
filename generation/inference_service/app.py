@@ -29,10 +29,17 @@ Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
          (Spring on a cloud VM, this service on the GPU PC over Tailscale: no shared disk).
   BESIDE_INFERENCE_TOKEN=<secret>: /infer, /infer/upload and /artifacts/* then need the X-Inference-Token header
          (401 otherwise); /healthz stays open. Set it whenever the service listens beyond 127.0.0.1.
+  DELETE /artifacts/{jobId} also cancels a run of that job still on this machine (Spring gave up on it): the run
+         stops at its next step and removes whatever it wrote after the DELETE (README 'DELETE /artifacts/{jobId}').
+  BESIDE_WORK_SWEEP_MINUTES=<N> (default unset = off): at startup and every min(N, 10) minutes, remove
+         {WORK_DIR}/<jobId> folders untouched for N minutes that no run is using (leftovers of a killed service).
 """
 from __future__ import annotations
 
+import contextlib
+import errno
 import hmac
+import itertools
 import json
 import logging
 import os
@@ -148,6 +155,9 @@ def _load_model() -> None:
 def _startup() -> None:
     if ANIMALLIFT_DIR and not SAMPLE_GLB:
         threading.Thread(target=_load_model, name="animallift-load", daemon=True).start()
+    minutes = _sweep_minutes()
+    if minutes > 0:
+        threading.Thread(target=_sweep_loop, args=(minutes,), name="work-sweep", daemon=True).start()
 
 
 # --------------------------------------------------------------------------- schemas (contract v0)
@@ -251,6 +261,162 @@ def _inference_failed(message: str) -> HTTPException:
     return HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "message": message})
 
 
+# --------------------------------------------------------------------------- job attempts: DELETE cancels a run
+# Spring sends DELETE /artifacts/{jobId} when it is done with a job, also when it gave up waiting (inference.timeout-ms)
+# or lost the connection. The run it gave up on is still here: waiting for MODEL_LOCK, inside MODEL.predict (which
+# cannot be interrupted) or converting. Before this, such a run converted anyway, and convert_asset's makedirs
+# recreated the deleted folder (2026-11-19 F1b-real: 3 folders left on the Pod's volume, one DELETE answered 500).
+# Now every POST registers an attempt of its jobId; DELETE forgets it and a retry (a new POST of the same jobId)
+# replaces it. A run checks between its steps that it is still the job's attempt and otherwise stops with the model
+# failure answer (nobody reads it), and a cancelled run removes the job folder again when it ends.
+
+_JOBS_GUARD = threading.Lock()        # guards _CURRENT and every removal of a job folder (DELETE, cleanup, sweep)
+_CURRENT: dict = {}                   # jobId -> number of the attempt that may still write {WORK_DIR}/{jobId}
+_ATTEMPT_NUMBERS = itertools.count(1)
+_REMOVE_TRIES = 3                     # rmtree tries when a run still writes into the folder
+_REMOVE_PAUSE_S = 0.05
+
+
+@dataclass(frozen=True)
+class _Attempt:
+    """One POST /infer or POST /infer/upload of a job, registered by _job_attempt."""
+
+    job_id: str
+    number: int
+
+    def state(self) -> str:
+        """'live', 'cancelled' (DELETE /artifacts since) or 'superseded' (a newer POST of the same jobId since)."""
+        with _JOBS_GUARD:
+            current = _CURRENT.get(self.job_id)
+        if current == self.number:
+            return "live"
+        return "cancelled" if current is None else "superseded"
+
+
+def _deleted_during_run(job_id: str, at: str) -> HTTPException:
+    log.warning("job %s: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping %s, "
+                "answering INFERENCE_FAILED", job_id, at)
+    return _inference_failed("job work folder deleted during the run (client gave up, DELETE /artifacts)")
+
+
+def _stop_if_cancelled(attempt: Optional[_Attempt], at: str) -> None:
+    """Raises the model failure answer when attempt is no longer its job's attempt, so the run writes nothing more.
+    attempt None (tests calling _run directly): no check."""
+    if attempt is None:
+        return
+    state = attempt.state()
+    if state == "cancelled":
+        raise _deleted_during_run(attempt.job_id, at)
+    if state == "superseded":
+        log.warning("job %s: a newer attempt of the same job started during the run, stopping %s, "
+                    "answering INFERENCE_FAILED", attempt.job_id, at)
+        raise _inference_failed("a newer attempt of the same job started during the run")
+
+
+def _remove_job_dir(job_dir: pathlib.Path) -> bool:
+    """rmtree that survives a run still writing into the folder (call with _JOBS_GUARD held). A file created while
+    rmtree walks makes it fail with 'Directory not empty' (F1b-real, answered 500), so try again. True when the folder
+    was there and is gone; raises the last error if it is still there after _REMOVE_TRIES tries."""
+    if not job_dir.exists():
+        return False
+    error: Optional[OSError] = None
+    for tries in range(1, _REMOVE_TRIES + 1):
+        try:
+            shutil.rmtree(job_dir)
+        except OSError as e:   # ENOTEMPTY: a writer added a file; ENOENT: an entry vanished during the walk
+            error = e
+        if not job_dir.exists():
+            return True
+        if tries < _REMOVE_TRIES:
+            time.sleep(_REMOVE_PAUSE_S)
+    raise error or OSError(errno.ENOTEMPTY, "job folder came back after removal", str(job_dir))
+
+
+@contextlib.contextmanager
+def _job_attempt(job_id: str):
+    """Registers a new attempt of job_id for the with block (it takes over from an older attempt of the same job).
+    On exit a live attempt is forgotten; a cancelled one (DELETE and no retry since) removes the job folder again,
+    because the steps it cannot interrupt (MODEL.predict, a conversion under way) may have written after the DELETE."""
+    with _JOBS_GUARD:
+        attempt = _Attempt(job_id, next(_ATTEMPT_NUMBERS))
+        _CURRENT[job_id] = attempt.number
+    try:
+        yield attempt
+    finally:
+        with _JOBS_GUARD:
+            current = _CURRENT.get(job_id)
+            if current == attempt.number:
+                del _CURRENT[job_id]
+            elif current is None:
+                try:
+                    if _remove_job_dir(WORK_DIR / job_id):
+                        log.warning("job %s: removed what the cancelled run wrote after DELETE /artifacts", job_id)
+                except OSError:
+                    log.exception("job %s: could not remove the work folder of a cancelled run", job_id)
+
+
+def _sweep_minutes() -> float:
+    """BESIDE_WORK_SWEEP_MINUTES as a number of minutes; unset, empty, unreadable or <= 0 = 0 (no sweep)."""
+    raw = (os.environ.get("BESIDE_WORK_SWEEP_MINUTES") or "").strip()
+    if not raw:
+        return 0.0
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        log.warning("BESIDE_WORK_SWEEP_MINUTES=%r is not a number, no sweep", raw)
+        return 0.0
+
+
+def _newest_mtime(folder: pathlib.Path) -> float:
+    newest = folder.stat().st_mtime
+    for root, dirs, files in os.walk(folder):
+        for name in dirs + files:
+            try:
+                newest = max(newest, os.stat(os.path.join(root, name)).st_mtime)
+            except OSError:   # removed meanwhile
+                pass
+    return newest
+
+
+def _sweep_work_dir(max_age_s: float, now: Optional[float] = None) -> List[str]:
+    """Removes the {WORK_DIR}/<jobId> folders whose newest entry is older than max_age_s and that no run is using.
+    The backstop for folders nothing else removes: the service killed mid-run, a DELETE that never arrived."""
+    now = time.time() if now is None else now
+    removed: List[str] = []
+    if not WORK_DIR.is_dir():
+        return removed
+    for job_dir in sorted(WORK_DIR.iterdir()):
+        if job_dir.is_symlink() or not job_dir.is_dir() or not JOB_ID.match(job_dir.name):
+            continue
+        try:
+            if now - _newest_mtime(job_dir) < max_age_s:
+                continue
+        except OSError:   # the folder itself went away
+            continue
+        with _JOBS_GUARD:
+            if job_dir.name in _CURRENT:
+                continue
+            try:
+                if _remove_job_dir(job_dir):
+                    removed.append(job_dir.name)
+            except OSError:
+                log.exception("work sweep: could not remove %s", job_dir)
+    if removed:
+        log.warning("work sweep: removed %d job folder(s) untouched for %.0f min: %s",
+                    len(removed), max_age_s / 60, ", ".join(removed))
+    return removed
+
+
+def _sweep_loop(minutes: float) -> None:
+    log.warning("work sweep on: job folders untouched for %.0f min are removed", minutes)
+    while True:
+        try:
+            _sweep_work_dir(minutes * 60)
+        except Exception:  # noqa: BLE001  keep sweeping
+            log.exception("work sweep failed")
+        time.sleep(min(minutes, 10.0) * 60)
+
+
 # --------------------------------------------------------------------------- passthrough load-test knobs
 # Passthrough only (BESIDE_SAMPLE_GLB). They turn the instant sample answer into a simulated GPU: a generation time,
 # a bounded number of concurrent generations, failures and slow jobs (docs: README '패스스루 부하 설정').
@@ -321,10 +487,11 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
-def _simulate_generation(job_id: str, image_paths: List[str]) -> Optional[int]:
+def _simulate_generation(job_id: str, image_paths: List[str], attempt: Optional[_Attempt] = None) -> Optional[int]:
     """The knobs' simulated generation for one passthrough run. None when no knob is set (nothing happens), otherwise
     the generation time in ms (the time inside a slot, not the wait for one, as inferMs excludes MODEL_LOCK waits).
-    Raises the model failure answer for FAIL_TOKEN / FAIL_RATE, after the generation time like a failing model."""
+    Raises the model failure answer for FAIL_TOKEN / FAIL_RATE, after the generation time like a failing model, and
+    for a job cancelled while it waited for a slot (no sleep, like a model run cancelled while waiting for MODEL_LOCK)."""
     knobs = _passthrough_knobs()
     if not knobs.active:
         return None
@@ -333,6 +500,7 @@ def _simulate_generation(job_id: str, image_paths: List[str]) -> Optional[int]:
     slots = _passthrough_slots(knobs.slots)
     asked = time.perf_counter()
     with slots:
+        _stop_if_cancelled(attempt, "before the simulated generation")
         waited_ms = int((time.perf_counter() - asked) * 1000)
         if slow:
             sleep_ms = float(knobs.slow_ms)
@@ -357,9 +525,11 @@ def _simulate_generation(job_id: str, image_paths: List[str]) -> Optional[int]:
     return generation_ms
 
 
-def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
+def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Optional[_Attempt] = None) -> _Result:
     """The body of /infer, shared with /infer/upload: local image paths in, the GLB on this machine out.
-    Raises HTTPException with the contract's {code, message} detail (README error table)."""
+    Raises HTTPException with the contract's {code, message} detail (README error table). With an attempt (both
+    endpoints), stops between steps once DELETE /artifacts or a retry took the job away from it (_stop_if_cancelled)."""
+    _stop_if_cancelled(attempt, "before the run")
     for image in image_paths:
         if not pathlib.Path(image).is_file():
             raise HTTPException(status_code=400, detail={"code": "INFERENCE_FAILED", "message": f"image not found: {image}"})
@@ -369,7 +539,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
         sample = pathlib.Path(SAMPLE_GLB)
         if not sample.is_file():
             raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": f"BESIDE_SAMPLE_GLB not found: {SAMPLE_GLB}"})
-        simulated_ms = _simulate_generation(job_id, image_paths)   # None unless a BESIDE_PASSTHROUGH_* knob is set
+        simulated_ms = _simulate_generation(job_id, image_paths, attempt)   # None unless a BESIDE_PASSTHROUGH_* knob is set
         return _Result(
             glb=sample.resolve(),
             metrics=InferMetrics(inferMs=simulated_ms if simulated_ms is not None else int((time.perf_counter() - started) * 1000),
@@ -397,19 +567,25 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
         log.warning("job %s: %d photos, using the first one", job_id, len(image_paths))
 
     with MODEL_LOCK:
+        _stop_if_cancelled(attempt, "before the model")   # waited here after its client gave up: no GPU time for it
         try:
             pred = MODEL.predict(image, str(raw_dir))
         except Exception as e:  # noqa: BLE001  OOM, unreadable image, model errors
+            _stop_if_cancelled(attempt, "after a model error")   # e.g. its folder was deleted under it
             log.exception("job %s: inference failed", job_id)
             raise _inference_failed(f"{type(e).__name__}: {e}")
 
+    _stop_if_cancelled(attempt, "before conversion")
     glb = job_dir / "base.glb"
     try:
+        # make_dirs=False: a job folder that DELETE removed during the conversion is not recreated
         m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
-                    hair_npz=str(pred.hair_npz) if pred.hair_npz else None, forward_axis=FORWARD_AXIS)
+                    hair_npz=str(pred.hair_npz) if pred.hair_npz else None, forward_axis=FORWARD_AXIS, make_dirs=False)
     except ConversionError as e:
+        _stop_if_cancelled(attempt, "after a conversion error")
         raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": str(e)})
     except Exception as e:  # noqa: BLE001
+        _stop_if_cancelled(attempt, "after a conversion error")
         log.exception("job %s: conversion crashed", job_id)
         raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": f"{type(e).__name__}: {e}"})
 
@@ -417,6 +593,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
     if RIG_TEMPLATE:
         from rig_transfer import RigError, transfer
 
+        _stop_if_cancelled(attempt, "before rigging")
         rig_started = time.perf_counter()
         tmp = job_dir / "base.rigged.glb"
         try:
@@ -431,6 +608,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions) -> _Result:
             if tmp.exists():
                 tmp.unlink()
 
+    _stop_if_cancelled(attempt, "before answering")   # the GLB it would point to is gone or is the retry's
     log.warning("job %s: infer %d ms, convert %d ms, %d tris, %d bytes", job_id, pred.infer_ms, m["convertMs"], m["triangles"], m["bytes"])
     return _Result(
         glb=glb.resolve(),
@@ -458,7 +636,8 @@ def healthz() -> HealthResponse:
 def infer(request: InferRequest) -> InferResponse:
     """Path mode: Spring and this service share a filesystem."""
     request.imagePaths = [_to_local(p) for p in request.imagePaths]
-    result = _run(request.jobId, request.imagePaths, request.options)
+    with _job_attempt(request.jobId) as attempt:
+        result = _run(request.jobId, request.imagePaths, request.options, attempt)
     return InferResponse(
         # passthrough answers the sample's own path, a model result the path Spring can open (BESIDE_PATH_MAP)
         glbPath=str(result.glb) if result.passthrough else _to_remote(str(result.glb)),
@@ -481,31 +660,31 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
         raise HTTPException(status_code=422, detail=[{"loc": ["body", "photos"], "msg": f"1 to {MAX_PHOTOS} photos, got {len(photos)}"}])
 
     job_dir = _job_dir(parsed.jobId)
-    input_dir = job_dir / "input"
-    if input_dir.exists():   # a retry of the same job: only this attempt's photos
-        shutil.rmtree(input_dir)
-    input_dir.mkdir(parents=True)
-    saved: List[str] = []
-    for index, photo in enumerate(photos):
-        target = input_dir / _safe_photo_name(index, photo.filename)
-        with target.open("wb") as out:
-            shutil.copyfileobj(photo.file, out)
-        saved.append(str(target))
+    with _job_attempt(parsed.jobId) as attempt:   # registered before the photos land, so a DELETE from now on cancels
+        input_dir = job_dir / "input"
+        if input_dir.exists():   # a retry of the same job: only this attempt's photos
+            shutil.rmtree(input_dir)
+        input_dir.mkdir(parents=True)
+        saved: List[str] = []
+        for index, photo in enumerate(photos):
+            target = input_dir / _safe_photo_name(index, photo.filename)
+            with target.open("wb") as out:
+                shutil.copyfileobj(photo.file, out)
+            saved.append(str(target))
 
-    result = _run(parsed.jobId, saved, parsed.options)
-    artifact = job_dir / "base.glb"
-    if result.glb != artifact.resolve():   # passthrough: serve a copy of the sample as this job's artifact
-        try:
-            shutil.copyfile(result.glb, artifact)
-        except FileNotFoundError:
-            if job_dir.is_dir():   # the folder is there, so something else is missing: not the case below
-                raise
+        result = _run(parsed.jobId, saved, parsed.options, attempt)
+        artifact = job_dir / "base.glb"
+        if result.glb != artifact.resolve():   # passthrough: serve a copy of the sample as this job's artifact
             # Spring gave up (inference.timeout-ms) and its cleanup DELETE /artifacts/{jobId} removed the folder while
-            # this run still slept in its slot (README '패스스루 부하 설정', F1b). Nobody reads this answer any more;
-            # give the contract's failure instead of an unhandled traceback, and do not recreate the folder.
-            log.warning("job %s: work folder deleted during the run (DELETE /artifacts after the client gave up), "
-                        "answering INFERENCE_FAILED", parsed.jobId)
-            raise _inference_failed("job work folder deleted during the run (client gave up, DELETE /artifacts)")
+            # this run still slept in its slot (README '패스스루 부하 설정', F1b): answer the contract's failure (nobody
+            # reads it) instead of copying, and never recreate the folder.
+            _stop_if_cancelled(attempt, "before copying the sample")
+            try:
+                shutil.copyfile(result.glb, artifact)
+            except FileNotFoundError:
+                if job_dir.is_dir():   # the folder is there, so something else is missing: not the case below
+                    raise
+                raise _deleted_during_run(parsed.jobId, "while copying the sample")   # DELETE right after the check
     log.warning("job %s: upload mode, %d photo(s) in, %s out%s", parsed.jobId, len(saved), artifact,
                 " (passthrough sample)" if result.passthrough else "")
     return InferUploadResponse(
@@ -531,9 +710,14 @@ def get_artifact(job_id: str, name: str) -> FileResponse:
 
 @app.delete("/artifacts/{job_id}", status_code=204, response_class=Response)
 def delete_artifacts(job_id: str) -> Response:
-    """Removes {WORK_DIR}/{jobId} (uploaded photos, intermediate files, the GLB). Idempotent: 204 when already gone."""
+    """Removes {WORK_DIR}/{jobId} (uploaded photos, intermediate files, the GLB). Idempotent: 204 when already gone.
+    Also cancels a run of this job still on this machine (Spring gave up on it): it stops at its next step, answers
+    INFERENCE_FAILED to nobody and removes what it wrote after this (_job_attempt). A retry of the job is a new attempt."""
     job_dir = _job_dir(job_id)
-    if job_dir.exists():
-        shutil.rmtree(job_dir)
-        log.warning("job %s: work folder deleted", job_id)
+    with _JOBS_GUARD:   # a retry's POST registering now waits, so its new photos are not removed with the old folder
+        running = _CURRENT.pop(job_id, None) is not None
+        removed = _remove_job_dir(job_dir)
+    if removed or running:
+        log.warning("job %s: %s%s", job_id, "work folder deleted" if removed else "no work folder",
+                    ", cancelled the run still in progress" if running else "")
     return Response(status_code=204)

@@ -50,10 +50,25 @@ def _smooth_normals(vertices: np.ndarray, base_normals: np.ndarray) -> np.ndarra
     return n / (np.linalg.norm(n, axis=1, keepdims=True) + 1e-12)
 
 
+def _out_dir(path: str, make_dirs: bool) -> str:
+    """The folder of an output file: created when make_dirs, else it must still exist (ConversionError)."""
+    folder = os.path.dirname(os.path.abspath(path))
+    if make_dirs:
+        os.makedirs(folder, exist_ok=True)
+    elif not os.path.isdir(folder):
+        raise ConversionError(f"output folder is gone: {folder}")
+    return folder
+
+
 def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str | None = None,
             hair_npz: str | None = None, forward_axis: str = "+x", longest_axis: float = 1.0,
-            max_triangles: int = 20000, max_texture: int = 2048, max_bytes: int = 10 * 1024 * 1024) -> dict:
-    """Runs the conversion and returns the metrics dict (GLB_SPEC §5 names). Raises ConversionError."""
+            max_triangles: int = 20000, max_texture: int = 2048, max_bytes: int = 10 * 1024 * 1024,
+            make_dirs: bool = True) -> dict:
+    """Runs the conversion and returns the metrics dict (GLB_SPEC §5 names). Raises ConversionError.
+
+    make_dirs=False: never create the output folders; a missing one is a ConversionError. The inference service
+    passes it, so a job folder removed by DELETE /artifacts during the conversion is not recreated (2026-11-19 F1b-real
+    left folders holding only base.glb that way)."""
     started = time.perf_counter()
     if forward_axis not in _FORWARD:
         raise ConversionError(f"--forward-axis must be one of {sorted(_FORWARD)}")
@@ -96,12 +111,12 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
 
     scene = trimesh.Scene()
     scene.add_geometry(out_mesh, node_name="base", geom_name="base")
-    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     data = scene.export(file_type="glb")
     if not data[:4] == b"glTF":
         raise ConversionError("exporter did not produce a glTF binary")
     if len(data) > max_bytes:
         raise ConversionError(f"GLB {len(data)} bytes > limit {max_bytes}")
+    out_dir = _out_dir(out_path, make_dirs)   # checked right before the write
     with open(out_path, "wb") as f:
         f.write(data)
 
@@ -114,14 +129,13 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
     }
 
     if hair_npz:
-        out_dir = os.path.dirname(os.path.abspath(out_path))
         fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
         with open(os.path.join(out_dir, "hair_maps.json"), "w") as f:
             json.dump({"furLength": round(fur * scale, 6), "lengthMap": "hair_length.png", "flowMap": "hair_flow.png"}, f)
 
     metrics["convertMs"] = int((time.perf_counter() - started) * 1000)
     if metrics_path:
-        os.makedirs(os.path.dirname(os.path.abspath(metrics_path)), exist_ok=True)
+        _out_dir(metrics_path, make_dirs)
         with open(metrics_path, "w") as f:
             json.dump(metrics, f)
     return metrics
