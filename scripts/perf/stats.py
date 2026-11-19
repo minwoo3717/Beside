@@ -67,8 +67,9 @@ def compare(baseline_samples_by_rep, candidate_samples_by_rep, lower_is_better: 
     """Compare a candidate version with the baseline.
 
     Both arguments are lists with one list of samples per repetition (a single value per repetition works the same
-    way). Returns the pooled medians, deltaPct = (candidate - baseline) / baseline * 100, the per-repetition median
-    ranges, whether they overlap, and the verdict: "better" or "worse" only when |deltaPct| >= threshold_pct and the
+    way). Returns the pooled medians, deltaPct = (candidate - baseline) / baseline * 100 rounded to 2 decimals, the
+    per-repetition median ranges, whether they overlap, and the verdict: "better" or "worse" only when that rounded
+    |deltaPct| >= threshold_pct and the
     ranges do not overlap, otherwise "same". With lower_is_better=False (throughput) a higher candidate is "better".
     When the baseline median is 0 and the candidate's is not, deltaPct is None and the verdict is "n/a" (not
     comparable): calling that "same" would hide, say, 0 -> 5 as noise.
@@ -86,7 +87,9 @@ def compare(baseline_samples_by_rep, candidate_samples_by_rep, lower_is_better: 
     c_range = (min(c_meds), max(c_meds))
     overlap = b_range[0] <= c_range[1] and c_range[0] <= b_range[1]
     if b != 0:
-        delta = (c - b) / abs(b) * 100.0
+        # rounded before the threshold test: (9.9 - 11) / 11 * 100 is -9.999999999999996, which must count as -10 %
+        # like the deltaPct this function reports
+        delta = _round((c - b) / abs(b) * 100.0, 2)
     else:
         delta = 0.0 if c == 0 else None
     if delta is None:
@@ -99,7 +102,7 @@ def compare(baseline_samples_by_rep, candidate_samples_by_rep, lower_is_better: 
     return {
         "baseline": _round(b),
         "candidate": _round(c),
-        "deltaPct": _round(delta, 2),
+        "deltaPct": delta,
         "baselineRange": [_round(b_range[0]), _round(b_range[1])],
         "candidateRange": [_round(c_range[0]), _round(c_range[1])],
         "overlap": overlap,

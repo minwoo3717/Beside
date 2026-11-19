@@ -42,7 +42,7 @@
 ## 명령
 
 ```powershell
-# 보고용: 버전 3개 × 3회 (약 1시간, 시나리오 순서는 반복마다 회전)
+# 보고용: 버전 3개 × 3회 (약 1시간, 버전 순서는 반복마다 회전, 시나리오 순서는 고정)
 python scripts/perf/run.py --versions v0,v1,v2 --reps 3 --versions-file docs/perf/versions.json --stub-python C:/path/to/venv/Scripts/python.exe
 
 # 동작 확인용 (횟수 1/10, N = 50/100/200, 결과는 scripts/perf/out/quick/ 에, 커밋하지 않는다)
@@ -71,7 +71,7 @@ python -m unittest discover -s scripts/perf -p "test_*.py"
 ## 통계와 판정 규칙
 
 - 백분위수는 선형 보간(numpy `linear`, Hyndman–Fan type 7). 요약은 `{n, min, p50, p90, p95, p99, max, mean, stdev}`(ms, 소수 셋째 자리, stdev 는 표본 표준편차).
-- 버전 비교(`stats.compare`): 반복을 모두 합친 표본의 중앙값으로 Δ% = (후보 − 기준) ÷ 기준 × 100. 값 지표(기동 시간, RSS, 처리량)는 반복별 값을 표본으로 쓴다.
+- 버전 비교(`stats.compare`): 반복을 모두 합친 표본의 중앙값으로 Δ% = (후보 − 기준) ÷ 기준 × 100. Δ% 는 소수 둘째 자리로 반올림한 뒤 판정에 쓴다(부동소수 오차로 정확히 10 % 인 차이가 9.999… 로 빠지지 않게). 값 지표(기동 시간, RSS, 처리량)는 반복별 값을 표본으로 쓴다.
 - 판정: **|Δ%| ≥ 10 이고, 반복별 중앙값의 [최소, 최대] 범위가 기준의 범위와 겹치지 않을 때만** `better`(개선) / `worse`(악화). 그 밖에는 `same`(차이 없음, 잡음). 시간은 작을수록, 처리량(`bench.uploadMBps`, `bench.jobsPerSec`, `bench.pollReqPerSec`)은 클수록 개선.
 - 기준 중앙값이 0 이고 후보가 0 이 아니면 변화율이 없으므로 `n/a`(보고서 '비교 불가'). `same` 으로 두면 0 → 5 같은 변화가 잡음으로 보인다.
 - 오류 수 `bench.errors` 는 측정값이 아니라 사건 수라 반복을 **합한** 값을 보이고(한 반복에서만 난 실패가 중앙값 0 에 묻히지 않게), 0 이 아니면 빨간 칸, 변화율·판정은 없다. 실패한 요청·흐름이 하나라도 있으면 그 시나리오는 `status: "error"`(표본은 성공분 그대로)라 칸에 '오류 포함', 표지에 `<라벨> r<반복> (시나리오)` 가 나온다.
