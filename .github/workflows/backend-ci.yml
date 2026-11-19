@@ -73,11 +73,15 @@ jobs:
           # the compose healthcheck runs this inside the container
           docker exec beside-smoke curl -fsS -o /dev/null http://localhost:8080/api/v1/healthz
           docker exec beside-smoke id
+          # the Dockerfile's USER beside (uid 10001): fail here if the container runs as anyone else, e.g. root
+          test "$(docker exec beside-smoke id -u)" = 10001
           printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > probe.png
           code="$(curl -s -o /dev/null -w '%{http_code}' -F 'photos=@probe.png;type=image/png' http://127.0.0.1:18080/api/v1/jobs)"
           echo "POST /api/v1/jobs -> $code"
           test "$code" = 202
           docker exec beside-smoke ls -la /app/storage /app/storage/uploads
+          # the upload folder was created by the server process, so it belongs to uid 10001 too
+          test "$(docker exec beside-smoke stat -c %u /app/storage/uploads)" = 10001
 
       - name: preprocessing on without its models refuses to start (fails fast, says how to fix)
         run: |
