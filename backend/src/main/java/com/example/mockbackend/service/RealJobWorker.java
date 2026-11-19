@@ -36,7 +36,8 @@ import java.util.concurrent.Semaphore;
  *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
  *   <li>With inference.offline-wait-ms &gt; 0 (prod): while {@link InferenceHealthMonitor} does not read UP (the GPU PC
  *       is off or its model is still loading) the job keeps waiting as PENDING, checked every inference.offline-poll-ms,
- *       and fails INFERENCE_UNAVAILABLE only after that long. 0 (default) keeps the old behaviour: no wait, a missing
+ *       and fails INFERENCE_UNAVAILABLE only after that long, counted from dispatch (the wait for the slot is part
+ *       of it, so N queued jobs do not wait N times as long). 0 (default) keeps the old behaviour: no wait, a missing
  *       service fails the run at once.</li>
  *   <li>PROCESSING with progress null (the service reports none), then POST /infer (inference.transfer=path) or
  *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}.</li>
@@ -91,11 +92,14 @@ public class RealJobWorker implements JobWorker {
     @Override
     public void dispatch(String jobId) {
         Instant start = Instant.now();
+        // The offline wait counts from here, not from taking the slot: a job queued behind others that wait for the
+        // same stopped GPU must not start its own full wait only when they give up (N jobs would wait N x the limit).
+        long offlineDeadline = System.nanoTime() + offlineWaitMs * 1_000_000;
         try {
             PreparedPhoto photo = prepare(jobId);
             inferenceSlots.acquire();
             try {
-                run(jobId, start, photo);
+                run(jobId, start, photo, offlineDeadline);
             } finally {
                 inferenceSlots.release();
             }
@@ -117,18 +121,18 @@ public class RealJobWorker implements JobWorker {
         return job == null ? PreparedPhoto.off() : cutoutStage.prepare(job);
     }
 
-    private void run(String jobId, Instant start, PreparedPhoto photo) throws InterruptedException {
+    private void run(String jobId, Instant start, PreparedPhoto photo, long offlineDeadline) throws InterruptedException {
         Job job = jobRepository.findById(jobId).orElse(null);
         if (job == null) {
             log.warn("jobId={} not found for real worker", jobId);
             return;
         }
-        if (!awaitInferenceService(jobId)) {
+        if (!awaitInferenceService(jobId, offlineDeadline)) {
             InferenceHealthMonitor.Status status = healthMonitor.current();
             jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "The inference service was not ready within "
                     + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type(),
                     photo.apply(RunDetails.NONE));
-            log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE after waiting {} ms for the inference service ({})",
+            log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE: inference service not UP within {} ms of dispatch ({})",
                     jobId, offlineWaitMs, status.detail());
             return;
         }
@@ -169,15 +173,16 @@ public class RealJobWorker implements JobWorker {
     }
 
     /**
-     * True when the inference service reads UP, at once or within inference.offline-wait-ms; the job stays PENDING
-     * while this waits. Always true when the wait is off (0): the run then finds out from /infer itself.
+     * True when the inference service reads UP, at once or before {@code deadline} (System.nanoTime(): dispatch plus
+     * inference.offline-wait-ms, so time spent queued for the slot counts); the job stays PENDING while this waits.
+     * A job whose deadline passed while it queued gets one fresh reading. Always true when the wait is off (0): the
+     * run then finds out from /infer itself.
      */
-    private boolean awaitInferenceService(String jobId) throws InterruptedException {
+    private boolean awaitInferenceService(String jobId, long deadline) throws InterruptedException {
         if (offlineWaitMs == 0) {
             return true;
         }
         // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
-        long deadline = System.nanoTime() + offlineWaitMs * 1_000_000;
         boolean logged = false;
         while (true) {
             InferenceHealthMonitor.Status status = healthMonitor.refresh();
