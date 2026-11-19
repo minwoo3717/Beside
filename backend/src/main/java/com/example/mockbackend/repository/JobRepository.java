@@ -4,8 +4,10 @@ import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Collection;
@@ -33,4 +35,18 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /** How many jobs are in the given state (JobQueueGauge, every few seconds — not per request). */
     long countByStatus(JobStatus status);
+
+    /**
+     * Retry as one conditional update: a {@code failed} job becomes {@code pending} with the next attempt and without
+     * what the failed attempt left. Returns 1 when it changed the row and 0 when the job is not (or no longer) FAILED,
+     * so of two retries racing on one FAILED job only one wins and the attempt is dispatched once. The states are
+     * parameters (JobStatus.FAILED, JobStatus.PENDING) so they are written through JobStatusColumnConverter.
+     */
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("update Job j set j.status = :pending, j.attempt = j.attempt + 1, j.errorCode = null, j.errorMessage = null,"
+            + " j.resultPath = null, j.hairResultPath = null, j.processingStartedAt = null, j.finishedAt = null,"
+            + " j.progress = 0.0, j.queuedAt = :now, j.updatedAt = :now where j.id = :id and j.status = :failed")
+    int startRetry(@Param("id") String id, @Param("now") Instant now,
+                   @Param("failed") JobStatus failed, @Param("pending") JobStatus pending);
 }
