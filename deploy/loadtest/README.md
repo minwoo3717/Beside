@@ -334,7 +334,7 @@ $L exec -T backend sh -c 'cd /app/storage/uploads && echo "f3bad stored $(ls | g
 
 아래 명령은 아직 VM 에서 돌리지 않았다. 이름공간에 들어가는 부분만 바꿔 끼워 WSL(Ubuntu, iproute2 6.19)에서 확인한 것은 세 가지다: 줄마다 JSON 이 되는지, 실패하면 null 이 되는지, `kill` 뒤 멈추는지.
 
-- **root 가 필요하다.** `nsenter` 가 다른 프로세스의 네트워크 이름공간에 들어가기 때문이다. `sudo -n true` 가 암호 없이 끝나는지 먼저 본다. 암호를 묻는 VM 이면 아래 명령이 값 대신 null 을 남기고, 표본기는 그 이유를 `caddy-ns.err` 에 적는다.
+- **root 가 필요하다.** `nsenter` 가 다른 프로세스의 네트워크 이름공간에 들어가기 때문이다. `sudo -n true` 가 암호 없이 끝나는지 먼저 본다. 암호를 묻는 VM 이면 아래 명령(끝 값·표본기 모두)이 값 대신 null 을 남기고, 그 이유를 `caddy-ns.err` 에 적는다.
 - **`nstat -asz`**:
   - `-a` 는 Caddy 컨테이너의 이름공간이 생긴 뒤의 누적값이다. 증가분은 표본끼리 빼서 구한다. Caddy 가 다시 뜨면 값이 0 부터 다시 시작한다.
   - `-s` 는 nstat 의 기록 파일(`/tmp/.nstat.u<uid>`)을 고치지 않는다. 이 파일은 `-a` 만 줘도 써진다(WSL 에서 확인). 고치게 두면 같은 사용자가 나중에 호스트에서 돌리는 증가분 `nstat` 에 Caddy 이름공간의 값이 섞인다.
@@ -343,9 +343,9 @@ $L exec -T backend sh -c 'cd /app/storage/uploads && echo "f3bad stored $(ls | g
 ```bash
 # VM. 함수는 셸마다 한 번 정한다
 caddy_ns() { sudo -n nsenter -t "$(docker inspect -f '{{.State.Pid}}' beside-caddy-1)" -n "$@"; }
-# 실행이 끝나면 위 블록과 함께(같은 $OUT): Caddy 가 받은 443 연결 수, TCP 카운터(누적값)
-caddy_ns ss -Htn state established '( sport = :443 )' | wc -l > "$OUT/caddy-estab443-end.txt"
-caddy_ns nstat -asz > "$OUT/caddy-nstat-end.txt"
+# 실행이 끝나면 위 블록과 함께(같은 $OUT): Caddy 가 받은 443 연결 수, TCP 카운터(누적값). 읽지 못하면 0 이 아니라 null
+if o=$(caddy_ns ss -Htn state established '( sport = :443 )' 2>> "$OUT/caddy-ns.err"); then printf '%s' "$o" | grep -c .; else echo null; fi > "$OUT/caddy-estab443-end.txt"
+caddy_ns nstat -asz > "$OUT/caddy-nstat-end.txt" 2>> "$OUT/caddy-ns.err" || echo null > "$OUT/caddy-nstat-end.txt"
 ```
 
 **15초 표본기(제안).** 1차의 `docker stats` 표본기(`vm/docker-stats-series.jsonl`, 약 17초 간격)는 리포 밖, VM 에 있다. 그 표본기에 같은 주기로 아래 루프를 더하거나, 옆에 따로 띄운다.
