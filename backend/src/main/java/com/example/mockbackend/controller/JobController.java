@@ -20,9 +20,10 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * v0 REST controller: /api/jobs. FROZEN — used by the browser Mock UI (static/app.js) and its tests.
- * Do not change behaviour here; new work goes to api.v1.JobV1Controller. Removal is decided in the
- * contract meeting after Unity has moved to /api/v1 (see docs/PLAN.md).
+ * v0 REST controller: /api/jobs. FROZEN — no in-repo client: the browser Mock UI (static/app.js) has used /api/v1
+ * since 2026-10-04, and only JobAsyncIntegrationTest still calls it (as a freeze guard). Do not change behaviour
+ * here; new work goes to api.v1.JobV1Controller. Removal is decided in the contract meeting after Unity has moved to
+ * /api/v1 (see docs/PLAN.md).
  */
 @RestController
 @RequestMapping("/api/jobs")

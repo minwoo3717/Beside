@@ -189,7 +189,8 @@ public class JobServiceImpl implements JobService {
             jobWorker.dispatch(id);
         } catch (TaskRejectedException shuttingDown) {
             // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
-            // attempt, so the job goes back to the FAILED attempt this request found.
+            // attempt, so the job goes back to the FAILED attempt this request found. Nothing else writes the row in
+            // between: the UPDATE above made this request its only retry and no worker took it.
             jobRepository.save(found);
             throw shuttingDown;
         }
@@ -401,13 +402,17 @@ public class JobServiceImpl implements JobService {
     /**
      * Disk name of an upload: {jobId}_{the client's name}, with characters some file systems refuse (control
      * characters and {@code < > : " / \ | ? *}) replaced by '_' and the name cut to MAX_NAME_BYTES of UTF-8, keeping
-     * a short extension. StoredUpload.name keeps the name as sent.
+     * a short extension. Trailing spaces and dots are dropped: Windows refuses a path ending in a space and silently
+     * strips a final dot. StoredUpload.name keeps the name as sent.
      */
     static String storedName(String jobId, String name) {
-        String clean = name.replaceAll("[\\p{Cntrl}<>:\"/\\\\|?*]", "_");
+        String clean = name.replaceAll("[\\p{Cntrl}<>:\"/\\\\|?*]", "_").replaceAll("[ .]+$", "");
         int dot = clean.lastIndexOf('.');
         String ext = dot > 0 && clean.length() - dot <= 10 ? clean.substring(dot) : "";
         String stem = cutUtf8(clean.substring(0, clean.length() - ext.length()), MAX_NAME_BYTES - utf8Length(ext));
+        if (ext.isEmpty()) {
+            stem = stem.replaceAll("[ .]+$", ""); // the cut can end on a space or dot, and the stem ends the name
+        }
         return jobId + "_" + (stem.isEmpty() ? "upload" : stem) + ext;
     }
 
