@@ -72,7 +72,10 @@ public class InferenceClient {
     /**
      * A DELETE that fails with an I/O error (no answer at all) is sent once more. The pooled connection may have just
      * been closed by the service's keep-alive timeout (2026-11-18 load test: "HTTP/1.1 header parser received no
-     * bytes", the job folder stayed on the GPU volume), and the second attempt opens a new one.
+     * bytes", the job folder stayed on the GPU volume), and the second attempt opens a new one. A timeout (no
+     * connection within {@link #CONNECT_TIMEOUT}, no answer within {@link #CLEANUP_TIMEOUT}) is not retried: the path
+     * or the service is stuck, a second wait would hold the GPU slot longer (the worker cleans up before releasing it),
+     * and a late DELETE could land after a retry of the job already started on the service.
      */
     static final int CLEANUP_ATTEMPTS = 2;
     public static final String TOKEN_HEADER = "X-Inference-Token";
@@ -186,7 +189,8 @@ public class InferenceClient {
      * After the worker stored the GLB or gave up: upload mode deletes {storage.tmp.dir}/{jobId} and asks the service
      * to delete the job's folder (DELETE /artifacts/{jobId}). Never throws: a failed cleanup is logged and does not
      * change the job's result (JobFinisher rule). Path mode has nothing to clean. An I/O error on the DELETE (no
-     * answer) is retried once ({@link #CLEANUP_ATTEMPTS}); an HTTP error status is not (the service did answer).
+     * answer) is retried once ({@link #CLEANUP_ATTEMPTS}); a timeout is not, and neither is an HTTP error status (the
+     * service did answer).
      */
     public void cleanup(String jobId) {
         if (transfer != Transfer.UPLOAD) {
@@ -209,6 +213,9 @@ public class InferenceClient {
                 if (response.statusCode() / 100 != 2) {
                     log.warn("jobId={} {} -> HTTP {}: the service keeps the job's files", jobId, call, response.statusCode());
                 }
+                return;
+            } catch (HttpTimeoutException e) {   // includes HttpConnectTimeoutException
+                log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 return;
             } catch (IOException e) {
                 if (attempt < CLEANUP_ATTEMPTS) {

@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -534,6 +535,43 @@ class InferenceClientTest {
         }
         assertThat(requestLines).as("one retry, not more").hasSize(2)
                 .allMatch(line -> line.equals("DELETE /artifacts/job-u14 HTTP/1.1"));
+    }
+
+    @Test
+    void cleanupDoesNotSendTheDeleteAgainAfterATimeout() throws Exception {
+        // A stuck path or service: the request goes out and no answer comes. One CLEANUP_TIMEOUT (10 s) is the wait;
+        // a second one would hold the GPU slot longer and could reach the service after a retry of the job started.
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        List<Socket> heldOpen = new CopyOnWriteArrayList<>();
+        AtomicBoolean stop = new AtomicBoolean();
+        long elapsedMs;
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(200);
+            Thread service = new Thread(() -> {
+                while (!stop.get()) {
+                    try {
+                        Socket connection = listener.accept();
+                        heldOpen.add(connection);   // read, then never answer and keep the connection open
+                        requestLines.add(readRequestLine(connection));
+                    } catch (IOException e) {
+                        // accept timed out: look at stop again
+                    }
+                }
+            });
+            service.start();
+            long started = System.nanoTime();
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u15"); // logged only, never thrown
+            elapsedMs = (System.nanoTime() - started) / 1_000_000;
+            stop.set(true);
+            service.join(5_000);
+        } finally {
+            for (Socket connection : heldOpen) {
+                connection.close();
+            }
+        }
+        assertThat(requestLines).as("no second DELETE after a timeout").containsExactly("DELETE /artifacts/job-u15 HTTP/1.1");
+        assertThat(elapsedMs).as("one CLEANUP_TIMEOUT, not two").isBetween(9_000L, 15_000L);
     }
 
     /** The request line of an HTTP/1.1 request on {@code socket}, after reading its headers (DELETE has no body). */
