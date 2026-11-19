@@ -49,14 +49,15 @@ unity/
 
 - **[구현됨]** 계약 DTO (`Assets/Beside/Api/*.cs`): [openapi.yaml](../docs/api/openapi.yaml) v1 과 필드 이름 1:1. 알 수 없는 `status`/`variant` 는 `Unknown`.
 - **[구현됨]** API 클라이언트: multipart 업로드(`Idempotency-Key`, `X-Request-Id`), 상태 조회, `DownloadHandlerFile` 다운로드, `POST /retry`, `healthz`, `ErrorResponse` 봉투 파싱.
-- **[구현됨]** JobManager: 업로드 → 2초 폴링 → `persistentDataPath/models/{jobId}-base.glb` 캐시 확인 → 다운로드 → GLB 매직 검증 → glTFast 로드 → ObjectSpawner 0번 칸 교체. 앱 재실행 시 저장된 jobId 로 복원, 서버 실패는 `/retry`, 앱 실패는 재실행. **서버 주소를 앱에서 바꿔 저장**(`SetBaseUrl`, PlayerPrefs).
-- **[구현됨]** 런타임 로더: 정면 보정(`modelFacing`, 머리 → +Z), 최장 축 0.6 m 정규화(기본), 발바닥 원점, BoxCollider, glTFast 머티리얼 → URP/Lit 교체(빌드 셰이더 누락 방지), 선택적 셸 퍼(리깅 메시 포함).
+- **[구현됨]** JobManager: 업로드 → 2초 폴링 → `persistentDataPath/models/{jobId}-base.glb` 캐시 확인 → 다운로드 → GLB 매직 검증 → glTFast 로드 → ObjectSpawner 0번 칸 교체. 앱 재실행 시 저장된 jobId 로 복원, 서버 실패는 `/retry`, 앱 실패는 재실행, 업로드 실패는 같은 사진을 같은 `Idempotency-Key` 로 다시 보낸다. 생성 중 취소하면 로드 중이던 모델은 등록하지 않고 버린다. **서버 주소를 앱에서 바꿔 저장**(`SetBaseUrl`, PlayerPrefs).
+- **[구현됨]** 런타임 로더: 정면 보정(`modelFacing`, 머리 → +Z), 최장 축 0.6 m 정규화(기본), 발바닥 원점, BoxCollider, glTFast 머티리얼 → URP/Lit 교체(빌드 셰이더 누락 방지), 선택적 셸 퍼(리깅 메시 포함). 새 모델이 0번 칸을 바꾸면 이전 모델(템플릿·import·머티리얼·털 지도)을 해제한다(배치된 복사본이 남아 있으면 둔다).
 - **[구현됨]** 리깅 GLB 애니메이션: glTFast 레거시 Animation 으로 클립 재생, AR 화면 동작 버튼(걷기/앉기/꼬리/갸웃/기본), 실제 재생 중인 클립에 맞춘 버튼 강조. 에디터 단축키 1~5.
 - **[구현됨]** AR 배치 규칙: 1마리 제한(추가 터치 무시), 바닥에만 배치(벽·천장 차단), 배치 후 바닥 점 숨김, **"AR로 배치하기" 이후에만 바닥 인식**(다른 화면에서는 인식 중지, 진입 시 세션 리셋).
 - **[구현됨]** 측정: 구간별 JSON 로그(`[BesideMetric]`), `metrics.csv`(e2eMs 는 첫 AR 배치 시점), 배치 후 30초 FPS·메모리.
 - **[구현됨]** UI 두 종류: 기본 UI(`MainUIController`)와 디자인 UI(`DesignedUIController`). 둘 다 붙이고 하나만 켠다(화면은 `OnEnable` 에서 생성되므로 꺼진 쪽은 나타나지 않는다). 디자인 UI: 갤러리 선택, 사진 확인, 진행 단계, 미리보기, AR 3단계 안내, 상단 안내 닫기(×), 하단 버튼 숨기기/보기, 서버 설정 화면, 템플릿 UI 자동 숨김.
 - **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식.
 - **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
+- **[미검증]** 2026-11-20 코드 리뷰 수정(다운로드 오류 응답 처리, 업로드 실패 재시도, 취소한 로드 버림, 이전 모델·확인 화면 썸네일 해제, 기본 UI "새로 만들기" 의 배치 모델 지우기)은 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다(오류 0, 경고는 main 과 같은 36개). 에디터 Play·기기 확인 전이다.
 - **[미검증]** 리깅 모델 털(셸 퍼 BakeMesh), Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
 - **[계획]** 리깅 다음 단계(아래 "리깅 GLB" 참고): 바닥 위 걷기, GLB_SPEC rigged 계약, 추론 → 리깅 연결, 실제 사진 E2E 측정, 자세 따라하기. 그 밖에 터치 상호작용, 분류 모델(Jev) 연동, 크래시 수집(Sentry/Crashlytics).
 

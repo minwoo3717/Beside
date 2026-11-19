@@ -55,6 +55,7 @@ namespace Beside.UI.Designed
         InputField urlInput; Text settingsStatus, homeServerText;
         // confirm
         RectTransform thumbGrid; Text confirmCount; List<Photo> pendingPhotos = new List<Photo>();
+        readonly List<Texture2D> thumbTextures = new List<Texture2D>();   // destroyed with the thumbnails (not freed by Destroy(gameObject))
         // progress
         Text progressTitle, progressBody, progressJob; (RectTransform row, Image circle, Text label, Text right)[] steps;
         // preview
@@ -723,14 +724,16 @@ namespace Beside.UI.Designed
         void ShowConfirm(List<Photo> photos)
         {
             pendingPhotos = photos;
-            foreach (Transform c in thumbGrid) Destroy(c.gameObject);
+            ClearThumbs();
             for (int i = 0; i < photos.Count && i < 6; i++)
             {
                 var cell = UiKit.Rect("Thumb" + i, thumbGrid, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
                 var img = DesignKit.Box(cell, DesignKit.AccentSoft2, 50f);
                 var tex = new Texture2D(2, 2);
-                if (tex.LoadImage(photos[i].bytes))
+                if (!tex.LoadImage(photos[i].bytes, true)) Destroy(tex);   // true: no CPU-side copy kept
+                else
                 {
+                    thumbTextures.Add(tex);
                     var raw = UiKit.Rect("Img", cell, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero).gameObject.AddComponent<RawImage>();
                     raw.texture = tex;
                     float a = (float)tex.width / tex.height;                                   // cover crop
@@ -747,6 +750,16 @@ namespace Beside.UI.Designed
             confirmCount.text = $"선택한 사진 {photos.Count}장 · 최대 {ApiV1Routes.MaxPhotos}장";
             Show(Screen.Confirm);
         }
+
+        /// <summary>Removes the confirm thumbnails and their decoded photo textures.</summary>
+        void ClearThumbs()
+        {
+            if (thumbGrid != null) foreach (Transform c in thumbGrid) Destroy(c.gameObject);
+            foreach (var t in thumbTextures) if (t != null) Destroy(t);
+            thumbTextures.Clear();
+        }
+
+        void OnDestroy() => ClearThumbs();
 
         void EnterAR()
         {
@@ -799,6 +812,7 @@ namespace Beside.UI.Designed
         {
             ClearPlacedModels();
             readyTemplate = null; placed = false; pendingPhotos.Clear();
+            ClearThumbs();
             jobManager.ClearSavedJob();
             Show(Screen.Home);
         }

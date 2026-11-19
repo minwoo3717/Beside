@@ -31,6 +31,8 @@ namespace Beside.UI
         GameObject readyTemplate;
         bool placed;
         GameObject uiRoot;
+        SpawnLimiter limiter;
+        UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner spawner;
 
         void Awake()
         {
@@ -38,6 +40,8 @@ namespace Beside.UI
             if (photoPicker == null) photoPicker = GetComponent<PhotoPicker>() ?? FindFirstObjectByType<PhotoPicker>();
             if (preview == null) preview = GetComponent<ModelPreview>() ?? FindFirstObjectByType<ModelPreview>();
             if (guidance == null) guidance = GetComponent<ARGuidance>() ?? FindFirstObjectByType<ARGuidance>();
+            limiter = FindAnyObjectByType<SpawnLimiter>();   // one per scene
+            spawner = FindAnyObjectByType<UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner>();
             if (jobManager == null) { Debug.LogError("[MainUI] JobManager missing"); enabled = false; return; }
             // Awake runs even when this component is unchecked, so the UI is built in OnEnable instead.
         }
@@ -237,6 +241,9 @@ namespace Beside.UI
 
         void StartOver()
         {
+            // remove the placed pet first: SpawnLimiter (max 1, Block) would otherwise block placing the next model
+            if (limiter != null) limiter.ClearAll();
+            else if (spawner != null) foreach (Transform c in spawner.transform) Destroy(c.gameObject);
             readyTemplate = null;
             placed = false;
             jobManager.ClearSavedJob();
