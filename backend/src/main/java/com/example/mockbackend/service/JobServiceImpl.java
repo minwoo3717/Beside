@@ -173,25 +173,18 @@ public class JobServiceImpl implements JobService {
 
     @Override
     public Job retry(String id) {
-        Job job = getJobOrThrow(id);
-        Job found = getJobOrThrow(id); // a second, unchanged copy (no persistence context spans the two reads)
-        if (job.getStatus() != JobStatus.FAILED) {
+        Job found = getJobOrThrow(id); // the FAILED attempt as this request found it
+        if (found.getStatus() != JobStatus.FAILED) {
             throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                    "Only FAILED jobs can be retried; current status is " + job.getStatus());
+                    "Only FAILED jobs can be retried; current status is " + found.getStatus());
         }
-        Instant now = Instant.now();
-        job.setErrorCode(null);
-        job.setErrorMessage(null);
-        job.setResultPath(null);
-        job.setHairResultPath(null);
-        job.setProcessingStartedAt(null);
-        job.setFinishedAt(null);
-        job.setProgress(0.0);
-        job.setAttempt(job.getAttempt() + 1);
-        job.setQueuedAt(now);
-        job.setUpdatedAt(now);
-        job.setStatus(JobStatus.PENDING);
-        jobRepository.save(job);
+        // FAILED -> PENDING in one conditional update: when two retries of the same FAILED job overlap, both pass the
+        // check above but only one changes the row, so the attempt is dispatched once and the other gets 409.
+        if (jobRepository.startRetry(id, Instant.now(), JobStatus.FAILED, JobStatus.PENDING) == 0) {
+            throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
+                    "Only FAILED jobs can be retried; current status is " + getJobOrThrow(id).getStatus());
+        }
+        Job job = getJobOrThrow(id);
         try {
             jobWorker.dispatch(id);
         } catch (TaskRejectedException shuttingDown) {

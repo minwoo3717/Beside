@@ -38,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Profile "real" with inference.offline-wait-ms (prod): while the GPU PC's /healthz does not report a loaded model,
- * jobs wait as PENDING without calling /infer, start once it does, and fail INFERENCE_UNAVAILABLE only after the wait.
+ * jobs wait as PENDING without calling /infer, start once it does, and fail INFERENCE_UNAVAILABLE only after the wait,
+ * which counts from dispatch, not from taking the inference slot.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -123,6 +124,27 @@ class RealJobWorkerOfflineTest {
         assertThat((System.nanoTime() - started) / 1_000_000).isGreaterThanOrEqualTo(2_000);
         String body = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString();
         assertThat(JSON.readTree(body).path("error").path("code").asText()).isEqualTo("INFERENCE_UNAVAILABLE");
+        assertThat(inferCalls.get()).isZero();
+    }
+
+    /**
+     * Two jobs, one inference slot (max-concurrency 1), GPU off: the wait counts from when each job was accepted, so
+     * both end about offline-wait-ms (2.5 s) after it. Counted from taking the slot, the second job waited for the
+     * first one's whole wait and then its own (about 5 s, N x the limit for N queued jobs).
+     */
+    @Test
+    void queuedJobsCountTheWaitFromAcceptanceNotFromTheSlot() throws Exception {
+        long started = System.nanoTime();
+        String first = upload();
+        String second = upload();
+        await().atMost(Duration.ofSeconds(15))
+                .until(() -> statusOf(first).equals("FAILED") && statusOf(second).equals("FAILED"));
+        long elapsedMs = (System.nanoTime() - started) / 1_000_000;
+        assertThat(elapsedMs).isGreaterThanOrEqualTo(2_000).isLessThan(4_000);
+        for (String jobId : new String[]{first, second}) {
+            String body = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString();
+            assertThat(JSON.readTree(body).path("error").path("code").asText()).isEqualTo("INFERENCE_UNAVAILABLE");
+        }
         assertThat(inferCalls.get()).isZero();
     }
 

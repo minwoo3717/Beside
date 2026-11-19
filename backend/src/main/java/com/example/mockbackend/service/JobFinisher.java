@@ -71,12 +71,22 @@ public class JobFinisher {
         measure(JobRun.of(job, now, workerType, details != null ? details : RunDetails.NONE));
     }
 
-    /** Insert-only row first (finishing one attempt twice is a bug and must not overwrite the first measurement), then the line. */
+    /**
+     * Insert-only row first (finishing one attempt twice is a bug and must not overwrite the first measurement), then
+     * the line. A second finish of the same attempt (its row is already there) stops at the row: no second line and no
+     * second notification, so events.jsonl and job_runs keep one record per attempt. Any other failed insert (a value
+     * too long, say) is only logged and the line is still written.
+     */
     private void measure(JobRun run) {
         try {
             jobRunRepository.saveAndFlush(run);
-        } catch (DataIntegrityViolationException twice) {
-            log.error("jobId={} attempt={} finished twice; job_runs keeps the first row", run.getJobId(), run.getAttempt());
+        } catch (DataIntegrityViolationException e) {
+            if (alreadyMeasured(run)) {
+                log.error("jobId={} attempt={} finished twice; job_runs keeps the first row, no second events.jsonl"
+                        + " line or notification", run.getJobId(), run.getAttempt());
+                return;
+            }
+            log.error("Could not store the job_runs row of jobId={} attempt={}: {}", run.getJobId(), run.getAttempt(), e.toString());
         } catch (RuntimeException e) {
             log.error("Could not store the job_runs row of jobId={} attempt={}: {}", run.getJobId(), run.getAttempt(), e.toString());
         }
@@ -85,6 +95,15 @@ public class JobFinisher {
             events.publishEvent(JobFinishedEvent.of(run));
         } catch (RuntimeException e) {
             log.warn("jobId={} attempt={} finish notification not published: {}", run.getJobId(), run.getAttempt(), e.toString());
+        }
+    }
+
+    /** True when job_runs already holds this attempt's row (the insert failed because it was measured before). */
+    private boolean alreadyMeasured(JobRun run) {
+        try {
+            return jobRunRepository.existsById(run.getId());
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 }

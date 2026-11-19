@@ -163,6 +163,15 @@ class JobPersistenceTest {
                 assertThat(run.result()).isEqualTo("COMPLETED");
             });
         }
+        // events.jsonl agrees with job_runs: the second finish writes no line of its own.
+        List<String> results = new ArrayList<>();
+        for (String line : Files.readAllLines(dir.resolve("events.jsonl"), StandardCharsets.UTF_8)) {
+            JsonNode event = new ObjectMapper().readTree(line);
+            if (event.path("jobId").asText().equals("job-c")) {
+                results.add(event.path("result").asText());
+            }
+        }
+        assertThat(results).containsExactly("COMPLETED");
     }
 
     @Test
