@@ -88,6 +88,14 @@ class JobServiceStoreTest {
         String noExtension = JobServiceImpl.storedName("id", "x".repeat(300) + ".notanextension1");
         assertThat(noExtension.substring(3)).hasSize(JobServiceImpl.MAX_NAME_BYTES);
         assertThat(JobServiceImpl.storedName("id", "???")).isEqualTo("id____");
+        // Windows refuses a name ending in a space (400 INVALID_REQUEST before) and strips a final dot.
+        assertThat(JobServiceImpl.storedName("id", "dog.jpg ")).isEqualTo("id_dog.jpg");
+        assertThat(JobServiceImpl.storedName("id", "dog.")).isEqualTo("id_dog");
+        assertThat(JobServiceImpl.storedName("id", "dog . . ")).isEqualTo("id_dog");
+        assertThat(JobServiceImpl.storedName("id", " . ")).isEqualTo("id_upload");
+        assertThat(JobServiceImpl.storedName("id", "dog .jpg")).isEqualTo("id_dog .jpg");
+        String cutAtSpace = JobServiceImpl.storedName("id", "x".repeat(JobServiceImpl.MAX_NAME_BYTES - 1) + " yyyy");
+        assertThat(cutAtSpace).isEqualTo("id_" + "x".repeat(JobServiceImpl.MAX_NAME_BYTES - 1));
     }
 
     @Test

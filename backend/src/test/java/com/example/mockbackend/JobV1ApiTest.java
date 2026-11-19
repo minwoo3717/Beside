@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -115,6 +116,18 @@ class JobV1ApiTest {
                 .andExpect(header().string("Content-Disposition", "attachment; filename=\"" + jobId + "-base.glb\""))
                 .andExpect(header().longValue("Content-Length", SAMPLE_GLB.length))
                 .andExpect(content().bytes(SAMPLE_GLB));
+        // Range requests: one range declares its own length; several (multipart/byteranges) must not declare the
+        // whole file's length, or the client waits for bytes the shorter body never sends.
+        mvc.perform(get(completed.path("asset").path("url").asText()).header("Range", "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().longValue("Content-Length", 4))
+                .andExpect(content().bytes(Arrays.copyOfRange(SAMPLE_GLB, 0, 4)));
+        MvcResult multiRange = mvc.perform(get(completed.path("asset").path("url").asText())
+                        .header("Range", "bytes=0-3,8-11"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().doesNotExist("Content-Length"))
+                .andReturn();
+        assertThat(multiRange.getResponse().getContentType()).startsWith("multipart/byteranges");
         mvc.perform(get("/api/v1/jobs/{id}/asset?variant=hair", jobId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("ASSET_NOT_FOUND"))
