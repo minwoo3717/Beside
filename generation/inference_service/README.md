@@ -100,6 +100,40 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 확인한 것 **[구현됨]**: `test_app.py` 의 `PassthroughKnobTest` 10개 — 설정 없음 → sleep·슬롯 없음, 지연+지터 범위와 sleep 중 슬롯 점유, `SLOTS=2` 에서 둘은 겹치고 셋째는 기다림, 실패 토큰·실패율 응답의 상태 코드·`detail` 모양이 모델 실패 경로(가짜 모델)와 같음, 느린 토큰, 느린 업로드 도중 `DELETE /artifacts` 로 폴더가 지워지면 500 `INFERENCE_FAILED`·경고 로그·폴더 재생성 없음, 슬롯을 기다리다 취소되면 sleep 없음, `inferMs`, 패스스루 밖(501·모델 모드)에서는 무시, 값 범위. 이 PC 에서 uvicorn 스텁을 직접 띄워 동시 4건을 보낸 동작 확인(성능 측정 아님): `DELAY_MS=300` 에서 `SLOTS=1` 은 약 300 ms 간격으로 하나씩, `SLOTS=2` 는 둘씩 끝났고, `FAIL_TOKEN` 사진은 위 500 응답을 받았다.
 
+## 요청별 시간 기록 (`BESIDE_REQUEST_TIMING=1`, 부하 시험용)
+
+두 모드 모두에서 쓸 수 있다. 기본은 꺼짐이고, 켜지 않으면 미들웨어도 출력도 없다. 켜면 HTTP 요청마다 stderr(Pod 에서는 `inference.log`)에 한 줄을 쓴다.
+
+```
+timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 start_ms=8231.0 end_ms=8231.4 gone_ms=- out=1212 err=- at=2026-11-20T01:02:03.456Z
+```
+
+| 칸 | 뜻 |
+|---|---|
+| `in` / `out` | 요청 본문 / 응답 본문 바이트 |
+| `body_ms` | 서비스가 요청 본문의 마지막 조각을 읽은 때. 업로드면 받기가 끝난 때다. 본문 바이트가 없으면 `-` |
+| `start_ms` | 응답 머리를 uvicorn 에 넘긴 때. 이쪽이 답을 다 만든 때다 |
+| `end_ms` | 응답 본문의 마지막 조각을 uvicorn 에 넘긴 때. **바이트가 이 기계를 떠난 때가 아니다**(아래) |
+| `gone_ms` | 응답을 다 넘기기 전에 클라이언트가 끊은 것을 본 때. 아니면 `-` |
+| `err` | 처리 중 예외 이름. 이때 상태는 500 이고 `start_ms`·`end_ms` 는 `-` 다(500 은 Starlette 가 이 층 밖에서 보낸다) |
+| `client` | 연결한 쪽의 주소와 포트. Pod 에서는 userspace tailscaled 가 들어온 tailnet 연결마다 루프백 연결을 하나 열므로 `127.0.0.1:<tailscaled 가 연 포트>` 다. 같은 포트가 다시 나오면 같은 tailnet 연결을 이어 쓴 것이다. Spring 쪽 포트가 아니므로 VM 기록과는 `at` 과 경로(jobId)로 맞춘다 |
+| `at` | 요청이 들어온 UTC 시각 |
+
+- 시각은 모두 요청이 들어온 때(머리를 읽은 뒤)부터의 ms 다.
+- **`end_ms` 로 전송 시간을 재지 않는다.**
+  - uvicorn 은 쓰기 버퍼가 64 KiB 를 넘을 때만 보내기를 기다린다. Linux 에서는 약 1.3 MB GLB 가 소켓 버퍼에 다 들어간다. Pod 에서는 그 뒤의 userspace tailscaled 가 루프백을 바로 읽어 간다.
+  - 그래서 Pod 에서 `end_ms - start_ms` 는 0 에 가깝다(검토에서 WSL2 Linux 로 확인: 300 KB/s 로 읽는 클라이언트에도 0.7 ms). 이 PC(Windows)의 루프백에서는 기다렸다.
+  - 전송 시간은 Spring 쪽이 받기를 끝낸 시각에서 이 줄의 `at` + `end_ms` 를 빼서 구한다. 경로(tailscaled·tailnet·VM) 몫이다.
+- **클라이언트가 떠난 뒤 끝난 답**은 보통 줄처럼 찍힌다. uvicorn 이 보낼 곳 없는 답을 조용히 버리기 때문이다. 이때 uvicorn 의 접근 로그 줄은 없다.
+- **Pod 에서 켜기**: `start_pod.sh` 는 이미 떠 있는 서비스를 다시 띄우지 않는다.
+  1. 먼저 `kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다.
+  2. `BESIDE_REQUEST_TIMING=1 bash /workspace/Beside/deploy/runpod/start_pod.sh` 로 다시 띄운다. 환경변수는 두 모드 모두 uvicorn 까지 이어진다.
+  3. `curl -s http://127.0.0.1:8002/healthz` 한 번 뒤 `grep '^timing ' /workspace/beside-logs/inference.log` 에 줄이 나오는지 본다.
+- 쓰는 곳: 3차 부하 시험 4절의 가설을 가리는 4차 시험. 동시 작업에서 응답·내려받기가 길어지는 것이 이쪽이 늦게 답해서인지, 경로에서 늦어져서인지 본다.
+- 확인한 것 **[구현됨]**:
+  - `test_app.py` 의 `RequestTimingTest` 5개: 기본 꺼짐, 업로드와 GLB 내려받기의 줄, 토큰 거부 때 본문을 읽지 않음, 예외 이름과 500, 켠 상태로 새로 띄운 프로세스의 미들웨어 순서와 토큰·쿼리 문자열이 줄에 없음.
+  - 이 PC 의 uvicorn 0.54 에서 1.5 MB 내려받기의 `out` 이 파일 크기와 같았다. 이어 쓴 연결은 같은 `client` 포트로 찍혔다.
+
 ## 계약 v0 (내부)
 
 ### `POST /infer`

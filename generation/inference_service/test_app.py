@@ -21,6 +21,7 @@ sys.path.insert(0, str(HERE))
 WORK = tempfile.mkdtemp(prefix="beside-infer-test-")
 os.environ.setdefault("BESIDE_WORK_DIR", WORK)
 os.environ.pop("BESIDE_INFERENCE_TOKEN", None)
+os.environ.pop("BESIDE_REQUEST_TIMING", None)   # RequestTimingTest wraps the app itself
 KNOBS = ("DELAY_MS", "JITTER_MS", "SLOTS", "FAIL_RATE", "FAIL_TOKEN", "SLOW_TOKEN", "SLOW_MS")
 for _knob in KNOBS:   # each test sets the passthrough knobs it needs
     os.environ.pop("BESIDE_PASSTHROUGH_" + _knob, None)
@@ -724,6 +725,96 @@ class WorkSweepTest(unittest.TestCase):
                 if raw is not None:
                     os.environ["BESIDE_WORK_SWEEP_MINUTES"] = raw
                 self.assertEqual(service._sweep_minutes(), minutes, raw)
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class RequestTimingTest(_ModelModeCase):
+    """BESIDE_REQUEST_TIMING=1: one line per request with the Pod-side times (load test round 4)."""
+
+    LINE = (r"^timing (?P<method>\S+) (?P<path>\S+) (?P<status>\S+) client=(?P<client>\S+) in=(?P<inb>\d+) "
+            r"body_ms=(?P<body>\S+) start_ms=(?P<start>\S+) end_ms=(?P<end>\S+) gone_ms=(?P<gone>\S+) "
+            r"out=(?P<out>\d+) err=(?P<err>\S+) at=(?P<at>\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z)$")
+
+    def setUp(self):
+        super().setUp()
+        self.lines = _Records()
+        service.timing_log.addHandler(self.lines)
+        self.addCleanup(service.timing_log.removeHandler, self.lines)
+        level = service.timing_log.level
+        service.timing_log.setLevel(logging.INFO)
+        self.addCleanup(service.timing_log.setLevel, level)
+        self.client = TestClient(service._RequestTiming(service.app))
+
+    def timings(self):
+        import re as _re
+        out = []
+        for record in self.lines.records:
+            match = _re.match(self.LINE, record.getMessage())
+            self.assertIsNotNone(match, record.getMessage())
+            out.append(match.groupdict())
+        return out
+
+    def test_off_unless_the_setting_is_1(self):
+        # The tests import the service without BESIDE_REQUEST_TIMING: no middleware, no handler.
+        self.assertFalse(service.REQUEST_TIMING)
+        self.assertFalse(any(m.cls is service._RequestTiming for m in service.app.user_middleware))
+
+    def test_an_upload_and_its_glb_download_are_timed(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        glb = self.client.get(answer.json()["glbUrl"])
+        self.assertEqual((glb.status_code, glb.content), (200, GLB_STUB))
+        up, down = self.timings()
+        self.assertEqual((up["method"], up["path"], up["status"]), ("POST", "/infer/upload", "200"))
+        self.assertGreater(int(up["inb"]), len(b"\xff\xd8\xff\xe0 jpeg"))   # the whole multipart body
+        self.assertLessEqual(float(up["body"]), float(up["start"]))          # read, then answered
+        self.assertLessEqual(float(up["start"]), float(up["end"]))
+        self.assertEqual(int(up["out"]), len(answer.content))
+        self.assertEqual((down["method"], down["path"], down["status"]), ("GET", f"/artifacts/{self.job}/base.glb", "200"))
+        self.assertEqual((int(down["inb"]), int(down["out"])), (0, len(GLB_STUB)))
+        self.assertLessEqual(float(down["start"]), float(down["end"]))
+        self.assertEqual(down["body"], "-")   # no request body bytes, although FileResponse polls receive
+        self.assertEqual((up["gone"], up["err"], down["gone"], down["err"]), ("-", "-", "-", "-"))
+
+    def test_a_request_refused_by_the_token_check_is_timed_without_reading_its_body(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "secret"):
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 401)
+        (line,) = self.timings()
+        self.assertEqual((line["path"], line["status"], line["body"]), ("/infer/upload", "401", "-"))
+
+    def test_an_exception_is_logged_with_its_name_and_raised_unchanged(self):
+        self.job_dir.mkdir(parents=True)
+        client = TestClient(service._RequestTiming(service.app), raise_server_exceptions=False)
+        with mock.patch.object(service.shutil, "rmtree", side_effect=PermissionError(errno.EACCES, "denied")), \
+                mock.patch.object(service, "_REMOVE_PAUSE_S", 0):
+            answer = client.delete(f"/artifacts/{self.job}")
+        self.assertEqual(answer.status_code, 500)
+        (line,) = self.timings()
+        self.assertEqual((line["method"], line["status"], line["err"]), ("DELETE", "500", "PermissionError"))
+
+    def test_the_production_wiring_wraps_the_token_check_and_logs_no_secret(self):
+        # Import the service as the Pod does (setting on), in a fresh interpreter: middleware order, stderr line,
+        # neither the token sent nor the query string in it.
+        script = (
+            "import sys; sys.path.insert(0, sys.argv[1]); import app\n"
+            "kinds =[m.cls.__name__ for m in app.app.user_middleware]\n"
+            "assert kinds[:2] == ['_RequestTiming', 'BaseHTTPMiddleware'], kinds\n"
+            "from fastapi.testclient import TestClient\n"
+            "c = TestClient(app.app, raise_server_exceptions=False)\n"
+            "r = c.post('/infer/upload?q=leakme', headers={'X-Inference-Token': 'wrong-secret'}, data={'request': '{}'})\n"
+            "assert r.status_code == 401, r.status_code\n"
+        )
+        import subprocess
+        env = dict(os.environ, BESIDE_REQUEST_TIMING="1", BESIDE_INFERENCE_TOKEN="right-secret", BESIDE_WORK_DIR=WORK)
+        done = subprocess.run([sys.executable, "-c", script, str(HERE)], env=env, capture_output=True, text=True,
+                              timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        lines = [l for l in done.stderr.splitlines() if l.startswith("timing ")]
+        self.assertEqual(len(lines), 1, done.stderr[-2000:])
+        self.assertRegex(lines[0], r"^timing POST /infer/upload 401 ")
+        for secret in ("wrong-secret", "right-secret", "leakme"):
+            self.assertNotIn(secret, lines[0])
 
 
 class UprightPhotoTest(unittest.TestCase):

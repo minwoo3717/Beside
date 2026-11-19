@@ -127,6 +127,88 @@ async def _check_token(request: Request, call_next):
     return await call_next(request)
 
 
+# --------------------------------------------------------------------------- per-request timing (load tests, opt-in)
+# BESIDE_REQUEST_TIMING=1 writes one stderr line per HTTP request with the times this service can see. 2026-11-19
+# load test round 3 (docs/perf/load/2026-11-19_vm-3rd.md section 4): with two jobs at once the response/GLB download
+# after conversion grew from 1.9 s to 4.3~6.7 s; these lines say when this side answered and handed the bytes over,
+# so the rest of Spring's time is the path (tailscaled, the tailnet, the VM). Off by default: no middleware, no output.
+REQUEST_TIMING = (os.environ.get("BESIDE_REQUEST_TIMING") or "").strip() == "1"
+timing_log = logging.getLogger("beside.timing")
+
+
+class _RequestTiming:
+    """Pure ASGI middleware, the outermost user middleware (inside Starlette's ServerErrorMiddleware), so it wraps the
+    token check and sees the raw body chunks.
+
+    One line per request: "timing <method> <path> <status> client=<ip>:<port> in=<request body bytes>
+    body_ms=<last request body chunk received> start_ms=<response headers handed to the server> end_ms=<last response
+    chunk handed to the server> gone_ms=<client disconnect seen> out=<response body bytes> err=<exception> at=<UTC
+    arrival>". Times are ms from the arrival of the request (headers read); "-" when it did not happen: body_ms for a
+    request without body bytes, start_ms/end_ms for an exception (status 500, sent by Starlette outside this layer).
+    end_ms is when uvicorn took the last chunk, not when the bytes left the machine: on Linux a GLB of ~1.3 MB fits in
+    the socket buffers (and on the Pod in the userspace tailscaled reading the loopback), so end_ms - start_ms is about
+    0 there. The transfer time is Spring's: its receive end minus this line's arrival + end_ms. An answer finished after
+    the client left is logged like a normal one (uvicorn drops it silently); uvicorn then writes no access-log line.
+    On the Pod, client is 127.0.0.1:<port tailscaled opened>: the same port again means a reused tailnet connection."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        t0, wall = time.perf_counter(), time.time()
+        rec = {"in": 0, "out": 0, "status": None, "body": None, "start": None, "end": None, "gone": None}
+
+        async def timed_receive():
+            message = await receive()
+            if message["type"] == "http.request":
+                chunk = len(message.get("body", b""))
+                rec["in"] += chunk
+                if chunk and not message.get("more_body", False) and rec["body"] is None:
+                    rec["body"] = time.perf_counter()
+            elif message["type"] == "http.disconnect" and rec["end"] is None and rec["gone"] is None:
+                rec["gone"] = time.perf_counter()
+            return message
+
+        async def timed_send(message):
+            if message["type"] == "http.response.start":
+                rec["status"], rec["start"] = message["status"], time.perf_counter()
+            elif message["type"] == "http.response.body":
+                rec["out"] += len(message.get("body", b""))
+            await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                rec["end"] = time.perf_counter()
+
+        error = "-"
+        try:
+            await self.app(scope, timed_receive, timed_send)
+        except BaseException as exc:   # logged, then raised unchanged (Starlette answers 500 outside this layer)
+            error = type(exc).__name__
+            raise
+        finally:
+            def ms(t):
+                return "-" if t is None else f"{(t - t0) * 1000:.1f}"
+
+            client = scope.get("client") or ("-", "-")
+            status = rec["status"] or (500 if error != "-" else "-")
+            at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(wall)) + f".{int(wall % 1 * 1000):03d}Z"
+            timing_log.info("timing %s %s %s client=%s:%s in=%d body_ms=%s start_ms=%s end_ms=%s gone_ms=%s out=%d "
+                            "err=%s at=%s", scope.get("method", "-"), scope.get("path", "-"), status, client[0],
+                            client[1], rec["in"], ms(rec["body"]), ms(rec["start"]), ms(rec["end"]), ms(rec["gone"]),
+                            rec["out"], error, at)
+
+
+if REQUEST_TIMING:
+    _timing_handler = logging.StreamHandler(sys.stderr)
+    _timing_handler.setFormatter(logging.Formatter("%(message)s"))
+    timing_log.addHandler(_timing_handler)
+    timing_log.setLevel(logging.INFO)
+    timing_log.propagate = False
+    app.add_middleware(_RequestTiming)   # added after _check_token, so it wraps it
+
+
 def _load_model() -> None:
     global MODEL, MODEL_ERROR
     try:
