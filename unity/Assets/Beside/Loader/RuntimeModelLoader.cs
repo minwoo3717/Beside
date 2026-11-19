@@ -67,6 +67,15 @@ public class RuntimeModelLoader : MonoBehaviour
     Transform templateRoot;                               // inactive holder: templates never run or render
     readonly List<GltfImport> imports = new List<GltfImport>(); // keep alive: spawned copies share their meshes/textures
 
+    /// <summary>What one loaded template owns: its import plus the materials and hair maps made for it.
+    /// Freed when a newer model replaces it in the spawner slot.</summary>
+    sealed class LoadedModel
+    {
+        public GltfImport gltf;
+        public readonly List<UnityEngine.Object> owned = new List<UnityEngine.Object>();
+    }
+    readonly Dictionary<GameObject, LoadedModel> loaded = new Dictionary<GameObject, LoadedModel>();
+
     void Awake()
     {
         var holder = new GameObject("RuntimeModelTemplates");
@@ -104,8 +113,10 @@ public class RuntimeModelLoader : MonoBehaviour
         return await BuildAndRegister(gltf, System.IO.Path.GetFileNameWithoutExtension(glbUrl), lengthMap, flowMap);
     }
 
-    /// <summary>Same, from GLB bytes already downloaded (lets the caller measure download time and validate the file).</summary>
-    public async Task<GameObject> LoadAndRegister(byte[] glbBytes, string name, byte[] hairLengthPng = null, byte[] hairFlowPng = null)
+    /// <summary>Same, from GLB bytes already downloaded (lets the caller measure download time and validate the file).
+    /// stillWanted: checked before registering; false (job cancelled) drops the model and returns null.</summary>
+    public async Task<GameObject> LoadAndRegister(byte[] glbBytes, string name, byte[] hairLengthPng = null, byte[] hairFlowPng = null,
+        Func<bool> stillWanted = null)
     {
         if (!IsGlb(glbBytes))
         {
@@ -128,7 +139,7 @@ public class RuntimeModelLoader : MonoBehaviour
         Texture2D lengthMap = hairLengthPng == null ? fallbackHairLength : LinearTexture(hairLengthPng);
         Texture2D flowMap   = hairFlowPng   == null ? fallbackHairFlow   : LinearTexture(hairFlowPng);
         if (lengthMap == null) Debug.Log("[RuntimeModelLoader] no fur maps in GLB and no fallback set: fur skipped");
-        return await BuildAndRegister(gltf, name, lengthMap, flowMap, furLength);
+        return await BuildAndRegister(gltf, name, lengthMap, flowMap, furLength, stillWanted);
     }
 
     /// <summary>
@@ -174,9 +185,14 @@ public class RuntimeModelLoader : MonoBehaviour
     public static bool IsGlb(byte[] data) =>
         data != null && data.Length > 12 && data[0] == 0x67 && data[1] == 0x6C && data[2] == 0x54 && data[3] == 0x46;
 
-    async Task<GameObject> BuildAndRegister(GltfImport gltf, string name, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f)
+    async Task<GameObject> BuildAndRegister(GltfImport gltf, string name, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f,
+        Func<bool> stillWanted = null)
     {
-        if (shellPrefab == null) { Debug.LogError("[RuntimeModelLoader] Shell Prefab is not set."); gltf.Dispose(); return null; }
+        var model = new LoadedModel { gltf = gltf };
+        if (lengthMap != null && lengthMap != fallbackHairLength) model.owned.Add(lengthMap);   // made from bytes here
+        if (flowMap != null && flowMap != fallbackHairFlow) model.owned.Add(flowMap);
+
+        if (shellPrefab == null) { Debug.LogError("[RuntimeModelLoader] Shell Prefab is not set."); Free(null, model); return null; }
         imports.Add(gltf);
 
         GameObject template = Instantiate(shellPrefab, templateRoot);
@@ -188,25 +204,33 @@ public class RuntimeModelLoader : MonoBehaviour
         if (!await gltf.InstantiateMainSceneAsync(modelRoot))
         {
             Debug.LogError("[RuntimeModelLoader] Failed to instantiate GLB scene.");
-            Destroy(template);
+            Free(template, model);
             return null;
         }
 
         if (baseMaterialTemplate != null)
-            ReplaceMaterials(modelRoot, gltf);
+            ReplaceMaterials(modelRoot, gltf, model.owned);
 
         modelRoot.localRotation = FacingToPlusZ(modelFacing);   // head -> +Z (faces the camera on spawn)
 
         if (!FitModel(template.transform, modelRoot))
         {
             Debug.LogError("[RuntimeModelLoader] GLB contains no meshes.");
-            Destroy(template);
+            Free(template, model);
             return null;
         }
 
         if (furMaterialTemplate != null && lengthMap != null)
-            AddFur(modelRoot, lengthMap, flowMap, furLength);
+            AddFur(modelRoot, lengthMap, flowMap, furLength, model.owned);
 
+        if (stillWanted != null && !stillWanted())
+        {
+            Debug.Log($"[RuntimeModelLoader] Load cancelled, model dropped: {template.name}");
+            Free(template, model);
+            return null;
+        }
+
+        loaded[template] = model;
         Register(template);
         Debug.Log($"[RuntimeModelLoader] Ready: {template.name}");
         ModelReady?.Invoke(template);
@@ -272,7 +296,7 @@ public class RuntimeModelLoader : MonoBehaviour
 
     // ---------- materials ----------
 
-    void ReplaceMaterials(Transform model, GltfImport gltf)
+    void ReplaceMaterials(Transform model, GltfImport gltf, List<UnityEngine.Object> owned)
     {
         // Fallback texture straight from the GLB, in case the glTFast material could not be created
         Texture fallback = gltf.TextureCount > 0 ? gltf.GetTexture(0) : null;
@@ -286,6 +310,7 @@ public class RuntimeModelLoader : MonoBehaviour
                 Material old = i < oldMats.Length ? oldMats[i] : null;
                 Texture tex = GetBaseTexture(old) ?? fallback;
                 var m = new Material(baseMaterialTemplate);
+                owned.Add(m);
                 m.SetTexture("_BaseMap", tex);
                 m.SetColor("_BaseColor", Color.white);
                 newMats[i] = m;
@@ -297,7 +322,7 @@ public class RuntimeModelLoader : MonoBehaviour
 
     // ---------- fur ----------
 
-    void AddFur(Transform model, Texture2D lengthMap, Texture2D flowMap, float furLength = -1f)
+    void AddFur(Transform model, Texture2D lengthMap, Texture2D flowMap, float furLength, List<UnityEngine.Object> owned)
     {
         // static meshes (MeshFilter) and rigged meshes (SkinnedMeshRenderer) both get shells
         var targets = new List<Renderer>();
@@ -307,6 +332,7 @@ public class RuntimeModelLoader : MonoBehaviour
         foreach (var baseRenderer in targets)
         {
             var mat = new Material(furMaterialTemplate);
+            owned.Add(mat);
             if (furLength > 0f) mat.SetFloat("_FurLength", furLength);   // value from the converter, model units
             mat.SetTexture("_LengthMap", lengthMap);
             if (flowMap != null) mat.SetTexture("_FlowMap", flowMap);
@@ -337,7 +363,7 @@ public class RuntimeModelLoader : MonoBehaviour
     static Texture2D LinearTexture(byte[] png)
     {
         var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false, true); // linear: data, not color
-        if (!tex.LoadImage(png)) { Debug.LogError("[RuntimeModelLoader] Hair map is not a valid image."); return null; }
+        if (!tex.LoadImage(png)) { Debug.LogError("[RuntimeModelLoader] Hair map is not a valid image."); Destroy(tex); return null; }
         tex.wrapMode = TextureWrapMode.Clamp;
         return tex;
     }
@@ -365,8 +391,10 @@ public class RuntimeModelLoader : MonoBehaviour
         int index;
         if (replaceSlot >= 0 && replaceSlot < list.Count)
         {
+            GameObject previous = list[replaceSlot];
             list[replaceSlot] = template;   // the menu button for this slot now spawns the loaded model
             index = replaceSlot;
+            if (previous != null && previous != template) FreeReplaced(previous);
         }
         else
         {
@@ -375,5 +403,36 @@ public class RuntimeModelLoader : MonoBehaviour
         }
         objectSpawner.spawnOptionIndex = index; // next tap spawns this model
         Debug.Log($"[RuntimeModelLoader] Registered in spawner slot {index}");
+    }
+
+    // ---------- freeing ----------
+
+    /// <summary>Frees a runtime template that a newer model pushed out of the spawner slot. Kept while a placed copy
+    /// still uses its meshes and materials (the UI clears placed models before the next job, so this is rare).</summary>
+    void FreeReplaced(GameObject previous)
+    {
+        if (!loaded.TryGetValue(previous, out var model)) return;   // scene prefab, not ours
+        if (HasPlacedCopies(previous.name)) { Debug.Log($"[RuntimeModelLoader] {previous.name} still placed: kept in memory"); return; }
+        loaded.Remove(previous);
+        Free(previous, model);
+        Debug.Log($"[RuntimeModelLoader] Freed {previous.name}");
+    }
+
+    /// <summary>Destroys the template, the materials and hair maps made for it, and disposes its import.</summary>
+    void Free(GameObject template, LoadedModel model)
+    {
+        if (template != null) Destroy(template);
+        foreach (var o in model.owned) if (o != null) Destroy(o);
+        model.owned.Clear();
+        imports.Remove(model.gltf);
+        model.gltf.Dispose();
+    }
+
+    /// <summary>Spawned copies are named "{template}(Clone)"; templates themselves sit under the inactive holder.</summary>
+    static bool HasPlacedCopies(string templateName)
+    {
+        foreach (var t in FindObjectsByType<Transform>(FindObjectsInactive.Exclude))
+            if (t.name.StartsWith(templateName, StringComparison.Ordinal)) return true;
+        return false;
     }
 }
