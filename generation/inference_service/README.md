@@ -2,7 +2,7 @@
 
 Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는 호출하지 않는다. 담당은 3D Generation 트랙, `/infer` 계약 변경은 Backend 와 합의한다.
 
-상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다 — 실측 기록(exp-01: 1건 시간·VRAM)은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정'). VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다 [실험 결과].
+상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다. 1건 시간·VRAM 은 **[실험 결과]** [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, 리깅 끔, 표본 4건 + 2차 부하 539건). 품질 점수와 리깅을 켠 측정은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정'). VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다 [실험 결과].
 
 ## GPU 서버 실행
 
@@ -150,7 +150,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 |---|---|---|
 | `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
-| `options.hair` | bool | true 면 `hair.npz` 로 hair variant 도 생성 |
+| `options.hair` | bool | 받기만 하고 지금은 무시한다. true 일 때 hair variant(`{jobId}/hair.glb`)를 만드는 것은 **[계획]**. 털 맵(`hair_length.png`·`hair_flow.png`·`hair_maps.json`)은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 옆에 쓴다 |
 
 응답 200:
 
@@ -165,7 +165,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 | 응답 필드 | 타입 | 설명 |
 |---|---|---|
 | `glbPath` | string | base GLB 의 절대 경로. Spring 이 헤더를 확인하고 `storage/results/{jobId}/base.glb` 로 복사한다 |
-| `hairGlbPath` | string \| null | `options.hair` 일 때 hair GLB 경로 (Spring 쪽 저장은 [계획]) |
+| `hairGlbPath` | string \| null | 지금은 항상 null. `options.hair` 일 때 hair GLB 경로를 주는 것은 **[계획]**(Spring 쪽 저장도 [계획]) |
 | `metrics.*` | int \| null | §2 의 여섯 수치. 숫자가 아니면 Spring 이 null 로 기록한다 |
 | `passthrough` | bool | 샘플을 돌려줬으면 true. Spring 이 실행마다 저장하므로 측정표에서 거를 수 있다 |
 | `modelVersion` | string \| null | **선택**(2026-10-06 추가). GLB 를 만든 모델·가중치 버전, 예 `animallift-baseline@<커밋>`. Spring 이 실행마다 `job_runs.model_version` 에 저장해 베이스라인과 개선안을 구분한다. 패스스루는 None, 128자까지 |
@@ -174,7 +174,8 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 
 | HTTP | code | 상황 | Spring 이 Job 에 기록할 코드 |
 |---|---|---|---|
-| 400 | `INFERENCE_FAILED` | 이미지 없음·읽기 실패·입력 품질 불량 | `INFERENCE_FAILED` |
+| 400 | `INFERENCE_FAILED` | 이미지 없음(경로가 파일이 아님) | `INFERENCE_FAILED` |
+| 500 | `INFERENCE_FAILED` | 모델 실패·이미지 읽기 실패(OOM, 깨진 사진), 취소된 실행(아래 'DELETE /artifacts/{jobId}') | `INFERENCE_FAILED` |
 | 500 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB_SPEC 위반 | `CONVERSION_FAILED` |
 | 501 | `INFERENCE_UNAVAILABLE` | 모델 미설정(`BESIDE_ANIMALLIFT_DIR`·`BESIDE_MODEL_DIR`·`BESIDE_SAMPLE_GLB` 모두 없음) | `INFERENCE_UNAVAILABLE` |
 | 503 | `INFERENCE_UNAVAILABLE` | 모델 로딩 중 또는 로드 실패(서비스 로그 확인) | `INFERENCE_UNAVAILABLE` |
@@ -183,11 +184,11 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 | 그 밖의 4xx·5xx | 없음·모르는 코드 | 처리하지 않은 예외(FastAPI 기본 500), 요청 검증 실패 422 | `INFERENCE_FAILED` |
 | 200 | — | `glbPath` 없음, 파일 없음, glTF 2.0 바이너리 아님(Spring 이 헤더 magic `glTF`·version 2 만 확인) | `CONVERSION_FAILED` |
 
-`detail.code` 가 위 Job 실패 코드면 HTTP 상태와 관계없이 그 코드가 기록된다. Spring 은 `detail.message` 를 앱 응답에 싣지 않고 서버 로그에만 남기므로 message 에 경로를 넣어도 된다.
+이 서비스는 입력 품질(동물 수·크기·밝기·흐림)을 검사하지 않는다. 그 검사는 Spring 의 `POST /jobs` 가 한다([docs/api/ERROR_CODES.md](../../docs/api/ERROR_CODES.md) '대표 사진 검사'). `detail.code` 가 위 Job 실패 코드면 HTTP 상태와 관계없이 그 코드가 기록된다. Spring 은 `detail.message` 를 앱 응답에 싣지 않고 서버 로그에만 남기므로 message 에 경로를 넣어도 된다.
 
 ### 전송 모드: 경로(path) / 업로드(upload) — 업로드는 [구현됨] 2026-10-30
 
-업로드 모드는 이 서비스(FastAPI)와 Spring(`InferenceClient`) 양쪽 다 구현돼 있다. 확인한 것: Spring 가짜 서버 테스트(`InferenceClientTest`, `RealJobWorkerUploadTest`), 이 서비스의 TestClient 스모크(패스스루), 같은 PC 에서 패스스루 uvicorn(토큰 설정) ↔ Spring real(`inference.transfer=upload`) 으로 `scripts/e2e_mock.ps1` 전체 흐름. VM ↔ GPU PC(Tailscale) 실제 배치와 모델 모드의 업로드는 아직 돌려 보지 않았다 **[계획]**.
+업로드 모드는 이 서비스(FastAPI)와 Spring(`InferenceClient`) 양쪽 다 구현돼 있다. 확인한 것: Spring 가짜 서버 테스트(`InferenceClientTest`, `RealJobWorkerUploadTest`), 이 서비스의 TestClient 스모크(패스스루), 같은 PC 에서 패스스루 uvicorn(토큰 설정) ↔ Spring real(`inference.transfer=upload`) 으로 `scripts/e2e_mock.ps1` 전체 흐름. VM ↔ GPU(Tailscale) 실제 배치에서 모델 모드의 업로드도 돌렸다 **[실험 결과]**: GPU 는 Runpod A40 Pod 였고, [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md)(2026-11-17, VM 경유 3건)과 2차 부하 시험 [docs/perf/load/2026-11-18_vm-2nd.md](../../docs/perf/load/2026-11-18_vm-2nd.md)(539건 모두 COMPLETED)에 기록했다.
 
 2026-10-30 결정(REVIEW_CHECKLIST #6 (b)): Spring 을 클라우드 VM 에 두고 이 서비스는 팀원 GPU PC 에 남긴다(Tailscale 사설망). 두 기계는 디스크를 공유하지 않으므로 사진 파일을 올리고 GLB 를 내려받는 업로드 모드를 **추가**한다. 위 `POST /infer`(경로 모드)는 바뀌지 않는다.
 

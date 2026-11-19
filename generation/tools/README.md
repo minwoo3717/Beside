@@ -1,6 +1,6 @@
 # tools — 에셋 변환 도구 (3D Generation 트랙)
 
-상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 변환기만 따로 보는 자동 테스트는 없다. 추론 서비스 시험 `RealConversionCancelTest`(2026-11-19)가 합성 출력으로 `convert()` 를 실제로 돌려 쓰기 위치와 `make_dirs=False`(출력 폴더를 만들지 않고, 없으면 `ConversionError`. 추론 서비스가 쓴다. CLI 는 지금처럼 만든다)를 본다. convertMs·삼각형 수는 [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md) 에 있다 [실험 결과]. gltf-validator 결과는 **[계획]** (exp-02).
+상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 변환기만 따로 보는 자동 테스트는 없다. 추론 서비스 시험 `RealConversionCancelTest`(2026-11-19)가 합성 출력으로 `convert()` 를 실제로 돌려 쓰기 위치와 `make_dirs=False`(출력 폴더를 만들지 않고, 없으면 `ConversionError`. 추론 서비스가 쓴다. CLI 는 지금처럼 만든다)를 본다. `rig_transfer.py` 의 정점 순서 확인은 `RigTransferVertexOrderTest`(합성 GLB 로 `transfer()`·CLI 종료 코드 2), 리깅 결과의 크기 상한·`base.metrics.json` 다시 쓰기는 `RiggedResultTest`·`OversizeRiggedResultTest`(가짜 `rig_transfer`)가 본다(2026-11-20). convertMs·삼각형 수는 [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md) 에 있다 [실험 결과]. gltf-validator 결과는 **[계획]** (exp-02).
 
 의존성: [requirements.txt](requirements.txt) (numpy, pillow, trimesh, scipy). 추론 서비스와 같은 env 에 설치한다.
 
@@ -27,7 +27,8 @@ python tools/rig_transfer.py --base work/<jobId>/base.glb --texture work/<jobId>
 
 - AnimalLift 출력은 모두 같은 템플릿 위상(SMAL 계열, 정점 순서 동일)이라, 템플릿의 스킨 가중치·삼각형·UV·애니메이션 클립을 그대로 쓰고 정점 위치·법선만 새 모델 것으로 바꾼다. 관절 위치는 근처 정점으로 다시 맞추고, 루트 이동 키는 골반 높이 비율로 늘이거나 줄인다.
 - 템플릿 GLB 는 SMAL 파생(학술 라이선스)이라 git 에 넣지 않는다. 추론 서비스는 환경변수 `BESIDE_RIG_TEMPLATE` 이 있을 때만 리깅한다(`scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 켠다). 템플릿을 만든 스크립트는 이 리포에 없다.
-- 표준 출력: `{ "joints", "fitErrorM", "heightRatio", "clips", "bytes" }`. 위상이 다르면 종료 코드 2(`RIG_FAILED`) — 추론 서비스는 그때 리깅 없는 GLB 를 그대로 돌려준다. 리깅 시간은 `convertMs` 에 더해진다(METRICS 의 정의는 변환만 — 측정 때 주의).
+- 표준 출력: `{ "joints", "fitErrorM", "heightRatio", "clips", "bytes" }`. 위상이 다르면 종료 코드 2(`RIG_FAILED`) — 추론 서비스는 그때 리깅 없는 GLB 를 그대로 돌려준다. 위상 확인은 정점 수·삼각형 수, 그리고 삼각형의 정점 번호다(2026-11-20): 수가 같아도 정점 순서가 다르면 삼각형의 정점 번호가 달라 거절한다. 면 순서·시작 꼭짓점은 따지지 않고 UV 값은 비교하지 않는다.
+- 추론 서비스는 리깅한 GLB 도 GLB_SPEC §1 크기 상한(10 MB, `convert_asset.MAX_GLB_BYTES`)으로 다시 본다. 넘으면 리깅 없는 GLB 를 돌려준다(2026-11-20). 리깅한 GLB 를 쓰면 `base.metrics.json` 의 `bytes`·`convertMs` 를 그 파일 기준으로 다시 쓴다. 리깅 시간은 `convertMs` 에 더해진다(METRICS 의 정의는 변환만 — 측정 때 주의).
 - 앱(`unity/Assets/Beside/Pet/PetAnimationPlayer.cs`)은 GLB 안의 클립 `Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt` 를 칩으로 보여 준다.
 
 ## 검증 ([계획])

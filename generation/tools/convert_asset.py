@@ -35,6 +35,8 @@ _FORWARD = {
     "-x": lambda x, z: (z, -x),
 }
 
+MAX_GLB_BYTES = 10 * 1024 * 1024   # GLB_SPEC §1 file size limit; the inference service checks a rigged GLB against it too
+
 
 class ConversionError(Exception):
     pass
@@ -62,7 +64,7 @@ def _out_dir(path: str, make_dirs: bool) -> str:
 
 def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str | None = None,
             hair_npz: str | None = None, forward_axis: str = "+x", longest_axis: float = 1.0,
-            max_triangles: int = 20000, max_texture: int = 2048, max_bytes: int = 10 * 1024 * 1024,
+            max_triangles: int = 20000, max_texture: int = 2048, max_bytes: int = MAX_GLB_BYTES,
             make_dirs: bool = True) -> dict:
     """Runs the conversion and returns the metrics dict (GLB_SPEC §5 names). Raises ConversionError.
 
@@ -174,7 +176,7 @@ def main(argv=None) -> int:
     ap.add_argument("--normalize-longest-axis", type=float, default=1.0)
     ap.add_argument("--max-triangles", type=int, default=20000)
     ap.add_argument("--max-texture", type=int, default=2048)
-    ap.add_argument("--max-bytes", type=int, default=10 * 1024 * 1024)
+    ap.add_argument("--max-bytes", type=int, default=MAX_GLB_BYTES)
     a = ap.parse_args(argv)
     try:
         m = convert(a.obj, a.texture, a.out, a.metrics, a.hair, a.forward_axis, a.normalize_longest_axis,
