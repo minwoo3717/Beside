@@ -22,7 +22,9 @@ if [[ "${1:-}" == "stop" ]]; then
 fi
 
 ANIMALLIFT_DIR="${1:?usage: run_real.sh <AnimalLift dir> [python]}"
-PY="${2:-$(command -v python)}"
+# No fallback to python3: the system interpreter lacks AnimalLift/uvicorn and healthz would only time out after 240 s.
+PY="${2:-$(command -v python || true)}"
+[[ -n "$PY" ]] || { echo "no python on PATH: conda activate animallift, or pass the interpreter as the 2nd argument" >&2; exit 1; }
 PORT="${PORT:-8080}"; INFER_PORT="${INFER_PORT:-8001}"
 [[ -f "$ANIMALLIFT_DIR/animallift/inference.py" ]] || { echo "not an AnimalLift checkout: $ANIMALLIFT_DIR"; exit 1; }
 

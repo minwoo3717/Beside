@@ -5,6 +5,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.web.servlet.ServletRegistrationBean;
+import org.springframework.context.ApplicationContext;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -15,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -46,10 +49,19 @@ class ProdProfileTest {
     @Autowired
     MockMvc mvc;
 
+    @Autowired
+    ApplicationContext context;
+
     @Test
     void consoleAndApiDocsAreClosed() throws Exception {
-        mvc.perform(get("/h2-console")).andExpect(status().isNotFound());
-        mvc.perform(get("/h2-console/login.jsp")).andExpect(status().isNotFound());
+        // The console is its own servlet, which MockMvc never reaches (/h2-console answers 404 here even when it is
+        // on), so the check is on the setting and the servlet registration. mock and real turn it on; prod must win.
+        assertThat(context.getEnvironment().getProperty("spring.h2.console.enabled", Boolean.class)).isFalse();
+        List<String> consoleMappings = context.getBeansOfType(ServletRegistrationBean.class).values().stream()
+                .flatMap(registration -> ((ServletRegistrationBean<?>) registration).getUrlMappings().stream())
+                .filter(mapping -> mapping.startsWith("/h2-console"))
+                .toList();
+        assertThat(consoleMappings).isEmpty();
         mvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());
         mvc.perform(get("/swagger-ui.html")).andExpect(status().isNotFound());
         mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isNotFound());

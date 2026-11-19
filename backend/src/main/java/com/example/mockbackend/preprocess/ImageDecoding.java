@@ -3,6 +3,8 @@ package com.example.mockbackend.preprocess;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
+import javax.imageio.event.IIOReadProgressListener;
+import javax.imageio.event.IIOReadUpdateListener;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.Color;
@@ -27,8 +29,13 @@ import java.util.function.IntSupplier;
  * subsampled while reading when it is much bigger than needed, reduced to a target long side in halving steps,
  * flattened on white, turned upright by EXIF, as TYPE_3BYTE_BGR (the channel order YOLOX reads).
  * <p>
- * Same safety rules as the review branch's thumbnails (header-first pixel cap, 64 MP / 16 MP for WEBP, a watchdog that
- * aborts a slow decode). Bytes are read through a memory cache, so ImageIO writes no temporary file.
+ * Same safety rules as the review branch's thumbnails (header-first pixel cap, 64 MP / 16 MP for WEBP, a time limit
+ * that aborts a slow decode). Bytes are read through a memory cache, so ImageIO writes no temporary file.
+ * <p>
+ * The time limit is checked by the reading thread itself, in the reader's callbacks (every decoded row, pass and
+ * progress report): the JDK's JPEG reader refuses abort() from any other thread while it reads (IllegalStateException),
+ * so a watchdog alone never stopped a slow JPEG. The watchdog stays for readers that report nothing while they work
+ * and accept abort() from another thread.
  */
 public final class ImageDecoding {
 
@@ -127,11 +134,19 @@ public final class ImageDecoding {
     private static BufferedImage readWithin(ImageReader reader, ImageReadParam param, long limitMs)
             throws IOException, UnreadableImageException {
         AtomicBoolean timedOut = new AtomicBoolean();
+        Deadline deadline = new Deadline(System.nanoTime() + limitMs * 1_000_000, timedOut);
+        reader.addIIOReadProgressListener(deadline);
+        reader.addIIOReadUpdateListener(deadline);
         ScheduledFuture<?> guard = WATCHDOG.schedule(() -> {
             timedOut.set(true);
-            reader.abort();
+            try {
+                reader.abort();
+            } catch (IllegalStateException lockedByTheReadingThread) {
+                // JPEG: only the reading thread may abort; Deadline does it at the next row or pass.
+            }
         }, limitMs, TimeUnit.MILLISECONDS);
         try {
+            // An aborted read still returns the partly decoded image, so the flag decides.
             BufferedImage image = reader.read(0, param);
             if (timedOut.get() || image == null) {
                 throw new UnreadableImageException("decode took longer than " + limitMs + " ms (aborted)");
@@ -139,6 +154,100 @@ public final class ImageDecoding {
             return image;
         } finally {
             guard.cancel(false);
+            reader.removeIIOReadProgressListener(deadline);
+            reader.removeIIOReadUpdateListener(deadline);
+        }
+    }
+
+    /**
+     * Aborts the read from the reading thread once the deadline (System.nanoTime()) has passed. Listens to rows and
+     * passes as well as progress: the JPEG reader stops reporting progress after about 20 progressive passes, but still
+     * reports every row of every pass.
+     */
+    private static final class Deadline implements IIOReadProgressListener, IIOReadUpdateListener {
+        private final long deadlineNanos;
+        private final AtomicBoolean timedOut;
+        private boolean aborted;
+
+        Deadline(long deadlineNanos, AtomicBoolean timedOut) {
+            this.deadlineNanos = deadlineNanos;
+            this.timedOut = timedOut;
+        }
+
+        private void check(ImageReader source) {
+            if (!aborted && System.nanoTime() - deadlineNanos >= 0) {
+                aborted = true;
+                timedOut.set(true);
+                source.abort();
+            }
+        }
+
+        @Override
+        public void imageProgress(ImageReader source, float percentageDone) {
+            check(source);
+        }
+
+        @Override
+        public void imageUpdate(ImageReader source, BufferedImage theImage, int minX, int minY, int width, int height,
+                                int periodX, int periodY, int[] bands) {
+            check(source);
+        }
+
+        @Override
+        public void passStarted(ImageReader source, BufferedImage theImage, int pass, int minPass, int maxPass,
+                                int minX, int minY, int periodX, int periodY, int[] bands) {
+            check(source);
+        }
+
+        @Override
+        public void passComplete(ImageReader source, BufferedImage theImage) {
+            check(source);
+        }
+
+        @Override
+        public void sequenceStarted(ImageReader source, int minIndex) {
+        }
+
+        @Override
+        public void sequenceComplete(ImageReader source) {
+        }
+
+        @Override
+        public void imageStarted(ImageReader source, int imageIndex) {
+        }
+
+        @Override
+        public void imageComplete(ImageReader source) {
+        }
+
+        @Override
+        public void thumbnailStarted(ImageReader source, int imageIndex, int thumbnailIndex) {
+        }
+
+        @Override
+        public void thumbnailProgress(ImageReader source, float percentageDone) {
+        }
+
+        @Override
+        public void thumbnailComplete(ImageReader source) {
+        }
+
+        @Override
+        public void readAborted(ImageReader source) {
+        }
+
+        @Override
+        public void thumbnailPassStarted(ImageReader source, BufferedImage theThumbnail, int pass, int minPass,
+                                         int maxPass, int minX, int minY, int periodX, int periodY, int[] bands) {
+        }
+
+        @Override
+        public void thumbnailUpdate(ImageReader source, BufferedImage theThumbnail, int minX, int minY, int width,
+                                    int height, int periodX, int periodY, int[] bands) {
+        }
+
+        @Override
+        public void thumbnailPassComplete(ImageReader source, BufferedImage theThumbnail) {
         }
     }
 

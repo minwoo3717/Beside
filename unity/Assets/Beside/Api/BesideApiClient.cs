@@ -55,8 +55,10 @@ namespace Beside.Api
 
         // ---------- POST /api/v1/jobs ----------
 
+        /// <summary>idempotencyKey: keep the same key when the same photos are sent again after a failed upload
+        /// (the server then returns the same jobId). Null = use requestId.</summary>
         public IEnumerator UploadPhotos(IList<Photo> photos, string requestId,
-            Action<JobCreatedResponse> onJobCreated, Action<ApiError> onError)
+            Action<JobCreatedResponse> onJobCreated, Action<ApiError> onError, string idempotencyKey = null)
         {
             var sections = new List<IMultipartFormSection>();
             foreach (var p in photos)
@@ -65,7 +67,7 @@ namespace Beside.Api
             using (var req = UnityWebRequest.Post(Url(ApiV1Routes.Jobs), sections))
             {
                 Prepare(req, requestId);
-                req.SetRequestHeader(ApiV1Routes.IdempotencyKeyHeader, requestId); // same key -> same jobId on a retried upload
+                req.SetRequestHeader(ApiV1Routes.IdempotencyKeyHeader, idempotencyKey ?? requestId); // same key -> same jobId on a retried upload
                 yield return req.SendWebRequest();
 
                 if (!Succeeded(req, out var error)) { onError(error); yield break; }
@@ -120,7 +122,9 @@ namespace Beside.Api
                 req.timeout = DownloadTimeoutSeconds;
                 yield return req.SendWebRequest();
 
-                if (!Succeeded(req, out var error))
+                // DownloadHandlerFile has no .text (it throws), so the error envelope is read from the small .part file
+                string errorBody = req.result == UnityWebRequest.Result.ProtocolError ? ReadSmallText(tmp) : null;
+                if (!Succeeded(req, out var error, errorBody))
                 {
                     TryDelete(tmp);
                     onError(error);
@@ -178,8 +182,9 @@ namespace Beside.Api
             req.SetRequestHeader("ngrok-skip-browser-warning", "1");   // ngrok free tier: skip the HTML warning page (ignored elsewhere)
         }
 
-        /// <summary>True on HTTP 2xx. Otherwise fills error from the v1 error envelope when present.</summary>
-        static bool Succeeded(UnityWebRequest req, out ApiError error)
+        /// <summary>True on HTTP 2xx. Otherwise fills error from the v1 error envelope when present.
+        /// errorBody: the response body when the download handler cannot give it as text (DownloadHandlerFile).</summary>
+        static bool Succeeded(UnityWebRequest req, out ApiError error, string errorBody = null)
         {
             error = null;
             if (req.result == UnityWebRequest.Result.Success) return true;
@@ -192,7 +197,7 @@ namespace Beside.Api
             }
 
             // ProtocolError (4xx / 5xx): try the { error: { code, message, jobId } } envelope
-            var envelope = Parse<ErrorResponse>(req.downloadHandler?.text);
+            var envelope = Parse<ErrorResponse>(errorBody ?? ReadText(req));
             if (envelope?.error != null && !string.IsNullOrEmpty(envelope.error.code))
             {
                 error.code = envelope.error.code;
@@ -211,6 +216,20 @@ namespace Beside.Api
             if (string.IsNullOrEmpty(json)) return null;
             try { return JsonConvert.DeserializeObject<T>(json); }
             catch (Exception e) { Debug.LogWarning($"[BesideApi] JSON parse failed: {e.Message}\n{json}"); return null; }
+        }
+
+        /// <summary>Response body as text, or null. Never throws (DownloadHandlerFile.text throws NotSupportedException).</summary>
+        static string ReadText(UnityWebRequest req)
+        {
+            if (req.downloadHandler == null || req.downloadHandler is DownloadHandlerFile) return null;
+            try { return req.downloadHandler.text; } catch (Exception) { return null; }
+        }
+
+        /// <summary>Text of a small file (an error envelope saved by DownloadHandlerFile), or null. Never throws.</summary>
+        static string ReadSmallText(string path)
+        {
+            try { return File.Exists(path) && new FileInfo(path).Length < 64 * 1024 ? File.ReadAllText(path) : null; }
+            catch (Exception) { return null; }
         }
 
         static void TryDelete(string path)

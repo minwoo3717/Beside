@@ -36,9 +36,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -132,12 +130,13 @@ public class JobV1Controller {
     @GetMapping("/jobs/{jobId}/asset")
     public ResponseEntity<Resource> downloadAsset(
             @PathVariable("jobId") String jobId,
-            @Parameter(description = "base | hair, 기본 base") @RequestParam(value = "variant", required = false, defaultValue = "base") AssetVariant variant)
-            throws IOException {
+            @Parameter(description = "base | hair, 기본 base") @RequestParam(value = "variant", required = false, defaultValue = "base") AssetVariant variant) {
         Path file = jobService.resolveAsset(jobId, variant);
+        // No contentLength here: Spring sets it from the resource for 200 and from the range for a single-range 206.
+        // A fixed whole-file length would also go out on a multi-range 206 (multipart/byteranges), whose body is
+        // shorter, and the client would wait for bytes that never come; that response goes chunked instead.
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(GLB))
-                .contentLength(Files.size(file))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + jobId + "-" + variant.name() + ".glb\"")
                 .body(new FileSystemResource(file));
     }

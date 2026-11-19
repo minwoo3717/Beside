@@ -8,7 +8,8 @@ Why this works without re-rigging: every AnimalLift output uses the same templat
 weights carry over unchanged; only the joint positions have to follow the new body shape.
 
   1. skin weights, triangles, UVs, materials, animation clips: copied from the template
-  2. vertex positions + normals: taken from the new base.glb (same vertex order — checked)
+  2. vertex positions + normals: taken from the new base.glb (same vertex order — checked: same vertex count and
+     the same triangles as vertex-number triples, in any face order)
   3. joints: each joint is an affine combination of nearby template vertices (fit once on the template, exact
      under any affine change of the body), re-evaluated on the new vertices -> new bind pose + inverse binds
   4. texture: replaced by the new uv.png (same UV layout as the template)
@@ -140,6 +141,13 @@ def _fit_regressor(verts: np.ndarray, joint_pos: np.ndarray, weights: np.ndarray
     return reg
 
 
+def _triangle_set(tri: np.ndarray) -> np.ndarray:
+    """Triangles as vertex-number triples, each sorted, rows sorted: equal for two meshes with the same vertex order
+    even when faces are listed in another order or start at another corner."""
+    rows = np.sort(tri, axis=1)
+    return rows[np.lexsort(rows.T[::-1])]
+
+
 def transfer(base_glb: str, texture_png: str | None, template_glb: str, out_glb: str) -> dict:
     tpl = Glb(template_glb)
     new = Glb(base_glb)
@@ -154,8 +162,13 @@ def transfer(base_glb: str, texture_png: str | None, template_glb: str, out_glb:
     n_nrm = new.read(nprim["attributes"]["NORMAL"]).astype(np.float64)
     if t_pos.shape != n_pos.shape:
         raise RigError(f"vertex count differs (template {len(t_pos)}, model {len(n_pos)}): not the same topology")
-    if len(tpl.read(tprim["indices"])) != len(new.read(nprim["indices"])):
+    t_idx = tpl.read(tprim["indices"]).astype(np.int64).ravel()
+    n_idx = new.read(nprim["indices"]).astype(np.int64).ravel()
+    if len(t_idx) != len(n_idx) or len(t_idx) % 3:
         raise RigError("triangle count differs: not the same topology")
+    if not np.array_equal(_triangle_set(t_idx.reshape(-1, 3)), _triangle_set(n_idx.reshape(-1, 3))):
+        # same counts, other vertex numbers: the template's skin weights and UVs would land on the wrong vertices
+        raise RigError("vertex order differs from template (same counts, different triangles)")
 
     # ---- template skeleton (bind pose world matrices)
     skin = tj["skins"][0]

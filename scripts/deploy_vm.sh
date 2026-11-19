@@ -31,7 +31,19 @@ git --no-pager log --oneline -1
 
 # The first-photo check and the cutout (on in real,prod) need their models in the folder compose mounts at
 # /app/models; the server refuses to start without them. fetch_models.sh only downloads what is missing or wrong.
-env_value() { sed -n "s/^$1=//p" deploy/.env | tail -n1 | tr -d "\"' \r"; }
+# env_value reads a value the way compose reads deploy/.env: a value in matching quotes is what is inside them;
+# otherwise ' #' starts a comment and the spaces around the value go. Spaces inside the value stay.
+env_value() {
+  local v
+  v="$(sed -n "s/^$1=//p" deploy/.env | tail -n1 | tr -d '\r')"
+  v="${v#"${v%%[![:space:]]*}"}"
+  case "$v" in
+    \"*\"*) v="${v#\"}"; v="${v%%\"*}" ;;
+    \'*\'*) v="${v#\'}"; v="${v%%\'*}" ;;
+    *) v="${v%% #*}"; v="${v%"${v##*[![:space:]]}"}" ;;
+  esac
+  printf '%s' "$v"
+}
 if [[ "$(env_value PREPROCESS_CHECK_ENABLED)" == false && "$(env_value PREPROCESS_CUTOUT_ENABLED)" == false ]]; then
   echo "[2/4] preprocessing off in deploy/.env: no models needed"
 else
@@ -52,7 +64,7 @@ if ! "${COMPOSE[@]}" exec -T caddy cat /etc/caddy/Caddyfile </dev/null | cmp -s 
 fi
 
 # Through Caddy on this VM (TLS + proxy + backend), without depending on hairpin routing to the public IP.
-DOMAIN="$(sed -n 's/^BESIDE_DOMAIN=//p' deploy/.env | tr -d "\"' \r")"
+DOMAIN="$(env_value BESIDE_DOMAIN)"
 echo "[4/4] https://$DOMAIN/api/v1/healthz"
 for _ in $(seq 1 60); do
   if out="$(curl -fsS --max-time 5 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/api/v1/healthz" 2>/dev/null)"; then

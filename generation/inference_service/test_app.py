@@ -1,7 +1,9 @@
 """Inference service checks that need no model: python -m unittest discover -s generation/inference_service
-(fastapi + httpx for TestClient; Pillow for the photo test and numpy + trimesh + Pillow for the real conversion
-tests, each skipped without them)."""
+(fastapi + httpx for TestClient; Pillow for the photo test, numpy + trimesh + Pillow for the real conversion
+tests and numpy for the rig transfer test, each skipped without them)."""
+import contextlib
 import errno
+import io
 import json
 import logging
 import os
@@ -371,10 +373,11 @@ f 2/2 4/4 3/3
 
 
 def _fake_convert_module(calls):
-    """convert_asset stand-in (no numpy): writes a GLB stub and, like the real one, creates the folder only when
-    make_dirs (otherwise the write fails on a deleted folder). Each call is appended to calls."""
+    """convert_asset stand-in (no numpy): writes a GLB stub and its metrics file and, like the real one, creates the
+    folder only when make_dirs (otherwise the write fails on a deleted folder). Each call is appended to calls."""
     module = types.ModuleType("convert_asset")
     module.ConversionError = type("ConversionError", (Exception,), {})
+    module.MAX_GLB_BYTES = 10 * 1024 * 1024
 
     def convert(obj, texture, out, metrics=None, hair_npz=None, forward_axis="+x", make_dirs=True):
         calls.append({"out": out, "make_dirs": make_dirs})
@@ -382,9 +385,28 @@ def _fake_convert_module(calls):
             os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as glb:
             glb.write(GLB_STUB)
-        return {"vertices": 4, "triangles": 4, "textureSize": 8, "bytes": len(GLB_STUB), "convertMs": 1}
+        result = {"vertices": 4, "triangles": 4, "textureSize": 8, "bytes": len(GLB_STUB), "convertMs": 1}
+        if metrics:
+            with open(metrics, "w") as f:
+                json.dump(result, f)
+        return result
 
     module.convert = convert
+    return module
+
+
+def _fake_rig_module(size):
+    """rig_transfer stand-in: writes a 'rigged' GLB of size bytes (GLB_STUB, zero padded) and reports it."""
+    module = types.ModuleType("rig_transfer")
+    module.RigError = type("RigError", (Exception,), {})
+
+    def transfer(base, texture, template, out):
+        data = GLB_STUB + b"\0" * (size - len(GLB_STUB))
+        with open(out, "wb") as glb:
+            glb.write(data)
+        return {"joints": 2, "fitErrorM": 0.0, "heightRatio": 1.0, "clips": ["Idle"], "bytes": len(data)}
+
+    module.transfer = transfer
     return module
 
 
@@ -680,6 +702,166 @@ class RealConversionCancelTest(_ModelModeCase):
             made = Path(folder) / "made"   # the CLI default still creates it
             convert_asset.convert(str(raw / "mesh.obj"), str(raw / "uv.png"), str(made / "base.glb"))
             self.assertTrue((made / "base.glb").is_file())
+
+
+class _RiggedCase(_ModelModeCase):
+    """BESIDE_RIG_TEMPLATE set, rig_transfer faked to write a rigged GLB of rigged_size bytes."""
+
+    rigged_size = 64
+
+    def converter_patches(self):
+        return super().converter_patches() + [
+            mock.patch.object(service, "RIG_TEMPLATE", "template-rigged.glb"),
+            mock.patch.dict(sys.modules, {"rig_transfer": _fake_rig_module(self.rigged_size)}),
+        ]
+
+    def metrics_file(self):
+        return json.loads((self.job_dir / "base.metrics.json").read_text())
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class RiggedResultTest(_RiggedCase):
+    """The rigged GLB replaces base.glb, and base.metrics.json then describes the rigged file (review 2026-11-20)."""
+
+    def test_a_kept_rigged_glb_rewrites_base_metrics_json(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(answer.json()["modelVersion"], "fake@test:ckpt+rig")
+        served = self.client.get(answer.json()["glbUrl"]).content
+        self.assertEqual(len(served), self.rigged_size)
+        metrics = self.metrics_file()
+        self.assertEqual(metrics["bytes"], self.rigged_size)   # was the static GLB's size before the fix
+        self.assertEqual(metrics["convertMs"], answer.json()["metrics"]["convertMs"])
+        self.assertFalse((self.job_dir / "base.rigged.glb").exists())
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class OversizeRiggedResultTest(_RiggedCase):
+    """A rigged GLB over the GLB_SPEC §1 size limit is dropped like a failed transfer (review 2026-11-20): convert
+    checked only the static GLB, and the rigged one adds the template's skin, clips and the raw uv.png."""
+
+    rigged_size = 10 * 1024 * 1024 + 1   # one byte over convert_asset.MAX_GLB_BYTES
+
+    def test_a_rigged_glb_over_the_size_limit_keeps_the_static_glb(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(answer.json()["modelVersion"], "fake@test:ckpt")   # no +rig: the static result is served
+        self.assertEqual(self.client.get(answer.json()["glbUrl"]).content, GLB_STUB)
+        self.assertEqual(self.metrics_file()["bytes"], len(GLB_STUB))
+        self.assertFalse((self.job_dir / "base.rigged.glb").exists())
+        skipped = self.warnings("rig transfer skipped")
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("> limit 10485760", skipped[0])
+
+
+def _write_glb(path, gltf, arrays):
+    """A GLB with one buffer: arrays[i] (numpy) becomes accessor i in its own bufferView, then gltf (the rest of the
+    JSON: nodes, meshes, ...) refers to them by number."""
+    import struct
+
+    import numpy as np
+
+    kinds = {np.dtype(np.float32): 5126, np.dtype(np.uint32): 5125, np.dtype(np.uint16): 5123, np.dtype(np.uint8): 5121}
+    shapes = {1: "SCALAR", 2: "VEC2", 3: "VEC3", 4: "VEC4", 16: "MAT4"}
+    blob, views, accessors = bytearray(), [], []
+    for array in arrays:
+        rows = np.ascontiguousarray(array).reshape(len(array), -1)
+        views.append({"buffer": 0, "byteOffset": len(blob), "byteLength": rows.nbytes})
+        accessors.append({"bufferView": len(views) - 1, "componentType": kinds[rows.dtype], "count": len(rows),
+                          "type": shapes[rows.shape[1]]})
+        blob += rows.tobytes()
+        blob += b"\0" * ((4 - len(blob) % 4) % 4)
+    gltf = dict(gltf, asset={"version": "2.0"}, buffers=[{"byteLength": len(blob)}], bufferViews=views, accessors=accessors)
+    js = json.dumps(gltf).encode()
+    js += b" " * ((4 - len(js) % 4) % 4)
+    total = 12 + 8 + len(js) + 8 + len(blob)
+    Path(path).write_bytes(struct.pack("<4sII", b"glTF", 2, total) + struct.pack("<I4s", len(js), b"JSON") + js
+                           + struct.pack("<I4s", len(blob), b"BIN\x00") + bytes(blob))
+
+
+# a square pyramid: base 0..3 on y = 0, apex 4 (unlike a tetrahedron, renumbering its vertices changes its triangles)
+PYRAMID = [[-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0, 0.5], [-0.5, 0, 0.5], [0, 1, 0]]
+PYRAMID_FACES = [[0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4], [0, 2, 1], [0, 3, 2]]
+
+
+def _has_numpy():
+    try:
+        import numpy  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+@unittest.skipIf(TestClient is None or not _has_numpy(), "fastapi/httpx or numpy not installed")
+class RigTransferVertexOrderTest(unittest.TestCase):
+    """tools/rig_transfer.py keeps the template's triangles, UVs and skin weights and takes only the new positions,
+    so a base GLB with the template's counts but another vertex order must be refused, not rigged into a torn mesh."""
+
+    def setUp(self):
+        import numpy as np
+
+        import rig_transfer
+
+        self.np, self.rig = np, rig_transfer
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.folder = Path(folder.name)
+        self.template = self.folder / "template.glb"
+        pos = np.array(PYRAMID, np.float32)
+        _write_glb(self.template, {
+            "scene": 0, "scenes": [{"nodes": [0, 1]}],
+            "nodes": [{"name": "base", "mesh": 0, "skin": 0}, {"name": "Root", "children": [2]},
+                      {"name": "Pelvis", "translation": [0, 0.5, 0]}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "JOINTS_0": 3, "WEIGHTS_0": 4},
+                                        "indices": 2}]}],
+            "skins": [{"joints": [1, 2], "inverseBindMatrices": 5}],
+            "animations": [{"name": "Idle", "samplers": [{"input": 6, "output": 7}],
+                            "channels": [{"sampler": 0, "target": {"node": 2, "path": "translation"}}]}],
+        }, [pos, self.normals(pos), np.array(PYRAMID_FACES, np.uint16).reshape(-1),
+            np.tile(np.array([0, 1, 0, 0], np.uint8), (5, 1)), np.tile(np.array([0.5, 0.5, 0, 0], np.float32), (5, 1)),
+            np.tile(np.eye(4, dtype=np.float32).reshape(16), (2, 1)),
+            np.array([0, 1], np.float32), np.array([[0, 0.5, 0], [0, 0.6, 0]], np.float32)])
+
+    def normals(self, pos):
+        n = pos - pos.mean(0)
+        return (n / self.np.linalg.norm(n, axis=1, keepdims=True)).astype(self.np.float32)
+
+    def base(self, pos, faces):
+        path = self.folder / "base.glb"
+        pos = self.np.asarray(pos, self.np.float32)
+        _write_glb(path, {"scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"name": "base", "mesh": 0}],
+                          "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2}]}]},
+                   [pos, self.normals(pos), self.np.array(faces, self.np.uint16).reshape(-1)])
+        return path
+
+    def test_the_same_vertex_order_is_rigged_also_with_faces_listed_differently(self):
+        np = self.np
+        bigger = np.array(PYRAMID) * 1.2
+        faces = [f[1:] + f[:1] for f in PYRAMID_FACES[::-1]]   # other face order, other first corner
+        out = self.folder / "rigged.glb"
+        info = self.rig.transfer(str(self.base(bigger, faces)), None, str(self.template), str(out))
+        self.assertEqual((info["joints"], info["clips"]), (2, ["Idle"]))
+        self.assertAlmostEqual(info["heightRatio"], 1.2, places=3)
+        rigged = self.rig.Glb(str(out))
+        positions = rigged.read(rigged.json["meshes"][0]["primitives"][0]["attributes"]["POSITION"])
+        np.testing.assert_allclose(positions, bigger, atol=1e-6)
+
+    def test_another_vertex_order_with_the_same_counts_is_refused(self):
+        np = self.np
+        order = [0, 4, 2, 3, 1]   # vertex 1 and the apex swap numbers: same shape, same counts
+        renumber = {old: new for new, old in enumerate(order)}
+        faces = [[renumber[v] for v in face] for face in PYRAMID_FACES]
+        # other vertex-number triples (swapping 0 and the apex would not change them: a symmetry of this mesh)
+        self.assertNotEqual(sorted(map(sorted, faces)), sorted(map(sorted, PYRAMID_FACES)))
+        base = self.base(np.array(PYRAMID)[order], faces)
+        out = self.folder / "rigged.glb"
+        with self.assertRaisesRegex(self.rig.RigError, "vertex order differs"):
+            self.rig.transfer(str(base), None, str(self.template), str(out))
+        self.assertFalse(out.exists())
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:   # the CLI: exit code 2, keep the static GLB
+            code = self.rig.main(["--base", str(base), "--template", str(self.template), "--out", str(out)])
+        self.assertEqual(code, 2)
+        self.assertIn("RIG_FAILED: vertex order differs", stderr.getvalue())
 
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")

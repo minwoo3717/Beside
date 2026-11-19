@@ -11,7 +11,7 @@ import java.util.List;
  * v0 response of GET /api/jobs/{id}, frozen. It reproduces the shape from when the Job entity was
  * serialized directly (including server paths). Do not extend; v1 clients use api.v1.dto.JobResponse.
  *
- * @deprecated v0 is kept only for the browser Mock UI until Unity has moved to /api/v1.
+ * @deprecated v0 is kept frozen until the contract meeting decides its removal.
  */
 @Deprecated
 public record LegacyJobResponse(

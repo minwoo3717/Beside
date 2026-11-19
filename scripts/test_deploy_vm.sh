@@ -2,7 +2,8 @@
 # Test of scripts/deploy_vm.sh without a VM: fake ssh (runs the remote part here), docker and curl on PATH, a bare repo
 # as the remote. Checks that caddy is restarted whenever the running container reads another Caddyfile than the
 # checkout, also when this run's pull changed nothing (an earlier run pulled the change and failed at the build), and
-# that the preprocessing models are fetched into the folder compose mounts unless deploy/.env turns preprocessing off.
+# that the preprocessing models are fetched into the folder compose mounts unless deploy/.env turns preprocessing off,
+# and that deploy/.env values are read the way compose reads them (' #' comment, quotes) for the models and the domain.
 #   bash scripts/test_deploy_vm.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -29,6 +30,7 @@ esac
 FAKE
 cat > "$WORK/bin/curl" <<'FAKE'
 #!/usr/bin/env bash
+echo "$*" >> "$FAKE_STATE/curl"
 echo '{"status":"UP"}'
 FAKE
 chmod +x "$WORK/bin/"*
@@ -73,6 +75,20 @@ echo "BESIDE_MODELS_DIR=/opt/beside/models" >> "$WORK/vm/deploy/.env"
 rm "$WORK/state/fetched"
 deploy || fail "deploy with BESIDE_MODELS_DIR"
 [[ "$(cat "$WORK/state/fetched")" == "/opt/beside/models" ]] || fail "models not fetched into BESIDE_MODELS_DIR"
+# deploy/.env is read the way compose reads it: ' #' starts a comment, quotes go, spaces inside quotes stay
+echo "BESIDE_MODELS_DIR=/opt/beside/models # outside the repo" >> "$WORK/vm/deploy/.env"
+rm "$WORK/state/fetched"
+deploy || fail "deploy with a comment after BESIDE_MODELS_DIR"
+[[ "$(cat "$WORK/state/fetched")" == "/opt/beside/models" ]] || fail "comment kept in BESIDE_MODELS_DIR: $(cat "$WORK/state/fetched")"
+echo "BESIDE_MODELS_DIR='/opt/beside models'" >> "$WORK/vm/deploy/.env"
+rm "$WORK/state/fetched"
+deploy || fail "deploy with a quoted BESIDE_MODELS_DIR"
+[[ "$(cat "$WORK/state/fetched")" == "/opt/beside models" ]] || fail "quoted BESIDE_MODELS_DIR changed: $(cat "$WORK/state/fetched")"
+echo "BESIDE_DOMAIN=example.test # team domain" >> "$WORK/vm/deploy/.env"
+rm -f "$WORK/state/curl"
+deploy || fail "deploy with a comment after BESIDE_DOMAIN"
+grep -qF -- "--resolve example.test:443:127.0.0.1 https://example.test/api/v1/healthz" "$WORK/state/curl" \
+  || fail "healthz not asked at https://example.test: $(cat "$WORK/state/curl")"
 printf 'PREPROCESS_CHECK_ENABLED=false\nPREPROCESS_CUTOUT_ENABLED=false\n' >> "$WORK/vm/deploy/.env"
 rm "$WORK/state/fetched"
 deploy || fail "deploy with preprocessing off"

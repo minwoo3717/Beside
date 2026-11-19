@@ -10,7 +10,7 @@
 #
 # First time (Pod web terminal or SSH; an exec tool can run every line except the token one, which needs a keyboard:
 # an exec tool has no stdin, and a token passed in its command or env ends up in the tool-call record):
-#   git clone -b deploy/gcp https://github.com/minwoo3717/Beside.git /workspace/Beside   # main once merged
+#   git clone https://github.com/minwoo3717/Beside.git /workspace/Beside   # main (deploy/gcp merged by PR #5, 2026-11-18)
 #   (umask 077; cat > /workspace/beside-token)    # paste only the value after INFERENCE_TOKEN= in the VM deploy/.env,
 #                                                 # then Enter, Ctrl-D
 # Every Pod start (the container disk is wiped on stop; /workspace survives):

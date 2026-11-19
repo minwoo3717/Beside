@@ -1,6 +1,10 @@
 package com.example.mockbackend.preprocess;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -10,6 +14,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * Small real images for the preprocessing tests, drawn here and encoded with ImageIO (no binary fixtures except WEBP,
@@ -74,6 +79,54 @@ final class Pictures {
                 .put((byte) 0xFF).put((byte) 0xE1).putShort((short) length).put(exifHeader).put(tiff.array())
                 .put(plain, 2, plain.length - 2);
         return out.array();
+    }
+
+    /**
+     * A small file that decodes slowly (a crafted upload): a progressive JPEG (ImageIO's default scan script) whose last
+     * scan is repeated {@code extraScans} more times before EOI. The JDK reader runs a full output pass for every scan;
+     * libjpeg only warns about the repeated progression.
+     */
+    static byte[] progressiveJpegWithRepeatedScan(int width, int height, int extraScans) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
+        try (ImageOutputStream stream = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(stream);
+            ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setProgressiveMode(ImageWriteParam.MODE_DEFAULT);
+            writer.write(null, new IIOImage(halves(width, height, BufferedImage.TYPE_INT_RGB), null, null), param);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        } finally {
+            writer.dispose();
+        }
+        byte[] jpeg = out.toByteArray();
+        int lastScan = -1;
+        int lastScanEnd = -1;
+        int pos = 2; // after SOI
+        while ((jpeg[pos + 1] & 0xFF) != 0xD9) { // until EOI
+            int marker = jpeg[pos + 1] & 0xFF;
+            int next = pos + 2 + (((jpeg[pos + 2] & 0xFF) << 8) | (jpeg[pos + 3] & 0xFF));
+            if (marker == 0xDA) { // SOS: header, then entropy-coded data up to the next marker that is not a stuffed 0 or RSTn
+                while (!((jpeg[next] & 0xFF) == 0xFF && jpeg[next + 1] != 0
+                        && ((jpeg[next + 1] & 0xFF) < 0xD0 || (jpeg[next + 1] & 0xFF) > 0xD7))) {
+                    next++;
+                }
+                lastScan = pos;
+                lastScanEnd = next;
+            }
+            pos = next;
+        }
+        if (lastScan < 0) {
+            throw new IllegalStateException("ImageIO wrote no scan");
+        }
+        byte[] scan = Arrays.copyOfRange(jpeg, lastScan, lastScanEnd);
+        ByteArrayOutputStream crafted = new ByteArrayOutputStream();
+        crafted.write(jpeg, 0, pos);
+        for (int i = 0; i < extraScans; i++) {
+            crafted.writeBytes(scan);
+        }
+        crafted.write(jpeg, pos, jpeg.length - pos); // EOI
+        return crafted.toByteArray();
     }
 
     /** A real WEBP (lossy, 300 x 200, left half red, right half blue) made by Chrome's encoder. */

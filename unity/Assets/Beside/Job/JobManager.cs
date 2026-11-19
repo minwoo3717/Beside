@@ -53,6 +53,9 @@ namespace Beside.Job
         Coroutine running;
         string requestId;
         bool lastFailureWasJob;
+        List<Photo> lastPhotos;   // copy of the photos until the server accepts them (202), so Retry can send them again
+        string uploadKey;         // Idempotency-Key of those photos: a repeated upload returns the same jobId
+        int loadGen;              // bumped by CancelJob: a model load that finishes after a cancel is dropped
 
         /// <summary>Server timings of the job being waited for (null before the first status). Real jobs take minutes
         /// and report no progress, so the UI shows elapsed time from these.</summary>
@@ -115,7 +118,10 @@ namespace Beside.Job
             }
             if (total > ApiV1Routes.MaxRequestBytes) { Fail("PAYLOAD_TOO_LARGE"); return; }
 
-            running = StartCoroutine(Flow(photos, null));
+            lastPhotos = new List<Photo>(photos);   // the UI may clear its own list (StartOver)
+            uploadKey = Guid.NewGuid().ToString("N");
+            CurrentJobId = null;                    // a failed upload must not "retry" an older job
+            running = StartCoroutine(Flow(lastPhotos, null));
         }
 
         /// <summary>Continue polling a job created earlier (app restart).</summary>
@@ -125,10 +131,16 @@ namespace Beside.Job
             running = StartCoroutine(Flow(null, jobId));
         }
 
-        /// <summary>Retry after a failure. Server job failures go through POST /retry; app-side failures re-run the flow.</summary>
+        /// <summary>Retry after a failure. A failed upload sends the same photos again (same Idempotency-Key);
+        /// server job failures go through POST /retry; other app-side failures re-run the flow.</summary>
         public void Retry()
         {
-            if (IsBusy || string.IsNullOrEmpty(CurrentJobId)) return;
+            if (IsBusy) return;
+            if (string.IsNullOrEmpty(CurrentJobId))
+            {
+                if (lastPhotos != null) running = StartCoroutine(Flow(lastPhotos, null));
+                return;
+            }
             if (lastFailureWasJob || ErrorMessages.IsJobFailureCode(LastErrorCode)) running = StartCoroutine(RetryOnServer(CurrentJobId));
             else ResumeJob(CurrentJobId);
         }
@@ -137,6 +149,7 @@ namespace Beside.Job
         {
             if (running != null) StopCoroutine(running);
             running = null;
+            loadGen++;   // the model load task keeps running: it must not register the cancelled model
             SetState(State.Idle, "");
         }
 
@@ -147,6 +160,8 @@ namespace Beside.Job
             PlayerPrefs.Save();
             CurrentJobId = null;
             LastErrorCode = null;
+            lastPhotos = null;
+            uploadKey = null;
         }
 
         public void CheckHealth(Action<HealthResponse> onOk, Action<ApiError> onError) => StartCoroutine(api.Health(onOk, onError));
@@ -171,7 +186,8 @@ namespace Beside.Job
             Debug.Log($"[JobManager] server -> {baseUrl}");
         }
 
-        /// <summary>Trims, adds http:// when no scheme is given, drops a trailing slash.</summary>
+        /// <summary>Trims, adds https:// when no scheme is given, drops a trailing slash.
+        /// A plain-HTTP server (LAN Mock) needs "http://" typed explicitly.</summary>
         public static string NormalizeUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return "";
@@ -199,11 +215,12 @@ namespace Beside.Job
                 SetState(State.Uploading, "사진을 업로드하는 중이에요");
                 var sw = Stopwatch.StartNew();
                 string jobId = null; ApiError err = null;
-                yield return api.UploadPhotos(photos, requestId, r => jobId = r.jobId, e => err = e);
+                yield return api.UploadPhotos(photos, requestId, r => jobId = r.jobId, e => err = e, uploadKey);
                 row.uploadMs = sw.ElapsedMilliseconds;
                 MetricsRecorder.Log(requestId, jobId, "upload", row.uploadMs, err?.code, err?.message);
                 if (err != null) { Fail(err.code); yield break; }
 
+                lastPhotos = null;   // accepted: later retries go through the jobId
                 CurrentJobId = jobId;
                 PlayerPrefs.SetString(JobIdPrefKey, jobId);
                 PlayerPrefs.Save();
@@ -287,7 +304,9 @@ namespace Beside.Job
             GameObject template = null;
             if (modelLoader != null)
             {
-                Task<GameObject> task = modelLoader.LoadAndRegister(File.ReadAllBytes(path), "job_" + CurrentJobId);
+                int gen = loadGen;   // CancelJob stops this coroutine, but not the load task
+                Task<GameObject> task = modelLoader.LoadAndRegister(File.ReadAllBytes(path), "job_" + CurrentJobId,
+                    stillWanted: () => gen == loadGen);
                 yield return new WaitUntil(() => task.IsCompleted);
                 template = task.IsCompletedSuccessfully ? task.Result : null;
             }
