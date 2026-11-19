@@ -266,12 +266,16 @@ def _inference_failed(message: str) -> HTTPException:
 # or lost the connection. The run it gave up on is still here: waiting for MODEL_LOCK, inside MODEL.predict (which
 # cannot be interrupted) or converting. Before this, such a run converted anyway, and convert_asset's makedirs
 # recreated the deleted folder (2026-11-19 F1b-real: 3 folders left on the Pod's volume, one DELETE answered 500).
-# Now every POST registers an attempt of its jobId; DELETE forgets it and a retry (a new POST of the same jobId)
-# replaces it. A run checks between its steps that it is still the job's attempt and otherwise stops with the model
-# failure answer (nobody reads it), and a cancelled run removes the job folder again when it ends.
+# Now every POST registers an attempt of its jobId; DELETE marks it cancelled and a retry (a new POST of the same
+# jobId) replaces it. A run checks between its steps that it is still the job's attempt and otherwise stops with the
+# model failure answer (nobody reads it), and a cancelled run removes the job folder again when it ends.
 
-_JOBS_GUARD = threading.Lock()        # guards _CURRENT and every removal of a job folder (DELETE, cleanup, sweep)
+_JOBS_GUARD = threading.Lock()        # guards _CURRENT, _CANCELLED and every job folder removal (DELETE, cleanup, sweep)
 _CURRENT: dict = {}                   # jobId -> number of the attempt that may still write {WORK_DIR}/{jobId}
+# jobId -> number of the attempt a DELETE took away while it ran (until it ends or a retry registers). Kept apart from
+# "no entry in _CURRENT": that also happens when a newer attempt of the job finished, and that attempt's folder (its
+# base.glb before Spring's GET, path mode's kept outputs) must survive an older attempt that ends later.
+_CANCELLED: dict = {}
 _ATTEMPT_NUMBERS = itertools.count(1)
 _REMOVE_TRIES = 3                     # rmtree tries when a run still writes into the folder
 _REMOVE_PAUSE_S = 0.05
@@ -285,12 +289,17 @@ class _Attempt:
     number: int
 
     def state(self) -> str:
-        """'live', 'cancelled' (DELETE /artifacts since) or 'superseded' (a newer POST of the same jobId since)."""
+        """'live', 'cancelled' (DELETE /artifacts since, no retry since) or 'superseded' (a newer POST of the same
+        jobId since, whether that attempt still runs or already ended)."""
         with _JOBS_GUARD:
-            current = _CURRENT.get(self.job_id)
-        if current == self.number:
+            return self._state_locked()
+
+    def _state_locked(self) -> str:
+        if _CURRENT.get(self.job_id) == self.number:
             return "live"
-        return "cancelled" if current is None else "superseded"
+        if _CANCELLED.get(self.job_id) == self.number:
+            return "cancelled"
+        return "superseded"
 
 
 def _deleted_during_run(job_id: str, at: str) -> HTTPException:
@@ -336,18 +345,21 @@ def _remove_job_dir(job_dir: pathlib.Path) -> bool:
 def _job_attempt(job_id: str):
     """Registers a new attempt of job_id for the with block (it takes over from an older attempt of the same job).
     On exit a live attempt is forgotten; a cancelled one (DELETE and no retry since) removes the job folder again,
-    because the steps it cannot interrupt (MODEL.predict, a conversion under way) may have written after the DELETE."""
+    because the steps it cannot interrupt (MODEL.predict, a conversion under way) may have written after the DELETE.
+    A superseded one removes nothing: the folder is the newer attempt's, also when that attempt already ended."""
     with _JOBS_GUARD:
         attempt = _Attempt(job_id, next(_ATTEMPT_NUMBERS))
         _CURRENT[job_id] = attempt.number
+        _CANCELLED.pop(job_id, None)   # the retry takes the folder over from a cancelled attempt
     try:
         yield attempt
     finally:
         with _JOBS_GUARD:
-            current = _CURRENT.get(job_id)
-            if current == attempt.number:
+            state = attempt._state_locked()
+            if state == "live":
                 del _CURRENT[job_id]
-            elif current is None:
+            elif state == "cancelled":
+                del _CANCELLED[job_id]
                 try:
                     if _remove_job_dir(WORK_DIR / job_id):
                         log.warning("job %s: removed what the cancelled run wrote after DELETE /artifacts", job_id)
@@ -715,7 +727,10 @@ def delete_artifacts(job_id: str) -> Response:
     INFERENCE_FAILED to nobody and removes what it wrote after this (_job_attempt). A retry of the job is a new attempt."""
     job_dir = _job_dir(job_id)
     with _JOBS_GUARD:   # a retry's POST registering now waits, so its new photos are not removed with the old folder
-        running = _CURRENT.pop(job_id, None) is not None
+        number = _CURRENT.pop(job_id, None)
+        running = number is not None
+        if running:
+            _CANCELLED[job_id] = number
         removed = _remove_job_dir(job_dir)
     if removed or running:
         log.warning("job %s: %s%s", job_id, "work folder deleted" if removed else "no work folder",

@@ -480,6 +480,7 @@ class _ModelModeCase(unittest.TestCase):
         self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
         self.assertFalse(self.job_dir.exists(), sorted(str(p) for p in self.job_dir.rglob("*")))
         self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
 
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
@@ -551,6 +552,49 @@ class CancelOnDeleteTest(_ModelModeCase):
         self.assertEqual(self.delete(), 204)   # Spring stored the GLB: its cleanup
         self.assertFalse(self.job_dir.exists())
         self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_a_cancelled_attempt_ending_after_the_retry_finished_keeps_the_retrys_glb(self):
+        # Pre-merge review 2026-11-19: with max-concurrency >= 2 (or SLOTS >= 2) the retry can finish first. Its
+        # registry entry is then gone too, and the old attempt used to read that as "cancelled" and rmtree the
+        # retry's folder before Spring's GET of base.glb (404 -> CONVERSION_FAILED for a retry that worked).
+        with service._job_attempt(self.job) as old:
+            (self.job_dir / "input").mkdir(parents=True)
+            self.assertEqual(self.delete(), 204)   # Spring gave up on the old attempt
+            self.assertEqual(old.state(), "cancelled")
+            with service._job_attempt(self.job) as retry:
+                self.job_dir.mkdir()   # the retry's upload makes the folder again
+                (self.job_dir / "base.glb").write_bytes(GLB_STUB)   # the retry's answer, not fetched yet
+                self.assertEqual(old.state(), "superseded")
+            self.assertEqual(retry.state(), "superseded")   # ended: the folder is no attempt's to remove
+            self.assertEqual(old.state(), "superseded")
+        self.assertEqual((self.job_dir / "base.glb").read_bytes(), GLB_STUB)
+        self.assertEqual(self.warnings("removed what the cancelled run wrote"), [])
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_an_older_attempt_ending_after_a_newer_one_removes_nothing_without_a_delete(self):
+        # Path mode never sends DELETE and keeps the outputs for experiments: nothing may remove them.
+        with service._job_attempt(self.job) as old:
+            with service._job_attempt(self.job):
+                (self.job_dir / "raw").mkdir(parents=True)
+                (self.job_dir / "raw" / "uv.png").write_bytes(b"x")
+            self.assertEqual(old.state(), "superseded")
+        self.assertTrue((self.job_dir / "raw" / "uv.png").is_file())
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_a_cancelled_retry_is_cleaned_by_the_retry_not_by_the_older_attempt(self):
+        with service._job_attempt(self.job) as old:
+            self.assertEqual(self.delete(), 204)
+            with service._job_attempt(self.job) as retry:
+                self.assertEqual(self.delete(), 204)   # Spring gave up on the retry too
+                (self.job_dir / "raw").mkdir(parents=True)   # predict wrote after that DELETE
+                self.assertEqual((old.state(), retry.state()), ("superseded", "cancelled"))
+            self.assertFalse(self.job_dir.exists())   # the retry removed what it wrote
+        self.assertEqual(len(self.warnings("removed what the cancelled run wrote")), 1)
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
 
     def test_a_run_nobody_cancelled_answers_and_leaves_its_folder_for_the_get(self):
         answer = self.upload()
