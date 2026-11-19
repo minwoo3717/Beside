@@ -143,6 +143,21 @@ class ImageDecodingTest {
         assertThat(ImageDecoding.decode(Pictures.jpeg(300, 200), 1600, LIMITS).decodeMs()).isNotNegative();
     }
 
+    /**
+     * A small crafted progressive JPEG (one scan repeated 400 times) that takes several seconds to decode stops near
+     * the time limit. The JDK's JPEG reader refuses abort() from another thread, so a watchdog alone let it run to the end.
+     */
+    @Test
+    void aSlowDecodeIsAbortedNearTheTimeLimit() {
+        byte[] slow = Pictures.progressiveJpegWithRepeatedScan(2000, 1500, 400);
+        ImageDecoding.Limits limits = new ImageDecoding.Limits(LIMITS.maxPixels(), LIMITS.maxWebpPixels(), 300);
+
+        long start = System.nanoTime();
+        assertThatThrownBy(() -> ImageDecoding.decode(slow, 2000, limits))
+                .isInstanceOf(UnreadableImageException.class).hasMessageContaining("aborted");
+        assertThat((System.nanoTime() - start) / 1_000_000).isLessThan(3_000);
+    }
+
     /** PNG signature + IHDR (8-bit RGB) + IEND: enough for a reader to report the size, no image data. */
     private static byte[] pngHeaderOnly(int width, int height) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
