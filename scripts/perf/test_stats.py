@@ -86,6 +86,13 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(result["deltaPct"], -10.0)
         self.assertEqual(result["verdict"], "better")  # one repetition each: the ranges are points
 
+    def test_threshold_is_inclusive_despite_float_rounding(self):
+        # (9.9 - 11) / 11 * 100 is -9.999999999999996 in floating point; the report prints it as -10.0 %
+        result = stats.compare([[11.0]], [[9.9]])
+        self.assertEqual(result["deltaPct"], -10.0)
+        self.assertEqual(result["verdict"], "better")
+        self.assertEqual(stats.compare([[11.0]], [[12.1]])["verdict"], "worse")
+
     def test_zero_baseline_and_empty(self):
         self.assertEqual(stats.compare([[0], [0]], [[0], [0]])["verdict"], "same")
         # 0 -> 5 (say errors per repetition) has no rate of change; it must not read as noise
