@@ -20,9 +20,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,6 +32,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -477,6 +480,113 @@ class InferenceClientTest {
 
         client(5_000).cleanup("job-u12");
         assertThat(calls).as("path mode has nothing to clean on the service").hasSize(1);
+    }
+
+    @Test
+    void cleanupSendsTheDeleteOnceMoreWhenTheConnectionClosesWithoutAnAnswer() throws Exception {
+        // The service closes the first connection after reading the request (a keep-alive close racing the DELETE,
+        // seen in the 2026-11-18 load test as "HTTP/1.1 header parser received no bytes") and answers the second.
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(5_000);
+            Thread service = new Thread(() -> {
+                try {
+                    try (Socket first = listener.accept()) {
+                        requestLines.add(readRequestLine(first));
+                    }
+                    try (Socket second = listener.accept()) {
+                        requestLines.add(readRequestLine(second));
+                        second.getOutputStream().write(
+                                "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+                        second.getOutputStream().flush();
+                    }
+                } catch (IOException ignored) {
+                    // the assertion below reports what arrived
+                }
+            });
+            service.start();
+
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u13");
+            service.join(10_000);
+        }
+        assertThat(requestLines).containsExactly("DELETE /artifacts/job-u13 HTTP/1.1", "DELETE /artifacts/job-u13 HTTP/1.1");
+    }
+
+    @Test
+    void cleanupGivesUpAfterTheSecondDeleteWithoutAnAnswer() throws Exception {
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(3_000);
+            Thread service = new Thread(() -> {
+                while (true) {
+                    try (Socket connection = listener.accept()) {
+                        requestLines.add(readRequestLine(connection));   // read, then close without answering
+                    } catch (IOException e) {
+                        return;   // accept timed out: no further attempt came
+                    }
+                }
+            });
+            service.start();
+
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u14"); // logged only, never thrown
+            service.join(10_000);
+        }
+        assertThat(requestLines).as("one retry, not more").hasSize(2)
+                .allMatch(line -> line.equals("DELETE /artifacts/job-u14 HTTP/1.1"));
+    }
+
+    @Test
+    void cleanupDoesNotSendTheDeleteAgainAfterATimeout() throws Exception {
+        // A stuck path or service: the request goes out and no answer comes. One CLEANUP_TIMEOUT (10 s) is the wait;
+        // a second one would hold the GPU slot longer and could reach the service after a retry of the job started.
+        List<String> requestLines = new CopyOnWriteArrayList<>();
+        List<Socket> heldOpen = new CopyOnWriteArrayList<>();
+        AtomicBoolean stop = new AtomicBoolean();
+        long elapsedMs;
+        try (ServerSocket listener = new ServerSocket(0, 5, InetAddress.getLoopbackAddress())) {
+            listener.setSoTimeout(200);
+            Thread service = new Thread(() -> {
+                while (!stop.get()) {
+                    try {
+                        Socket connection = listener.accept();
+                        heldOpen.add(connection);   // read, then never answer and keep the connection open
+                        requestLines.add(readRequestLine(connection));
+                    } catch (IOException e) {
+                        // accept timed out: look at stop again
+                    }
+                }
+            });
+            service.start();
+            long started = System.nanoTime();
+            new InferenceClient("http://127.0.0.1:" + listener.getLocalPort(), 5_000, "upload", "", dir.resolve("tmp").toString(), JSON)
+                    .cleanup("job-u15"); // logged only, never thrown
+            elapsedMs = (System.nanoTime() - started) / 1_000_000;
+            stop.set(true);
+            service.join(5_000);
+        } finally {
+            for (Socket connection : heldOpen) {
+                connection.close();
+            }
+        }
+        assertThat(requestLines).as("no second DELETE after a timeout").containsExactly("DELETE /artifacts/job-u15 HTTP/1.1");
+        assertThat(elapsedMs).as("one CLEANUP_TIMEOUT, not two").isBetween(9_000L, 15_000L);
+    }
+
+    /** The request line of an HTTP/1.1 request on {@code socket}, after reading its headers (DELETE has no body). */
+    private static String readRequestLine(Socket socket) throws IOException {
+        InputStream in = socket.getInputStream();
+        StringBuilder head = new StringBuilder();
+        int b;
+        while ((b = in.read()) != -1) {
+            head.append((char) b);
+            if (head.length() >= 4 && head.substring(head.length() - 4).equals("\r\n\r\n")) {
+                break;
+            }
+        }
+        int end = head.indexOf("\r\n");
+        return end < 0 ? head.toString() : head.substring(0, end);
     }
 
     @Test

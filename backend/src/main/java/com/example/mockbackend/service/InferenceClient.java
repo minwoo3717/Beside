@@ -69,6 +69,15 @@ public class InferenceClient {
     static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     /** DELETE /artifacts/{jobId} is housekeeping after the run ended: give up quickly. */
     static final Duration CLEANUP_TIMEOUT = Duration.ofSeconds(10);
+    /**
+     * A DELETE that fails with an I/O error (no answer at all) is sent once more. The pooled connection may have just
+     * been closed by the service's keep-alive timeout (2026-11-18 load test: "HTTP/1.1 header parser received no
+     * bytes", the job folder stayed on the GPU volume), and the second attempt opens a new one. A timeout (no
+     * connection within {@link #CONNECT_TIMEOUT}, no answer within {@link #CLEANUP_TIMEOUT}) is not retried: the path
+     * or the service is stuck, a second wait would hold the GPU slot longer (the worker cleans up before releasing it),
+     * and a late DELETE could land after a retry of the job already started on the service.
+     */
+    static final int CLEANUP_ATTEMPTS = 2;
     public static final String TOKEN_HEADER = "X-Inference-Token";
     /** Codes the inference service may send in detail.code. */
     private static final Set<ErrorCode> SERVICE_CODES = EnumSet.of(ErrorCode.INFERENCE_FAILED,
@@ -179,7 +188,9 @@ public class InferenceClient {
     /**
      * After the worker stored the GLB or gave up: upload mode deletes {storage.tmp.dir}/{jobId} and asks the service
      * to delete the job's folder (DELETE /artifacts/{jobId}). Never throws: a failed cleanup is logged and does not
-     * change the job's result (JobFinisher rule). Path mode has nothing to clean.
+     * change the job's result (JobFinisher rule). Path mode has nothing to clean. An I/O error on the DELETE (no
+     * answer) is retried once ({@link #CLEANUP_ATTEMPTS}); a timeout is not, and neither is an HTTP error status (the
+     * service did answer).
      */
     public void cleanup(String jobId) {
         if (transfer != Transfer.UPLOAD) {
@@ -192,20 +203,34 @@ public class InferenceClient {
             log.warn("jobId={} could not delete the temporary GLB folder {}: {}", jobId, jobTmp, e.toString());
         }
         String call = "DELETE " + baseUrl + "/artifacts/" + jobId;
-        try {
-            HttpRequest request = withToken(HttpRequest.newBuilder(URI.create(baseUrl + "/artifacts/" + jobId)))
-                    .timeout(CLEANUP_TIMEOUT)
-                    .DELETE()
-                    .build();
-            HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() / 100 != 2) {
-                log.warn("jobId={} {} -> HTTP {}: the service keeps the job's files", jobId, call, response.statusCode());
+        for (int attempt = 1; attempt <= CLEANUP_ATTEMPTS; attempt++) {
+            try {
+                HttpRequest request = withToken(HttpRequest.newBuilder(URI.create(baseUrl + "/artifacts/" + jobId)))
+                        .timeout(CLEANUP_TIMEOUT)
+                        .DELETE()
+                        .build();
+                HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
+                if (response.statusCode() / 100 != 2) {
+                    log.warn("jobId={} {} -> HTTP {}: the service keeps the job's files", jobId, call, response.statusCode());
+                }
+                return;
+            } catch (HttpTimeoutException e) {   // includes HttpConnectTimeoutException
+                log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
+                return;
+            } catch (IOException e) {
+                if (attempt < CLEANUP_ATTEMPTS) {
+                    log.info("jobId={} {} failed: {}: sending it once more", jobId, call, e.toString());
+                } else {
+                    log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
+                }
+            } catch (RuntimeException e) {
+                log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
+                return;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("jobId={} {} interrupted: the service keeps the job's files", jobId, call);
+                return;
             }
-        } catch (IOException | RuntimeException e) {
-            log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("jobId={} {} interrupted: the service keeps the job's files", jobId, call);
         }
     }
 
