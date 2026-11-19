@@ -1,14 +1,18 @@
 """Inference service checks that need no model: python -m unittest discover -s generation/inference_service
-(fastapi + httpx for TestClient; Pillow for the photo test, skipped without it)."""
+(fastapi + httpx for TestClient; Pillow for the photo test and numpy + trimesh + Pillow for the real conversion
+tests, each skipped without them)."""
+import errno
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 import threading
 import time
 import types
 import unittest
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -61,6 +65,40 @@ class _Records(logging.Handler):
 
     def emit(self, record):
         self.records.append(record)
+
+
+class _GateLock:
+    """Stand-in for MODEL_LOCK or a passthrough slot: the test holds .lock (another job has the GPU) and .waiting
+    says when a run starts waiting for it."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.waiting = threading.Event()
+
+    def __enter__(self):
+        self.waiting.set()
+        self.lock.acquire()
+        return self
+
+    def __exit__(self, *exc):
+        self.lock.release()
+
+
+def _in_thread(call):
+    """Runs call() in a thread (a concurrent request); its result lands in box["answer"]."""
+    box = {}
+    thread = threading.Thread(target=lambda: box.setdefault("answer", call()))
+    thread.start()
+    return thread, box
+
+
+def _wait_until(predicate, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return predicate()
 
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
@@ -264,6 +302,26 @@ class PassthroughKnobTest(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertIn("job-2", warnings[0])
 
+    def test_an_upload_cancelled_while_it_waits_for_a_slot_does_not_sleep(self):
+        """Like a model run cancelled while waiting for MODEL_LOCK: an abandoned job does not take the slot's time."""
+        gate = _GateLock()
+        gate.lock.acquire()   # the one slot is busy
+        with _knobs(delay_ms=10000), mock.patch.object(service, "_passthrough_slots", return_value=gate):
+            thread, box = _in_thread(lambda: self.upload("lt-f1b-gq-1.png"))
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                self.assertEqual(self.client.delete("/artifacts/job-2").status_code, 204)   # Spring gave up
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        answer = box["answer"]
+        self.assertEqual(answer.status_code, 500, answer.text)
+        self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.sleep.assert_not_called()
+        self.assertEqual(self.simulated_lines(), [])
+        self.assertFalse((service.WORK_DIR / "job-2").exists())
+        self.assertNotIn("job-2", service._CURRENT)
+
     def test_infer_ms_is_the_simulated_generation_time(self):
         self.sleep.side_effect = time.sleep   # a real 60 ms sleep
         with _knobs(delay_ms=60):
@@ -293,6 +351,379 @@ class PassthroughKnobTest(unittest.TestCase):
         self.assertEqual(service._passthrough_knobs().slots, 1)   # back to the default once the env is gone
         self.assertIs(service._passthrough_slots(2), service._passthrough_slots(2))
         self.assertIsNot(service._passthrough_slots(3), service._passthrough_slots(2))   # a new size, a new semaphore
+
+
+GLB_STUB = b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
+TETRA_OBJ = """v 0 0 0
+v 1 0 0
+v 0 1 0
+v 0 0 1
+vt 0 0
+vt 1 0
+vt 0 1
+vt 1 1
+f 1/1 2/2 3/3
+f 1/1 4/4 2/2
+f 1/1 3/3 4/4
+f 2/2 4/4 3/3
+"""
+
+
+def _fake_convert_module(calls):
+    """convert_asset stand-in (no numpy): writes a GLB stub and, like the real one, creates the folder only when
+    make_dirs (otherwise the write fails on a deleted folder). Each call is appended to calls."""
+    module = types.ModuleType("convert_asset")
+    module.ConversionError = type("ConversionError", (Exception,), {})
+
+    def convert(obj, texture, out, metrics=None, hair_npz=None, forward_axis="+x", make_dirs=True):
+        calls.append({"out": out, "make_dirs": make_dirs})
+        if make_dirs:
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, "wb") as glb:
+            glb.write(GLB_STUB)
+        return {"vertices": 4, "triangles": 4, "textureSize": 8, "bytes": len(GLB_STUB), "convertMs": 1}
+
+    module.convert = convert
+    return module
+
+
+def _write_stub_raw(out):
+    for name in ("mesh.obj", "uv.png", "hair.npz"):
+        (out / name).write_bytes(b"stub")
+
+
+def _write_real_raw(out):
+    """What AnimalLift writes, tiny: a tetrahedron with UVs, an 8x8 texture and quantized hair offsets."""
+    import numpy as np
+    from PIL import Image
+
+    (out / "mesh.obj").write_text(TETRA_OBJ)
+    Image.new("RGB", (8, 8), (200, 150, 100)).save(out / "uv.png")
+    np.savez(out / "hair.npz", hair_offsets_local_q=np.full((8, 8, 2, 3), 20, np.int8), offset_scale=np.float32(0.01))
+
+
+class _FakeModel:
+    """Runner interface stand-in. predict calls hook(call number) first (a DELETE or a pause arriving mid-run), then
+    writes the raw files with mkdir(parents=True) as AnimalLiftRunner.predict does, so a deleted job folder comes back."""
+
+    version = "fake@test:ckpt"
+    model_params = 1
+    device = "cpu"
+
+    def __init__(self, write_raw):
+        self.write_raw = write_raw
+        self.calls = 0
+        self.hook = None
+
+    def predict(self, image, out_dir):
+        self.calls += 1
+        if self.hook:
+            self.hook(self.calls)
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self.write_raw(out)
+        return types.SimpleNamespace(mesh_obj=out / "mesh.obj", uv_png=out / "uv.png", hair_npz=out / "hair.npz",
+                                     infer_ms=5, gpu_peak_mb=None)
+
+
+def _has_converter_deps():
+    try:
+        import numpy  # noqa: F401
+        import trimesh  # noqa: F401
+        from PIL import Image  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+class _ModelModeCase(unittest.TestCase):
+    """Model mode with a fake runner, driven through the upload endpoints like Spring on the VM does."""
+
+    write_raw = staticmethod(_write_stub_raw)
+
+    def converter_patches(self):
+        return [mock.patch.dict(sys.modules, {"convert_asset": _fake_convert_module(self.converted)})]
+
+    def setUp(self):
+        self.job = "t-" + uuid.uuid4().hex[:12]
+        self.model = _FakeModel(self.write_raw)
+        self.converted = []
+        patches = [mock.patch.object(service, "SAMPLE_GLB", None), mock.patch.object(service, "ANIMALLIFT_DIR", "model"),
+                   mock.patch.object(service, "MODEL", self.model), mock.patch.object(service, "RIG_TEMPLATE", None)]
+        for patcher in patches + self.converter_patches():
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.addCleanup(shutil.rmtree, self.job_dir, True)
+        self.records = _Records()
+        service.log.addHandler(self.records)
+        self.addCleanup(service.log.removeHandler, self.records)
+        self.client = TestClient(service.app)
+
+    @property
+    def job_dir(self):
+        return service.WORK_DIR / self.job
+
+    def upload(self, name="dog.jpg"):
+        return self.client.post("/infer/upload", data={"request": json.dumps({"jobId": self.job})},
+                                files=[("photos", (name, b"\xff\xd8\xff\xe0 jpeg", "image/jpeg"))])
+
+    def delete(self):
+        return self.client.delete(f"/artifacts/{self.job}").status_code
+
+    def warnings(self, text):
+        return [r.getMessage() for r in self.records.records if r.levelno == logging.WARNING and text in r.getMessage()]
+
+    def assert_failed_and_gone(self, answer):
+        """The contract's model failure (nobody reads it), no work folder, no attempt left registered."""
+        self.assertEqual(answer.status_code, 500, answer.text)
+        self.assertEqual(set(answer.json()["detail"]), {"code", "message"})
+        self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.assertFalse(self.job_dir.exists(), sorted(str(p) for p in self.job_dir.rglob("*")))
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class CancelOnDeleteTest(_ModelModeCase):
+    """DELETE /artifacts/{jobId} cancels a run of the job (2026-11-19 F1b-real: Spring's 5 s timeout gave up on every
+    job, the abandoned runs converted anyway and left 3 folders on the Pod's volume, one DELETE answered 500)."""
+
+    def test_a_run_cancelled_while_it_waits_for_the_model_never_runs_it(self):
+        gate = _GateLock()
+        gate.lock.acquire()   # an earlier job holds the GPU
+        with mock.patch.object(service, "MODEL_LOCK", gate):
+            thread, box = _in_thread(self.upload)
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                self.assertTrue((self.job_dir / "input" / "00_dog.jpg").is_file())
+                self.assertEqual(self.delete(), 204)   # Spring timed out: its cleanup
+                self.assertFalse(self.job_dir.exists())
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        self.assert_failed_and_gone(box["answer"])
+        self.assertEqual(self.model.calls, 0)   # no GPU time for a job nobody waits for
+        self.assertEqual(self.converted, [])
+        self.assertEqual(len(self.warnings("stopping before the model")), 1)
+
+    def test_a_delete_during_the_model_run_skips_conversion_and_removes_what_the_run_wrote(self):
+        deletes = []
+        self.model.hook = lambda call: deletes.append(self.delete())   # then predict recreates raw/ (mkdir parents)
+        answer = self.upload()
+        self.assertEqual(deletes, [204])
+        self.assertEqual(self.model.calls, 1)
+        self.assertEqual(self.converted, [])   # stopped before conversion
+        self.assert_failed_and_gone(answer)    # the raw files written after the DELETE went too
+        self.assertEqual(len(self.warnings("stopping before conversion")), 1)
+        self.assertEqual(len(self.warnings("removed what the cancelled run wrote")), 1)
+
+    def test_a_retry_after_the_delete_completes_while_the_abandoned_run_stops(self):
+        entered, go = threading.Event(), threading.Event()
+
+        def first_run_is_slow(call):
+            if call == 1:
+                entered.set()
+                go.wait(10)
+
+        self.model.hook = first_run_is_slow
+        first, first_box = _in_thread(lambda: self.upload("first.jpg"))
+        second, second_box = None, {}
+        try:
+            self.assertTrue(entered.wait(10))
+            self.assertEqual(self.delete(), 204)   # Spring timed out on the first attempt
+            second, second_box = _in_thread(lambda: self.upload("retry.jpg"))   # the retry: same jobId
+            self.assertTrue(_wait_until((self.job_dir / "input" / "00_retry.jpg").is_file))
+        finally:
+            go.set()
+            first.join(10)
+            if second:
+                second.join(10)
+        old, new = first_box["answer"], second_box["answer"]
+        self.assertEqual(old.status_code, 500, old.text)
+        self.assertEqual(old.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.assertEqual(len(self.warnings("a newer attempt of the same job started")), 1)
+        self.assertEqual(new.status_code, 200, new.text)
+        self.assertEqual(new.json()["glbUrl"], f"/artifacts/{self.job}/base.glb")
+        self.assertEqual(self.model.calls, 2)
+        self.assertEqual(len(self.converted), 1)   # only the retry converted, without creating folders
+        self.assertFalse(self.converted[0]["make_dirs"])
+        glb = self.client.get(new.json()["glbUrl"])
+        self.assertEqual((glb.status_code, glb.content), (200, GLB_STUB))
+        self.assertEqual(self.delete(), 204)   # Spring stored the GLB: its cleanup
+        self.assertFalse(self.job_dir.exists())
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_a_cancelled_attempt_ending_after_the_retry_finished_keeps_the_retrys_glb(self):
+        # Pre-merge review 2026-11-19: with max-concurrency >= 2 (or SLOTS >= 2) the retry can finish first. Its
+        # registry entry is then gone too, and the old attempt used to read that as "cancelled" and rmtree the
+        # retry's folder before Spring's GET of base.glb (404 -> CONVERSION_FAILED for a retry that worked).
+        with service._job_attempt(self.job) as old:
+            (self.job_dir / "input").mkdir(parents=True)
+            self.assertEqual(self.delete(), 204)   # Spring gave up on the old attempt
+            self.assertEqual(old.state(), "cancelled")
+            with service._job_attempt(self.job) as retry:
+                self.job_dir.mkdir()   # the retry's upload makes the folder again
+                (self.job_dir / "base.glb").write_bytes(GLB_STUB)   # the retry's answer, not fetched yet
+                self.assertEqual(old.state(), "superseded")
+            self.assertEqual(retry.state(), "superseded")   # ended: the folder is no attempt's to remove
+            self.assertEqual(old.state(), "superseded")
+        self.assertEqual((self.job_dir / "base.glb").read_bytes(), GLB_STUB)
+        self.assertEqual(self.warnings("removed what the cancelled run wrote"), [])
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_an_older_attempt_ending_after_a_newer_one_removes_nothing_without_a_delete(self):
+        # Path mode never sends DELETE and keeps the outputs for experiments: nothing may remove them.
+        with service._job_attempt(self.job) as old:
+            with service._job_attempt(self.job):
+                (self.job_dir / "raw").mkdir(parents=True)
+                (self.job_dir / "raw" / "uv.png").write_bytes(b"x")
+            self.assertEqual(old.state(), "superseded")
+        self.assertTrue((self.job_dir / "raw" / "uv.png").is_file())
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_a_cancelled_retry_is_cleaned_by_the_retry_not_by_the_older_attempt(self):
+        with service._job_attempt(self.job) as old:
+            self.assertEqual(self.delete(), 204)
+            with service._job_attempt(self.job) as retry:
+                self.assertEqual(self.delete(), 204)   # Spring gave up on the retry too
+                (self.job_dir / "raw").mkdir(parents=True)   # predict wrote after that DELETE
+                self.assertEqual((old.state(), retry.state()), ("superseded", "cancelled"))
+            self.assertFalse(self.job_dir.exists())   # the retry removed what it wrote
+        self.assertEqual(len(self.warnings("removed what the cancelled run wrote")), 1)
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertNotIn(self.job, service._CANCELLED)
+
+    def test_a_run_nobody_cancelled_answers_and_leaves_its_folder_for_the_get(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertTrue((self.job_dir / "base.glb").is_file())
+        self.assertNotIn(self.job, service._CURRENT)
+        self.assertEqual(self.warnings("stopping"), [])
+
+    def test_delete_tries_again_when_a_writer_refills_the_folder(self):
+        (self.job_dir / "raw").mkdir(parents=True)
+        (self.job_dir / "raw" / "uv.png").write_bytes(b"x")
+        real_rmtree, tries = shutil.rmtree, []
+
+        def racing_writer(path, *args, **kwargs):
+            tries.append(path)
+            if len(tries) == 1:   # a run wrote a file while rmtree walked (F1b-real: OSError 39, answered 500)
+                raise OSError(errno.ENOTEMPTY, "Directory not empty", str(path))
+            return real_rmtree(path, *args, **kwargs)
+
+        with mock.patch.object(service.shutil, "rmtree", side_effect=racing_writer):
+            self.assertEqual(self.delete(), 204)
+        self.assertEqual(len(tries), 2)
+        self.assertFalse(self.job_dir.exists())
+
+    def test_delete_still_fails_when_the_folder_cannot_be_removed(self):
+        self.job_dir.mkdir(parents=True)
+        client = TestClient(service.app, raise_server_exceptions=False)
+        with mock.patch.object(service.shutil, "rmtree", side_effect=PermissionError(errno.EACCES, "denied")) as rmtree, \
+                mock.patch.object(service, "_REMOVE_PAUSE_S", 0):
+            answer = client.delete(f"/artifacts/{self.job}")
+        self.assertEqual(answer.status_code, 500)   # Spring logs it (README DELETE), the sweep is the backstop
+        self.assertEqual(rmtree.call_count, service._REMOVE_TRIES)
+        self.assertTrue(self.job_dir.exists())
+
+
+@unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")
+class RealConversionCancelTest(_ModelModeCase):
+    """The same with tools/convert_asset.py itself: its makedirs brought a deleted job folder back with base.glb."""
+
+    write_raw = staticmethod(_write_real_raw)
+
+    def converter_patches(self):
+        return []
+
+    def test_a_delete_during_conversion_leaves_no_folder(self):
+        import convert_asset
+
+        deletes, normals = [], convert_asset._smooth_normals
+
+        def delete_then_normals(*args):   # the DELETE lands after the OBJ and texture were read, before any write
+            deletes.append(self.delete())
+            return normals(*args)
+
+        with mock.patch.object(convert_asset, "_smooth_normals", side_effect=delete_then_normals):
+            answer = self.upload()
+        self.assertEqual(deletes, [204])
+        self.assert_failed_and_gone(answer)
+        self.assertEqual(len(self.warnings("stopping after a conversion error")), 1)
+        self.assertEqual([r.getMessage() for r in self.records.records if r.levelno >= logging.ERROR], [])   # no traceback
+
+    def test_the_conversion_writes_into_the_existing_job_folder(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        for name in ("base.glb", "base.metrics.json", "hair_length.png", "hair_flow.png", "hair_maps.json"):
+            self.assertTrue((self.job_dir / name).is_file(), name)
+        self.assertEqual(self.client.get(answer.json()["glbUrl"]).content[:4], b"glTF")
+        self.assertEqual(self.delete(), 204)
+        self.assertFalse(self.job_dir.exists())
+
+    def test_convert_creates_the_output_folder_only_with_make_dirs(self):
+        import convert_asset
+
+        with tempfile.TemporaryDirectory() as folder:
+            raw = Path(folder) / "raw"
+            raw.mkdir()
+            _write_real_raw(raw)
+            gone = Path(folder) / "gone"
+            with self.assertRaisesRegex(convert_asset.ConversionError, "output folder is gone"):
+                convert_asset.convert(str(raw / "mesh.obj"), str(raw / "uv.png"), str(gone / "base.glb"),
+                                      str(gone / "base.metrics.json"), hair_npz=str(raw / "hair.npz"), make_dirs=False)
+            self.assertFalse(gone.exists())
+            made = Path(folder) / "made"   # the CLI default still creates it
+            convert_asset.convert(str(raw / "mesh.obj"), str(raw / "uv.png"), str(made / "base.glb"))
+            self.assertTrue((made / "base.glb").is_file())
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class WorkSweepTest(unittest.TestCase):
+    """BESIDE_WORK_SWEEP_MINUTES: the backstop for job folders nothing else removes."""
+
+    def setUp(self):
+        self.records = _Records()
+        service.log.addHandler(self.records)
+        self.addCleanup(service.log.removeHandler, self.records)
+
+    def test_only_old_job_folders_no_run_uses_are_removed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            work = Path(folder).resolve()
+            now = time.time()
+            old = now - 2 * 3600
+
+            def job(name, mtime):
+                path = work / name
+                (path / "raw").mkdir(parents=True)
+                (path / "raw" / "mesh.obj").write_bytes(b"x")
+                for entry in (path / "raw" / "mesh.obj", path / "raw", path):
+                    os.utime(entry, (mtime, mtime))
+                return path
+
+            stale, fresh, busy, odd = job("job-stale", old), job("job-fresh", now - 60), job("job-busy", old), job("not_a_job", old)
+            touched = job("job-touched", old)
+            os.utime(touched / "raw" / "mesh.obj", (now, now))   # an old folder with a new file inside
+            stray = work / "notes.txt"
+            stray.write_text("x")
+            os.utime(stray, (old, old))
+            with mock.patch.object(service, "WORK_DIR", work), mock.patch.dict(service._CURRENT, {"job-busy": 1}):
+                removed = service._sweep_work_dir(3600, now=now)
+            self.assertEqual(removed, ["job-stale"])
+            self.assertFalse(stale.exists())
+            for kept in (fresh, busy, touched, odd, stray):
+                self.assertTrue(kept.exists(), kept)
+
+    def test_the_setting_is_off_unless_a_positive_number(self):
+        for raw, minutes in ((None, 0), ("", 0), ("60", 60), (" 30 ", 30), ("abc", 0), ("-5", 0)):
+            with mock.patch.dict(os.environ, {}):
+                os.environ.pop("BESIDE_WORK_SWEEP_MINUTES", None)
+                if raw is not None:
+                    os.environ["BESIDE_WORK_SWEEP_MINUTES"] = raw
+                self.assertEqual(service._sweep_minutes(), minutes, raw)
 
 
 class UprightPhotoTest(unittest.TestCase):
