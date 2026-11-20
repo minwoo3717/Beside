@@ -10,18 +10,20 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.Mockito;
-import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.context.annotation.Bean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -35,9 +37,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
 
 /**
  * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting): a request keeps its place until the write
@@ -45,8 +44,11 @@ import static org.mockito.Mockito.doAnswer;
  * before, the gate would count neither the place nor the row for a moment and admit past the cap (under-counting,
  * which the design rules out; counting both for a moment is fine). The gate's own tests only imitate that order, so
  * these hold JobServiceImpl to it: the place is still held when the write commits, and a write slowed down inside the
- * place lets no request past the cap. Its own class because @MockBean and @SpyBean replace beans for the whole
- * context.
+ * place lets no request past the cap.
+ * <p>
+ * The writes are watched by a test-only wrapper around the JobRepository bean, not a Mockito spy: the scheduler calls
+ * the same bean (JobQueueGauge at startup and every 5 s), and a call from that thread can take a doAnswer stubbing
+ * meant for the test thread. Its own class because @MockBean and the wrapper change the whole context.
  */
 @SpringBootTest(properties = {"admission.max-pending=2", "admission.retry-after-seconds=45"})
 class JobServiceAdmissionOrderTest {
@@ -55,6 +57,11 @@ class JobServiceAdmissionOrderTest {
     /** A write takes SLOW_WRITE_MS here, and the requests come STAGGER_MS apart: most arrive during the first writes. */
     private static final long SLOW_WRITE_MS = 150;
     private static final long STAGGER_MS = 10;
+
+    /** How many places the gate held when each watched write was committed (set and read by the tests). */
+    private static final List<Integer> placesHeldAtCommit = new CopyOnWriteArrayList<>();
+    private static volatile AdmissionGate watchedGate;
+    private static volatile long slowWriteMs;
 
     @TempDir
     static Path storage;
@@ -65,11 +72,64 @@ class JobServiceAdmissionOrderTest {
         registry.add("storage.result.dir", () -> storage.resolve("results").toString());
     }
 
+    /** Wraps the JobRepository bean: save(Job) and startRetry are slowed down and watched, the rest passes through. */
+    @TestConfiguration
+    static class WatchedWrites {
+        @Bean
+        static BeanPostProcessor watchJobWrites() {
+            return new BeanPostProcessor() {
+                @Override
+                public Object postProcessAfterInitialization(Object bean, String beanName) {
+                    if (!(bean instanceof JobRepository repository)) {
+                        return bean;
+                    }
+                    return Proxy.newProxyInstance(JobRepository.class.getClassLoader(), new Class<?>[]{JobRepository.class},
+                            (proxy, method, args) -> {
+                                boolean watched = method.getName().equals("startRetry")
+                                        || (method.getName().equals("save") && args != null && args[0] instanceof Job);
+                                if (watched) {
+                                    Thread.sleep(slowWriteMs);
+                                }
+                                Object result;
+                                try {
+                                    result = method.invoke(repository, args);
+                                } catch (InvocationTargetException e) {
+                                    throw e.getCause();
+                                }
+                                if (watched) {
+                                    recordPlacesAtCommit();
+                                }
+                                return result;
+                            });
+                }
+            };
+        }
+    }
+
+    private static void recordPlacesAtCommit() {
+        AdmissionGate gate = watchedGate;
+        if (gate == null) {
+            return; // a write before the test set the gate (startup)
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            // A transaction is still open around the write (a @Transactional on JobServiceImpl would be one): the
+            // write is committed when that one ends.
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    placesHeldAtCommit.add(gate.reserved());
+                }
+            });
+        } else {
+            placesHeldAtCommit.add(gate.reserved()); // the repository's own transaction has committed
+        }
+    }
+
     /** Takes the dispatch and runs nothing: a job stays as the request left it. */
     @MockBean
     JobWorker jobWorker;
 
-    @SpyBean
+    @Autowired
     JobRepository jobRepository;
 
     @Autowired
@@ -81,38 +141,17 @@ class JobServiceAdmissionOrderTest {
     @Autowired
     AdmissionGate admissionGate;
 
-    /** How many places the gate held when each watched write was committed. */
-    private final List<Integer> placesHeldAtCommit = new CopyOnWriteArrayList<>();
-    private volatile long slowWriteMs;
-
     @BeforeEach
     void watchTheWrites() {
-        // A spy of a repository proxy delegates to it (it has no real method to call): its default answer is the write.
-        Answer<?> write = Mockito.mockingDetails(jobRepository).getMockCreationSettings().getDefaultAnswer();
-        Answer<?> watched = call -> {
-            Thread.sleep(slowWriteMs);
-            Object result = write.answer(call);
-            if (TransactionSynchronizationManager.isSynchronizationActive()) {
-                // A transaction is still open around the write (here Spring's proxy for startRetry's @Transactional
-                // wraps the spy; a @Transactional on JobServiceImpl would too): it is committed when that one ends.
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        placesHeldAtCommit.add(admissionGate.reserved());
-                    }
-                });
-            } else {
-                placesHeldAtCommit.add(admissionGate.reserved()); // the repository's own transaction has committed
-            }
-            return result;
-        };
-        doAnswer(watched).when(jobRepository).save(any(Job.class));
-        doAnswer(watched).when(jobRepository).startRetry(anyString(), any(), any(), any());
+        slowWriteMs = 0;
+        placesHeldAtCommit.clear();
+        watchedGate = admissionGate;
     }
 
     @AfterEach
     void clear() {
-        Mockito.reset(jobRepository);
+        watchedGate = null;
+        slowWriteMs = 0;
         idempotencyKeys.deleteAll();
         jobRepository.deleteAll(); // nothing runs them: PENDING rows would fill the next test's queue
     }
