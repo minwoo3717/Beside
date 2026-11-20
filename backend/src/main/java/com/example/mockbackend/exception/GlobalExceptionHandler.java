@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.NestedExceptionUtils;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -44,9 +45,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<?> handleApi(ApiException ex, HttpServletRequest request) {
-        log.warn("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
+        if (ex.getRetryAfterSeconds() != null) {
+            // QUEUE_FULL: an intended refusal under load, logged once with the queue numbers by AdmissionGate.
+            log.debug("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
+        } else {
+            log.warn("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
+        }
         if (isV1(request)) {
-            return v1(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getJobId());
+            ResponseEntity<ErrorResponse> body = v1(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getJobId());
+            if (ex.getRetryAfterSeconds() == null) {
+                return body;
+            }
+            return ResponseEntity.status(body.getStatusCode()).headers(body.getHeaders())
+                    .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds())).body(body.getBody());
         }
         return flat(ex.getStatus(), ex.getMessage());
     }
