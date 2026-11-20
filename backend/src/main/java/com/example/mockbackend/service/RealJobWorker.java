@@ -48,7 +48,9 @@ import java.util.concurrent.Semaphore;
  *       DELETE /artifacts/{jobId}; a failed cleanup is only logged.</li>
  * </ol>
  * Failures end the run FAILED with their job failure code (InferenceClient documents the mapping). An interrupted
- * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end.
+ * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end;
+ * that includes an error before PROCESSING (reading the job, the cutout, the inference-service check, the PROCESSING
+ * save), which used to leave the job PENDING until the next restart.
  */
 @Service
 @Profile("real")
@@ -95,8 +97,9 @@ public class RealJobWorker implements JobWorker {
         // The offline wait counts from here, not from taking the slot: a job queued behind others that wait for the
         // same stopped GPU must not start its own full wait only when they give up (N jobs would wait N x the limit).
         long offlineDeadline = System.nanoTime() + offlineWaitMs * 1_000_000;
+        PreparedPhoto photo = null;
         try {
-            PreparedPhoto photo = prepare(jobId);
+            photo = prepare(jobId);
             inferenceSlots.acquire();
             try {
                 run(jobId, start, photo, offlineDeadline);
@@ -112,6 +115,11 @@ public class RealJobWorker implements JobWorker {
             } finally {
                 Thread.currentThread().interrupt();
             }
+        } catch (RuntimeException unexpected) {
+            // Outside run()'s own handling: reading the job, the cutout, the inference-service check, the PROCESSING
+            // save, or a failure write that threw. Escaping the @Async method would leave the job PENDING (or
+            // PROCESSING) with no thread left to end it until the next restart. The slot is already released.
+            failUnended(jobId, unexpected, photo);
         }
     }
 
@@ -162,8 +170,7 @@ public class RealJobWorker implements JobWorker {
             log.warn("jobId={} stage=FAILED code={} {} [{}]", jobId, failure.code(), failure.getMessage(), failure.logDetail());
         } catch (RuntimeException unexpected) {
             log.error("jobId={} real worker error", jobId, unexpected);
-            // The exception text may name server paths; it stays in the log.
-            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker error (" + unexpected.getClass().getSimpleName() + ")", type(),
+            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, unexpectedMessage(unexpected), type(),
                     photo.apply(RunDetails.NONE));
         } finally {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
@@ -260,5 +267,37 @@ public class RealJobWorker implements JobWorker {
         }
         jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Real worker interrupted (server shutting down)", type());
         log.warn("jobId={} stage=FAILED (real worker interrupted)", jobId);
+    }
+
+    /** error.message of an unexpected error: the class name only, the exception text may name server paths (log only). */
+    private static String unexpectedMessage(RuntimeException unexpected) {
+        return "Real worker error (" + unexpected.getClass().getSimpleName() + ")";
+    }
+
+    /**
+     * Ends the run INTERNAL_ERROR after an error that left {@link #dispatch}, reading the job again: the copy the run
+     * held may say PROCESSING or FAILED in memory only, when its save is what failed. A run that already ended
+     * (COMPLETED or FAILED in the database) stays as it is. One attempt: when the failure cannot be written either
+     * (database down) this only logs, and InterruptedJobRecovery fails the job at the next startup.
+     */
+    private void failUnended(String jobId, RuntimeException unexpected, PreparedPhoto photo) {
+        log.error("jobId={} real worker error", jobId, unexpected);
+        try {
+            Job job = jobRepository.findById(jobId).orElse(null);
+            if (job == null) {
+                log.warn("jobId={} not found for real worker", jobId);
+                return;
+            }
+            if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.PROCESSING) {
+                log.warn("jobId={} already {}; left as it is", jobId, job.getStatus());
+                return;
+            }
+            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, unexpectedMessage(unexpected), type(),
+                    photo != null ? photo.apply(RunDetails.NONE) : RunDetails.NONE);
+            log.warn("jobId={} stage=FAILED code=INTERNAL_ERROR ({})", jobId, unexpected.getClass().getSimpleName());
+        } catch (RuntimeException notRecorded) {
+            log.error("jobId={} could not record the failure ({}); InterruptedJobRecovery fails it at the next startup",
+                    jobId, notRecorded.toString());
+        }
     }
 }

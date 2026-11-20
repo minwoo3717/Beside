@@ -85,6 +85,8 @@ stateDiagram-v2
 
 서버가 다시 시작되면 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다. 작업 기록은 H2 에 남지만 워커 스레드는 남지 않기 때문이며, 앱은 retry 로 다시 실행한다 (`InterruptedJobRecovery`, 웹 서버가 요청을 받기 전에 실행).
 
+워커 안에서 예상하지 못한 예외가 나도 아직 끝나지 않은 작업(PENDING·PROCESSING)은 그 자리에서 FAILED(`INTERNAL_ERROR`)가 된다 **[구현됨]** (2026-11-20). 전에는 PROCESSING 전 구간(작업 읽기·전처리·추론 서비스 확인·PROCESSING 저장)의 예외가 워커 밖으로 나가 작업이 재시작 때까지 PENDING 에 남았다. 실패 기록마저 쓰지 못하면(DB 오류) 로그만 남기고, 다음 시작 때 `InterruptedJobRecovery` 가 닫는다.
+
 `timings.queuedMs` 는 PENDING 구간, `processingMs` 는 PROCESSING 구간, `totalMs` 는 접수(또는 retry)부터 종료까지. 상태는 결과 메타데이터를 채운 뒤 마지막에 바꾼다.
 
 ## 프로파일
