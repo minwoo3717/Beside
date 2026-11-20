@@ -21,9 +21,9 @@
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
 | Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). 그날 VM ↔ Pod 는 DERP 중계(왕복 약 300 ms)였고, 2026-11-18·19 2·3차 부하 시험 때는 직접 연결(`tailscale ping` 263~269 ms)이었다 **[실험 결과]**. 날마다 바뀔 수 있다. 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
-| Runpod Pod 추론 서비스 자동 재시작([runpod/supervise_inference.sh](runpod/supervise_inference.sh), 장애 대응 R7) | **[구현됨]** 2026-11-20: `start_pod.sh` 가 서비스를 감독 루프 아래에서 띄운다. 가짜 서비스·가짜 Tailscale 로 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사(passthrough·model 모드)가 WSL(Ubuntu 26.04)에서 통과했고 CI 단계로 넣었다. 실제 Pod 에서 `kill -9` 뒤 다시 뜨는 시간과 그동안의 디스코드 알림은 **[계획]**. 아래 'Runpod Pod 쪽'의 '서비스 자동 재시작' |
+| Runpod Pod 추론 서비스 자동 재시작([runpod/supervise_inference.sh](runpod/supervise_inference.sh), 장애 대응 R7) | **[구현됨]** 2026-11-20: `start_pod.sh` 가 서비스를 감독 루프 아래에서 띄운다. 가짜 서비스·가짜 Tailscale 로 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사(passthrough·model 모드)가 WSL(Ubuntu 26.04)에서 통과했고 CI 단계로 넣었다. 2026-11-20 장애 훈련 2차 확인에서 실제 A40 Pod(main `ce1a685`)로 쟀다 **[실험 결과]**: `kill -9` 5 s 뒤 감독 루프가 다시 띄우고 41 s 뒤 backend 가 UP 을 봤다(사람 손 없음). DOWN 이 45 s 유예보다 짧아 DOWN 알림 없이 🟡·🟢 만 갔다. 아래 'Runpod Pod 쪽'의 '서비스 자동 재시작' |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매시 5분, 48개. 2026-11-20 까지는 매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인. 매시·48개는 `DatabaseBackupScheduleTest`, VM 반영은 [계획] — 아래 '운영 대응 설치'). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다(매일 04:30 설정 때). Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매시 5분, 48개. 2026-11-20 까지는 매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인. 매시·48개는 `DatabaseBackupScheduleTest`). VM 반영은 2026-11-20 05:33 UTC main `ce1a685` 배포로 했다 **[구현됨: 적용]**: 설정 `0 5 * * * *`·48개를 확인했고, 배포 뒤 첫 매시 zip 은 아직 기록하지 않았다(아래 '운영 대응 설치'). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다(매일 04:30 설정 때). Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 서버 이름이 든 메시지는 2026-11-20 장애 훈련 2차 확인에서 훈련 backend(운영 `.env`, 웹훅만 수집 서버로 바꿈)가 보낸 본문으로 확인했다("GPU 추론 서버(Runpod A40)…", [docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log](../docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log)) **[실험 결과]**. 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4, mock) 2026-11-18, 2차(실제 A40, G0r·G1r·G3r) 2026-11-18, 3차(G2r·F2-real·F1b-real·F1a) 2026-11-19 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [1차](../docs/perf/load/2026-11-18_vm-1st.md)·[2차](../docs/perf/load/2026-11-18_vm-2nd.md)·[3차](../docs/perf/load/2026-11-19_vm-3rd.md) |
 
@@ -39,7 +39,7 @@
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
 | 서비스 계정·백업 버킷 | `beside-backup@beside-514511.iam.gserviceaccount.com`(키 없음, 범위 `storage-rw,logging-write,monitoring-write`, 2026-11-20 04:26 UTC 까지 붙임) — 버킷 `gs://beside-514511-backups` 에 만들기만(`roles/storage.objectCreator`). 아래 '운영 대응 설치' 3번. 컨테이너는 2번(메타데이터 차단, 2026-11-20)으로 이 토큰을 받지 못한다 |
-| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-19 PR #6~#11 병합 뒤 `1c87da5`, 11:04 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 배포). 추론 서비스 변경(PR #11)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
+| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-20 PR #18·#20 병합 뒤 `ce1a685`, 05:32:32~05:33:49 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 빌드·caddy 다시 만듦). 추론 서비스 변경(PR #11, PR #20 의 `loadError`·`busyForMs`·감독 루프)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -219,7 +219,7 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 | Docker · OS | 한도 없음, 약 0.5GB |
 | **합계** | **약 5.6GB + OS** (한도 합) |
 
-caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다. compose 값 **[구현됨]** · `docker compose config` 로 두 값을 확인하는 CI 단언은 넣었지만 아직 돌지 않았다(개발 PC 에 Docker 가 없다. PR CI 의 docker 작업이 통과하면 그 커밋을 여기에 적는다). 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다).
+caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다. compose 값 **[구현됨]** · `docker compose config` 로 두 값을 확인하는 CI 단언은 넣었지만 아직 돌지 않았다(개발 PC 에 Docker 가 없다. PR CI 의 docker 작업이 통과하면 그 커밋을 여기에 적는다). 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다). VM 반영 **[구현됨: 적용]**: 2026-11-20 05:33 UTC 배포로 caddy 를 다시 만들었고 `Memory` 2147483648, `GOMEMLIMIT` 1638MiB 를 확인했다.
 
 지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 4GB VM 이면 한도 합이 RAM 을 넘으므로 **swap 2GB 가 필요**하다(한 번). A1 때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
 
@@ -300,7 +300,7 @@ $C start backend
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
 - **[구현됨]** prod 는 서버를 멈추지 않고 매시 5분(한국 시각 기준 `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 48개(이틀)를 남긴다(`storage.backup.*`, 2026-11-20 까지는 매일 04:30·7개). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
-- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번) 전이라 VM 의 prod 는 아직 매일 04:30 KST·7개로 백업하므로, 그때까지 버킷에 새로 올라가는 DB zip 은 하루 1개다.
+- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번)는 2026-11-20 05:33 UTC 에 했다. 그 전까지 VM 의 prod 는 매일 04:30 KST·7개로 백업해서 버킷에 새로 올라가는 DB zip 이 하루 1개였다. 이제 매시 5분 zip 이 그 시각 20분에 올라간다 [계산: 설정으로 본 값, 배포 뒤 첫 매시 zip·업로드는 아직 기록하지 않음].
 
 ### 부하 시험
 
@@ -308,17 +308,17 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 ## 운영 대응 설치 (R1~R5)
 
-2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 2026-11-20 에 2~5번(메타데이터 차단, 버킷·계정·VM 에 붙이기, 백업 타이머, 스냅샷 일정)을 했고 [구현됨: 적용], 1·6·7번은 [계획]** 이다. 3번은 운영자 보고, 2·4·5번은 장애 훈련 기록 `docs/ops/2026-11-20_failure-drills.md`(`ops/failure-drills` 커밋 `723fda8`)의 '적용함(2026-11-20, 운영)' 에 따른 것이고, 이 브랜치에서 VM 을 다시 들여다보지는 않았다. 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
+2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 2026-11-20 에 1~5번과 7번을 했고 [구현됨: 적용], 6번(외부 가동 확인 R3)만 [계획]** 이다. 2~5번(메타데이터 차단, 버킷·계정·VM 에 붙이기, 백업 타이머, 스냅샷 일정)은 장애 훈련 전후에 했다(3번은 운영자 보고, 2·4·5번은 [장애 훈련 기록](../docs/ops/2026-11-20_failure-drills.md)의 '결과에서 나온 대응'). 1번(백엔드 배포)은 05:32:32~05:33:49 UTC, 7번(VM 감시)은 05:34 UTC 에 했고, 이어진 장애 훈련 2차 확인(05:37~05:53 UTC)에서 R4·R6·R7 을 다시 재현했다. 다시 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
 
 | 대응 | 막는 장애 | 파일 | 상태 |
 |---|---|---|---|
-| R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기·VM 설치(차단·타이머) [구현됨: 적용] 2026-11-20 · 매시 H2 백업의 VM 반영(1번) [계획] |
+| R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기·VM 설치(차단·타이머) [구현됨: 적용] 2026-11-20 · 매시 H2 백업의 VM 반영(1번) [구현됨: 적용] 2026-11-20 05:33 |
 | R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 일정 `beside-daily-snapshot` [구현됨: 적용] 2026-11-20 · 일정이 만든 첫 스냅샷 확인 [계획] |
 | R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
-| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [계획] |
-| R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [계획] |
+| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [구현됨: 적용] 2026-11-20 05:34 · FD2 재현에서 멈춘 backend 를 112 s 뒤 재시작 **[실험 결과]** |
+| R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [구현됨: 적용] 2026-11-20 05:33 |
 
-- **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 1번(매시 백업)을 배포하기 전인 지금은 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
+- **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 1번(매시 백업)을 배포한 2026-11-20 05:33 UTC 전에는 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이었다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
 - **순서**: 메타데이터 차단(2) → 버킷·계정(3) → VM 에 계정 붙이기(정지 필요) → 백업 타이머(4). 차단을 먼저 하는 이유: 계정을 붙인 순간부터 컨테이너가 그 토큰을 받을 수 있다. 2026-11-20 에 2~4번을 모두 적용했으므로(단계별 시각은 남기지 않았다) 이 순서는 VM 을 빈 디스크(`create_vm.sh`)로 다시 만들 때 지킨다.
 - **스크립트는 복사해서 쓴다**: root 가 돌리는 파일이 `git pull` 만으로 바뀌지 않게 `/usr/local/sbin` 으로 `install` 한다. 리포의 스크립트가 바뀌면 아래 `install` 줄을 다시 실행한다.
 - 비밀(웹훅·토큰)은 출력하지 않는다. 백업 스크립트는 메타데이터 서버 토큰을, 감시 스크립트는 `deploy/.env` 의 `NOTIFY_WEBHOOK_URL` 을 curl 설정(stdin)으로만 넘긴다.
@@ -327,15 +327,15 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 | 단계 | 상태 | 적용 시각 (UTC) | 확인 결과 |
 |---|---|---|---|
-| 1. 백엔드 배포(R1 매시 백업, R5) | [계획] | | (caddy `Memory`·`GOMEMLIMIT`, 정시 5분 뒤 새 zip) |
-| 2. 메타데이터 차단(R1) | **[구현됨: 적용]** (장애 훈련 기록 `723fda8` 의 운영자 적용, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 (시각 기록 없음) | 컨테이너에서 메타데이터 HTTP 000(무응답), 호스트 200, 컨테이너의 이름 풀이 정상 |
+| 1. 백엔드 배포(R1 매시 백업, R5) | **[구현됨: 적용]** (main `ce1a685`, `scripts/deploy_vm.sh`) | 2026-11-20 05:32:32~05:33:49 | backend 다시 빌드, caddy 다시 만듦: `Memory` 2147483648, `GOMEMLIMIT` 1638MiB. prod H2 백업 `0 5 * * * *`·48개, `management.health.diskspace.enabled=false`, actuator `/health` UP, 공개 경로 61/61. 정시 5분 뒤 새 zip 은 아직 기록하지 않음 [계획] |
+| 2. 메타데이터 차단(R1) | **[구현됨: 적용]** (장애 훈련 기록 `723fda8` 의 운영자 적용, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 (시각 기록 없음). 1번 배포 뒤 리포 판으로 다시 `install` | 컨테이너에서 메타데이터 HTTP 000(무응답), 호스트 200, 컨테이너의 이름 풀이 정상. 1번으로 컨테이너를 다시 만든 뒤에도 `check` ok |
 | 3. 버킷·계정·VM 에 붙이기(R1) | **[구현됨: 적용]** (운영자 적용·보고, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 04:26 까지 | 버킷 `gs://beside-514511-backups`: asia-northeast3, 균일 접근, 공개 액세스 방지 enforced, 소프트 삭제 7일, 수명 주기 `db/` 만 30일 뒤 삭제. 키 없는 `beside-backup@beside-514511.iam.gserviceaccount.com` 에 그 버킷의 `roles/storage.objectCreator`. `beside-vm` 에 `--scopes=storage-rw,logging-write,monitoring-write` 로 붙임 |
-| 4. 백업 타이머(R1) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음) | 매시 20분 타이머. 첫 실행이 DB 백업 zip 7개(1번 배포 전이라 매일 04:30 KST 것)와 사진·GLB 29개를 올림. 버킷에서 받은 zip 을 H2 로 열어 작업 15건 확인 |
+| 4. 백업 타이머(R1) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음). 1번 배포 뒤 리포 판으로 다시 `install` | 매시 20분 타이머. 첫 실행이 DB 백업 zip 7개(1번 배포 전이라 매일 04:30 KST 것)와 사진·GLB 29개를 올림. 버킷에서 받은 zip 을 H2 로 열어 작업 15건 확인. 1번 배포 전 마지막 실행 05:20 성공 |
 | 5. 스냅샷 일정(R2) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음) | 일정 `beside-daily-snapshot`: 매일 19:00 UTC, 7일 보관. 일정이 만든 첫 스냅샷(2026-11-20 19:00 UTC 뒤)은 아직 확인하지 않음 [계획] |
 | 6. 외부 가동 확인(R3) | [계획] | | (알림 채널 종류, 가동 확인 이름) |
-| 7. VM 감시(R4) | [계획] | | (`list-timers` 의 다음 실행) |
+| 7. VM 감시(R4) | **[구현됨: 적용]** | 2026-11-20 05:34 | `beside-watchdog.timer` 30초마다, 정상이면 스크립트는 아무것도 남기지 않음. 장애 훈련 2차 확인 FD2(05:44:36 SIGSTOP, 점검 표시 없음): 실패 1/3·2/3·3/3 뒤 `docker restart`, 새 컨테이너 05:46:28.9, 🔁 05:46:29(운영 웹훅), VM 안 healthz 200 05:46:45 — 멈춤에서 재시작 112 s **[실험 결과]**. 디스크·백업 알림은 재현하지 않음 |
 
-**1. 백엔드 배포(R1 의 매시 백업, R5)**: 이 변경이 main 에 들어간 뒤 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
+**1. 백엔드 배포(R1 의 매시 백업, R5)** — 2026-11-20 05:32:32~05:33:49 UTC 적용함 **[구현됨: 적용]**(main `ce1a685`, 위 '적용 기록'). 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
 
 ```bash
 docker inspect -f '{{.HostConfig.Memory}}' beside-caddy-1          # 2147483648
@@ -382,7 +382,7 @@ systemctl list-timers beside-backup.timer
 
 **6. 외부 가동 확인(R3, gcloud)**: 콘솔 Monitoring → Alerting → Edit notification channels 에서 메일 채널을 만든 뒤 `gcloud beta monitoring channels list --format='table(name.basename(),type,displayName)'` 로 id 를 보고 `bash deploy/gcp/uptime_check.sh create <id>`. 부하 시험·장애 훈련 동안은 `bash deploy/gcp/uptime_check.sh pause`, 끝나면 `resume`(가동 확인 자체는 계속 돌고 기록된다).
 
-**7. VM 감시(R4, VM)**:
+**7. VM 감시(R4, VM)** — 2026-11-20 05:34 UTC 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 빈 디스크로 새로 만들 때와 리포의 스크립트가 바뀌었을 때(`install` 줄)뿐이다:
 
 ```bash
 sudo install -m 755 deploy/watchdog/beside-watchdog.sh /usr/local/sbin/beside-watchdog
@@ -443,8 +443,8 @@ journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 
 - 다시 띄우기 전 기다리는 시간은 5 s 다. 연달아 죽으면 두 배씩 늘고 60 s 에서 멈춘다(5 → 10 → 20 → 40 → 60 s). 한 번 300 s 넘게 돌았으면 다시 5 s 부터다. 값은 `RESTART_DELAY_S`·`RESTART_MAX_DELAY_S`·`RESTART_STABLE_S` 로 바꾼다.
 - 프로세스가 끝났을 때만 다시 띄운다. 살아 있지만 멈춘 서비스는 그대로 둔다. 멈춘 서비스를 누가 알아채는지는 `/healthz` 가 답하느냐에 달렸다.
   - SIGSTOP 처럼 `/healthz` 도 답하지 못하면: backend 의 `InferenceHealthMonitor` 가 다음 검사(15 s 마다)에서 2 s 안에 답이 없어 DOWN 으로 읽는다. `NOTIFY_WEBHOOK_URL` 을 넣었으면 DOWN 이 45 s 이어진 뒤(`notify.down-grace-ms=45000`) 디스코드 GPU 알림이 간다. 코드를 읽어 정리한 것이고, 실제 Pod 에서 SIGSTOP 으로 확인하는 것은 **[계획]** 이다.
-  - `/healthz` 는 답하는데 추론만 멈추면: backend 는 UP 으로 보고 작업을 계속 보내며, 감독 루프도 프로세스가 살아 있어 그대로 둔다. 작업마다 `inference.timeout-ms`(600 s) 뒤 `INFERENCE_TIMEOUT` 으로 실패한다. 이것을 알아채는 것은 장애 대응 R6 의 멈춤 알림이다: `/healthz` 의 `busyForMs`(아직 도는 `predict`·패스스루 모의 생성이 시작한 뒤 ms)가 `inference.stuck-alert-ms`(기본 120 s)를 넘으면 웹훅을 넣었을 때 디스코드 🐢 가 한 번, 풀리면 🟢 가 한 번 간다(아래 '문제 해결'). 변환·리깅에서 멈춘 것은 `busyForMs` 에 들어가지 않아 작업 시간 초과 말고는 잡는 장치가 없다. 알림은 시험(`test_app.py`·`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`)으로 확인했고 **[구현됨]**, VM·Pod 에서 실제로 받아 보는 것은 **[계획]** 이다.
-  - 모델을 불러오지 못한 서비스(장애 훈련 FD18, 2026-11-20: 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)도 프로세스는 살아 있어 다시 띄우지 않는다. 서비스는 다시 불러오지 않고 `/healthz` 가 `modelLoaded=false` 로 답하므로 backend 는 LOADING 으로 보고 새 작업은 `inference.offline-wait-ms`(prod 30분)까지 PENDING 으로 기다린다. 2026-11-20 부터 `/healthz` 의 `loadError` 가 이유를 알려 주고 backend 가 디스코드 🧩 를 한 번 보낸다(아래 '문제 해결'). 시험으로 **[구현됨]**, VM·Pod 에서 받아 보는 것은 **[계획]**.
+  - `/healthz` 는 답하는데 추론만 멈추면: backend 는 UP 으로 보고 작업을 계속 보내며, 감독 루프도 프로세스가 살아 있어 그대로 둔다. 작업마다 `inference.timeout-ms`(600 s) 뒤 `INFERENCE_TIMEOUT` 으로 실패한다. 이것을 알아채는 것은 장애 대응 R6 의 멈춤 알림이다: `/healthz` 의 `busyForMs`(아직 도는 `predict`·패스스루 모의 생성이 시작한 뒤 ms)가 `inference.stuck-alert-ms`(기본 120 s)를 넘으면 웹훅을 넣었을 때 디스코드 🐢 가 한 번, 풀리면 🟢 가 한 번 간다(아래 '문제 해결'). 변환·리깅에서 멈춘 것은 `busyForMs` 에 들어가지 않아 작업 시간 초과 말고는 잡는 장치가 없다. 알림은 시험(`test_app.py`·`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`)으로 확인했고 **[구현됨]**, 2026-11-20 05:33 UTC VM 배포로 켰다 **[구현됨: 적용]**. 장애 훈련 2차 확인에서 VM 의 훈련 스텁(패스스루, 600 s 지연)으로 받았다 **[실험 결과]**: 작업을 보내고 2분 14초 뒤 🐢, 스텁을 다시 띄우자 🟢. 실제 모델이 멈춘 경우는 **[계획]** 이다.
+  - 모델을 불러오지 못한 서비스(장애 훈련 FD18, 2026-11-20: 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)도 프로세스는 살아 있어 다시 띄우지 않는다. 서비스는 다시 불러오지 않고 `/healthz` 가 `modelLoaded=false` 로 답하므로 backend 는 LOADING 으로 보고 새 작업은 `inference.offline-wait-ms`(prod 30분)까지 PENDING 으로 기다린다. 2026-11-20 부터 `/healthz` 의 `loadError` 가 이유를 알려 주고 backend 가 디스코드 🧩 를 한 번 보낸다(아래 '문제 해결'). 시험으로 **[구현됨]**, 같은 날 VM 배포(05:33 UTC)로 backend 쪽을 켰고 Pod 쪽은 리포를 main 으로 맞춘 Pod 에서 돈다 **[구현됨: 적용]**. 장애 훈련 2차 확인에서 실제 A40 Pod 를 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 띄워 받았다 **[실험 결과]**: 🟡 와 함께 🧩 "(FileNotFoundError)", 바르게 다시 띄우자 🧩 풀림 알림 뒤 40 s 만에 UP.
   - 어느 경우든 자동으로 다시 띄우지는 않는다. 멈춘 서비스는 `kill -9 $(cat /var/run/beside/inference.pid)` 로 끝내면 감독 루프가 5 s 뒤 같은 설정으로 다시 띄운다(SIGTERM 은 처리 중인 요청이 끝나기를 기다린다 — [loadtest/README.md](loadtest/README.md) F2 와 같은 이유).
 - 기록: `/workspace/beside-logs/supervisor.log` 에 시작·종료·재시작마다 UTC 시각을 붙인 한 줄(끝난 pid, 종료 상태, 돈 시간, 몇 번째 재시작, 기다릴 시간)이 남는다. `inference.log` 에도 `=== <시각> supervise_inference.sh restart N ===` 줄이 붙는다.
 - `/var/run/beside/inference.pid` 는 지금 떠 있는 uvicorn 프로세스다. model 모드의 `start_inference_wsl.sh` 는 uvicorn 을 `exec` 하므로 pid 가 같다(감독 루프의 바로 아래 자식이다. 아래 시험의 model 모드 부분으로 확인했고, 진짜 conda·uvicorn 으로는 **[계획]**). SIGSTOP·`kill` 은 이 pid 에 보낸다. 감독 루프의 pid 는 `/var/run/beside/supervisor.pid` 다.
@@ -467,6 +467,7 @@ bash /workspace/Beside/deploy/runpod/start_pod.sh                               
 
 확인한 것과 남은 것:
 
+- **[실험 결과]** 2026-11-20 장애 훈련 2차 확인, 실제 A40 Pod `03rnszh20mywif`(리포 main `ce1a685`): 감독 루프 pid 210, 서비스 pid 218(부모 210). 05:48:25.2 `kill -9` → `supervisor.log` "exited (status 137, signal 9) after 79 s; restart 1 in 5 s", 05:48:30 새 pid 315 → backend DOWN 05:48:35, LOADING 05:48:51, UP 05:49:06.3(kill 에서 41 s, Pod·VM 시계를 섞은 값). 표시 파일을 만든 뒤의 `kill` 에는 "norestart exists - not restarting" 으로 다시 띄우지 않았다. 기록은 [docs/ops/2026-11-20_failure-drills.md](../docs/ops/2026-11-20_failure-drills.md) '2차 확인'.
 - **[구현됨]** WSL(Ubuntu 26.04, bash 5.3)에서 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사가 통과했다(가짜 서비스·가짜 Tailscale·가짜 venv·가짜 conda 환경, 127.0.0.1 밖으로 나가지 않음). 같은 시험을 6개 동시에 돌려도 통과했다.
   - 감독 루프만: `kill -9` 뒤 새 pid 로 다시 뜸, pid 파일이 새 프로세스를 가리킴, SIGSTOP 에는 다시 띄우지 않음, 기다리는 시간 1·2·4·4 s(시험 값: 처음 1 s, 상한 4 s), 오래 돈 뒤에는 처음 값으로 돌아감, 표시 파일(끝날 때·기다리는 중), 두 번째 감독 루프 거부, SIGTERM 전달(멈춘 서비스도), 감독 루프를 `kill -9` 해도 서비스가 잠금을 쥐지 않음.
   - `start_pod.sh` 와 함께(passthrough): `[4/4]` 줄의 설정, 두 번 띄우지 않음, 다시 뜬 서비스의 환경변수·작업 폴더가 처음과 같음, 모드가 다르면 거부, 재시작을 기다리는 감독 루프가 있으면 거부, 표시 파일을 지우고 다시 띄움, 시작하자마자 끝나는 서비스면 감독 루프도 끝냄, 감독 없는 서비스 알림.
