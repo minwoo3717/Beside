@@ -206,10 +206,11 @@ class QueueAdmissionTest {
 
     @Test
     void pendingRowsOlderThanStaleAfterDoNotHoldPlaces() throws Exception {
-        // Mock has no offline wait: rows PENDING for longer than 10 min are taken as lost, not as waiting.
+        // admission.stale-after-ms unset: the longest a job can wait as PENDING here (cap 2, no offline wait, default
+        // /infer timeout: 2 x 2 x 10 min + 10 min = 50 min). Rows a day old are taken as lost, not as waiting.
         for (int i = 0; i < 2; i++) {
             Job lost = job(JobStatus.PENDING);
-            lost.setQueuedAt(Instant.now().minus(Duration.ofHours(2)));
+            lost.setQueuedAt(Instant.now().minus(Duration.ofDays(1)));
             jobRepository.save(lost);
         }
 

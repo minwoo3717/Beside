@@ -12,6 +12,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -309,15 +310,73 @@ class AdmissionGateTest {
         JobRepository jobs = mock(JobRepository.class);
         JobMetrics metrics = new JobMetrics(new SimpleMeterRegistry());
 
-        AdmissionGate prod = new AdmissionGate(jobs, metrics, 19, 165, -1, 1_800_000);
+        // prod: N 19, offline wait 30 min, /infer timeout 10 min, one inference slot, 8 worker threads (Spring default).
+        AdmissionGate prod = new AdmissionGate(jobs, metrics, 19, 165, "", 1_800_000, 600_000, 1, 8);
         assertThat(prod.maxPending()).isEqualTo(19);
         assertThat(prod.retryAfterSeconds()).isEqualTo(165);
-        assertThat(prod.staleAfterMs()).as("offline wait + 10 min").isEqualTo(2_400_000);
-        assertThat(new AdmissionGate(jobs, metrics, 19, 165, -1, 0).staleAfterMs()).isEqualTo(600_000);
-        assertThat(new AdmissionGate(jobs, metrics, 19, 165, 5_000, 1_800_000).staleAfterMs()).isEqualTo(5_000);
+        assertThat(prod.staleAfterMs()).as("3 offline waits + 2 x 19 timeouts + 10 min = 8 h").isEqualTo(28_800_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "", 0, 600_000, 1, 8).staleAfterMs())
+                .as("real without the offline wait: 2 x 19 timeouts + 10 min").isEqualTo(23_400_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, " ", 1_800_000, 600_000, 1, 8).staleAfterMs())
+                .as("blank is unset").isEqualTo(28_800_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "5000", 1_800_000, 600_000, 1, 8).staleAfterMs())
+                .isEqualTo(5_000);
         assertThat(lines(Level.INFO)).first().isEqualTo(
-                "Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=2400000");
+                "Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=28800000");
+        assertThatThrownBy(() -> new AdmissionGate(jobs, metrics, 19, 165, "10m", 0, 600_000, 1, 8))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("admission.stale-after-ms");
         verifyNoInteractions(jobs); // nothing is counted before the first request
+    }
+
+    /**
+     * The default of admission.stale-after-ms is the longest a job can legitimately wait as PENDING while the cap
+     * holds, so the safety net never drops a job that is only waiting. The real worker starts a job's offline wait when
+     * an executor thread takes it, and holds the one inference slot during that wait and during /infer, so with the GPU
+     * off the jobs past the 8 worker threads wait a whole offline wait per round of threads, and behind hung /infer calls
+     * every job ahead costs up to the timeout twice (upload mode: the upload POST and the GLB download).
+     */
+    @Test
+    void theDefaultStaleAfterIsTheLongestAQueuedJobCanWait() {
+        long prod = AdmissionGate.defaultStaleAfterMs(19, 1, 8, 1_800_000, 600_000);
+        // GPU off (review of 2026-11-20): jobs 17-19 get a thread after two rounds of 8 have each waited 30 min.
+        assertThat(prod).isGreaterThan(Duration.ofMinutes(90).toMillis());
+        // Hung /infer: 19 jobs ahead, each holding the slot up to the timeout for the upload and again for the GLB.
+        assertThat(prod).isGreaterThan(19 * 2 * 600_000L);
+        assertThat(prod).as("the old default, offline wait + 10 min, dropped waiting jobs")
+                .isGreaterThan(2_400_000L);
+        assertThat(prod).isEqualTo(3 * 1_800_000L + 2 * 19 * 600_000L + AdmissionGate.STALE_SLACK_MS);
+
+        // Two slots share the timeouts; 400 worker threads (load test) take every job at once; 0 and less mean 1.
+        assertThat(AdmissionGate.defaultStaleAfterMs(19, 2, 8, 1_800_000, 600_000))
+                .isEqualTo(3 * 1_800_000L + 2 * 10 * 600_000L + AdmissionGate.STALE_SLACK_MS);
+        assertThat(AdmissionGate.defaultStaleAfterMs(19, 1, 400, 300_000, 120_000))
+                .isEqualTo(300_000L + 2 * 19 * 120_000L + AdmissionGate.STALE_SLACK_MS);
+        assertThat(AdmissionGate.defaultStaleAfterMs(3, 0, 0, 0, 600_000))
+                .isEqualTo(2 * 3 * 600_000L + AdmissionGate.STALE_SLACK_MS);
+    }
+
+    /** As Spring binds it: an empty admission.stale-after-ms (an unset compose variable) means the default. */
+    @Test
+    void anEmptyStaleAfterSettingMeansTheDefaultAndANonNumberStopsTheStart() {
+        ApplicationContextRunner server = new ApplicationContextRunner()
+                .withBean(JobRepository.class, () -> mock(JobRepository.class))
+                .withBean(JobMetrics.class, () -> new JobMetrics(new SimpleMeterRegistry()))
+                .withBean(AdmissionGate.class)
+                .withPropertyValues("admission.max-pending=19", "inference.offline-wait-ms=1800000",
+                        "inference.timeout-ms=600000");
+
+        server.withPropertyValues("admission.stale-after-ms=").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(28_800_000);
+        });
+        server.withPropertyValues("admission.stale-after-ms=", "spring.task.execution.pool.core-size=400",
+                "inference.max-concurrency=2").run(context ->
+                assertThat(context.getBean(AdmissionGate.class).staleAfterMs())
+                        .isEqualTo(AdmissionGate.defaultStaleAfterMs(19, 2, 400, 1_800_000, 600_000)));
+        server.withPropertyValues("admission.stale-after-ms=900000").run(context ->
+                assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(900_000));
+        server.withPropertyValues("admission.stale-after-ms=30m").run(context ->
+                assertThat(context).getFailure().rootCause().hasMessageContaining("admission.stale-after-ms"));
     }
 
     private AdmissionGate gate(int maxPending) {

@@ -31,9 +31,10 @@ import java.util.function.Supplier;
  *       twice (row and reservation), which only makes the cap stricter for that moment; it is never under-counted.</li>
  *   <li>The reservation lives inside one request (try-with-resources), so no worker path has to give it back. One JVM
  *       owns the database file (no AUTO_SERVER), so this count plus the database is the whole queue.</li>
- *   <li>PENDING rows queued longer ago than admission.stale-after-ms (default inference.offline-wait-ms + 10 min) are
- *       not counted: a row whose worker was lost would otherwise hold a place until the next restart. They are reported
- *       with one WARN line at most once a minute.</li>
+ *   <li>PENDING rows queued longer ago than admission.stale-after-ms are not counted: a row whose worker was lost would
+ *       otherwise hold a place until the next restart. Unset (or empty), it is {@link #defaultStaleAfterMs}, the longest
+ *       a job can legitimately wait as PENDING while the cap holds, so the safety net never drops a job that is only
+ *       waiting (a GPU outage, hung /infer calls). They are reported with one WARN line at most once a minute.</li>
  *   <li>Two retries of the same job: while one holds a permit the other gets 409 JOB_NOT_FAILED (it would lose the
  *       conditional update anyway), so a full queue never answers it 503 for a job another retry is re-queuing.</li>
  *   <li>max-pending 0 (the default) admits everything without a query: behaviour stays as without the cap.</li>
@@ -45,7 +46,7 @@ import java.util.function.Supplier;
 public class AdmissionGate {
     /** How often the stale PENDING rows are counted for the WARN line (only while the cap is on). */
     static final Duration STALE_CHECK_INTERVAL = Duration.ofMinutes(1);
-    /** Added to inference.offline-wait-ms when admission.stale-after-ms is not set. */
+    /** The margin in {@link #defaultStaleAfterMs} (cutout, transfers, cleanup, scheduling). */
     static final long STALE_SLACK_MS = Duration.ofMinutes(10).toMillis();
 
     private static final Logger log = LoggerFactory.getLogger(AdmissionGate.class);
@@ -80,14 +81,58 @@ public class AdmissionGate {
     private final Set<String> retrying = new HashSet<>();
     private Instant nextStaleCheck = Instant.MIN;
 
+    /**
+     * admission.stale-after-ms is read as text so that an empty value (a compose variable left unset) means the
+     * default, as when the setting is absent; anything else must be a whole number of milliseconds. The default is
+     * worked out from the worker's settings: the inference slots (inference.max-concurrency), the worker threads
+     * (spring.task.execution.pool.core-size, Spring's default 8 with an unbounded queue), the offline wait and the
+     * /infer timeout.
+     */
     @Autowired
     public AdmissionGate(JobRepository jobs, JobMetrics metrics,
                          @Value("${admission.max-pending:0}") int maxPending,
                          @Value("${admission.retry-after-seconds:165}") int retryAfterSeconds,
-                         @Value("${admission.stale-after-ms:-1}") long staleAfterMs,
-                         @Value("${inference.offline-wait-ms:0}") long offlineWaitMs) {
+                         @Value("${admission.stale-after-ms:}") String staleAfterMs,
+                         @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
+                         @Value("${inference.timeout-ms:600000}") long inferenceTimeoutMs,
+                         @Value("${inference.max-concurrency:1}") int inferenceSlots,
+                         @Value("${spring.task.execution.pool.core-size:8}") int workerThreads) {
         this(pendingJobs(jobs), metrics::jobRefused, Clock.systemUTC(), maxPending, retryAfterSeconds,
-                staleAfterMs < 0 ? Math.max(0L, offlineWaitMs) + STALE_SLACK_MS : staleAfterMs);
+                staleAfterMs == null || staleAfterMs.isBlank()
+                        ? defaultStaleAfterMs(maxPending, inferenceSlots, workerThreads, offlineWaitMs, inferenceTimeoutMs)
+                        : parseMillis(staleAfterMs));
+    }
+
+    /**
+     * The longest a job can wait as PENDING while at most {@code maxPending} are queued, plus {@link #STALE_SLACK_MS}:
+     * the default of admission.stale-after-ms. The real worker
+     * <ul>
+     *   <li>starts a job's offline wait when an executor thread takes the job, so with the GPU off each round of
+     *       {@code workerThreads} jobs waits a whole offline wait: ⌈(maxPending + slots) / threads⌉ waits for the last
+     *       one (the jobs ahead include the ones holding a slot);</li>
+     *   <li>holds an inference slot during /infer, up to the timeout for the call and again for the GLB download
+     *       (upload mode), so behind hung calls the last job waits up to 2 × ⌈maxPending / slots⌉ timeouts.</li>
+     * </ul>
+     * The two add up (the offline wait is also spent holding a slot). Values below 1 thread or 1 slot count as 1.
+     */
+    static long defaultStaleAfterMs(int maxPending, int inferenceSlots, int workerThreads, long offlineWaitMs,
+                                    long inferenceTimeoutMs) {
+        long slots = Math.max(1, inferenceSlots);
+        long threads = Math.max(1, workerThreads);
+        long pending = Math.max(0, maxPending);
+        long threadRounds = (pending + slots + threads - 1) / threads;
+        long slotRounds = (pending + slots - 1) / slots;
+        return threadRounds * Math.max(0L, offlineWaitMs) + 2 * slotRounds * Math.max(0L, inferenceTimeoutMs)
+                + STALE_SLACK_MS;
+    }
+
+    private static long parseMillis(String staleAfterMs) {
+        try {
+            return Long.parseLong(staleAfterMs.strip());
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("admission.stale-after-ms must be a whole number of milliseconds, or unset"
+                    + " for the default, got '" + staleAfterMs + "'");
+        }
     }
 
     AdmissionGate(PendingCounts counts, Consumer<Op> onRefused, Clock clock, int maxPending, int retryAfterSeconds,
@@ -101,7 +146,7 @@ public class AdmissionGate {
         }
         if (maxPending > 0 && staleAfterMs < 1) {
             throw new IllegalStateException("admission.stale-after-ms must be more than 0 while admission.max-pending is"
-                    + " on (leave it unset for inference.offline-wait-ms + 10 min), got " + staleAfterMs);
+                    + " on (leave it unset for the longest a queued job can wait), got " + staleAfterMs);
         }
         this.counts = counts;
         this.onRefused = onRefused;
@@ -173,8 +218,9 @@ public class AdmissionGate {
         nextStaleCheck = now.plus(STALE_CHECK_INTERVAL);
         long stale = counts.queuedUpTo(cutoff);
         if (stale > 0) {
-            log.warn("Queue admission: {} PENDING job(s) queued before {} are older than admission.stale-after-ms={} and"
-                    + " not counted toward the cap; a worker may have lost them (they end at the next restart)",
+            log.warn("Queue admission: {} PENDING job(s) queued before {} have waited longer than"
+                    + " admission.stale-after-ms={} and are not counted toward the cap: a job no worker runs, or a"
+                    + " wait longer than the setting allows (InterruptedJobRecovery ends PENDING jobs at the next restart)",
                     stale, cutoff, staleAfterMs);
         }
     }
