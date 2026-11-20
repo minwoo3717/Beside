@@ -19,7 +19,8 @@ import java.util.Locale;
 /**
  * Profile "mock" (default): no GPU. PENDING for pending-ms, PROCESSING for processing-ms, then COMPLETED
  * with the sample GLB, or FAILED (INFERENCE_FAILED) when an uploaded filename contains the fail token.
- * Separate bean so calls from JobServiceImpl pass through Spring's async proxy. Runs end through JobFinisher.
+ * Separate bean so calls from JobServiceImpl pass through Spring's async proxy. Runs end through JobFinisher; an
+ * interrupted worker (shutdown) or an unexpected error ends the run with INTERNAL_ERROR.
  */
 @Service
 @Profile("mock")
@@ -80,6 +81,35 @@ public class MockJobWorker implements JobWorker {
             } finally {
                 Thread.currentThread().interrupt();
             }
+        } catch (RuntimeException unexpected) {
+            // Escaping the @Async method would leave the job PENDING or PROCESSING until the next restart.
+            failUnended(jobId, unexpected);
+        }
+    }
+
+    /**
+     * Ends the run INTERNAL_ERROR, reading the job again (the copy the run held may be ahead of the database when its
+     * save failed). A run that already ended stays as it is. One attempt: when the failure cannot be written either
+     * (database down) this only logs, and InterruptedJobRecovery fails the job at the next startup.
+     */
+    private void failUnended(String jobId, RuntimeException unexpected) {
+        log.error("jobId={} mock worker error", jobId, unexpected);
+        try {
+            Job job = jobRepository.findById(jobId).orElse(null);
+            if (job == null) {
+                log.warn("jobId={} not found for mock worker", jobId);
+                return;
+            }
+            if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.PROCESSING) {
+                log.warn("jobId={} already {}; left as it is", jobId, job.getStatus());
+                return;
+            }
+            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR,
+                    "Mock worker error (" + unexpected.getClass().getSimpleName() + ")", type());
+            log.warn("jobId={} stage=FAILED code=INTERNAL_ERROR ({})", jobId, unexpected.getClass().getSimpleName());
+        } catch (RuntimeException notRecorded) {
+            log.error("jobId={} could not record the failure ({}); InterruptedJobRecovery fails it at the next startup",
+                    jobId, notRecorded.toString());
         }
     }
 
