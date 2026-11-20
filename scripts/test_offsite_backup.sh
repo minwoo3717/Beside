@@ -123,10 +123,14 @@ in_bucket db/beside-20261120-112000-001.zip && fail "a zip younger than MIN_AGE_
 in_bucket files/results/9f9f/base.glb && fail "a file younger than MIN_AGE_MIN was sent"
 in_bucket db/beside-20261120-103000-000.zip && fail "the unreadable zip was sent"
 [[ "$(writes)" == 5 ]] || fail "expected 5 objects, got $(writes)"
+[[ ! -e "$WORK/state/last.ok" ]] || fail "a failed run wrote last.ok"
 
-# the same hour again: nothing new, success
+# the same hour again: nothing new, success; last.ok (read by the VM watchdog) holds the time of this good run
+before_run="$(date +%s)"
 run || fail "second run"
 [[ "$(writes)" == 5 ]] || fail "second run wrote again"
+ok="$(cat "$WORK/state/last.ok" 2>/dev/null || true)"
+[[ "$ok" =~ ^[0-9]+$ ]] && ((ok >= before_run && ok <= $(date +%s))) || fail "last.ok after a good run: '$ok'"
 
 # next hour: the waiting zip and a new one go; the day's files are done, so the new photo waits for tomorrow
 touch -d "70 minutes ago" "$WORK/vol/backup/beside-20261120-112000-001.zip"
@@ -144,12 +148,15 @@ in_bucket files/results/9f9f/base.glb && fail "FORCE_FILES sent a file younger t
 zip_at beside-20261120-130500-001.zip 15
 zip_at beside-20261120-140500-001.zip 10
 echo db/beside-20261120-130500-001.zip > "$WORK/fail"
+echo 1 > "$WORK/state/last.ok"   # an old good run
 if run; then fail "a 503 did not fail the run"; fi
 grep -q "upload failed (HTTP 503): db/beside-20261120-130500-001.zip: Backend Error" "$WORK/out.txt" || fail "503 not reported"
 in_bucket db/beside-20261120-140500-001.zip && fail "a later zip was sent past the failed one"
+[[ "$(cat "$WORK/state/last.ok")" == 1 ]] || fail "a failed run moved last.ok"
 rm "$WORK/fail"
 run || fail "run after the 503"
 in_bucket db/beside-20261120-130500-001.zip && in_bucket db/beside-20261120-140500-001.zip || fail "zips not sent after the 503"
+(($(cat "$WORK/state/last.ok") > 1)) || fail "the good run after the 503 did not move last.ok"
 
 # state lost (VM rebuilt from a snapshot): everything is offered again, the bucket answers 412 and nothing is replaced
 rm -rf "$WORK/state" "$WORK/vol/backup/beside-20261120-103000-000.zip"   # the broken zip was pruned meanwhile

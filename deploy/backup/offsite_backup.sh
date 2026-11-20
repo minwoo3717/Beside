@@ -13,8 +13,9 @@
 # Install and check: deploy/README.md '운영 대응 설치'. Config: /etc/beside-backup.env with BUCKET=<bucket name>.
 #   sudo /usr/local/sbin/beside-offsite-backup                  # what the timer runs
 #   sudo FORCE_FILES=1 /usr/local/sbin/beside-offsite-backup    # photos and GLBs too, now, not only at the day's first run
-# Exit status 1 when an upload failed (the next run tries it again). The access token is never printed or put on a
-# command line. Tests: scripts/test_offsite_backup.sh (fake docker/curl/metadata server/bucket).
+# Exit status 1 when an upload failed (the next run tries it again); a good run writes its time to $STATE_DIR/last.ok,
+# which the VM watchdog reads to report a backup that stopped. The access token is never printed or put on a command
+# line. Tests: scripts/test_offsite_backup.sh (fake docker/curl/metadata server/bucket).
 set -euo pipefail
 export LC_ALL=C   # byte order for the backup names and the manifest
 
@@ -223,4 +224,9 @@ if [[ "$FORCE_FILES" == 1 || "$(cat "$STATE_DIR/files.day" 2>/dev/null || true)"
   log "files: $files_sent new file(s) sent, $files_failed failed, $(wc -l < "$manifest") in the bucket"
 fi
 
+# The time of the last good run, for the VM watchdog (deploy/watchdog): it posts to Discord when this is 3 h old, so a
+# backup that keeps failing (service account or scope gone, uploads refused) does not end the protection unnoticed.
+if ((failed == 0)); then
+  date +%s > "$STATE_DIR/last.ok.tmp" && mv -f "$STATE_DIR/last.ok.tmp" "$STATE_DIR/last.ok"
+fi
 exit "$failed"
