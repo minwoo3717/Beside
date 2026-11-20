@@ -1,0 +1,12 @@
+# Every hour at minute 20 (the backend writes its H2 backup at minute 5, application-prod.properties).
+# Persistent: a run missed while the VM was off happens right after it starts again.
+[Unit]
+Description=Beside offsite backup every hour at minute 20
+
+[Timer]
+OnCalendar=*-*-* *:20:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

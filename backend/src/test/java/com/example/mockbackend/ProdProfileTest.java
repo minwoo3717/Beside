@@ -1,8 +1,10 @@
 package com.example.mockbackend;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.actuate.health.HealthContributorRegistry;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
@@ -27,7 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Profile "prod" laid over "mock" (a public server runs real,prod; prod comes last so it wins):
- * the H2 console and the API docs are off, and v1 uploads must really be JPEG, PNG or WEBP files.
+ * the H2 console and the API docs are off, v1 uploads must really be JPEG, PNG or WEBP files, and Actuator health
+ * leaves out the disk-space check that a watchdog restart cannot fix.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,6 +55,12 @@ class ProdProfileTest {
     @Autowired
     ApplicationContext context;
 
+    @Autowired
+    HealthContributorRegistry health;
+
+    @Autowired
+    MeterRegistry meters;
+
     @Test
     void consoleAndApiDocsAreClosed() throws Exception {
         // The console is its own servlet, which MockMvc never reaches (/h2-console answers 404 here even when it is
@@ -67,6 +76,19 @@ class ProdProfileTest {
         mvc.perform(get("/swagger-ui/index.html")).andExpect(status().isNotFound());
         mvc.perform(get("/api/v1/healthz")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.profile").value("mock,prod"));
+    }
+
+    @Test
+    void healthChecksTheDatabaseButNotTheDiskSpace() {
+        // The VM watchdog (deploy/watchdog/beside-watchdog.sh) restarts the backend when /actuator/health stays DOWN.
+        // Spring's disk-space check goes DOWN under 10 MB free; a restart frees no disk and ends every PENDING and
+        // PROCESSING job, so near a full disk it would only restart the server every 10 min. The watchdog warns about
+        // the disk itself (80 %), so prod leaves this check out and keeps the database one.
+        assertThat(health.getContributor("diskSpace")).isNull();
+        assertThat(health.getContributor("db")).isNotNull();
+        assertThat(health.getContributor("ping")).isNotNull();
+        // The free-space gauge (disk_free_bytes in /actuator/prometheus) is a separate binder and stays.
+        assertThat(meters.find("disk.free").gauge()).isNotNull();
     }
 
     @Test

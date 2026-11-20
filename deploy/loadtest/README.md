@@ -34,7 +34,7 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | `LOADTEST_PROFILES` | `SPRING_PROFILES_ACTIVE` | `mock,prod` | A 시리즈 = mock(생성 뺀 API 계층), G 시리즈 = `real,prod` |
 | (고정) | `METRICS_ENV` → 지표 태그 `env` | `loadtest` | Grafana 에서 운영(`prod`)과 나눠 본다 |
 | (고정) | `NOTIFY_WEBHOOKURL` → `notify.webhook-url` | 빈 값 | 팀 채널에 알림 수천 건이 가지 않게 |
-| (고정) | `STORAGE_BACKUP_ENABLED` → `storage.backup.enabled` | `false` | 매일 H2 백업(DatabaseBackup) 끔 |
+| (고정) | `STORAGE_BACKUP_ENABLED` → `storage.backup.enabled` | `false` | 매시 H2 백업(DatabaseBackup) 끔 |
 | `LOADTEST_PREPROCESS_CHECK_ENABLED` | `PREPROCESS_CHECK_ENABLED` → `preprocess.check.enabled` | `false` | 운영은 켬. k6 기본 사진은 동물이 없는 잡음 PNG 라 켜면 업로드가 모두 400 `NO_ANIMAL_DETECTED`. 실제 GPU 실행은 `-e PHOTOS=<리포>/backend/src/test/resources/photos/dog.jpg`(CC0, exp-01 과 같은 사진)로 바꾸고 켠다(아래 '실제 GPU(Runpod A40) 실행') |
 | `LOADTEST_PREPROCESS_CUTOUT_ENABLED` | `PREPROCESS_CUTOUT_ENABLED` → `preprocess.cutout.enabled` | `false` | 운영은 켬(G 시리즈 real 에서 추론 전 크롭·배경 제거). 위와 같은 이유로 끔 |
 | `MOCK_WORKER_PENDINGMS` | → `mock.worker.pending-ms` | `0` | 접수 즉시 PROCESSING. A2 의 PENDING 시드와 측정 동안만 길게(아래 '시리즈별 값') |
