@@ -43,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Failure drill FD16b end to end (profile real, offline wait on as in prod): the Pod was stopped while a run was in
  * flight and came back as a new process. The old request is never answered; once /healthz names the new instance the
  * worker gives it up (INFERENCE_UNAVAILABLE) and the next job takes the only slot, instead of both waiting out
- * inference.timeout-ms (600 s in prod, 30 s here).
+ * inference.timeout-ms (120 s in prod since 2026-11-21, 600 s before; 30 s here).
  */
 @SpringBootTest
 @AutoConfigureMockMvc

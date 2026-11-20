@@ -55,13 +55,13 @@ gantt
 | 0바이트 `sample-dog.glb` → GLB_SPEC 을 만족하는 유효 GLB 로 교체 | **직접 할 일** | Unity 로드 검증의 전제 |
 | `convert_asset.py` 투입 (`generation/tools/`) | **머지됨**(#1, 2026-10-14) | `rig_transfer.py` 포함. 자동 테스트·gltf-validator 기록은 [계획] |
 | Unity 프로젝트 생성(패키지 설치) | **머지됨**(#1, Unity 6000.6.0f1) | 컴파일 증빙은 아래 DoD |
-| GPU 서버 확보, 접속 정보 | **결정됨** 2026-10-05: 팀원 개인 PC(GPU 장착). Spring 도 그 PC 에 함께 배치(REVIEW_CHECKLIST #6 (a) 제안) | Java 17·리포 클론(ASCII 경로)·방화벽·IP 공유는 **직접 할 일** — [backend/README](../backend/README.md) 'GPU PC 에 real 배치', `scripts/run_real.ps1` |
+| GPU 서버 확보, 접속 정보 | **결정됨** 2026-10-05: 팀원 개인 PC(GPU 장착). Spring 도 그 PC 에 함께 배치(당시 REVIEW_CHECKLIST #6 (a) 제안). → 2026-11-13 GPU 는 Runpod Pod, 2026-11-21 #6 은 (b) 업로드 모드로 결정(경로 모드는 같은 호스트용으로 남음) | Java 17·리포 클론(ASCII 경로)·방화벽·IP 공유는 **직접 할 일** — [backend/README](../backend/README.md) 'GPU PC 에 real 배치', `scripts/run_real.ps1` |
 | 메모리 저장소 → **H2 파일 DB** (Job + Idempotency-Key 영속화) | **[구현됨]** 2026-10-04 | `JobPersistenceTest`. 재시작 때 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry |
 | `events.jsonl` 기록기 (METRICS §1) | **[구현됨]** 2026-10-04 | 실행이 끝날 때마다 한 줄(`JobFinisher`). `JobEventsTest`. 실제 측정값은 아직 없음 |
 | 브라우저 Mock UI `app.js` → v1 전환 | **[구현됨]** 2026-10-04 | Node 테스트 18개(실제 서버 라이브 포함) 통과. 오류 문구는 ERROR_CODES, GIF 거부. v0 API 는 동결 유지 |
 
 완료 기준(DoD):
-- [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0`
+- [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0` — 결정은 2026-11-21 계약 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸·CHANGELOG 에 적었다. 결정 반영(openapi·코드·문서)과 태그는 [계획]
 - [x] `cd backend; .\gradlew.bat test` 전부 통과, `node --test backend/src/test/js/mock-mvp.test.cjs` 통과 (2026-10-04 확인)
 - [ ] `scripts/e2e_mock.ps1` 이 bytes > 0 인 GLB 를 받는다 (샘플 교체 후)
 - [x] 서버 재시작 후 기존 jobId 조회가 200 (H2) — 2026-10-04 jar 강제 종료·재시작으로 확인. 같은 Idempotency-Key 도 같은 jobId
@@ -90,7 +90,7 @@ DoD:
 
 담당 Unity. 의존: 1단계 glTFast 로드 성공.
 
-산출물: AR Foundation 평면 감지 → 탭 배치(원점 = 발바닥 접지) → 기본 스케일 0.6, 핀치 0.2~1.5, 회전 → 초기 정면이 카메라를 향함 → `avgFps, minFps, memMB` 기록 → (선택) `hair` 토글.
+산출물: AR Foundation 평면 감지 → 탭 배치(원점 = 발바닥 접지) → 기본 스케일 0.6, 핀치 0.2~1.5, 회전 → 초기 정면이 카메라를 향함 → `avgFps, minFps, memMB` 기록 → (선택) `hair` 토글(→ 2026-11-21 #4 로 `hair` variant 는 계약에서 뺐다. 털은 base GLB 안 털 맵으로 앱이 셸 털을 그린다, #14).
 
 DoD:
 - [ ] 실기기 바닥 평면 배치, 30초 측정 `avgFps` (목표 ≥ 30, 제안값) **[실험 결과]**
@@ -105,7 +105,7 @@ DoD:
 
 | 주차 | 내용 | 기록 |
 |---|---|---|
-| 10-06 ~ 10-12 | 환경 구축(GPU PC), 공식 코드 실행, 샘플 1건 생성. **출력 파일 형식·1건 소요 시간·VRAM 을 기록**한다 — 문서의 `mesh.obj + uv.png (+ hair.npz)` 가정을 여기서 확인하고, 1건 시간은 `inference.timeout-ms`(제안: 3배) 와 Unity 최대 대기의 근거가 된다 | exp-01 |
+| 10-06 ~ 10-12 | 환경 구축(GPU PC), 공식 코드 실행, 샘플 1건 생성. **출력 파일 형식·1건 소요 시간·VRAM 을 기록**한다 — 문서의 `mesh.obj + uv.png (+ hair.npz)` 가정을 여기서 확인하고, 1건 시간은 `inference.timeout-ms`(제안: 3배) 와 Unity 최대 대기의 근거가 된다. → exp-01(2026-11-17, 작업 전체 12~16 s) 뒤 2026-11-21 #7 로 `inference.timeout-ms` 120 s, 앱 최대 대기 600 s 그대로 | exp-01 |
 | 10-13 ~ 10-19 | (앞당김) `convert_asset.py` 투입 → exp-01 출력으로 GLB_SPEC §8 통과 GLB 1개(0바이트 `sample-dog.glb` 교체) → `app.py` 의 501 TODO 를 실제 경로로(모델이 별도 conda env 면 subprocess), `modelVersion` 채움 → 우리 사진 3마리 이상으로 베이스라인 수치·품질 채점 | exp-02 |
 | 10-20 ~ 10-26 | (앞당김, 4단계 선행) **실제 E2E**: GPU PC 에 `run_real.ps1` 로 Spring real + 추론 서비스 → PC 에서 `e2e_mock.ps1 -Photos <실제 사진> -TimeoutSeconds 600` → 폰(Unity)에서 실제 모델 AR 배치 → 10건 이상 → `job_runs` CSV 내보내기(METRICS §1.1) | exp-02 완성 (첫 [실험 결과]) |
 | 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭 — Spring 쪽 [구현됨] 2026-11-05 브랜치 `feat/preprocess`, 3D 비교는 [generation/experiments/2026-11-05_exp-03_input-preprocess.md](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) [계획]), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
@@ -120,13 +120,13 @@ DoD:
 
 담당 Backend + Generation, Unity 검증. 의존: 3단계 `/infer` 동작, 0단계 H2(완료).
 
-산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `JobFinisher` 로 종료 → `events.jsonl` 은 자동), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경), Unity 에서 real 프로파일 전체 흐름.
+산출물: `RealJobWorker` 구현(PROCESSING 전이, `/infer` 호출·타임아웃, 오류 코드 매핑, GLB 복사, `JobFinisher` 로 종료 → `events.jsonl` 은 자동), 배포 구성(같은 호스트 또는 공유 볼륨 — 불가 시 `/infer` 바이너리 응답으로 변경. → 분리 배포는 업로드 모드(JSON `glbUrl` + `GET`/`DELETE /artifacts`)로 구현했고 2026-11-21 #6 (b) 로 결정), Unity 에서 real 프로파일 전체 흐름.
 
 | 항목 | 상태 | 비고 |
 |---|---|---|
 | `RealJobWorker`: 추론 슬롯 대기(`inference.max-concurrency=1`) → PROCESSING → `/infer` 호출·타임아웃 → 오류 코드 매핑 → GLB 헤더 확인·복사 → `JobFinisher` | **[구현됨]** 2026-10-04 (선행) | `InferenceClientTest` 18개·`RealJobWorkerTest` 5개(가짜 `/infer`). 실제 FastAPI 스텁으로 패스스루 COMPLETED(48바이트 최소 GLB), 501·꺼짐 → `INFERENCE_UNAVAILABLE`, 0바이트 GLB → `CONVERSION_FAILED` 확인 |
 | 실행별 측정 `job_runs`(서버 타이밍 + `/infer` 수치 + `passthrough`·`modelVersion`·`glbBytes`), `events.jsonl` 19 필드 | **[구현됨]** 2026-10-06 | `JobPersistenceTest`·`JobEventsTest`·`RealJobWorkerTest`. 측정표는 real 프로파일 h2-console 에서 `CSVWRITE`(METRICS §1.1). `/infer` 선택 필드 `modelVersion` 추가(내부 계약) |
-| 배포 구성 | **결정됨** 2026-10-05 + 절차 **[구현됨]** 2026-10-06 | 팀원 GPU PC 한 대에 Spring + 추론 서비스(같은 호스트, #6 (a) 제안). `scripts/run_real.ps1`, [backend/README](../backend/README.md) 'GPU PC 에 real 배치'. 실제 설치는 10-20 주 **직접 할 일**. 바이너리 전송으로 바뀌면 `InferenceClient` 만 교체 |
+| 배포 구성 | **결정됨** 2026-10-05 + 절차 **[구현됨]** 2026-10-06 | 팀원 GPU PC 한 대에 Spring + 추론 서비스(같은 호스트, 당시 #6 (a) 제안). `scripts/run_real.ps1`, [backend/README](../backend/README.md) 'GPU PC 에 real 배치'. 실제 설치는 10-20 주 **직접 할 일**. 그 뒤 VM 배치(4b)로 바뀌어 업로드 모드를 `InferenceClient` 에 더했고 **[구현됨]**(4b S2), 2026-11-21 #6 을 (b) 업로드 모드(사진 멀티파트 → JSON `glbUrl` → `GET`/`DELETE /artifacts`)로 결정했다. 같은 호스트 배치는 경로 모드 그대로 |
 | 실제 AnimalLift 모델로 전체 흐름 | **[실험 결과]** — VM 업로드 모드(4b S2) + Runpod A40 으로 exp-01(2026-11-17, VM 경유 3건(사진 3장) + Pod 직접 1건)과 2차 부하 시험(2026-11-18, 539건, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))·3차(2026-11-19, 실제 모델 완료 328건, [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md))·4차(2026-11-19 UTC, k6 실행 안 실제 모델 완료 361건, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 사진 10장 이상·품질 채점(exp-02)은 [계획] | 모델 연결 코드는 #1 로 머지됨 |
 | Unity 에서 real 프로파일 전체 흐름 | **[계획]** — 600초 대기·`progress` null 처리는 앱(#1)에 있음, 실기기 real 흐름 기록 없음 | |
 
@@ -141,7 +141,7 @@ DoD:
 담당 Backend, `/infer` 변경은 Generation 리뷰. 결정(2026-10-30):
 - 백엔드는 클라우드 VM 한 대(Docker Compose + Caddy HTTPS)에 올린다.
 - GPU 추론은 팀원 GPU PC 에 남기고 Tailscale 사설망으로 잇는다. → 2026-11-13 변경: GPU 는 **Runpod Pod** 로 하고(GPU PC 는 대안) Pod 안에 Tailscale 을 userspace 모드로 띄운다. Runpod HTTP 프록시는 100초에서 끊고, TCP 포트 공개는 암호화가 없고 Pod 재시작마다 포트가 바뀌기 때문이다([deploy/README.md](../deploy/README.md) 'Runpod Pod 쪽').
-- 두 기계가 디스크를 공유하지 않으므로 `/infer` 에 업로드 전송 모드를 더한다(REVIEW_CHECKLIST #6 (b)). 경로 모드는 같은 PC 배치용으로 유지한다.
+- 두 기계가 디스크를 공유하지 않으므로 `/infer` 에 업로드 전송 모드를 더한다(REVIEW_CHECKLIST #6 (b), 2026-11-21 결정). 경로 모드는 같은 PC 배치용으로 유지한다.
 - 사용 범위는 팀 내부 테스트다. 계정 없이 웹·관리·목록 경로만 Basic 인증 뒤에 둔다.
 - 새 화면은 Spring 정적 웹으로 만들고, Unity 변경은 선택 사항이다.
 
@@ -151,7 +151,7 @@ DoD:
 | S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e, GCP VM 의 backend ↔ VM 안 스텁 컨테이너로 공개 주소 e2e(2026-11-13). Pod 쪽 `deploy/runpod/start_pod.sh`(WSL 시험 65개)·`install_animallift.sh` 로 VM ↔ Runpod Pod 연결과 AnimalLift 모델 모드 공개 주소 e2e 3건 [구현됨](2026-11-17, A40 EU-SE-1, [기록](deploy/2026-11-17_runpod-connect.md)) |
 | S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | **[구현됨]** 테스트 + 로컬에서 GPU 끔 → PENDING → 켬 → COMPLETED 확인 |
 | S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | **[구현됨]** CI(main push·PR #4) 통과, GCP VM 배포 2026-11-13(`https://beside-team.duckdns.org`, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 첫 배포 감사로 Caddy 규칙 강화(`deploy/gcp` 브랜치, 이 브랜치의 PR 로 main 병합) |
-| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합) |
+| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합). → 2026-11-21 #11·#12: S5~S9 는 항목별로 받아 `api-v1.2` 로(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가, 오류 코드 5개). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 병합 **[계획]** |
 | S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
 | S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |
@@ -175,10 +175,10 @@ DoD:
 | B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). 2차(실제 A40, G0r·G1r·G3r) 같은 날 **[실험 결과]** — [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md). 3차(실제 A40, G2r·F2-real·F1b-real, 같은 Pod 를 스텁으로 F1a) 2026-11-19 **[실험 결과]** — [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md). 4차(새 A40 Pod, G0r·같은 Pod 의 G3r·G2r·F1b-real 다시) 2026-11-19 UTC **[실험 결과]** — [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md). A3 large·스텁 G1·G2·G3·스텁 F1~F5·A5·A6 **[계획]** |
 | B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 89개(2026-11-19 PR #9 로 7개 더함: 상태 계열 카운터·browse 사전 VU). 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 1차 2026-11-18 **[실험 결과]**(B6) |
 | VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G0r·G1r·G3r 2차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로) 3차 **[실험 결과]**(2026-11-19). 새 Pod 에서 G0r(새 시작 기본값)·같은 Pod 의 c=1 과부하와 c=2(Pod 요청별 시간)·F1b-real 다시(PR #11) 4차 **[실험 결과]**(2026-11-19 UTC, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 스텁 G1·G2·G3, 스텁 F1~F5, A5·A6, 넘치는 c=2 **[계획]** |
-| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | **[계획]** 계약 회의 안건 #21·#22, 결정 전에는 검토 브랜치에만 |
+| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | 2026-11-21 결정: #21 큐 상한 도입(N=19, `Retry-After` 165 s) — `api-v1.1`, PR #19 로 적용 **[계획]**(운영에서 켜는 것은 Unity 새 빌드 뒤). #22 는 429 이름만 예약하고 키·한도·구현은 큐 상한 적용과 5차 부하 시험 뒤 **[계획]** |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
 
-막는 것: VM(11-04 목표, 위 직접 할 일)이 있어야 부하 시험을 시작할 수 있고, 계약 회의가 있어야 R1~R3 을 main 에 넣을 수 있다.
+막는 것: VM(11-04 목표, 위 직접 할 일)이 있어야 부하 시험을 시작할 수 있고, 계약 회의가 있어야 R1~R3 을 main 에 넣을 수 있다. → 2026-11-21 결정으로 R1~R3 의 순서는 `api-v1.0` 태그 → `api-v1.1`(큐 상한, PR #19)이다.
 
 ## 5단계 — 측정·보고 (2026-11-23 ~ 12-06)
 
@@ -199,11 +199,11 @@ DoD:
 |---|---|---|
 | GPU 서버 확보 지연 | 3·4단계 지연 | 패스스루 모드로 Spring↔Python 연동을 먼저 끝낸다 **[구현됨]** 2026-10-04. 클라우드 GPU 시간제 사용 검토 |
 | AnimalLift 재현 실패·품질 미달 | 핵심 가치 | 실패 사례를 실험 기록으로 남기고 전처리·후처리 개선에 집중. 최악의 경우 베이스라인 결과로 데모 |
-| 생성 시간 수 분 | UX | `progress` 와 예상 시간 표시, 완료 알림. 폴링 간격 2초, 최대 대기 600초 |
-| 파일시스템 공유 가정 불가 | 4단계 설계 | `/infer/upload` 업로드 전송 모드 **[구현됨]**(4b S2: 사진 멀티파트 업로드 → JSON `glbUrl` → `GET`/`DELETE /artifacts`). 내부 계약 #6 (b) 결정 기록은 계약 회의 |
-| 서버 재시작 | 진행 중 작업 중단 | 작업은 H2 에 보존 **[구현됨]**. 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry. 자동 재개는 계약 회의 안건 |
+| 생성 시간 수 분 | UX | `progress` 와 예상 시간 표시, 완료 알림. 폴링 간격 2초, 최대 대기 600초(2026-11-21 #7 로 그대로 확정). 실제 생성은 작업 전체 12~16 s 였다 **[실험 결과]**(exp-01) |
+| 파일시스템 공유 가정 불가 | 4단계 설계 | `/infer/upload` 업로드 전송 모드 **[구현됨]**(4b S2: 사진 멀티파트 업로드 → JSON `glbUrl` → `GET`/`DELETE /artifacts`). 내부 계약 #6 (b) 는 2026-11-21 결정(계약 회의 대신 Backend 담당, REVIEW_CHECKLIST 결정 칸) |
+| 서버 재시작 | 진행 중 작업 중단 | 작업은 H2 에 보존 **[구현됨]**. 진행 중이던 작업은 FAILED(`INTERNAL_ERROR`) → 앱이 retry. 자동 재개는 하지 않기로 2026-11-21 결정(#7) |
 | 리포 경로에 한글·공백 (OneDrive `바탕 화면` 등) | 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` | GPU PC 에서는 리포를 ASCII·공백 없는 경로(예 `C:\beside`)에 둔다. `run_real.ps1` 이 경고한다 |
 | 패스스루 실행이 측정에 섞임 | 베이스라인 수치 오염 | `job_runs.passthrough=true` 로 거른다(METRICS §1.1 SQL). 개선안은 `modelVersion` 으로 구분 |
 | 기기 성능 (FPS) | 2단계 | 삼각형 상한 하향, 텍스처 1024 로 축소 실험 |
-| 쏘카 수준(T3) 생성 수요를 GPU 1대로 감당 못 함 | 공개 베타(T2)부터 GPU 1대 용량 초과: 생성 시간 T > 21초면 이용률 0.7 초과, T ≥ 30초면 대기열이 계속 늘어 앱의 600초를 넘김 | 용량 모델로 필요 GPU 수를 계산해 보고하고(c = ⌈λT/0.7⌉, T3·T=60초면 86대, [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md)), 넘치는 요청은 큐 상한으로 즉시 거절한다(안건 #21, 결정 전 [계획]). 다중 GPU 풀은 [계획] |
-| 업로드·GLB 누적으로 디스크 고갈 | T2(하루 2.3 GB)에서 VM 디스크가 참: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) | 보존 정책(안건 #23). 부하 시험은 별도 볼륨에 쓰고 디스크 80 %에서 중단한다 |
+| 쏘카 수준(T3) 생성 수요를 GPU 1대로 감당 못 함 | 공개 베타(T2)부터 GPU 1대 용량 초과: 생성 시간 T > 21초면 이용률 0.7 초과, T ≥ 30초면 대기열이 계속 늘어 앱의 600초를 넘김 | 용량 모델로 필요 GPU 수를 계산해 보고하고(c = ⌈λT/0.7⌉, T3·T=60초면 86대, [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md)), 넘치는 요청은 큐 상한으로 즉시 거절한다(안건 #21, 2026-11-21 결정: N=19, 적용은 `api-v1.1` PR #19 [계획]). 다중 GPU 풀은 [계획] |
+| 업로드·GLB 누적으로 디스크 고갈 | T2(하루 2.3 GB)에서 VM 디스크가 참: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) | 보존 정책(안건 #23, 2026-11-21 결정: 사진 7일·GLB 30일, 지운 작업은 404 `ASSET_NOT_FOUND`, 디스크 80 % 알림은 적용됨. 자동 삭제 구현은 공개 베타 전 [계획]). 부하 시험은 별도 볼륨에 쓰고 디스크 80 %에서 중단한다 |

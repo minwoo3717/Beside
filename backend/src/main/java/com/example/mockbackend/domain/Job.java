@@ -55,7 +55,10 @@ public class Job {
     /** Server path of the completed base GLB. Never exposed in v1. */
     @Column(length = 1024)
     private String resultPath;
-    /** Server path of the completed hair GLB, if any. Never exposed in v1. */
+    /**
+     * Unused: the hair variant left API v1 on 2026-11-21 (REVIEW_CHECKLIST #4) and nothing ever wrote this. The column
+     * stays because ddl-auto=update cannot drop it; retry still clears it. Never exposed in v1.
+     */
     @Column(length = 1024)
     private String hairResultPath;
     /** ErrorCode name when FAILED. */
