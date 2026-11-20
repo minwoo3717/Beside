@@ -21,6 +21,7 @@
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
 | Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). 그날 VM ↔ Pod 는 DERP 중계(왕복 약 300 ms)였고, 2026-11-18·19 2·3차 부하 시험 때는 직접 연결(`tailscale ping` 263~269 ms)이었다 **[실험 결과]**. 날마다 바뀔 수 있다. 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
+| Runpod Pod 추론 서비스 자동 재시작([runpod/supervise_inference.sh](runpod/supervise_inference.sh), 장애 대응 R7) | **[구현됨]** 2026-11-20: `start_pod.sh` 가 서비스를 감독 루프 아래에서 띄운다. 가짜 서비스·가짜 Tailscale 로 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 91개 검사가 WSL(Ubuntu 26.04)에서 통과했고 CI 단계로 넣었다. 실제 Pod 에서 `kill -9` 뒤 다시 뜨는 시간과 그동안의 디스코드 알림은 **[계획]**. 아래 'Runpod Pod 쪽'의 '서비스 자동 재시작' |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
 | GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
@@ -338,9 +339,41 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 5. 첫 실행은 Tailscale 1.104.6 을 `/workspace/tailscale` 에 받고(sha256 고정) 로그인 링크를 `/workspace/beside-logs/tailscale-up.log` 에 쓴다. 그 링크를 승인하면 `start.log` 끝에 `INFERENCE_BASE_URL=http://100.x.y.z:8002` 가 나온다. 터미널을 보고 있다면 `nohup ... &` 없이 실행해도 같은 내용이 화면에 나온다.
 6. VM: `deploy/.env` 의 `INFERENCE_BASE_URL` 을 그 값으로 바꾸고 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 를 실행한다. 확인은 `/healthz` 만이 아니라 실제 사진 1건(`scripts/e2e_mock.sh https://<도메인> <사진>`)으로 한다 — tailnet 의 MTU 가 작아 큰 업로드만 막히는 경우를 healthz 는 잡지 못한다. 끝나면 `docker rm -f beside-stub`.
 
-**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. `pull` 을 쓰지 않는 이유: 4차 부하 시험(2026-11-19 UTC) 시작 때 볼륨의 리포는 브랜치가 아닌 detached HEAD(3차 중에 바꾼 `b6c0e6c`)였다. detached HEAD 에서 `git pull` 은 인자 없이는 브랜치가 없다며 거부하고, `origin main` 을 주면 빨리감기는 해도 detached 인 채로 남는다(개발 PC git 2.54 로 확인). 볼륨의 커밋이 main 의 조상이 아니면(예: main 에 병합되지 않은 브랜치의 커밋) `--ff-only` 가 실패한다. `checkout -B main origin/main` 은 어느 상태에서든 `main` 브랜치를 origin 의 main 으로 맞춘다. 볼륨 리포에서 고친 파일이 없어야 한다(로컬 `main` 은 덮인다). 4차 때 이 명령으로 main `a9aa091` 에 맞췄다(PR #11 DELETE 취소·시작 기본값·요청별 시간 기록 포함). `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
+**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. `pull` 을 쓰지 않는 이유: 4차 부하 시험(2026-11-19 UTC) 시작 때 볼륨의 리포는 브랜치가 아닌 detached HEAD(3차 중에 바꾼 `b6c0e6c`)였다. detached HEAD 에서 `git pull` 은 인자 없이는 브랜치가 없다며 거부하고, `origin main` 을 주면 빨리감기는 해도 detached 인 채로 남는다(개발 PC git 2.54 로 확인). 볼륨의 커밋이 main 의 조상이 아니면(예: main 에 병합되지 않은 브랜치의 커밋) `--ff-only` 가 실패한다. `checkout -B main origin/main` 은 어느 상태에서든 `main` 브랜치를 origin 의 main 으로 맞춘다. 볼륨 리포에서 고친 파일이 없어야 한다(로컬 `main` 은 덮인다). 4차 때 이 명령으로 main `a9aa091` 에 맞췄다(PR #11 DELETE 취소·시작 기본값·요청별 시간 기록 포함). `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 서비스를 일부러 내리라고(`touch /workspace/beside-norestart && kill <pid>`, 아래 '서비스 자동 재시작') 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
 
-**추론 서비스 기본값**(2026-11-20 KST = 2026-11-19 16:33 UTC, `3b12c7b`): `start_pod.sh` 는 uvicorn 유휴 연결 75 s(`UVICORN_TIMEOUT_KEEP_ALIVE`)와 torch·BLAS 스레드 8(`THREADS` → `OMP/MKL/OPENBLAS_NUM_THREADS`)로 서비스를 띄운다 **[구현됨]**. 근거는 3차 부하 시험 2절이다: 처리 중앙값 −0.88 s, Pod CPU 한도에 걸린 100 ms 주기 0. 8 은 A40 Pod 의 cgroup CPU 한도(7.65 코어)에 맞춘 값이다. 다른 Pod 종류면 `THREADS` 를 그 Pod 의 cgroup CPU 한도(`cpu.cfs_quota_us / cpu.cfs_period_us` 또는 `cpu.max`, 반올림)로 준다. 콘솔이 보여 주는 vCPU 수(이 A40 Pod 는 9)가 아니다. `THREADS=default` 면 스레드 변수를 넣지 않는다(3차 G2r·F 와 같은 라이브러리 기본). backend 의 HttpClient 는 유휴 연결을 60 s 에 놓는다(`backend/Dockerfile` 의 `jdk.httpclient.keepalive.timeout`, JDK 기본 1200 s). 서비스(75 s)보다 먼저 놓아야, 이미 닫힌 연결로 `POST /infer/upload` 를 보내지 않는다. 값은 서비스를 띄울 때만 들어간다. 이미 떠 있는 서비스가 다른 값이면 `[4/4]` 줄 다음에 NOTE 가 나오므로, 그 pid 를 `kill` 하고 다시 실행한다. `[4/4]` 줄에는 서비스 프로세스가 실제로 받은 값(`/proc/<pid>/environ`)이 나온다. 4차 부하 시험(2026-11-19 UTC, 새 A40 Pod)에서 실제 Pod 로 확인했다 **[실험 결과]**: `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. G0 에서 Pod CPU 한도에 걸린 주기는 0 이었고, 작업 연결 하나를 31건이 이어 썼다(작업 사이 유휴 약 22 s, [docs/perf/load/2026-11-20_vm-4th.md](../docs/perf/load/2026-11-20_vm-4th.md) 2절).
+**추론 서비스 기본값**(2026-11-20 KST = 2026-11-19 16:33 UTC, `3b12c7b`): `start_pod.sh` 는 uvicorn 유휴 연결 75 s(`UVICORN_TIMEOUT_KEEP_ALIVE`)와 torch·BLAS 스레드 8(`THREADS` → `OMP/MKL/OPENBLAS_NUM_THREADS`)로 서비스를 띄운다 **[구현됨]**. 근거는 3차 부하 시험 2절이다: 처리 중앙값 −0.88 s, Pod CPU 한도에 걸린 100 ms 주기 0. 8 은 A40 Pod 의 cgroup CPU 한도(7.65 코어)에 맞춘 값이다. 다른 Pod 종류면 `THREADS` 를 그 Pod 의 cgroup CPU 한도(`cpu.cfs_quota_us / cpu.cfs_period_us` 또는 `cpu.max`, 반올림)로 준다. 콘솔이 보여 주는 vCPU 수(이 A40 Pod 는 9)가 아니다. `THREADS=default` 면 스레드 변수를 넣지 않는다(3차 G2r·F 와 같은 라이브러리 기본). backend 의 HttpClient 는 유휴 연결을 60 s 에 놓는다(`backend/Dockerfile` 의 `jdk.httpclient.keepalive.timeout`, JDK 기본 1200 s). 서비스(75 s)보다 먼저 놓아야, 이미 닫힌 연결로 `POST /infer/upload` 를 보내지 않는다. 값은 서비스를 띄울 때만 들어간다(감독 루프가 다시 띄울 때는 처음 값 그대로다). 이미 떠 있는 서비스가 다른 값이면 `[4/4]` 줄 다음에 NOTE 가 나오므로, 그 서비스를 일부러 내리고(`touch /workspace/beside-norestart && kill <pid>`) 다시 실행한다. `[4/4]` 줄에는 서비스 프로세스가 실제로 받은 값(`/proc/<pid>/environ`)이 나온다. 4차 부하 시험(2026-11-19 UTC, 새 A40 Pod)에서 실제 Pod 로 확인했다 **[실험 결과]**: `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. G0 에서 Pod CPU 한도에 걸린 주기는 0 이었고, 작업 연결 하나를 31건이 이어 썼다(작업 사이 유휴 약 22 s, [docs/perf/load/2026-11-20_vm-4th.md](../docs/perf/load/2026-11-20_vm-4th.md) 2절).
+
+**서비스 자동 재시작**(2026-11-20, 장애 대응 R7) **[구현됨]**: 그전에는 서비스가 죽으면 누가 `start_pod.sh` 를 다시 실행할 때까지 꺼진 채로 남았다. 이제 `start_pod.sh` 는 서비스를 감독 루프 [runpod/supervise_inference.sh](runpod/supervise_inference.sh) 아래에서 띄운다.
+
+- 서비스 프로세스가 끝나면(오류로 죽음, 메모리 부족으로 죽음, `kill -9`) 같은 환경변수·작업 폴더로 다시 띄운다. keep-alive·스레드·토큰·모드가 처음과 같다.
+- 다시 띄우기 전 기다리는 시간은 5 s 다. 연달아 죽으면 두 배씩 늘고 60 s 에서 멈춘다(5 → 10 → 20 → 40 → 60 s). 한 번 300 s 넘게 돌았으면 다시 5 s 부터다. 값은 `RESTART_DELAY_S`·`RESTART_MAX_DELAY_S`·`RESTART_STABLE_S` 로 바꾼다.
+- 프로세스가 끝났을 때만 다시 띄운다. 살아 있지만 멈춘 서비스(SIGSTOP, healthz 는 답하는데 추론만 멈춤)는 그대로 둔다. 그쪽은 backend 의 추론 감시가 맡는다.
+- 기록: `/workspace/beside-logs/supervisor.log` 에 시작·종료·재시작마다 UTC 시각을 붙인 한 줄(끝난 pid, 종료 상태, 돈 시간, 몇 번째 재시작, 기다릴 시간)이 남는다. `inference.log` 에도 `=== <시각> supervise_inference.sh restart N ===` 줄이 붙는다.
+- `/var/run/beside/inference.pid` 는 지금 떠 있는 uvicorn 프로세스다. model 모드의 `start_inference_wsl.sh` 는 uvicorn 을 `exec` 하므로 pid 가 같다. SIGSTOP·`kill` 은 이 pid 에 보낸다. 감독 루프의 pid 는 `/var/run/beside/supervisor.pid` 다.
+- 감독 루프는 한 번에 하나만 돈다(`/var/run/beside/supervisor.lock` 을 잡는다). 서비스는 내려가 있고 감독 루프가 재시작을 기다리는 중이면 `start_pod.sh` 는 그 pid 를 알리고 멈춘다.
+- 처음 띄울 때 서비스가 바로 끝나면(포트 충돌, conda 환경 없음 등) `start_pod.sh` 는 감독 루프도 끝내고 실패로 멈춘다. 망가진 설정을 끝없이 다시 띄우지 않게 하려는 것이다.
+- 2026-11-20 전의 `start_pod.sh` 로 띄운 서비스에는 감독 루프가 없다. `start_pod.sh` 가 `NOTE: no supervisor watches it` 로 알린다. 일부러 내린 뒤 다시 실행하면 감독 아래에서 뜬다.
+
+**일부러 내릴 때**(모드 바꾸기, 설정 바꾸기, F2·FD18 같은 훈련): 그냥 `kill` 하면 5 s 뒤 예전 설정으로 다시 뜬다. 표시 파일을 먼저 만든다.
+
+```bash
+touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)   # F2 처럼 꺼진 채로 둘 때는 kill -9
+bash /workspace/Beside/deploy/runpod/start_pod.sh                                # 다시 띄울 때. 표시 파일을 지운다
+```
+
+- 표시 파일이 있으면 서비스가 끝나도 다시 띄우지 않고, 감독 루프도 끝난다. 재시작을 기다리는 중에 만들어도 같다.
+- `start_pod.sh` 는 서비스를 새로 띄울 때 표시 파일을 지우고 그렇게 했다고 출력한다. 파일이 볼륨(`/workspace`)에 있어 Pod 를 새로 만들어도 남기 때문이다. 지우지 않으면 다음 Pod 의 서비스도 재시작이 꺼진 채로 돈다.
+- 서비스가 떠 있는데 표시 파일이 있으면 `start_pod.sh` 가 NOTE 로 알린다.
+- 감독 루프와 서비스를 함께 내리려면 `kill $(cat /var/run/beside/supervisor.pid)` 한다. 감독 루프가 SIGTERM 을 서비스에 넘기고, 서비스가 끝나면 함께 끝난다.
+- `ps` 에는 감독 루프의 인자에도 uvicorn 명령이 보인다. `pkill -f uvicorn` 은 둘 다 맞히므로 pid 로 보낸다.
+
+확인한 것과 남은 것:
+
+- **[구현됨]** WSL(Ubuntu 26.04, bash 5.3)에서 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 91개 검사가 통과했다(가짜 서비스·가짜 Tailscale·가짜 venv, 127.0.0.1 밖으로 나가지 않음). 같은 시험을 6개 동시에 돌려도 통과했다.
+  - 감독 루프만: `kill -9` 뒤 새 pid 로 다시 뜸, pid 파일이 새 프로세스를 가리킴, SIGSTOP 에는 다시 띄우지 않음, 기다리는 시간 1·2·4·4 s(시험 값: 처음 1 s, 상한 4 s), 오래 돈 뒤에는 처음 값으로 돌아감, 표시 파일(끝날 때·기다리는 중), 두 번째 감독 루프 거부, SIGTERM 전달(멈춘 서비스도), 감독 루프를 `kill -9` 해도 서비스가 잠금을 쥐지 않음.
+  - `start_pod.sh` 와 함께: `[4/4]` 줄의 설정, 두 번 띄우지 않음, 다시 뜬 서비스의 환경변수·작업 폴더가 처음과 같음, 모드가 다르면 거부, 재시작을 기다리는 감독 루프가 있으면 거부, 표시 파일을 지우고 다시 띄움, 시작하자마자 끝나는 서비스면 감독 루프도 끝냄, 감독 없는 서비스 알림.
+  - 시험이 잡는지 일부러 고장 낸 판으로 확인했다: 8가지(잠금 상속, 표시 파일 무시, 두 배 안 함, 처음 값으로 안 돌아감, 예전 `start_pod.sh`, 시작 실패 때 감독 루프를 안 끔, 표시 파일을 안 지움, SIGTERM 을 안 넘김)가 모두 실패로 나왔다.
+- **[계획]** 실제 Pod: model 모드에서 `kill -9` 뒤 다시 뜨기까지(5 s + 모델 로드 31~73 s, 지난 기록) 걸리는 시간, 그동안 backend 의 GPU 알림. 끊김이 45 s 유예 안에 끝나면 🟡·🟢 만 갈 것으로 예상하지만 확인하지 않았다.
 
 **네트워크 볼륨이 아니라 Pod 볼륨 디스크로 만든 Pod 를 Terminate 했을 때**는 `/workspace` 가 지워져 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤, VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
 
@@ -356,9 +389,10 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | `/workspace/tailscale/` | 바이너리와 노드 상태(노드 키, 권한 700), 마지막 Pod id |
 | `/workspace/beside-token` | 추론 토큰(권한 600). `BESIDE_INFERENCE_TOKEN` 환경 변수가 있으면 그쪽이 먼저다 |
 | `/workspace/.cache/` | SD VAE·DINOv2 가중치 캐시(`HF_HOME`, `TORCH_HOME`). 없으면 컨테이너 디스크에 받아 정지할 때마다 다시 받는다 |
-| `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`. 실행마다 시각 표시를 붙여 이어 쓴다 |
+| `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`, `supervisor.log`(서비스 시작·종료·재시작). 실행마다 시각 표시를 붙여 이어 쓴다 |
+| `/workspace/beside-norestart` | 있으면 감독 루프가 끝난 서비스를 다시 띄우지 않는다(일부러 내릴 때 만든다). `start_pod.sh` 가 서비스를 새로 띄울 때 지운다 |
 | `/workspace/beside-work/` | 작업 폴더(Spring 이 GLB 를 받은 뒤 `DELETE` 로 지운다). 남은 폴더는 `BESIDE_WORK_SWEEP_MINUTES` 로 지울 수 있다(`start_pod.sh` 는 켜지 않는다) |
-| `/var/run/beside/` | 소켓과 pid. 정지하면 사라진다 |
+| `/var/run/beside/` | 소켓, pid(`inference.pid` 는 uvicorn, `supervisor.pid` 는 감독 루프, `tailscaled.pid`), 잠금. 정지하면 사라진다 |
 
 **확인한 것**
 
@@ -401,7 +435,8 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 맞는 비밀번호인데 계속 401 | `... exec caddy printenv BASIC_AUTH_HASH` 가 `$2a$14$` 로 시작하는 완전한 해시인지 | `.env` 에서 작은따옴표로 감싸고 `up -d`(환경변수가 바뀌면 caddy 가 새로 만들어진다) |
 | 업로드 413 | 응답 본문이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)면 Spring(장당 5MB·요청 20MB), 본문이 비었으면 Caddy(25MB) | 사진을 줄인다. 상한을 바꾸려면 Spring 설정과 Caddyfile 을 함께(계약 회의) |
 | 502 Bad Gateway | `... ps` 에서 backend 상태, `... logs backend` | 기동 중(첫 30~60초)이면 기다린다. 종료됐으면 로그의 원인(DB 잠김·메모리) |
-| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/`(`supervisor.log` 에 서비스가 죽고 다시 뜬 기록) | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| Pod `supervisor.log` 에 `restart N in 60 s` 가 이어짐(서비스가 뜨자마자 죽음) | `inference.log` 에서 각 `supervise_inference.sh restart` 줄 바로 앞의 오류(포트, CUDA, conda, 토큰) | 감독 루프는 60 s 마다 계속 다시 띄운다. `kill $(cat /var/run/beside/supervisor.pid)` 로 멈추고, 원인을 고친 뒤 `start_pod.sh` 를 실행한다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
 | grafana 가 계속 재시작, 로그에 `GRAFANA_ADMIN_PASSWORD 를 넣는다` | `deploy/.env` 의 `GRAFANA_ADMIN_PASSWORD` | 값을 넣고 `$M up -d grafana` |

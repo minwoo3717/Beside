@@ -100,6 +100,7 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
 - **uvicorn 유휴 연결**:
   - 추론 서비스를 `UVICORN_TIMEOUT_KEEP_ALIVE=75` 와 함께 띄우면(uvicorn 0.54 는 `UVICORN_` 환경변수를 읽는다) 30초 간격에서도 연결을 이어 써 처리가 약 0.9 s 줄었다. 2026-11-20 부터는 `start_pod.sh` 의 기본값이다. 5 s 와 비교하려면 `UVICORN_TIMEOUT_KEEP_ALIVE=5` 로 띄운다.
   - 재시작하는 스크립트(`f2_kill.sh`·`pt_switch.sh`)에도 같은 값을 넘긴다. 실행 기록에 이 값을 적는다.
+  - 2026-11-20 부터 `start_pod.sh` 로 띄운 서비스는 감독 루프가 다시 띄운다. 그래서 서비스를 스스로 내리고 다시 띄우는 스크립트는 `kill` 전에 `touch /workspace/beside-norestart` 한다. 그러지 않으면 감독 루프가 5 s 뒤 예전 설정으로 먼저 띄운다([deploy/README.md](../README.md) Runpod 절 '서비스 자동 재시작').
 - **Pod CPU 한도**:
   - Pod 컨테이너는 cgroup v1 이고(`cpu.max` 없음) 한도는 `cpu.cfs_quota_us` 765000 / `cpu.cfs_period_us` 100000 = 7.65 코어다. 보이는 CPU 는 96개다.
   - torch 기본 스레드로는 100 ms 주기의 0.5~2.2 % 에서 한도에 걸렸다. `OMP/MKL/OPENBLAS_NUM_THREADS=8` 이면 0 이었다. 2026-11-20 부터는 `start_pod.sh` 의 기본값이다(`THREADS`). 기본 스레드와 비교하려면 `THREADS=default` 로 띄운다.
@@ -120,7 +121,7 @@ G 시리즈의 도착은 `gpu_queue.js` 가 포아송으로 만들고(솎아내�
   - 볼륨의 `/workspace/Beside` 는 3차 중에 바꾼 `b6c0e6c` 에 detached 로 남아 있었다.
   - 그래서 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 main `a9aa091` 에 맞췄다. `pull` 은 detached HEAD 에서 `main` 브랜치로 돌려놓지 않는다(자세한 이유는 [deploy/README.md](../README.md) Runpod 절 '다시 쓸 때마다').
   - 맞춘 뒤 `pod-info.txt` 를 만들었다(`repo main a9aa091`).
-- **시작 기본값 확인**: `start_pod.sh` 의 `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. 새 값을 넣거나 시간 기록을 켜려면 이미 떠 있는 서비스를 `kill` 한 뒤 다시 띄운다(`start_pod.sh` 는 떠 있는 서비스를 다시 띄우지 않는다).
+- **시작 기본값 확인**: `start_pod.sh` 의 `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. 새 값을 넣거나 시간 기록을 켜려면 이미 떠 있는 서비스를 내린 뒤 다시 띄운다(`start_pod.sh` 는 떠 있는 서비스를 다시 띄우지 않는다). 2026-11-20 부터는 `touch /workspace/beside-norestart && kill <pid>` 로 내린다(감독 루프).
 - **요청별 시간 줄** (`BESIDE_REQUEST_TIMING=1`, 형식은 [generation/inference_service/README.md](../../generation/inference_service/README.md) '요청별 시간 기록'):
   - 시작 명령 앞에 붙인다: `BESIDE_REQUEST_TIMING=1 bash /workspace/beside-bootstrap.sh`. `inference.log` 에 `timing …` 줄이 uvicorn 접근 줄과 함께 찍힌다.
   - `body_ms` 는 요청 본문을 다 읽은 때, `start_ms` 는 응답 머리를 넘긴 때, `end_ms` 는 응답 본문을 uvicorn 에 다 넘긴 때다. **`end_ms` 는 바이트가 Pod 를 떠난 때가 아니다**(1.3 MB GLB 는 소켓·tailscaled 버퍼에 다 들어간다). 그래서 GLB 전송 시간은 VM 쪽(작업의 `finishedAt` 또는 `backend.log` 의 `stage=COMPLETED` 시각)에서 `GET` 의 `at` + `end_ms` 를 빼서 구한다. VM·Pod 시계가 섞인 값이다.
@@ -179,8 +180,18 @@ unset LOADTEST_INFERENCE_TOKEN
 - Pod 에서 받은 GPU 샘플(`nvidia-smi … -l 5`)과 시각을 붙인 추론 로그도 결과 폴더의 `gpu/` 에 둔다.
 
 **F2**: 추론 서비스를 `kill -9 $(cat /var/run/beside/inference.pid)` 로 죽인다. SIGTERM 은 처리 중인 요청을 마치므로 쓰지 않는다. 90 s 뒤 `MODE=model` 로 다시 띄운다.
+- 2026-11-20 부터 `start_pod.sh` 로 띄운 서비스는 감독 루프가 5 s 뒤 다시 띄운다([deploy/README.md](../README.md) Runpod 절 '서비스 자동 재시작'). 3차 F2-real 처럼 90 s 동안 꺼진 채로 두려면 표시 파일을 먼저 만든다.
 
-**F1a**: 같은 Pod 를 패스스루로 바꿔 돈다(`kill` → 합성 1.5 MB GLB → `MODE=passthrough BESIDE_SAMPLE_GLB=… BESIDE_PASSTHROUGH_DELAY_MS=<G0 의 추론+변환 중앙값, 2차는 4,008 + 884 ≈ 4900, 3차는 3,768 + 878 ≈ 4600> BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_FAIL_RATE=0.2`). 이 실행만 `stub-glb.sha256` 를 첨부한다.
+```bash
+# GPU Pod: 꺼진 채로 둘 때(3차 F2-real 과 같은 조건)
+touch /workspace/beside-norestart && kill -9 $(cat /var/run/beside/inference.pid)
+sleep 90
+MODE=model bash /workspace/Beside/deploy/runpod/start_pod.sh    # 표시 파일을 지우고 감독 아래에서 다시 띄운다
+```
+
+- 표시 파일 없이 `kill -9` 하면 감독 루프의 자동 복구를 잰다(5 s 뒤 같은 설정으로 다시 뜨고 모델을 다시 불러온다. 다시 뜬 시각은 Pod 의 `/workspace/beside-logs/supervisor.log`). 이 변형은 아직 돌리지 않았다 **[계획]**. 실행 이름과 기록에 어느 쪽인지 적는다.
+
+**F1a**: 같은 Pod 를 패스스루로 바꿔 돈다(표시 파일 + `kill` → 합성 1.5 MB GLB → `MODE=passthrough BESIDE_SAMPLE_GLB=… BESIDE_PASSTHROUGH_DELAY_MS=<G0 의 추론+변환 중앙값, 2차는 4,008 + 884 ≈ 4900, 3차는 3,768 + 878 ≈ 4600> BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_FAIL_RATE=0.2`). 이 실행만 `stub-glb.sha256` 를 첨부한다.
 
 스텁의 `BESIDE_PASSTHROUGH_*` 설정은 기본값이 모두 꺼져 있다(같은 W1 의 B5). 스텁은 실제 GPU PC 가 아닌 PC(예: 개발 PC)에서 Tailscale 주소에 띄운다. 스텁이 돌려줄 GLB(`BESIDE_SAMPLE_GLB`)는 **스텁 PC 에** 있어야 한다. VM 에 만든 파일(3번)은 스텁 PC 에서 보이지 않으므로, 같은 합성 GLB(아래 '합성 GLB 는 하나')를 스텁 PC 에서 따로 만든다:
 
