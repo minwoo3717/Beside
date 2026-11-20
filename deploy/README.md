@@ -23,7 +23,7 @@
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
 | Runpod Pod 추론 서비스 자동 재시작([runpod/supervise_inference.sh](runpod/supervise_inference.sh), 장애 대응 R7) | **[구현됨]** 2026-11-20: `start_pod.sh` 가 서비스를 감독 루프 아래에서 띄운다. 가짜 서비스·가짜 Tailscale 로 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사(passthrough·model 모드)가 WSL(Ubuntu 26.04)에서 통과했고 CI 단계로 넣었다. 2026-11-20 장애 훈련 2차 확인에서 실제 A40 Pod(main `ce1a685`)로 쟀다 **[실험 결과]**: `kill -9` 5 s 뒤 감독 루프가 다시 띄우고 41 s 뒤 backend 가 UP 을 봤다(사람 손 없음). DOWN 이 45 s 유예보다 짧아 DOWN 알림 없이 🟡·🟢 만 갔다. 아래 'Runpod Pod 쪽'의 '서비스 자동 재시작' |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매시 5분, 48개. 2026-11-20 까지는 매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인. 매시·48개는 `DatabaseBackupScheduleTest`). VM 반영은 2026-11-20 05:33 UTC main `ce1a685` 배포로 했다 **[구현됨: 적용]**: 설정 `0 5 * * * *`·48개를 확인했고, 배포 뒤 첫 매시 zip 은 아직 기록하지 않았다(아래 '운영 대응 설치'). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다(매일 04:30 설정 때). Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 서버 이름이 든 메시지는 2026-11-20 장애 훈련 2차 확인에서 훈련 backend(부하·훈련 덮어쓰기. `--env-file deploy/.env` 라 서버 이름 `NOTIFY_INFERENCE_LABEL` 은 운영 값, 웹훅은 수집 서버 `DRILL_WEBHOOK_URL`)가 보낸 본문으로 확인했다("GPU 추론 서버(Runpod A40)…", [docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log](../docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log)) **[실험 결과]**. 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매시 5분, 48개. 2026-11-20 까지는 매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인. 매시·48개는 `DatabaseBackupScheduleTest`). VM 반영은 2026-11-20 05:33 UTC main `ce1a685` 배포로 했다 **[구현됨: 적용]**: 설정 `0 5 * * * *`·48개를 확인했고, 그 뒤 매시 zip(13:05·14:05·15:05 UTC 등)과 매시 20분 VM 밖 업로드도 확인했다(아래 '운영 대응 설치' 적용 기록 1번). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다(매일 04:30 설정 때). Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 서버 이름이 든 메시지는 2026-11-20 장애 훈련 2차 확인에서 훈련 backend(부하·훈련 덮어쓰기. `--env-file deploy/.env` 라 서버 이름 `NOTIFY_INFERENCE_LABEL` 은 운영 값, 웹훅은 수집 서버 `DRILL_WEBHOOK_URL`)가 보낸 본문으로 확인했다("GPU 추론 서버(Runpod A40)…", [docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log](../docs/ops/data/2026-11-20_failure-drills/window2/window2-hook.log)) **[실험 결과]**. 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4, mock) 2026-11-18, 2차(실제 A40, G0r·G1r·G3r) 2026-11-18, 3차(G2r·F2-real·F1b-real·F1a) 2026-11-19 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [1차](../docs/perf/load/2026-11-18_vm-1st.md)·[2차](../docs/perf/load/2026-11-18_vm-2nd.md)·[3차](../docs/perf/load/2026-11-19_vm-3rd.md) |
 
@@ -39,7 +39,7 @@
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
 | 서비스 계정·백업 버킷 | `beside-backup@beside-514511.iam.gserviceaccount.com`(키 없음, 범위 `storage-rw,logging-write,monitoring-write`, 2026-11-20 04:26 UTC 까지 붙임) — 버킷 `gs://beside-514511-backups` 에 만들기만(`roles/storage.objectCreator`). 아래 '운영 대응 설치' 3번. 컨테이너는 2번(메타데이터 차단, 2026-11-20)으로 이 토큰을 받지 못한다 |
-| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-20 PR #18·#20 병합 뒤 `ce1a685`, 05:32:32~05:33:49 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 빌드·caddy 다시 만듦). 추론 서비스 변경(PR #11, PR #20 의 `loadError`·`busyForMs`·감독 루프)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
+| 코드 | VM 의 `~/Beside` 는 `main`(2026-11-20 PR #22 병합 뒤 `7230dea`, 15:50:40~15:53:14 UTC 에 `scripts/deploy_vm.sh` 로 backend 만 다시 빌드·다시 만듦. 그 전은 PR #18·#20 의 `ce1a685`, 05:32:32~05:33:49 UTC 배포). 추론 서비스 변경(PR #11, PR #20 의 `loadError`·`busyForMs`·감독 루프)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -167,14 +167,15 @@ scripts/fetch_models.sh backend/models        # 또는 BESIDE_MODELS_DIR 에 적
 
 backend 컨테이너는 이 모델 때문에 메모리 한도가 3 GB 다(힙 40% + ONNX Runtime). 4 GB VM 에서 이미지를 다시 빌드하는 동안 메모리가 모자랄 수 있으니 스왑 2 GB 를 만들어 둔다(`sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`, 재부팅 뒤에도 쓰려면 `/etc/fstab` 에 `/swapfile none swap sw 0 0`). 실제 사용량(`docker stats`)은 **[계획]** 이다. 전처리를 끄려면 `deploy/.env` 에 `PREPROCESS_CHECK_ENABLED=false`·`PREPROCESS_CUTOUT_ENABLED=false`.
 
-리포 루트에서(compose 파일 기준 상대 경로와 `--env-file` 경로가 맞도록):
+리포 루트에서(compose 파일 기준 상대 경로와 `--env-file` 경로가 맞도록). **새 서버의 첫 시작**은 DB 파일이 아직 없으므로 첫 줄에 `STORAGE_DB_CREATE_IF_MISSING=true` 를 붙이고, backend 가 healthy 가 되면 변수 없이 `up -d` 를 한 번 더 한다(prod 는 H2 DB 파일이 없으면 시작하지 않는다 — 장애 훈련 FD5. 위 'VM 첫 설정' 6번). 이미 쓰던 서버에서는 붙이지 않는다:
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps     # backend 가 healthy 가 되면 준비 끝
+STORAGE_DB_CREATE_IF_MISSING=true docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build   # 새 서버 첫 시작만
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps     # backend 가 healthy 가 되면
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d  # 변수 없이 한 번 더: 준비 끝
 ```
 
-첫 빌드는 Gradle 의존성을 받느라 몇 분 걸린다. 이후에는 코드만 바뀌면 빠르다.
+첫 빌드는 Gradle 의존성을 받느라 몇 분 걸린다. 이후에는 코드만 바뀌면 빠르다. 그 뒤 업데이트는 변수 없이 `up -d --build`(또는 `scripts/deploy_vm.sh`)다.
 
 ## 확인
 
@@ -300,7 +301,7 @@ $C start backend
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
 - **[구현됨]** prod 는 서버를 멈추지 않고 매시 5분(한국 시각 기준 `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 48개(이틀)를 남긴다(`storage.backup.*`, 2026-11-20 까지는 매일 04:30·7개). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
-- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번)는 2026-11-20 05:33 UTC 에 했다. 그 전까지 VM 의 prod 는 매일 04:30 KST·7개로 백업해서 버킷에 새로 올라가는 DB zip 이 하루 1개였다. 이제 매시 5분 zip 이 그 시각 20분에 올라간다 [계산: 설정으로 본 값, 배포 뒤 첫 매시 zip·업로드는 아직 기록하지 않음].
+- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번)는 2026-11-20 05:33 UTC 에 했다. 그 전까지 VM 의 prod 는 매일 04:30 KST·7개로 백업해서 버킷에 새로 올라가는 DB zip 이 하루 1개였다. 이제 매시 5분 zip 이 그 시각 20분에 올라간다 **[구현됨: 적용]**: 2026-11-20 13:05·14:05·15:05 UTC zip 이 생겼고, 13:20·14:20·15:20 UTC 업로드가 한 번에 1개씩 보냈다(`db: 1 new backup(s) sent`).
 
 ### 부하 시험
 
@@ -308,14 +309,14 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 ## 운영 대응 설치 (R1~R5)
 
-2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 2026-11-20 에 1~5번과 7번을 했고 [구현됨: 적용], 6번(외부 가동 확인 R3)만 [계획]** 이다. 2~5번(메타데이터 차단, 버킷·계정·VM 에 붙이기, 백업 타이머, 스냅샷 일정)은 장애 훈련 전후에 했다(3번은 운영자 보고, 2·4·5번은 [장애 훈련 기록](../docs/ops/2026-11-20_failure-drills.md)의 '결과에서 나온 대응'). 1번(백엔드 배포)은 05:32:32~05:33:49 UTC, 7번(VM 감시)은 05:34 UTC 에 했고, 이어진 장애 훈련 2차 확인(05:37~05:53 UTC)에서 R4·R6·R7 을 다시 재현했다. 다시 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
+2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 2026-11-20 에 1~5번과 7번을 했고 [구현됨: 적용], 6번(외부 가동 확인 R3)만 [계획]** 이다. 2~5번(메타데이터 차단, 버킷·계정·VM 에 붙이기, 백업 타이머, 스냅샷 일정)은 장애 훈련 전후에 했다(3번은 운영자 보고, 2·4·5번은 [장애 훈련 기록](../docs/ops/2026-11-20_failure-drills.md)의 '결과에서 나온 대응'). 1번(백엔드 배포)은 05:32:32~05:33:49 UTC, 7번(VM 감시)은 05:34 UTC 에 했고, 이어진 장애 훈련 2차 확인(05:37~05:53 UTC)에서 R4·R6·R7 을 다시 재현했다. 남은 장애 고침(PR #22: FD16b·FD5·FD4·FD9)은 같은 날 15:50:40~15:53:14 UTC 에 배포했고, 7번은 🧱 가 든 판으로 15:53 UTC 에 다시 설치했다. 다시 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
 
 | 대응 | 막는 장애 | 파일 | 상태 |
 |---|---|---|---|
 | R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기·VM 설치(차단·타이머) [구현됨: 적용] 2026-11-20 · 매시 H2 백업의 VM 반영(1번) [구현됨: 적용] 2026-11-20 05:33 |
 | R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 일정 `beside-daily-snapshot` [구현됨: 적용] 2026-11-20 · 일정이 만든 첫 스냅샷 확인 [계획] |
 | R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
-| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다, DB 파일이 없어 backend 가 시작하지 않는다(FD5, 재시작 반복 알림 🧱 은 [구현됨: 2026-11-20 PR, 배포 전] — 05:34 에 설치한 판에는 없고 VM 재설치는 [계획]) | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [구현됨: 적용] 2026-11-20 05:34 · FD2 재현에서 멈춘 backend 를 112 s 뒤 재시작 **[실험 결과]** |
+| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다, DB 파일이 없어 backend 가 시작하지 않는다(FD5, 재시작 반복 알림 🧱 — PR #22) | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [구현됨: 적용] 2026-11-20 05:34, 🧱 가 든 판으로 15:53 다시 설치 · FD2 재현에서 멈춘 backend 를 112 s 뒤 재시작 **[실험 결과]** · 🧱 를 실제로 받는 FD5 재현은 [계획] |
 | R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [구현됨: 적용] 2026-11-20 05:33 |
 
 - **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 1번(매시 백업)을 배포한 2026-11-20 05:33 UTC 전에는 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이었다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
@@ -327,15 +328,15 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 | 단계 | 상태 | 적용 시각 (UTC) | 확인 결과 |
 |---|---|---|---|
-| 1. 백엔드 배포(R1 매시 백업, R5) | **[구현됨: 적용]** (main `ce1a685`, `scripts/deploy_vm.sh`) | 2026-11-20 05:32:32~05:33:49 | backend 다시 빌드, caddy 다시 만듦: `Memory` 2147483648, `GOMEMLIMIT` 1638MiB. prod H2 백업 `0 5 * * * *`·48개, `management.health.diskspace.enabled=false`, actuator `/health` UP, 공개 경로 61/61. 정시 5분 뒤 새 zip 은 아직 기록하지 않음 [계획] |
+| 1. 백엔드 배포(R1 매시 백업, R5) | **[구현됨: 적용]** (main `ce1a685`, `scripts/deploy_vm.sh`) | 2026-11-20 05:32:32~05:33:49 | backend 다시 빌드, caddy 다시 만듦: `Memory` 2147483648, `GOMEMLIMIT` 1638MiB. prod H2 백업 `0 5 * * * *`·48개, `management.health.diskspace.enabled=false`, actuator `/health` UP, 공개 경로 61/61. 그 뒤 매시 5분 zip 이 생김(예: 13:05·14:05·15:05 UTC), 4번 타이머가 13:20·14:20·15:20 UTC 에 그 zip 을 하나씩 올림(`db: 1 new backup(s) sent`, 15:20 은 사진·GLB 새 파일 0·버킷 29). **PR #22 다시 배포**: main `7230dea`, 2026-11-20 15:50:40~15:53:14, backend 만 다시 빌드·다시 만듦(caddy 그대로). 배포 전 확인: 볼륨에 `db/beside-real.mv.db` 있음, `deploy/.env` 에 `STORAGE_DB_CREATE_IF_MISSING` 없음, 직전 2시간 `/api/v1/jobs` 요청 0. 배포 뒤: healthz `real,prod`, 컨테이너 `STORAGE_DB_CREATEIFMISSING=false`, `RestartCount` 0, 추론 `UNKNOWN -> DOWN`(Pod 꺼짐, 예상), 공개 경로 61/61 |
 | 2. 메타데이터 차단(R1) | **[구현됨: 적용]** (장애 훈련 기록 `723fda8` 의 운영자 적용, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 (시각 기록 없음). 1번 배포 뒤 리포 판으로 다시 `install` | 컨테이너에서 메타데이터 HTTP 000(무응답), 호스트 200, 컨테이너의 이름 풀이 정상. 1번으로 컨테이너를 다시 만든 뒤에도 `check` ok |
 | 3. 버킷·계정·VM 에 붙이기(R1) | **[구현됨: 적용]** (운영자 적용·보고, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 04:26 까지 | 버킷 `gs://beside-514511-backups`: asia-northeast3, 균일 접근, 공개 액세스 방지 enforced, 소프트 삭제 7일, 수명 주기 `db/` 만 30일 뒤 삭제. 키 없는 `beside-backup@beside-514511.iam.gserviceaccount.com` 에 그 버킷의 `roles/storage.objectCreator`. `beside-vm` 에 `--scopes=storage-rw,logging-write,monitoring-write` 로 붙임 |
 | 4. 백업 타이머(R1) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음). 1번 배포 뒤 리포 판으로 다시 `install` | 매시 20분 타이머. 첫 실행이 DB 백업 zip 7개(1번 배포 전이라 매일 04:30 KST 것)와 사진·GLB 29개를 올림. 버킷에서 받은 zip 을 H2 로 열어 작업 15건 확인. 1번 배포 전 마지막 실행 05:20 성공 |
 | 5. 스냅샷 일정(R2) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음) | 일정 `beside-daily-snapshot`: 매일 19:00 UTC, 7일 보관. 일정이 만든 첫 스냅샷(2026-11-20 19:00 UTC 뒤)은 아직 확인하지 않음 [계획] |
 | 6. 외부 가동 확인(R3) | [계획] | | (알림 채널 종류, 가동 확인 이름) |
-| 7. VM 감시(R4) | **[구현됨: 적용]** | 2026-11-20 05:34 | `beside-watchdog.timer` 30초마다, 정상이면 스크립트는 아무것도 남기지 않음. 장애 훈련 2차 확인 FD2(05:44:36 SIGSTOP, 점검 표시 없음): 실패 1/3·2/3·3/3 뒤 `docker restart`(컨테이너 다시 시작 05:46:28.9), 🔁 05:46:29(운영 웹훅) — 멈춤에서 재시작 112 s **[실험 결과]**. 바로 뒤 훈련 스크립트가 backend 를 다시 만들어, 다시 시작한 컨테이너가 정상이 되기까지는 재지 못했다. 감시는 ✅ "재시작 186초 뒤 확인"(05:49:10)도 운영 웹훅으로 보냈다(시작 뒤 90 s 검사 유예와 훈련의 다시 만들기 때문에 늦은 확인이고 회복 시간이 아니다). 디스크·백업 알림은 재현하지 않음 |
+| 7. VM 감시(R4) | **[구현됨: 적용]** | 2026-11-20 05:34, 15:53 다시 설치(🧱 가 든 PR #22 판) | 15:53 설치: `/usr/local/sbin/beside-watchdog` 가 리포 파일과 같음(`cmp`), 타이머 30초마다. 시작 90 s 유예가 끝난 15:54:30 부터 16:07 까지 25번 실행이 모두 조용했다(health 정상, 재시작 반복 없음). 🧱 를 실제로 받는 것은 FD5 재현 [계획]. 05:34 설치: `beside-watchdog.timer` 30초마다, 정상이면 스크립트는 아무것도 남기지 않음. 장애 훈련 2차 확인 FD2(05:44:36 SIGSTOP, 점검 표시 없음): 실패 1/3·2/3·3/3 뒤 `docker restart`(컨테이너 다시 시작 05:46:28.9), 🔁 05:46:29(운영 웹훅) — 멈춤에서 재시작 112 s **[실험 결과]**. 바로 뒤 훈련 스크립트가 backend 를 다시 만들어, 다시 시작한 컨테이너가 정상이 되기까지는 재지 못했다. 감시는 ✅ "재시작 186초 뒤 확인"(05:49:10)도 운영 웹훅으로 보냈다(시작 뒤 90 s 검사 유예와 훈련의 다시 만들기 때문에 늦은 확인이고 회복 시간이 아니다). 디스크·백업 알림은 재현하지 않음 |
 
-**1. 백엔드 배포(R1 의 매시 백업, R5)** — 2026-11-20 05:32:32~05:33:49 UTC 적용함 **[구현됨: 적용]**(main `ce1a685`, 위 '적용 기록'). 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
+**1. 백엔드 배포(R1 의 매시 백업, R5)** — 2026-11-20 05:32:32~05:33:49 UTC 적용함 **[구현됨: 적용]**(main `ce1a685`, 위 '적용 기록'. 같은 날 15:50:40~15:53:14 UTC 에 PR #22 의 `7230dea` 로 다시 배포). 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
 
 ```bash
 docker inspect -f '{{.HostConfig.Memory}}' beside-caddy-1          # 2147483648
@@ -382,7 +383,7 @@ systemctl list-timers beside-backup.timer
 
 **6. 외부 가동 확인(R3, gcloud)**: 콘솔 Monitoring → Alerting → Edit notification channels 에서 메일 채널을 만든 뒤 `gcloud beta monitoring channels list --format='table(name.basename(),type,displayName)'` 로 id 를 보고 `bash deploy/gcp/uptime_check.sh create <id>`. 부하 시험·장애 훈련 동안은 `bash deploy/gcp/uptime_check.sh pause`, 끝나면 `resume`(가동 확인 자체는 계속 돌고 기록된다).
 
-**7. VM 감시(R4, VM)** — 2026-11-20 05:34 UTC 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 빈 디스크로 새로 만들 때와 리포의 스크립트가 바뀌었을 때(`install` 줄)뿐이다:
+**7. VM 감시(R4, VM)** — 2026-11-20 05:34 UTC 적용함, 15:53 UTC 에 🧱 가 든 판으로 다시 설치함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 빈 디스크로 새로 만들 때와 리포의 스크립트가 바뀌었을 때(`install` 줄)뿐이다:
 
 ```bash
 sudo install -m 755 deploy/watchdog/beside-watchdog.sh /usr/local/sbin/beside-watchdog
@@ -393,9 +394,9 @@ journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 
 ```
 
 - 판단: backend 컨테이너 안에서 관리 포트 `/actuator/health`(DB·ping. Spring 의 디스크 여유 검사는 prod 에서 끈다 — 재시작해도 디스크는 비지 않고 진행 중 작업만 끝나므로, 디스크는 아래 80 % 경고가 맡는다. `ProdProfileTest`)를 묻고, 연속 3번(약 1~1.5분) 실패하면 `docker restart` + 디스코드. 10분에 한 번까지, 시작 90초 안은 판단하지 않음, 멈춘(`compose stop`)·재시작 중인 컨테이너는 손대지 않음. `/` 사용률 80 % 이상이면 1시간에 한 번 알린다. VM 밖 백업(4번)의 마지막 성공이 3시간 넘었거나 한 번도 성공하지 못하고 failed 면 6시간에 한 번 알린다(백업이 아직 설치되지 않았거나 실행 중이면 보지 않는다).
-- **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
+- **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. 표시가 있는 동안은 backend 검사를 통째로 건너뛰므로 재시작뿐 아니라 아래 재시작 반복 알림(🧱)도 오지 않는다 — FD5 를 다시 재현해 🧱 를 확인할 때는 표시 없이 한다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
 - 재시작하면 그때 PENDING·PROCESSING 이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱은 retry). GPU·추론 서비스 상태는 보지 않는다(backend 의 GPU 알림이 맡는다).
-- 재시작 반복: backend 가 시작하자마자 꺼지면(prod 에 H2 DB 파일이 없을 때 — 장애 훈련 FD5, 또는 잘못된 설정) Docker 가 계속 다시 띄우지만 90초를 넘기지 못해 위 판단에 걸리지 않는다. 마지막 정상 확인 뒤 Docker 의 `RestartCount` 가 3 이상 늘면 🧱 를 보내고(1시간마다 다시), 정상이 되면 한 번 알린다. 감시 스크립트의 `docker restart` 는 이 수를 늘리지 않는다 [구현됨: 2026-11-20 PR, `scripts/test_watchdog.sh`]. VM 에는 병합 뒤 위 설치 명령으로 스크립트를 다시 설치해야 들어간다 [계획].
+- 재시작 반복: backend 가 시작하자마자 꺼지면(prod 에 H2 DB 파일이 없을 때 — 장애 훈련 FD5, 또는 잘못된 설정) Docker 가 계속 다시 띄우지만 90초를 넘기지 못해 위 판단에 걸리지 않는다. 마지막 정상 확인 뒤 Docker 의 `RestartCount` 가 3 이상 늘면 🧱 를 보내고(1시간마다 다시), 정상이 되면 한 번 알린다. 감시 스크립트의 `docker restart` 는 이 수를 늘리지 않는다 [구현됨: PR #22, `scripts/test_watchdog.sh`]. VM 에는 2026-11-20 15:53 UTC 에 위 설치 명령으로 다시 설치했다 [구현됨: 적용]. 🧱 를 실제로 받는 것은 FD5 재현에서 확인한다 [계획].
 
 ## Runpod Pod 쪽
 

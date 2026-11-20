@@ -429,17 +429,22 @@ class WebhookNotifierTest {
         try (FakeHook hook = new FakeHook()) {
             hook.answerFor = text -> text.contains("fd9e0000") ? 503 : 204;   // only that result fails
             hook.holdIf.set(text -> text.startsWith("📭"));                   // the first summary is held on its way
-            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 300, JSON);
+            SettableClock clock = new SettableClock(Instant.parse("2026-11-20T01:00:00Z"));   // 10:00 KST
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 300, JSON, clock);
             notifier.onJobFinished(job("fd9e0000", JobStatus.FAILED));   // fails: one lost
             await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.stream().anyMatch(t -> t.startsWith("📭")));
+            clock.set(Instant.parse("2026-11-20T01:30:00Z"));                  // 10:30 KST
             for (int i = 1; i <= 52; i++) {   // 50 fit: 2 are dropped while the summary is on its way
                 notifier.onJobFinished(job(String.format("fd9e%04d", i), JobStatus.COMPLETED));
             }
             hook.release.countDown();
 
             await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 3);
-            assertThat(hook.delivered.get(0)).startsWith("📭").contains("— ⚠️ 실패 1건.").doesNotContain("완성");
-            assertThat(hook.delivered.get(1)).startsWith("📭").contains("— ✅ 완성 2건.").doesNotContain("⚠️ 실패");
+            assertThat(hook.delivered.get(0)).startsWith("📭").contains("(10:00부터 실패)")
+                    .contains("— ⚠️ 실패 1건.").doesNotContain("완성");
+            // The second summary is about the 2 dropped at 10:30, not the loss the first one already reported.
+            assertThat(hook.delivered.get(1)).startsWith("📭").contains("(10:30부터 실패)")
+                    .contains("— ✅ 완성 2건.").doesNotContain("⚠️ 실패");
             assertThat(hook.delivered.get(2)).startsWith("📦 작업 알림 50건");
             await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 3);
         }
@@ -488,6 +493,34 @@ class WebhookNotifierTest {
     private static JobFinishedEvent job(String jobId, JobStatus status) {
         return new JobFinishedEvent(jobId, 1, status, status == JobStatus.FAILED ? "INFERENCE_UNAVAILABLE" : null,
                 9_000L, "real", null, false);
+    }
+
+    /** A clock the test moves by hand, for the times the messages show. */
+    private static final class SettableClock extends java.time.Clock {
+        private volatile Instant now;
+
+        SettableClock(Instant now) {
+            this.now = now;
+        }
+
+        void set(Instant now) {
+            this.now = now;
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 
     /** A webhook of its own per test (the shared one also gets the Spring context's messages). */

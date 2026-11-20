@@ -21,6 +21,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -120,6 +121,7 @@ public class WebhookNotifier {
     }
 
     private final long retryBaseMs;
+    private final Clock clock;
     /** Guards the two queues and the counters below. */
     private final Object outbox = new Object();
     private final Deque<Note> urgentQueue = new ArrayDeque<>();
@@ -136,6 +138,12 @@ public class WebhookNotifier {
     private int lostFailed;
     private int lostGpu;
     private Instant lostSince;
+    /**
+     * A summary of lost messages is on its way, and when the first loss counted meanwhile happened: if the summary gets
+     * through, the losses left are only those, so the next summary says their time, not the one already reported.
+     */
+    private boolean summaryInFlight;
+    private Instant lostDuringSummary;
 
     public WebhookNotifier(String webhookUrl, String publicBaseUrl, ObjectMapper objectMapper) {
         this(webhookUrl, publicBaseUrl, "", 0, objectMapper);
@@ -153,6 +161,13 @@ public class WebhookNotifier {
                            @Value("${notify.down-grace-ms:0}") long downGraceMs,
                            @Value("${notify.retry-base-ms:" + DEFAULT_RETRY_BASE_MS + "}") long retryBaseMs,
                            ObjectMapper objectMapper) {
+        this(webhookUrl, publicBaseUrl, inferenceLabel, downGraceMs, retryBaseMs, objectMapper, Clock.systemUTC());
+    }
+
+    /** Tests pass a clock to set the times the messages show (queued at, first loss). */
+    public WebhookNotifier(String webhookUrl, String publicBaseUrl, String inferenceLabel, long downGraceMs, long retryBaseMs,
+                    ObjectMapper objectMapper, Clock clock) {
+        this.clock = clock;
         this.retryBaseMs = Math.max(1, retryBaseMs);
         this.webhook = webhookUrl == null || webhookUrl.isBlank() ? null : URI.create(webhookUrl.trim());
         this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim().replaceAll("/+$", "");
@@ -181,7 +196,7 @@ public class WebhookNotifier {
     public void onJobFinished(JobFinishedEvent event) {
         if (enabled()) {
             queue(new Note(jobMessage(event, linkFor(event.jobId())), false, event.status(), System.nanoTime(),
-                    Instant.now()));
+                    clock.instant()));
         }
     }
 
@@ -269,7 +284,7 @@ public class WebhookNotifier {
     }
 
     private void postUrgent(String message) {
-        queue(new Note(message, true, null, System.nanoTime(), Instant.now()));
+        queue(new Note(message, true, null, System.nanoTime(), clock.instant()));
     }
 
     /**
@@ -351,6 +366,8 @@ public class WebhookNotifier {
             long pauseMs;
             synchronized (outbox) {
                 inFlight.clear();
+                summaryInFlight = false;   // not sent: the losses stay counted from the first one
+                lostDuringSummary = null;
                 failures++;
                 pauseMs = Math.min(MAX_RETRY_DELAY.toMillis(), retryBaseMs << Math.min(failures - 1, 20));
             }
@@ -385,6 +402,8 @@ public class WebhookNotifier {
     private Batch next() {
         Batch batch = choose();
         inFlight.clear();
+        summaryInFlight = batch != null && batch.summary();
+        lostDuringSummary = null;
         if (batch != null) {
             inFlight.addAll(batch.notes());
         }
@@ -414,6 +433,9 @@ public class WebhookNotifier {
     /** Caller holds outbox. Updates the queues after a send; returns the pause before the next one, 0 to go on. */
     private long settle(Batch batch, Outcome outcome) {
         inFlight.clear();
+        Instant lostMeanwhile = lostDuringSummary;
+        summaryInFlight = false;
+        lostDuringSummary = null;
         if (outcome.sent()) {
             for (Note note : batch.notes()) {
                 (note.urgent() ? urgentQueue : jobQueue).remove(note);
@@ -427,6 +449,8 @@ public class WebhookNotifier {
                 lostGpu -= batch.summed()[2];
                 if (lostCompleted + lostFailed + lostGpu == 0) {
                     lostSince = null;
+                } else if (lostMeanwhile != null) {
+                    lostSince = lostMeanwhile;   // what is left was lost while the summary was on its way
                 }
             }
             failures = 0;
@@ -457,8 +481,12 @@ public class WebhookNotifier {
 
     /** Caller holds outbox. */
     private void lose(Note note) {
+        Instant now = clock.instant();
         if (lostSince == null) {
-            lostSince = Instant.now();
+            lostSince = now;
+        }
+        if (summaryInFlight && lostDuringSummary == null) {
+            lostDuringSummary = now;
         }
         if (note.urgent()) {
             lostGpu++;
