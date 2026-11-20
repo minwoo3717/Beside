@@ -1,6 +1,9 @@
 # 셸 스크립트와 gradlew 는 Windows 에서도 LF 를 유지한다 (bash 가 CR 을 읽으면 깨진다).
 *.sh      text eol=lf
 gradlew   text eol=lf
+# systemd 단위(deploy/backup·watchdog)도 VM 에 그대로 복사한다. CR 이 남으면 ExecStart 경로가 깨진다.
+*.service text eol=lf
+*.timer   text eol=lf
 *.bat     text eol=crlf
 *.ps1     text eol=crlf
 # fetch_models.sh 가 Linux 에서 읽는다
