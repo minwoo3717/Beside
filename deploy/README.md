@@ -212,12 +212,15 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 | 컨테이너 | 한도 |
 |---|---|
 | backend | 3g (`mem_limit`, 힙은 그 40 %, 나머지는 전처리 모델의 ONNX Runtime 네이티브 메모리) |
+| caddy | 2g (`mem_limit`) + `GOMEMLIMIT=1638MiB`(약 80 %, Go GC 목표) |
 | prometheus | 384m |
 | grafana | 256m |
-| caddy · Docker · OS | 한도 없음, 약 0.5GB |
-| **합계** | **약 4.2 / 4GB** (한도 합) |
+| Docker · OS | 한도 없음, 약 0.5GB |
+| **합계** | **약 5.6GB + OS** (한도 합) |
 
-monitoring 프로필까지 띄우면 한도 합이 4GB 를 넘으므로 **swap 2GB 가 필요**하다(한 번). 지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 다만 caddy 는 한도가 없고 2026-11-18 부하 시험 A1 에서 최대 2,246 MiB 까지 썼다(위 표의 추정보다 크다). 그때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
+caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다 **[구현됨: compose 값, CI 가 확인]**. 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다).
+
+지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 4GB VM 이면 한도 합이 RAM 을 넘으므로 **swap 2GB 가 필요**하다(한 번). A1 때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
 
 ```bash
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
