@@ -133,7 +133,16 @@ class RefusedMetricNameTest(unittest.TestCase):
         self.assertEqual(collect.REFUSED_METRIC, name)
         guard = (collect.HERE / "lib" / "guard.js").read_text(encoding="utf-8")
         self.assertIn(f"export const REFUSED_METRIC = '{name}';", guard)
-        for where, text in (("collect.py", " ".join(q for _, q in collect.queries("loadtest"))), ("lib/guard.js", guard)):
+        # Grafana 'Beside 운영': the 5xx panel takes the refusals out the same way, the jobs panel draws them
+        dashboard = json.loads((collect.REPO / "deploy" / "monitoring" / "grafana" / "dashboards" / "beside-ops.json")
+                               .read_text(encoding="utf-8"))
+        exprs = {(p["id"], t["refId"]): t["expr"] for p in dashboard["panels"] for t in p.get("targets", [])}
+        five_xx = next(p["id"] for p in dashboard["panels"] if p["title"] == "5xx · 4xx 비율")
+        jobs = next(p["id"] for p in dashboard["panels"] if p["title"].startswith("작업 생성 · 재시도"))
+        self.assertIn(f'- (sum(rate({name}{{env="$env"}}[$__rate_interval])) or vector(0)), 0)', exprs[(five_xx, "A")])
+        self.assertTrue(any(name in e for (panel, _), e in exprs.items() if panel == jobs))
+        for where, text in (("collect.py", " ".join(q for _, q in collect.queries("loadtest"))), ("lib/guard.js", guard),
+                            ("beside-ops.json", " ".join(exprs.values()))):
             self.assertEqual(set(self.NAME.findall(text)), {name}, where)
 
 

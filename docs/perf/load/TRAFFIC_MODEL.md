@@ -149,7 +149,7 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 - **A3**: 업로드는 모두 유효하므로 202 가 아닌 4xx(413·400, 프록시의 404·413, `RATE_LIMITED` 코드가 없는 429)는 전체와 유지 구간마다 0건이다(`load_unexpectedCount == 0`). 빠른 거절은 지연 기준도 통과하기 때문이다. 429 `RATE_LIMITED`·503 `QUEUE_FULL`(아직 계약에 없는 코드)은 `load_rejectedCount` 로 따로 세고 기준이 없다. 이 거절이 A3 유지 구간을 실패로 만드는지는 정하지 않았다(안건 #21·#22). 위 표의 1.5·3초는 0.8 MB 업로드의 기준이라, 20 MB 업로드의 지연은 유지 구간마다 기록만 하고 판정하지 않는다.
 
 - **깨지는 지점**: 유지 구간에서 위 기준을 처음 넘는 단계다. 아래 중단 조건의 오류 기준(k6 누적 오류 비율, 가드의 5xx 비율)이 멈춘 단계도 깨진 단계로 친다. 통과는 유지 구간을 끝까지 돌고 그 구간에 시작한 흐름이 모두 끝난 단계뿐이다. 보고하는 용량은 마지막으로 통과한 단계다(요약의 `breakingPoint.lastPassingStage`). 단계가 올라가기만 하는 시험(A1~A4)에 쓰고, 운영 상한(그 단계 사용자 수의 70 %, `operatingLimitUsers`)은 사용자 수로 단계를 거는 A1 에만 둔다. A5(스파이크·회복)와 A6(소크 한 단계)는 깨지는 지점 없이 단계별 판정만 본다.
-- **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 멈춘다. k6 가 스스로 멈춘다: 누적 오류 비율 > 5 %(첫 1분 뒤부터, `abortOnFail`, k6 종료 코드 99)와, `PROM_URL` 을 주면 가드가 보는 서버의 최근 1분 5xx 비율 > 5 %(15초 간격 2번 연속)·디스크 > 80 %(108). A0(`smoke.js`)·F3(`f3_uploads.js`)·F4(`f4_abort.py`)에는 이 둘이 없어 사람이 Ctrl+C 한다. 단계를 깨질 때까지 올리는 A1~A4 에서 오류 기준(누적 오류 비율, 가드의 5xx 비율)이 멈춘 것은 탐색의 예정된 끝이다(위 '깨지는 지점'): 부하가 멈춘 뒤 healthz 가 200 이고 5xx 비율이 0 으로 돌아오면 수집하고 다음 실행으로 간다. 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 %이면, 그리고 그 밖의 시험(A0·A5·A6·G·F)은 그 자리에서 멈추고 기본 스택으로 복구한다(`deploy/loadtest/README.md` '지키는 것').
+- **중단 조건**: 오류 > 5 %가 1분 지속되거나 디스크 > 80 %이면 멈춘다. k6 가 스스로 멈춘다: 누적 오류 비율 > 5 %(첫 1분 뒤부터, `abortOnFail`, k6 종료 코드 99)와, `PROM_URL` 을 주면 가드가 보는 서버의 최근 1분 5xx 비율(큐 상한이 일부러 낸 503 `QUEUE_FULL` 은 뺀다, 안건 #21 [제안값] D9, 계약 회의 전) > 5 %(15초 간격 2번 연속)·디스크 > 80 %(108). A0(`smoke.js`)·F3(`f3_uploads.js`)·F4(`f4_abort.py`)에는 이 둘이 없어 사람이 Ctrl+C 한다. 단계를 깨질 때까지 올리는 A1~A4 에서 오류 기준(누적 오류 비율, 가드의 5xx 비율)이 멈춘 것은 탐색의 예정된 끝이다(위 '깨지는 지점'): 부하가 멈춘 뒤 healthz 가 200 이고 5xx 비율이 0 으로 돌아오면 수집하고 다음 실행으로 간다. 부하가 멈춘 뒤에도 오류가 이어지거나 디스크 > 80 %이면, 그리고 그 밖의 시험(A0·A5·A6·G·F)은 그 자리에서 멈추고 기본 스택으로 복구한다(`deploy/loadtest/README.md` '지키는 것').
 
 ## 9. 시험 구성 (상태는 행마다)
 
@@ -233,6 +233,6 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
 
 ## 12. 데이터 위치와 다시 계산
 
-- 원시 결과: k6 실행마다 한 폴더 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 그 실행의 k6 summary, `collect.py` 가 쓰는 `run.json`·Prometheus 구간 CSV 18개(8절 'GC 뒤 힙' 의 `jvm_heap_after_gc` 포함), 그 실행의 VM 쪽 파일(`vm/`, run.json 에는 `collect.py --attach` 로만 들어감)이 모인다. 절차는 `deploy/loadtest/README.md` 5번. k6 스크립트와 수집 도구는 [scripts/load/](../../../scripts/load/).
+- 원시 결과: k6 실행마다 한 폴더 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 그 실행의 k6 summary, `collect.py` 가 쓰는 `run.json`·Prometheus 구간 CSV 19개(8절 'GC 뒤 힙' 의 `jvm_heap_after_gc`, 큐 상한 거절률 `jobs_refused_rate` 포함. 1~4차 VM 실행은 `jobs_refused_rate` 없이 18개), 그 실행의 VM 쪽 파일(`vm/`, run.json 에는 `collect.py --attach` 로만 들어감)이 모인다. 절차는 `deploy/loadtest/README.md` 5번. k6 스크립트와 수집 도구는 [scripts/load/](../../../scripts/load/).
 - 부하 문서는 `docs/perf/notes/` 에 넣지 않는다. `scripts/perf/report.py` 가 그 폴더의 모든 `.md` 를 루프백 보고서 PDF 에 넣기 때문이다.
 - exp-01 의 T 가 나오면: `scripts/load/model.py` 에 그 T 를 넣는다 → 3·5절 표와 Q_max 를 다시 계산한다 → 다시 계산한 값은 계약 회의 자료([2026-11-20_queue-cap.md](2026-11-20_queue-cap.md))에 넣는다 → 회의가 정한 뒤에 이 문서의 표와 안건 #21 의 상한 값을 고친다([CHECKLIST](../../CHECKLIST.md) 5절 '부하 시험' 의 재계산 항목과 같은 규칙) → G 시리즈 스텁 지연을 그 T 로 바꿔 다시 잰다.

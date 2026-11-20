@@ -186,7 +186,7 @@
   - `collect.py` 의 `http_5xx_ratio` 질의에 `or vector(0)` 을 붙일지: 서버가 뜬 뒤 5xx 를 한 번도 내지 않아 5xx 시계열이 없으면 머리줄만 있는 CSV 와 'no data: http_5xx_ratio' 가 된다(Prometheus 대역에서 봄).
 - [ ] 찾은 개선 **[계획]**. (BE)
   - Grafana 'Beside 운영' 의 'JVM 힙' 패널(단위 bytes)이 'GC 뒤 살아 있는 데이터' 선을 `jvm_gc_live_data_size_bytes` 로 그려 G1 GC 에서는 0 이나 옛 값에 머문다(mock jar 로컬 k6 실행, 1.5 GB 힙에서 내내 0) → `max(jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"})`(0~1)를 기준선 0.75 와 함께 비율 패널로 따로 그린다(`deploy/monitoring/grafana/dashboards/beside-ops.json`).
-  - `collect.py` 는 실행 구간 안의 서버 재시작을 알아보지 못한다: 오류 기준으로 멈춘 실행(run.json `outcome.ended` = `ruleStop`)은 지금 `vm/backend.log`·k6 출력으로 손으로 확인한다. `process_start_time_seconds` 를 19번째 CSV 로 더하면 재시작이 보인다(README 의 CSV 수와 `test_collect.py` 도 함께 바꿈).
+  - `collect.py` 는 실행 구간 안의 서버 재시작을 알아보지 못한다: 오류 기준으로 멈춘 실행(run.json `outcome.ended` = `ruleStop`)은 지금 `vm/backend.log`·k6 출력으로 손으로 확인한다. `process_start_time_seconds` 를 20번째 CSV 로 더하면(검토 브랜치에서 19번째는 큐 상한 거절률 `jobs_refused_rate`) 재시작이 보인다(README 의 CSV 수와 `test_collect.py` 도 함께 바꿈).
 - [x] F2 는 `gpu_queue.js` 에 `-e SCENARIO=F2` 를 붙여 돌리고, k6 가 끝날 때 내는 보고의 첫 줄(`== beside load: gpu_queue.js (F2) ...`)과 k6-summary.json `meta.scenario`(run.json 에서는 `k6.meta.scenario`)가 F2 이고 `meta.recompute` 가 null 인지 확인한다 — 2026-11-19 3차 `f2r1` 에서 확인했다(k6.log 첫 줄 `(F2)`, `meta.scenario` F2, `meta.recompute` null) **[실험 결과]**(VM). run.json 맨 위 `scenario` 는 `collect.py --scenario` 로 준 값이 우선이라(배포 절차는 늘 준다) 이 확인에 쓰지 못한다. 이름 없이 돌린 F2 실행은 늘 G1 으로 적히고, 오프라인 대기 안에 스텁이 돌아와 FAILED 작업이 하나도 없으면 retry 도 없어 큐 재계산(`meta.recompute`)까지 남는다(`gpu_queue.js` 머리말). 빠뜨렸으면 run.json 의 `k6.meta.scenario`·`k6.meta.recompute` 는 쓰지 않는다. (BE)
 
 ## 6. 문서 불일치

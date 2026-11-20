@@ -325,7 +325,7 @@
       "id": 6,
       "type": "stat",
       "title": "대기열 (지금)",
-      "description": "beside_jobs_queue{state}: 서버가 5초마다 센 PENDING·PROCESSING 작업 수.",
+      "description": "beside_jobs_queue{state}: 서버가 5초마다 센 PENDING·PROCESSING 작업 수. 빨간색 기준 9 는 T=60 가정의 옛 큐 상한 제안값이고, 안건 #21 이 N 을 정한 뒤 바꾼다('대기열 길이' 패널 설명).",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -758,7 +758,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "대기열 길이",
-      "description": "beside_jobs_queue{state}: 서버가 5초마다 센 PENDING·PROCESSING 작업 수. 빨간 선 = 큐 상한 제안값 Q_max = ⌊c·(600−T)/T⌋ (c=1, T=60 이면 9).",
+      "description": "beside_jobs_queue{state}: 서버가 5초마다 센 PENDING·PROCESSING 작업 수. 빨간 선 = 큐 상한 제안값 Q_max = ⌊c·(600−T)/T⌋ (c=1, T=60 이면 9). 9 는 T=60 가정의 옛 값이다. 큐 상한(안건 #21)의 N 은 계약 회의가 정한 뒤 이 선을 바꾼다(회의 자료 docs/perf/load/2026-11-20_queue-cap.md 의 추천 [제안값]은 c=1 에서 N 19). 상한을 켜면 v1 생성·retry 는 대기 작업 + 접수 중 요청이 N 에 닿을 때 거절되므로 PENDING 은 N 에서 멈춰야 한다. 예외는 상한이 없는 v0 /api/jobs 와, 상한이 세지 않는 오래된 PENDING(beside_jobs_pending_stale)이다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -1269,7 +1269,7 @@
       "id": 17,
       "type": "timeseries",
       "title": "작업 생성 · 재시도 ($window 창)",
-      "description": "beside_jobs_created_total(POST /jobs 로 저장된 작업), beside_jobs_retried_total(POST /retry).",
+      "description": "beside_jobs_created_total(POST /jobs 로 저장된 작업), beside_jobs_retried_total(POST /retry), beside_jobs_refused_total{op}(큐 상한이 503 QUEUE_FULL 로 거절한 v1 생성·retry, 안건 #21 [제안값], 계약 회의 전. 상한이 꺼져 있으면 0, 상한 코드가 없는 서버면 선이 없다).",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -1351,6 +1351,17 @@
           "refId": "B",
           "expr": "sum(increase(beside_jobs_retried_total{env=\"$env\"}[$window]))",
           "legendFormat": "재시도",
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "C",
+          "expr": "sum by (op) (increase(beside_jobs_refused_total{env=\"$env\"}[$window]))",
+          "legendFormat": "거절 503 QUEUE_FULL ({{op}})",
           "instant": false,
           "range": true
         }
@@ -1464,7 +1475,7 @@
       "id": 20,
       "type": "timeseries",
       "title": "5xx · 4xx 비율",
-      "description": "전체 요청 중 상태 5xx·4xx 비율. 합격 기준 제안: 5xx < 0.5 %. 의도한 4xx(검증 실패·404)는 4xx 로 따로 본다.",
+      "description": "전체 요청 중 상태 5xx·4xx 비율. 합격 기준 제안: 5xx < 0.5 %. 의도한 4xx(검증 실패·404)는 4xx 로 따로 본다. 5xx 는 큐 상한이 일부러 낸 503 QUEUE_FULL(beside_jobs_refused_total)을 뺀 값이다(안건 #21 [제안값], 회의 결정 D9, 계약 회의 전). 상한이 꺼져 있거나 상한 코드가 없는 서버는 뺄 것이 없어 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수는 '작업 생성 · 재시도' 패널, 503 원래 수는 상태별 요청률로 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -1537,8 +1548,8 @@
             "uid": "beside-prometheus"
           },
           "refId": "A",
-          "expr": "sum(rate(http_server_requests_seconds_count{env=\"$env\",uri!~\"/actuator.*\",status=~\"5..\"}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval]))",
-          "legendFormat": "5xx",
+          "expr": "clamp_min(sum(rate(http_server_requests_seconds_count{env=\"$env\",uri!~\"/actuator.*\",status=~\"5..\"}[$__rate_interval])) - (sum(rate(beside_jobs_refused_total{env=\"$env\"}[$__rate_interval])) or vector(0)), 0) / sum(rate(http_server_requests_seconds_count{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval]))",
+          "legendFormat": "5xx (QUEUE_FULL 제외)",
           "instant": false,
           "range": true
         },
