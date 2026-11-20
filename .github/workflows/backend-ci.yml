@@ -51,6 +51,29 @@ jobs:
           python3 -I -m unittest discover -s scripts/load -p "test_*.py"
           node --test scripts/load/*.test.mjs
 
+      - name: VM operations scripts against stubs (watchdog, offsite backup, metadata block, GCP setup)
+        run: |
+          bash scripts/test_watchdog.sh
+          bash scripts/test_offsite_backup.sh
+          bash scripts/test_block_metadata.sh
+          bash scripts/test_gcp_ops.sh
+
+      - name: systemd units of deploy/backup and deploy/watchdog (systemd-analyze verify)
+        run: |
+          # The units start /usr/local/sbin/beside-*; verify copies pointing at the scripts under the runner's temp dir.
+          units="$RUNNER_TEMP/units"
+          mkdir -p "$units/sbin"
+          install -m 755 deploy/backup/offsite_backup.sh "$units/sbin/beside-offsite-backup"
+          install -m 755 deploy/backup/block-metadata.sh "$units/sbin/beside-block-metadata"
+          install -m 755 deploy/watchdog/beside-watchdog.sh "$units/sbin/beside-watchdog"
+          for unit in deploy/backup/*.service deploy/backup/*.timer deploy/watchdog/*.service deploy/watchdog/*.timer; do
+            sed "s#/usr/local/sbin/#$units/sbin/#" "$unit" > "$units/$(basename "$unit")"
+          done
+          # beside-block-metadata.service needs docker.service; a stand-in keeps the check independent of the runner
+          printf '[Unit]\nDescription=stand-in\n[Service]\nExecStart=/bin/true\n' > "$units/docker.service"
+          cd "$units"
+          systemd-analyze verify --man=no ./beside-*.service ./beside-*.timer
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
