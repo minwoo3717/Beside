@@ -20,7 +20,7 @@ run.json "outcome" says how the k6 run ended (k6_outcome: normal, ruleStop, abor
 verdict.aborted and verdict.guard, and "status"/"resultCandidate" say whether it may be cited as [실험 결과]: not a local
 run, not one aborted for a reason other than capacity, not a summary without verdict.aborted. A run stopped by an error
 rule stays a candidate, but its status says to rule out a server restart or a network drop first; a run whose guard
-could not read Prometheus is named in the status. collect.py prints the status and how many of the 18 CSVs it wrote.
+could not read Prometheus is named in the status. collect.py prints the status and how many of the 19 CSVs it wrote.
 """
 from __future__ import annotations
 
@@ -40,6 +40,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 DROP_LABELS = {"__name__", "env", "instance", "job"}
+# The server's count of v1 creates and retries the queue cap answered 503 QUEUE_FULL (docs/METRICS.md §5.1, Micrometer
+# beside.jobs.refused{op}; REVIEW_CHECKLIST #21 [제안값], before the contract meeting). The same name as lib/guard.js
+# REFUSED_METRIC; test_collect.py checks both against the METRICS.md row.
+REFUSED_METRIC = "beside_jobs_refused_total"
 
 
 def selector(env: str, extra: str = "") -> str:
@@ -50,10 +54,15 @@ def selector(env: str, extra: str = "") -> str:
 
 
 def queries(env: str) -> list:
-    """(name, PromQL) pairs, the same for every run so runs can be compared file by file. One CSV each (18)."""
+    """(name, PromQL) pairs, the same for every run so runs can be compared file by file. One CSV each (19)."""
     s = lambda extra="": selector(env, extra)  # noqa: E731
     req_count = f"http_server_requests_seconds_count{s()}"
     status_5xx = s('status=~"5.."')  # no backslashes inside f-string braces: Python 3.10 on the VM
+    # http_5xx_ratio leaves out the intended 503 QUEUE_FULL refusals (#21 [제안값], meeting decision D9), as lib/guard.js
+    # does: "or vector(0)" when the server has no refusal counter (no cap code), so runs without a cap read as before;
+    # clamp_min(.., 0) because a refusal is counted just before its 503 is recorded. The raw 503s stay in
+    # http_rps_by_status, the refusals per op in jobs_refused_rate.
+    refused_rate = f"(sum(rate({REFUSED_METRIC}{s()}[1m])) or vector(0))"
     heap = s('area="heap"')
     # jvm_heap_after_gc is the "GC 뒤 힙 < 75 %" criterion (TRAFFIC_MODEL.md §8), a 0..1 ratio to compare with 0.75.
     # It is Micrometer's jvm_memory_usage_after_gc_percent (JvmHeapPressureMetrics, Spring Boot 3.2 / Micrometer 1.12):
@@ -76,8 +85,10 @@ def queries(env: str) -> list:
         ("http_p99_by_uri", f"histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
         ("http_rps_by_uri", f"sum by (uri) (rate({req_count}[1m]))"),
         ("http_rps_by_status", f"sum by (status) (rate({req_count}[1m]))"),
-        ("http_5xx_ratio", f"sum(rate(http_server_requests_seconds_count{status_5xx}[1m])) / clamp_min(sum(rate({req_count}[1m])), 1e-9)"),
+        ("http_5xx_ratio", f"clamp_min(sum(rate(http_server_requests_seconds_count{status_5xx}[1m])) - {refused_rate}, 0)"
+                           f" / clamp_min(sum(rate({req_count}[1m])), 1e-9)"),
         ("jobs_queue", f"sum by (state) (beside_jobs_queue{s()})"),
+        ("jobs_refused_rate", f"sum by (op) (rate({REFUSED_METRIC}{s()}[1m]))"),
         ("jobs_finished_rate", f"sum by (result, code) (rate(beside_jobs_finished_total{s()}[1m]))"),
         ("asset_downloads_rate", f"sum by (outcome) (rate(beside_asset_downloads_total{s()}[1m]))"),
         ("process_cpu", f"process_cpu_usage{s()}"),

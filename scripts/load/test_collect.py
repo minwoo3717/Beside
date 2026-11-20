@@ -2,6 +2,7 @@
 import csv
 import io
 import json
+import re
 import tempfile
 import threading
 import unittest
@@ -12,11 +13,11 @@ from pathlib import Path
 
 import collect
 
-REQUIRED = ["http_p95_by_uri", "http_rps_by_uri", "http_5xx_ratio", "jobs_queue", "process_cpu", "system_cpu", "jvm_heap_used",
-            "jvm_heap_max", "jvm_heap_after_gc", "tomcat_busy", "disk_free"]
+REQUIRED = ["http_p95_by_uri", "http_rps_by_uri", "http_5xx_ratio", "jobs_queue", "jobs_refused_rate", "process_cpu", "system_cpu",
+            "jvm_heap_used", "jvm_heap_max", "jvm_heap_after_gc", "tomcat_busy", "disk_free"]
 # The number of CSVs collect.py writes. scripts/load/README.md names it too ("Prometheus query_range CSV N개"):
 # ReadmeTest compares the two.
-CSV_COUNT = 18
+CSV_COUNT = 19
 
 
 def matrix(*series):
@@ -85,9 +86,55 @@ class QueryListTest(unittest.TestCase):
         qs = dict(collect.queries(""))
         self.assertEqual(qs["disk_free"], "disk_free_bytes")
         self.assertIn('http_server_requests_seconds_count{status=~"5.."}', qs["http_5xx_ratio"])
+        self.assertIn("(sum(rate(beside_jobs_refused_total[1m])) or vector(0))", qs["http_5xx_ratio"])
+        self.assertEqual(qs["jobs_refused_rate"], "sum by (op) (rate(beside_jobs_refused_total[1m]))")
         for q in qs.values():
             self.assertNotIn("{,", q)
             self.assertNotIn("{}", q)
+
+    def test_5xx_ratio_leaves_out_the_intended_queue_full_refusals(self):
+        # REVIEW_CHECKLIST #21 [제안값] (D9, before the contract meeting): the queue cap's 503 QUEUE_FULL are intended, so
+        # the 5xx numerator takes out the server's refusal counter, the same as lib/guard.js (summary_abort.test.mjs);
+        # "or vector(0)" when the server has no such counter, clamped at 0. The raw 503 rate stays in http_rps_by_status.
+        qs = dict(collect.queries("loadtest"))
+        self.assertEqual(qs["http_5xx_ratio"],
+                         'clamp_min(sum(rate(http_server_requests_seconds_count{env="loadtest",status=~"5.."}[1m]))'
+                         ' - (sum(rate(beside_jobs_refused_total{env="loadtest"}[1m])) or vector(0)), 0)'
+                         ' / clamp_min(sum(rate(http_server_requests_seconds_count{env="loadtest"}[1m])), 1e-9)')
+        # the refusals themselves, per op (create | retry): compared with k6's load_queueFullCount per endpoint
+        self.assertEqual(qs["jobs_refused_rate"], 'sum by (op) (rate(beside_jobs_refused_total{env="loadtest"}[1m]))')
+        self.assertEqual(qs["http_rps_by_status"], 'sum by (status) (rate(http_server_requests_seconds_count{env="loadtest"}[1m]))')
+
+
+class RefusedMetricNameTest(unittest.TestCase):
+    """The refusal counter the load tooling takes out of the 5xx ratio is the one docs/METRICS.md §5.1 names (the row
+    added with the Java counter on the queue-cap branch, #21). If the contract meeting renames it, "or vector(0)" would
+    quietly subtract nothing and the new CSV would come back empty, so the name is pinned to that row here."""
+
+    NAME = re.compile(r"beside_jobs_refused\w*")
+
+    def metrics_row(self) -> list:
+        rows = [line for line in (collect.REPO / "docs" / "METRICS.md").read_text(encoding="utf-8").splitlines()
+                if line.startswith("| `beside.jobs.refused` |")]
+        self.assertEqual(len(rows), 1, rows)
+        return [cell.strip() for cell in rows[0].strip().strip("|").split("|")]
+
+    def test_metrics_md_row_is_the_java_counter(self):
+        micrometer, prometheus, kind = self.metrics_row()[:3]
+        self.assertEqual(kind, "counter")
+        # Micrometer counter a.b.c is exported to Prometheus as a_b_c_total
+        self.assertEqual(prometheus, "`" + micrometer.strip("`").replace(".", "_") + "_total`")
+        java = (collect.REPO / "backend" / "src" / "main" / "java" / "com" / "example" / "mockbackend" / "service"
+                / "JobMetrics.java").read_text(encoding="utf-8")
+        self.assertIn(f"Counter.builder(\"{micrometer.strip('`')}\")", java)
+
+    def test_tooling_uses_the_metrics_md_name(self):
+        name = self.metrics_row()[1].strip("`")
+        self.assertEqual(collect.REFUSED_METRIC, name)
+        guard = (collect.HERE / "lib" / "guard.js").read_text(encoding="utf-8")
+        self.assertIn(f"export const REFUSED_METRIC = '{name}';", guard)
+        for where, text in (("collect.py", " ".join(q for _, q in collect.queries("loadtest"))), ("lib/guard.js", guard)):
+            self.assertEqual(set(self.NAME.findall(text)), {name}, where)
 
 
 class ReadmeTest(unittest.TestCase):

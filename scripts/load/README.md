@@ -3,7 +3,7 @@
 쏘카 수준 목표 트래픽의 계산·시험 도구다. 가정·목표 등급·공식·합격 기준·시험 구성의 근거는 [docs/perf/load/TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md) 한 곳이고, 이 README 의 "§N" 은 모두 그 문서의 절이다(§2 가정, §3 목표 등급, §4 공식, §7 디스크, §8 합격 기준, §9 시험 구성, §10 정직성 규칙, §11 이름). 트래픽 모델(`model.py`)이 T1/T2/T3 의 요청률과 GPU 대수를 계산하고, k6 스크립트가 그 요청률을 배포 VM 에 건다. 결과는 k6 실행 하나마다 폴더 하나(`docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`)에 모으고, `collect.py` 가 그 폴더에 조건과 함께 `run.json` 을 쓴다.
 
 **상태**
-- 스크립트: **[구현됨]**. 단위 테스트(Python 117개, Node 95개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
+- 스크립트: **[구현됨]**. 단위 테스트(Python 120개, Node 96개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
 - 트래픽 모델: **[파생]** — `tiers.json` 의 **[가정]** 으로 계산한 값이다. 측정값이 아니다.
 - 측정: A0~A4 는 2026-11-18 VM 1차, 실제 GPU 의 G0r·G1r·G3r 는 같은 날 2차, G2r·F1b-real·F2-real 과 F1a(실제 Pod 를 스텁으로)는 2026-11-19 3차, 같은 Pod 의 c=1 과부하·c=2 와 F1b-real 다시(PR #11)·G0r(새 시작 기본값)는 2026-11-19 UTC 4차 **[실험 결과]**(`docs/perf/load/2026-11-18_vm-1st.md`, `2026-11-18_vm-2nd.md`, `2026-11-19_vm-3rd.md`, `2026-11-20_vm-4th.md`). A5·A6, 스텁 G1~G3, 스텁 F1~F5 는 **[계획]**.
 
@@ -23,7 +23,7 @@
 | `failure/f3_uploads.js` | **F3** 잘못된 업로드 9종의 상태·`error.code` 일치(계획한 업로드를 모두 판정했는지 포함), 그동안 폴링 p95. 끝에 사례별 줄과 남은 파일 확인 명령을 출력한다 |
 | `failure/f3_throttled.py` | **F3** 느린 업로드: 유효한 사진 하나(0.4 MB)를 10 kB/s 로 올려 202·걸린 시간(약 40초)·k6 폴링 구간 안인지·그동안 폴링 p95 를 확인하고, 로컬 서버면 남은 파일도 센다(표준 라이브러리). k6 바로 앞에 백그라운드로 띄운다. 종료 코드 0 통과, 1 확인 실패, 2 시작 못 함 |
 | `failure/f4_abort.py` | **F4** 에셋 다운로드 N회를 본문 중간에 끊고, 작업 COMPLETED 유지와 다시 받은 파일의 SHA-256 일치를 확인(표준 라이브러리) |
-| `collect.py` | 결과 수집: 실행 폴더 하나에 `run.json`(조건·판정·끝난 방식 `outcome`·인용 후보 `resultCandidate`) + Prometheus query_range CSV 18개 + 첨부 복사 |
+| `collect.py` | 결과 수집: 실행 폴더 하나에 `run.json`(조건·판정·끝난 방식 `outcome`·인용 후보 `resultCandidate`) + Prometheus query_range CSV 19개 + 첨부 복사 |
 | `make_fixtures.py` | 입력 파일: `photo-400k.png`(0.40 MB), `photo-5mb.png`(4.99 MB), `glb-1.5mb.glb`(1,500,000 B) → `scripts/load/out/fixtures/`(커밋 안 함). GLB 는 부하 시험의 유일한 합성 GLB 다: `scripts/perf/fixtures.py` 의 `glb_synthetic(1_500_000, seed=14)` 와 같은 바이트, sha256 `03a0c8f2b05aee204237cee07ddb41c42173014b33ef0007a43c7b83e2fc0ee9`(deploy/loadtest/README.md 3번의 `/tmp/lt-sample-1500000.glb` 와 같다) |
 | `lib/` | k6 공용: `config`(환경·사용자→도착률), `stages`(경과 시간으로 단계 태그, 단계마다 시나리오 하나), `multipart`, `bodies`(사진은 VU 마다 한 번만 열기), `flow`(사용자 흐름), `classify`, `thresholds`(§8 기준), `summary`(handleSummary), `seed`, `guard`(Prometheus 중단 감시), `queue`, `metrics` |
 | `testing/`, `*.test.mjs` | Node 테스트: k6 모듈을 대역으로 바꿔 각 스크립트의 init(단계·기준)과 흐름을 가짜 API 서버로 돌린다 |
@@ -293,7 +293,7 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
 
 ### 큐 상한을 켠 실행 [계획]
 
-서버의 큐 상한(안건 #21: 대기 작업이 N 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 계약 회의 전이라 아직 없다. k6 쪽 준비만 해 두었다.
+서버의 큐 상한(안건 #21: 대기 작업이 N 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 계약 회의 전이라 main 에 없고, 검토 브랜치에만 기본 꺼짐으로 있다 **[제안값]**. 상한을 켠 VM 실행은 **[계획]** 이다(VM 쪽 값은 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
 
 - `-e QUEUE_CAP=<N>` 으로 서버에 건 상한을 요약 `meta.queueCap` 에 남긴다. 주지 않으면 null, 0 은 상한을 끈 서버다. `-e QUEUE_RETRY_AFTER=<R>`(공통, `lib/config.js`)을 주면 `meta.queueRetryAfterS` 에 남는다.
 - 거절 수: 503 `QUEUE_FULL` 은 `load_rejectedCount` 에 더해 `load_queueFullCount` 로 엔드포인트별로 센다. `meta.measuredRefused` 는 거절된 생성, `meta.measuredRefusedRetries` 는 거절된 retry 다. 거절된 생성은 작업을 만들지 않아 `meta.measuredCreates` 에 들지 않는다. 지연(`load_postMs`)과 `meta.measuredCreatePosts` 에는 든다.
@@ -304,7 +304,7 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
   - 거절된 흐름은 `load_flowOkRatio` 에서 0 이다. gpu_queue 는 ρ < 1 일 때만 `load_flowOkRatio >= 0.95` 를 건다. 그래서 ρ < 1 실행에서 거절이 흐름의 5 % 를 넘으면 이 기준이 실패한다(k6 종료 코드 99). ρ ≥ 1 실행(G3 등)에는 흐름 기준이 없다. A1(`api_staged.js`)은 같은 기준을 단계마다 걸어, 거절이 많은 단계는 fail 이 된다. 거절을 흐름 실패로 볼지는 계약 회의에서 정한다.
   - 생성 지연 기준(`http_req_duration{endpoint:create}`)에 거절된 POST 도 들어간다.
   - `create 202` check 는 거절마다 실패하므로 `verdict.checksFailed` 에 거절 수가 들어간다. 503 은 `verdict.httpStatus` 의 5xx(`5xxByCode` 의 503)에도 든다(보고만).
-  - 가드(`PROM_URL`)의 서버 5xx 비율은 의도한 503 도 센다. 거절을 5xx 에서 빼는 것은 서버 쪽 거절 지표가 생긴 뒤에 한다 [계획].
+- 서버 쪽 5xx 비율은 의도한 503 `QUEUE_FULL` 을 뺀다(안건 #21 [제안값], 회의 결정 D9, 계약 회의 전): 가드(`PROM_URL`)와 `collect.py` 의 `http_5xx_ratio` 는 5xx 에서 서버의 거절 카운터 `beside_jobs_refused_total`([docs/METRICS.md](../../docs/METRICS.md) §5.1, 상한이 503 으로 답한 것만 센다)의 비율을 빼고 0 아래는 0 으로 둔다. 카운터가 없는 서버(상한 코드 없음)는 `or vector(0)` 으로 아무것도 빼지 않아 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수 자체는 `collect.py` 의 `jobs_refused_rate`(op별)이고, 503 원래 수는 `http_rps_by_status` 에 남는다. 이름은 METRICS.md 행과 같아야 한다(`test_collect.py` 가 확인). k6 의 `load_queueFullCount{endpoint:create}`·`{endpoint:retry}` 와 맞춰 볼 때 `jobs_refused_rate` 는 비율이라 개수로 쓰지 않는다(`increase()` 도 보간해 정수가 아니다). 개수는 실행 시작·끝에 서버 카운터의 순간값을 남겨 `op` 별로 뺀다(VM 절차는 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
 - 서버 쪽 성공률 주의: 실패한 실행은 항상 `passthrough="false"` 로 붙는다(backend 는 스텁의 주입 실패와 모델 실패를 구분하지 못한다). 그래서 `passthrough="false"` 로 거른 성공률은 추론 서비스가 실제 모델을 돌릴 때만 맞다. G·F 스텁 실행에서는 거르지 않은 성공률(`beside_jobs_finished_total` 의 result 비율, `collect.py` 의 `jobs_finished_rate` CSV)이나 k6 의 `load_flowOkRatio` 를 쓴다.
 
 ### 큐 상한 모형 (`cap_model.py`, 안건 #21)
@@ -346,7 +346,7 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
 #   --scenario F4 --base-url $BASE_URL --start <f4.json 의 startedAt> --end <f4.json 의 endedAt> --attach $RUN/f4.json
 ```
 
-`collect.py` 는 `run.json written to <run>/run.json`, `status: <run.json 의 status>`, `prometheus: N of 18 CSV written to <run>/prometheus`(실패한 질의는 `; failed: …`, 머리줄만 온 CSV 는 `; no data: …`; `--prom-url` 이 없으면 `prometheus: no --prom-url`)를 출력한다. `no data` 는 `--prom-env`(기본 `loadtest`; k6 가드의 `PROM_ENV` 는 읽지 않으므로 바꿨으면 같은 값을 준다)가 서버의 `METRICS_ENV` 와 다르면 전부, 5xx 가 하나도 없으면 `http_5xx_ratio`(빈 합), Windows 서버면 `process_open_files` 에 나온다. 종료 코드는 0 완료, 1 썼지만 질의 일부 실패, 2 run.json 을 쓰지 않음(잘못된 인자, 읽을 수 없는 요약, 모르는 구간)이다. `--photo`·`--attach` 로 준 파일이 없으면 Python 오류(`FileNotFoundError`)와 종료 코드 1 로 끝나고 run.json 은 쓰지 않는다(`--attach` 쪽이면 `prometheus/*.csv` 는 이미 쓴 뒤다): VM 쪽 파일을 먼저 `vm/` 에 가져온 뒤 돌린다.
+`collect.py` 는 `run.json written to <run>/run.json`, `status: <run.json 의 status>`, `prometheus: N of 19 CSV written to <run>/prometheus`(실패한 질의는 `; failed: …`, 머리줄만 온 CSV 는 `; no data: …`; `--prom-url` 이 없으면 `prometheus: no --prom-url`)를 출력한다. `no data` 는 `--prom-env`(기본 `loadtest`; k6 가드의 `PROM_ENV` 는 읽지 않으므로 바꿨으면 같은 값을 준다)가 서버의 `METRICS_ENV` 와 다르면 전부, 5xx 가 하나도 없으면 `http_5xx_ratio`(빈 합), Windows 서버면 `process_open_files`, 큐 상한 코드가 없는 서버(지금 main)면 `jobs_refused_rate` 에 나온다. 종료 코드는 0 완료, 1 썼지만 질의 일부 실패, 2 run.json 을 쓰지 않음(잘못된 인자, 읽을 수 없는 요약, 모르는 구간)이다. `--photo`·`--attach` 로 준 파일이 없으면 Python 오류(`FileNotFoundError`)와 종료 코드 1 로 끝나고 run.json 은 쓰지 않는다(`--attach` 쪽이면 `prometheus/*.csv` 는 이미 쓴 뒤다): VM 쪽 파일을 먼저 `vm/` 에 가져온 뒤 돌린다.
 
 `docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/` 에 남는 것:
 
@@ -354,7 +354,7 @@ python scripts/load/collect.py $RUN --scenario A1 --tier T3 --summary $RUN/k6-su
 |---|---|
 | `k6-summary.json` | handleSummary 출력. `meta`: 스크립트, 시나리오, RUN_ID, 시작·끝, `testRunDurationMs`, 부하 예정·실제 길이 `loadPlannedS`·`loadRanS`, RTT(`rttBaseMsUsed`·`rttBaseMsMeasured`), 단계 `stages`(사용자 수·도착률·`holdS`·`holdEndS`, A2·A3·A4 는 그 단계의 시나리오 `scenario`), 스크립트별 항목 — A1·A5·A6 `vus`(`preAllocated`·`max` 는 flows 시나리오, `browse` 는 browse 시나리오의 `{ preAllocated, max }`, `BROWSE=0` 이면 null), A3·A4 `vus`(`preAllocated`, `max`, `byLevel`, `peakPreAllocated`, `maxByLevel`), A3 `expectedUploads`·`expectedUploadGB`, A2 `mode`(`load`·`seed-only`)·`rps`·`ids`(IDS_FILE: `file`·`files`·`completed`·`pending`·`checkedInSetup`·`pendingAgeS`·`endCheck`; 시드: `seeded`·`pending`·`idsOut`·`endCheck`), G `arrivalProcess`·`prediction`·`predictionNote`·`measuredQueuedMs`·`measuredProcessingMs`·`measuredCreates`·`measuredCreatePosts`·`measuredRetries`·`measuredRefused`·`measuredRefusedRetries`·`measuredRetryAfterChecks`·`measuredArrivalWindowS`·`measuredJobsPerHour`·`queueCap`·`queueRetryAfterS`·`recompute`·`preAllocatedVUs`·`maxVUs`, F3 `cases[]`(`expectedStatus`·`expectedCode`·`matchRate`·`checks`·`expectedChecks`·`photoPrefix`)·`resets`·`pollJob`·`photoNames`·`leftoverCheckVm`·`gracefulStopS`. `verdict`: `thresholdsOk`, 끝난 방식 `aborted`(정상이면 null, 위 "실행이 어떻게 끝났는지"), `unfinishedFlows`, 실패 기준, 단계별 판정 `stages[]`(`status`·`holdS`·`heldS`·`dropped`(A2·A3·A4)·`latency`·`httpStatus`·`sentMbps`·`assetMbps`), 깨지는 지점 `breakingPoint`·`breakingPointNote`, 가드 `guard`, `httpReqs`, `dataSentMbps`·`peakStageSentMbps`·`uplinkRatio`·`uplinkRatioWholeRun`, `droppedIterations`, `droppedByScenario`(요약에 남은 `dropped_iterations{scenario:…}` 마다 수 — A1·A5·A6 은 `flows`·`browse`, A2·A3·A4 는 단계 시나리오, 없으면 null), `checksFailed`, `unexpectedCount`, 상태 계열 `httpStatus`(위 '상태 계열'), `vusMax`. `k6`: 원본 지표와 `setup_data`(setup 이 끝난 시각 `readyAtMs` 포함). 중단된 실행은 `thresholdsOk` false 다 |
 | `run.json` | `status`(인용 여부를 적은 글), `resultCandidate`(true 면 [실험 결과] 후보), `outcome`(`ended`: `normal` · `ruleStop`(abortOnFail 오류 기준이나 가드의 5xx 기준이 멈춤) · `aborted`(그 밖의 중단) · `unknown`(요약에 `verdict.aborted` 가 없음) · null(`--summary` 없음, 예 F4), `abortedBy`, `reason`, `guardFailures`, `guardLastError`), 조건: VM 사양, 도구 커밋(`git rev-parse HEAD`, scripts/load 미커밋 변경 여부), 서버 커밋, k6 버전, 업링크, 클라이언트 CPU, 사진 크기·SHA-256, 티어, 시나리오, 구간, k6 판정 사본, Prometheus 질의 목록 |
-| `prometheus/*.csv` | `unix,time,series,value`, 18개: http p95/p99(uri별), RPS(uri·status별), 5xx 비율, `beside_jobs_queue`(state별), 작업 종료율, 에셋 다운로드(outcome별), process/system CPU, 힙 사용·최대, GC 뒤 힙 비율(`jvm_heap_after_gc`, 0~1), GC, Tomcat 바쁜 스레드, Hikari 대기, 열린 파일, 디스크 여유 |
+| `prometheus/*.csv` | `unix,time,series,value`, 19개: http p95/p99(uri별), RPS(uri·status별), 5xx 비율(큐 상한의 의도한 503 `QUEUE_FULL` 은 뺌, 아래 "큐 상한을 켠 실행"), `beside_jobs_queue`(state별), 큐 상한 거절률(`jobs_refused_rate`, op별), 작업 종료율, 에셋 다운로드(outcome별), process/system CPU, 힙 사용·최대, GC 뒤 힙 비율(`jvm_heap_after_gc`, 0~1), GC, Tomcat 바쁜 스레드, Hikari 대기, 열린 파일, 디스크 여유 |
 | `vm/` | 그 실행의 VM 쪽 원본(events.jsonl, `docker stats`, glb.sha256, F3 의 f3-leftovers.txt 등). run.json 에는 `--attach` 로 준 것만 들어간다 |
 | `attachments/` | `--attach` 로 준 파일의 사본(F3 의 f3-throttled.json, F4 보고 등) |
 

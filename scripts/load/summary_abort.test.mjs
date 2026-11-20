@@ -467,6 +467,32 @@ test('guard: guardLoop returns once the load is over, and keeps guarding the dra
   assert.ok(Date.now() >= 50000 && Date.now() < 51000, `returned at ${Date.now()} ms`);
 });
 
+test('guard: the 5xx ratio leaves out the intended 503 QUEUE_FULL refusals of the queue cap (#21 proposal)', async () => {
+  const { mod } = await guardModule();
+  // the server counter of refusals answered 503 (docs/METRICS.md §5.1; test_collect.py checks the name against that row)
+  assert.equal(mod.REFUSED_METRIC, 'beside_jobs_refused_total');
+  const q = mod.guardQueries('loadtest');
+  // numerator: 5xx minus refusals, "or vector(0)" for a server without the counter (main before the cap), clamped at 0
+  // because the two counters move at slightly different moments; denominator: every request, refusals included
+  assert.equal(q.errorRatio,
+    'clamp_min(sum(rate(http_server_requests_seconds_count{env="loadtest",status=~"5.."}[1m]))'
+    + ' - (sum(rate(beside_jobs_refused_total{env="loadtest"}[1m])) or vector(0)), 0)'
+    + ' / clamp_min(sum(rate(http_server_requests_seconds_count{env="loadtest"}[1m])), 1e-9)');
+  assert.equal(q.diskUsed, 'max(1 - disk_free_bytes{env="loadtest"} / disk_total_bytes{env="loadtest"})');
+  // a run whose 5xx are all refusals: Prometheus answers 0 for that query, so the guard does not stop it
+  const capped = await guardModule();
+  let asked = '';
+  state.handler = prometheus((kind, req) => {
+    if (kind === 'disk') return vector(0.3);
+    asked = decodeURIComponent(new URL(req.url).searchParams.get('query'));
+    return vector(asked.includes('beside_jobs_refused_total') ? 0 : 0.2);
+  });
+  for (let i = 0; i < 4; i++) capped.mod.guardCheck(capped.cfg);
+  assert.deepEqual(samples('load_guardErrorRatio').map((x) => x.value), [0, 0, 0, 0]);
+  assert.equal(samples('load_guardAbort').length, 0);
+  assert.match(asked, /or vector\(0\)/);
+});
+
 test('guard: 5xx and disk aborts leave their reason in load_guardAbort', async () => {
   const errors = await guardModule();
   state.handler = prometheus((kind) => vector(kind === 'disk' ? 0.3 : 0.2));
