@@ -26,6 +26,11 @@ public enum ErrorCode {
     NOT_FOUND(HttpStatus.NOT_FOUND),
     JOB_NOT_COMPLETED(HttpStatus.CONFLICT),
     JOB_NOT_FAILED(HttpStatus.CONFLICT),
+    /**
+     * PENDING jobs plus requests being admitted reached admission.max-pending (off by default). Proposal before the
+     * contract meeting (REVIEW_CHECKLIST #21): this code and its 503 stay on the review branch until the meeting decides.
+     */
+    QUEUE_FULL(HttpStatus.SERVICE_UNAVAILABLE),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR),
 
     // --- Job failure codes (JobResponse.error) ---

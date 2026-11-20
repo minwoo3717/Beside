@@ -24,6 +24,7 @@
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
 | `JOB_NOT_FAILED` | 409 | /retry | FAILED 가 아닌 작업에 재시도 요청 | 실패한 작업만 다시 시도할 수 있어요. | 무의미 |
 | `INTERNAL_ERROR` | 500 | 모든 엔드포인트 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
+| `QUEUE_FULL` | 503 | POST /jobs, /retry | 대기 작업(PENDING)과 지금 접수 중인 요청을 더한 수가 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이르러 작업을 만들지도, 다시 대기열에 넣지도 않음. `Retry-After` 헤더(초, 1 이상)가 붙는다. **[제안값] 안건 #21 — 계약 회의 전** | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. | `Retry-After` 초 뒤 |
 
 ### 대표 사진 검사 (`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)
 
@@ -32,6 +33,14 @@
 - 서버 설정 `preprocess.check.enabled` 로 켠다. real·prod 프로파일은 기본으로 켜고, mock 은 기본으로 끈다(앱의 Mock 개발 흐름이 동물이 없는 화면 캡처를 올리기 때문). 그래서 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #19).
 - 서버가 검사를 돌리지 못하면(동시 검사 대기 초과·모델 오류) 거절하지 않고 접수한다. 이 경우는 측정 기록에만 남는다.
 - 구현 상태: **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`: 코드·테스트). VM 에서의 시간·메모리는 **[계획]**. 실제 사진 판정 기록은 [docs/preprocess/2026-11-05_photo-check.md](../preprocess/2026-11-05_photo-check.md).
+
+### 대기열 상한 (`QUEUE_FULL`) — [제안값] 안건 #21, 계약 회의 전
+
+- 이 절과 위 표의 `QUEUE_FULL` 행은 계약 회의 전 초안이다. 상태 코드 503 을 기존 엔드포인트에 더하는 것이라 회의([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #21)가 정한 뒤에만 main 에 들어간다. 값·문구·순서는 회의 자료 [docs/perf/load/2026-11-20_queue-cap.md](../perf/load/2026-11-20_queue-cap.md) 의 D1~D11 로 정한다.
+- 서버 설정 `admission.max-pending`(N)이 0 이면(기본) 상한이 없고 지금과 똑같다. N > 0 이면 PENDING 작업 수에 지금 접수 중인 요청 수를 더한 값이 N 이상일 때 거절한다. 거절은 사진·작업·`Idempotency-Key` 를 남기지 않는다.
+- `POST /jobs` 의 검사 순서: 입력 검사(400) → 같은 `Idempotency-Key` 재요청(상한과 상관없이 기존 작업 202) → 상한(503) → 대표 사진 검사(400). 그래서 상한이 차 있으면 사진 문제(400)보다 503 을 먼저 받는다(D6).
+- `POST /retry`: 없는 작업 404 와 FAILED 가 아닌 작업 409 를 먼저 본다. 거절된 retry 의 작업은 FAILED 그대로이고, 같은 작업의 retry 가 동시에 들어오면 하나만 202 이고 나머지는 409 `JOB_NOT_FAILED` 다.
+- `Retry-After` 는 서버 설정 `admission.retry-after-seconds`(초)다. 앱은 그 시간 전에는 다시 보내지 않는다.
 
 ## Job 실패 코드 (`JobResponse.error.code`, `status=FAILED` 일 때)
 
@@ -46,7 +55,7 @@
 ## 규칙
 
 - `message` 는 개발자용 설명이다. 앱은 표시하지 않으며, 서버 경로·내부 주소·추론 서비스의 원문 메시지를 담지 않는다(그런 내용은 서버 로그에만).
-- `jobId` 는 오류가 특정 작업에 관한 것일 때만 채운다(`JOB_NOT_FOUND`, `ASSET_NOT_FOUND`, `JOB_NOT_COMPLETED`, `JOB_NOT_FAILED`).
+- `jobId` 는 오류가 특정 작업에 관한 것일 때만 채운다(`JOB_NOT_FOUND`, `ASSET_NOT_FOUND`, `JOB_NOT_COMPLETED`, `JOB_NOT_FAILED`, 그리고 `/retry` 를 거절한 `QUEUE_FULL` — **[제안값] 안건 #21, 계약 회의 전**(D7). 생성을 거절한 `QUEUE_FULL` 은 작업이 없으므로 null).
 - v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 표를 따르지 않는다(동결).
-- 상태 코드는 400 / 404 / 409 / 413 / 500 다섯 가지만 계약에 둔다. 프레임워크 수준 응답(405, 415 등)은 v1 봉투로 감싸되 `INVALID_REQUEST` 로 분류한다.
+- 상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지만 계약에 둔다. 503 은 `QUEUE_FULL` 전용이다(**[제안값] 안건 #21, 계약 회의 전**). 프레임워크 수준 응답(405, 415 등)은 v1 봉투로 감싸되 `INVALID_REQUEST` 로 분류한다.
 - 문구는 제안이다. UX 검토 후 바뀔 수 있으나 코드 이름은 유지한다.
