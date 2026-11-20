@@ -243,10 +243,71 @@ class MonteCarloTest(unittest.TestCase):
 class RetryTest(unittest.TestCase):
     SAMPLES = [(0.5, 8.0), (0.6, 8.2)]
 
+    # Built by hand: c = 1, cap 1, h = g = 0, no cutout; users = (first POST s, cutout s, processing s).
+    # u0 holds the slot 0-100 s. u1 (1 s) is PENDING until 100 s. u2 (2 s) and u3 (3 s) find u1 PENDING and are refused.
+    HAND = [(0.0, 0.0, 100.0), (1.0, 0.0, 10.0), (2.0, 0.0, 10.0), (3.0, 0.0, 10.0)]
+
+    def test_hand_built_retries(self):
+        res = cap_model.simulate(self.HAND, slots=1, cap=1, retry_after_s=50, max_tries=3)
+        u = res["users"]
+        self.assertEqual([x["tries"] for x in u], [1, 1, 3, 3])
+        self.assertEqual([x["admitted"] for x in u], [True, True, True, False])
+        # u2: refused at 2 and 52 s (u1 still PENDING), admitted at 102 s (u1 started at 100 s), starts when u1 ends
+        self.assertEqual(u[2]["first_refused_t"], 2.0)
+        self.assertEqual(u[2]["admit_t"], 102.0)
+        self.assertEqual((u[2]["ps"], u[2]["pe"]), (110.0, 120.0))
+        # u3: refused at 3, 53 and 103 s (u2 PENDING since 102 s), then out of tries
+        self.assertEqual(u[3]["first_refused_t"], 3.0)
+        self.assertIsNone(u[3]["admit_t"])
+        self.assertEqual((res["posts"], res["refused"]), (8, 5))
+
+    def test_hand_built_time_budget(self):
+        # the retries at 102 and 103 s are 100 s after the first POST: past a 60 s budget, so never made
+        res = cap_model.simulate(self.HAND, slots=1, cap=1, retry_after_s=50, max_tries=3, give_up_s=60)
+        self.assertEqual([x["tries"] for x in res["users"]], [1, 1, 2, 2])
+        self.assertEqual([x["admitted"] for x in res["users"]], [True, True, False, False])
+
+    def test_counts_cover_the_users_first_posting_in_the_window(self):
+        res = cap_model.simulate(self.HAND, slots=1, cap=1, retry_after_s=50, max_tries=3)
+        c = cap_model.retry_counts(res, warmup_s=0, end_s=3600)
+        self.assertEqual((c["users"], c["posts"], c["refused_posts"], c["admitted"], c["gave_up"]), (4, 8, 5, 3, 1))
+        self.assertEqual((c["admitted_after_retry"], c["max_tries_used"]), (1, 3))
+        self.assertEqual(c["first_post_to_admit_mean"], 100.0)     # u2: first POST 2 s, admitted 102 s
+        self.assertEqual(c["sojourn_after_admit_max"], 109.0)      # u1: admitted 1 s, done 110 s
+        self.assertEqual((c["posts_per_h"], c["refused_per_h"], c["admitted_per_h"]), (8.0, 5.0, 3.0))
+        # u2 alone: its retries count even though they come after end_s
+        u2 = cap_model.retry_counts(res, warmup_s=1.5, end_s=2.5)
+        self.assertEqual((u2["users"], u2["posts"], u2["admitted"], u2["gave_up"]), (1, 3, 1, 0))
+
+    def test_retry_tail(self):
+        # the longest time from a first POST to the last retry
+        self.assertEqual(cap_model.retry_tail_s(60, 5, None), 240)
+        self.assertEqual(cap_model.retry_tail_s(60, 10 ** 6, 600), 600)
+        self.assertEqual(cap_model.retry_tail_s(165, 10 ** 6, 600), 495)
+        self.assertEqual(cap_model.retry_tail_s(165, 3, 600), 330)
+        self.assertEqual(cap_model.retry_tail_s(None, 5, None), 0)
+        self.assertEqual(cap_model.retry_tail_s(60, 1, None), 0)
+
+    def test_counted_users_meet_live_traffic_to_their_last_retry(self):
+        # Arrivals go on past `hours` for the retry tail, so the counts are those of a longer run. Stopping them at
+        # `hours` (run_on_s 0) lets the last retries into a draining queue and counts more admissions.
+        for policy in (dict(max_tries=5), dict(max_tries=10 ** 6, give_up_s=600)):
+            with self.subTest(**policy):
+                kw = dict(cap=10, retry_after_s=60, hours=1, warmup_h=0, seed=5, **policy)
+                r = cap_model.retry_traffic(self.SAMPLES, 600, **kw)
+                longer = cap_model.retry_traffic(self.SAMPLES, 600, run_on_s=3600, **kw)
+                stopped = cap_model.retry_traffic(self.SAMPLES, 600, run_on_s=0, **kw)
+                keys = ("users", "posts", "admitted", "max_tries_used", "first_post_to_admit_mean")
+                self.assertEqual({k: r[k] for k in keys}, {k: longer[k] for k in keys})
+                self.assertGreater(stopped["admitted"], r["admitted"])
+
     def test_one_try_is_the_plain_cap(self):
-        r = cap_model.retry_traffic(self.SAMPLES, 600, cap=10, retry_after_s=60, max_tries=1, hours=2, warmup_h=0, seed=5)
+        kw = dict(cap=10, hours=2, warmup_h=0, seed=5)
+        r = cap_model.retry_traffic(self.SAMPLES, 600, retry_after_s=60, max_tries=1, **kw)
+        plain = cap_model.steady_state(self.SAMPLES, 600, **kw)
         self.assertEqual(r["posts"], r["users"])
-        self.assertEqual(r["gave_up"], r["refused_posts"])
+        self.assertEqual((r["users"], r["refused_posts"]), (plain["n"], plain["refused"]))
+        self.assertGreater(r["refused_posts"], 0)
 
     def test_no_cap_means_one_post_per_user(self):
         r = cap_model.retry_traffic(self.SAMPLES, 600, cap=0, retry_after_s=60, max_tries=5, hours=2, warmup_h=0, seed=5)
@@ -257,14 +318,14 @@ class RetryTest(unittest.TestCase):
         kw = dict(cap=10, retry_after_s=60, max_tries=4, hours=2, warmup_h=0, seed=5)
         r = cap_model.retry_traffic(self.SAMPLES, 600, **kw)
         self.assertEqual(r, cap_model.retry_traffic(self.SAMPLES, 600, **kw))
-        self.assertEqual(r["posts"], r["users"] + r["refused_posts"] - r["gave_up"])
         self.assertGreater(r["posts"], r["users"])
         self.assertLessEqual(r["posts"], 4 * r["users"])
+        self.assertEqual(r["max_tries_used"], 4)        # some user is refused 4 times; nobody posts a 5th time
 
     def test_time_budget_limits_tries(self):
         r = cap_model.retry_traffic(self.SAMPLES, 900, cap=5, retry_after_s=100, max_tries=100, hours=2, warmup_h=0,
                                     seed=5, give_up_s=250)
-        self.assertLessEqual(r["max_tries_used"], 3)    # tries at 0, 100, 200 s
+        self.assertEqual(r["max_tries_used"], 3)        # tries at 0, 100, 200 s
 
 
 class CliTest(unittest.TestCase):

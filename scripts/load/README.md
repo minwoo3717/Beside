@@ -3,7 +3,7 @@
 쏘카 수준 목표 트래픽의 계산·시험 도구다. 가정·목표 등급·공식·합격 기준·시험 구성의 근거는 [docs/perf/load/TRAFFIC_MODEL.md](../../docs/perf/load/TRAFFIC_MODEL.md) 한 곳이고, 이 README 의 "§N" 은 모두 그 문서의 절이다(§2 가정, §3 목표 등급, §4 공식, §7 디스크, §8 합격 기준, §9 시험 구성, §10 정직성 규칙, §11 이름). 트래픽 모델(`model.py`)이 T1/T2/T3 의 요청률과 GPU 대수를 계산하고, k6 스크립트가 그 요청률을 배포 VM 에 건다. 결과는 k6 실행 하나마다 폴더 하나(`docs/perf/load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`)에 모으고, `collect.py` 가 그 폴더에 조건과 함께 `run.json` 을 쓴다.
 
 **상태**
-- 스크립트: **[구현됨]**. 단위 테스트(Python 112개, Node 89개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
+- 스크립트: **[구현됨]**. 단위 테스트(Python 117개, Node 89개)와 `node --check` 문법 검사를 통과했다. 개발 PC 에 설치한 k6 v2.3.0(아래 "k6 설치")으로 루프백에 짧고 줄인 실행을 돌려 스크립트 동작을 확인했다(A 는 로컬 mock jar, G·F 일부는 real,prod jar 와 패스스루 스텁, 가드·`collect.py` 는 대역 Prometheus — 아래 "k6 v2.3.0 에서 확인한 것"). 동작 확인용이며 용량 결과가 아니다.
 - 트래픽 모델: **[파생]** — `tiers.json` 의 **[가정]** 으로 계산한 값이다. 측정값이 아니다.
 - 측정: A0~A4 는 2026-11-18 VM 1차, 실제 GPU 의 G0r·G1r·G3r 는 같은 날 2차, G2r·F1b-real·F2-real 과 F1a(실제 Pod 를 스텁으로)는 2026-11-19 3차, 같은 Pod 의 c=1 과부하·c=2 와 F1b-real 다시(PR #11)·G0r(새 시작 기본값)는 2026-11-19 UTC 4차 **[실험 결과]**(`docs/perf/load/2026-11-18_vm-1st.md`, `2026-11-18_vm-2nd.md`, `2026-11-19_vm-3rd.md`, `2026-11-20_vm-4th.md`). A5·A6, 스텁 G1~G3, 스텁 F1~F5 는 **[계획]**.
 
@@ -305,7 +305,7 @@ python scripts/load/cap_model.py retry docs/perf/load/data/2026-11-20_0256-g3c1 
 python scripts/load/cap_model.py all --out docs/perf/load/data/2026-11-20_queue-cap/cap_model-output.txt
 ```
 
-- **규칙**: c=1 은 N = ⌊W/S⌋ − 1(최악 대기 (N+1)·S), 슬롯이 여럿이면 잰 처리량 μ 로 N = ⌊μ·(W − T)⌋. `Retry-After` R = N × 3600 / μ.
+- **규칙**: c=1 은 N = ⌊W/S⌋ − 1(최악 대기 (N+1)·S), 슬롯이 여럿이면 잰 처리량 μ(건/h)로 N = ⌊μ·(W − T)/3600⌋(최악 대기 N × 3600/μ + T, T 는 작업 하나의 처리 시간). `Retry-After` R = N × 3600 / μ.
 - **작업 하나를 읽는 법**은 `g_trace.py`·`g4_analyze.py` 와 같다.
   - 생성 a = `finishedAt` − `totalMs`, 슬롯 요청 = a + `preprocessMs`, 처리 시작 = a + `queuedMs`.
   - 슬롯은 처리 + 넘김(앞 작업 처리 끝 → 기다린 다음 작업 처리 시작의 중앙값)을 잡는다. 넘김의 반은 처리 전(PENDING), 반은 처리 뒤로 둔다(`--h0` 로 바꾼다).
@@ -313,6 +313,7 @@ python scripts/load/cap_model.py all --out docs/perf/load/data/2026-11-20_queue-
 - **창으로 거른다**: `run.json` 의 `window` 안에서 생성된 첫 시도만 쓴다. `events.jsonl` 에는 앞 실행의 줄도 있다(g3c1 은 189줄 중 157건).
 - **재현 확인**: 상한 없이 다시 돌리면 측정 대기와 비교한 줄이 함께 나온다. g3c1 은 평균 −0.2 %, g3r165 는 +5.6 % 다(2차 문서의 FIFO 재현처럼 재현이 조금 높다).
 - 몬테카를로와 재시도는 `--seed` 로 고정된다. 같은 씨앗이면 상한만 다른 줄끼리 같은 도착을 쓴다.
+- **재시도**(`retry`)는 첫 POST 가 `--warmup-h`~`--hours` 안인 사용자를 마지막 재시도까지 따라간다. 도착은 `--hours` 뒤에도 첫 POST → 마지막 재시도의 가장 긴 시간(`retry_tail_s`)만큼 더 흘린다. 끊으면 마지막 재시도가 비어 가는 대기열에 들어가 짧은 실행의 받아들인 수가 GPU 용량보다 커진다.
 
 ## 결과 수집
 

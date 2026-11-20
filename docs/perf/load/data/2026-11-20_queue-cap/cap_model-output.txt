@@ -68,10 +68,10 @@
 
 == 6. retry traffic: users arrive at 517/h, a refused client posts the whole upload again after Retry-After R; N 19, slots 1, samples g3c1; one 20 h run per row, first 1 h not counted, seed 1; refused upload at 0.8 MB per POST ([가정] tiers.json)
   policy: at most 5 POSTs per user
-    R 10 s: POSTs 1380/h (2.69 per user), refused 964/h = 771 MB/h, admitted 416/h, gave up 19.0 % of users, admitted after a retry 42.0 % (first POST -> admitted mean 22 s)
-    R 60 s: POSTs 1341/h (2.61 per user), refused 924/h = 740 MB/h, admitted 416/h, gave up 19.0 % of users, admitted after a retry 39.6 % (first POST -> admitted mean 129 s)
-    R 165 s: POSTs 1312/h (2.55 per user), refused 895/h = 716 MB/h, admitted 417/h, gave up 18.8 % of users, admitted after a retry 39.2 % (first POST -> admitted mean 338 s)
+    R 10 s: POSTs 1380/h (2.69 per user), refused 964/h = 771 MB/h, admitted 416/h, gave up 19.1 % of users, admitted after a retry 42.0 % (first POST -> admitted mean 22 s)
+    R 60 s: POSTs 1342/h (2.61 per user), refused 926/h = 741 MB/h, admitted 416/h, gave up 19.1 % of users, admitted after a retry 39.5 % (first POST -> admitted mean 129 s)
+    R 165 s: POSTs 1314/h (2.56 per user), refused 899/h = 719 MB/h, admitted 416/h, gave up 19.1 % of users, admitted after a retry 38.9 % (first POST -> admitted mean 337 s)
   policy: posts again while within 600 s of the first POST
-    R 10 s: POSTs 14477/h (28.18 per user), refused 14060/h = 11248 MB/h, admitted 417/h, gave up 18.9 % of users, admitted after a retry 77.6 % (first POST -> admitted mean 204 s)
-    R 60 s: POSTs 3027/h (5.89 per user), refused 2610/h = 2088 MB/h, admitted 417/h, gave up 18.8 % of users, admitted after a retry 60.9 % (first POST -> admitted mean 297 s)
-    R 165 s: POSTs 1111/h (2.16 per user), refused 694/h = 555 MB/h, admitted 417/h, gave up 18.9 % of users, admitted after a retry 34.9 % (first POST -> admitted mean 282 s)
+    R 10 s: POSTs 14497/h (28.22 per user), refused 14081/h = 11265 MB/h, admitted 416/h, gave up 19.0 % of users, admitted after a retry 77.4 % (first POST -> admitted mean 204 s)
+    R 60 s: POSTs 3029/h (5.90 per user), refused 2613/h = 2091 MB/h, admitted 416/h, gave up 19.0 % of users, admitted after a retry 60.7 % (first POST -> admitted mean 296 s)
+    R 165 s: POSTs 1111/h (2.16 per user), refused 696/h = 557 MB/h, admitted 416/h, gave up 19.1 % of users, admitted after a retry 34.7 % (first POST -> admitted mean 281 s)

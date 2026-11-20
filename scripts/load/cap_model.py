@@ -331,27 +331,50 @@ def steady_state(samples: list, rate_per_h: float, cap: int, hours: float, warmu
             "sojourn_max": max(soj) if soj else None}
 
 
-def retry_traffic(samples: list, rate_per_h: float, cap: int, retry_after_s: float, max_tries: int, hours: float,
-                  warmup_h: float, seed: int, slots: int = 1, h: float = 0.0, g: float = 0.0, give_up_s=None) -> dict:
-    """Users arrive as Poisson at rate_per_h; a refused user posts again after retry_after_s (see simulate). Counts
-    cover users whose first POST came after warmup_h; their retries are followed to the end."""
-    rng = random.Random(seed)
-    users = poisson_users(rng, samples, rate_per_h, hours * 3600)
-    res = simulate(users, slots, cap, h, g, retry_after_s=retry_after_s, max_tries=max_tries, give_up_s=give_up_s)
-    counted = [u for u in res["users"] if u["a"] >= warmup_h * 3600]
+def retry_tail_s(retry_after_s, max_tries: int, give_up_s=None) -> float:
+    """The longest time from a user's first POST to its last retry under simulate's rules (0 without retries)."""
+    if retry_after_s is None or max_tries <= 1:
+        return 0.0
+    _positive("Retry-After", retry_after_s)
+    k = max_tries - 1
+    if give_up_s is not None:
+        k = min(k, math.floor((give_up_s + EPS) / retry_after_s))
+    return max(0, k) * retry_after_s
+
+
+def retry_counts(res: dict, warmup_s: float, end_s: float) -> dict:
+    """Counts over the users whose first POST is in [warmup_s, end_s), each followed to its last retry; per-hour rates
+    divide by the window. In steady state that cohort's POSTs per hour of first POSTs is the POST rate."""
+    counted = [u for u in res["users"] if warmup_s <= u["a"] < end_s]
     adm = [u for u in counted if u["admitted"]]
     posts = sum(u["tries"] for u in counted)
-    span = hours - warmup_h
+    span = (end_s - warmup_s) / 3600
     late = [u["admit_t"] - u["a"] for u in adm if u["tries"] > 1]
-    return {"rate": rate_per_h, "cap": cap, "retry_after_s": retry_after_s, "max_tries": max_tries,
-            "give_up_s": give_up_s, "hours": hours, "warmup_h": warmup_h, "seed": seed, "users": len(counted),
-            "posts": posts, "refused_posts": posts - len(adm), "admitted": len(adm), "gave_up": len(counted) - len(adm),
-            "max_tries_used": max((u["tries"] for u in counted), default=0),
+    return {"users": len(counted), "posts": posts, "refused_posts": posts - len(adm), "admitted": len(adm),
+            "gave_up": len(counted) - len(adm), "max_tries_used": max((u["tries"] for u in counted), default=0),
             "posts_per_h": posts / span if span > 0 else None,
             "refused_per_h": (posts - len(adm)) / span if span > 0 else None,
             "admitted_per_h": len(adm) / span if span > 0 else None,
             "admitted_after_retry": len(late), "first_post_to_admit_mean": st.fmean(late) if late else None,
             "sojourn_after_admit_max": max((u["pe"] - u["admit_t"] for u in adm), default=None)}
+
+
+def retry_traffic(samples: list, rate_per_h: float, cap: int, retry_after_s: float, max_tries: int, hours: float,
+                  warmup_h: float, seed: int, slots: int = 1, h: float = 0.0, g: float = 0.0, give_up_s=None,
+                  run_on_s=None) -> dict:
+    """Users arrive as Poisson at rate_per_h; a refused user posts again after retry_after_s (see simulate). Counts
+    cover users whose first POST is in [warmup_h, hours), followed to their last retry. Arrivals go on for run_on_s
+    past hours (default: retry_tail_s + 1 s), so those last retries meet live traffic, not a queue that drains once the
+    arrivals stop (that would admit more of them and inflate the per-hour rates of a short run)."""
+    tail = retry_tail_s(retry_after_s, max_tries, give_up_s)
+    run_on = tail + 1.0 if run_on_s is None else run_on_s
+    rng = random.Random(seed)
+    users = poisson_users(rng, samples, rate_per_h, hours * 3600 + run_on)
+    res = simulate(users, slots, cap, h, g, retry_after_s=retry_after_s, max_tries=max_tries, give_up_s=give_up_s)
+    out = {"rate": rate_per_h, "cap": cap, "retry_after_s": retry_after_s, "max_tries": max_tries,
+           "give_up_s": give_up_s, "hours": hours, "warmup_h": warmup_h, "seed": seed, "run_on_s": run_on}
+    out.update(retry_counts(res, warmup_h * 3600, hours * 3600))
+    return out
 
 
 # ---------------------------------------------------------------------------------------------------------------- report
