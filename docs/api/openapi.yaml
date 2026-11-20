@@ -312,7 +312,7 @@ components:
       description: >-
         생성 대기열이 가득 참 (QUEUE_FULL) — 작업을 만들지도, 다시 대기열에 넣지도 않았다. Retry-After 초 뒤에 다시 보낸다.
         PENDING 작업과 접수 중인 요청을 더한 수가 서버 상한(admission.max-pending, 기본 꺼짐)에 이를 때만 온다.
-        queuedAt 이 admission.stale-after-ms(기본은 정상 작업의 가장 긴 대기, prod 8시간)보다 오래된 PENDING 은
+        queuedAt 이 admission.stale-after-ms(기본은 정상 작업의 가장 긴 대기, prod·N 19·c 1 이면 8시간)보다 오래된 PENDING 은
         세지 않는다(돌릴 워커가 없는 작업을 위한 안전망, ERROR_CODES.md '대기열 상한').
         [제안값, 안건 #21, 계약 회의 전]
       headers:
