@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Test of deploy/watchdog/beside-watchdog.sh without a VM: stub docker (one backend container whose state, start time
-# and health come from files), curl (the Discord webhook, recorded) and df on PATH; the clock is WATCHDOG_NOW.
-# Checks the decisions: 3 failures in a row -> one restart and one message; booting containers are not judged; at most
-# one restart per 10 min with one "still failing" message; recovery is reported once; maintenance flags, stopped
-# containers and stale failures never restart; disk warnings at most hourly; the webhook URL is never on a command line
-# or in the log.
+# and health come from files), curl (the Discord webhook, recorded), systemctl (the off-VM backup unit) and df on PATH;
+# the clock is WATCHDOG_NOW. Checks the decisions: 3 failures in a row -> one restart and one message; booting
+# containers are not judged; at most one restart per 10 min with one "still failing" message; recovery is reported
+# once; maintenance flags, stopped containers and stale failures never restart; disk warnings at most hourly; an
+# off-VM backup without a good run for 3 h (or failing since it was installed) is reported every 6 h, its recovery
+# once; the webhook URL is never on a command line or in the log.
 #   bash scripts/test_watchdog.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -36,6 +37,12 @@ printf '%s\n' "$*" >> "$FAKE/fake/curl-argv"
 cat >> "$FAKE/fake/curl-config"
 while (($#)); do [[ "$1" == --data-binary ]] && printf '%s\n' "$2" >> "$FAKE/fake/messages"; shift; done
 FAKE
+cat > "$WORK/bin/systemctl" <<'FAKE'
+#!/usr/bin/env bash
+# fake systemctl: the off-VM backup unit's state comes from a file (a unit that is not installed reads "inactive")
+[[ "$*" == "show -p ActiveState --value beside-backup.service" ]] || { echo "fake systemctl: unexpected $*" >&2; exit 1; }
+cat "$FAKE/fake/backup-state" 2>/dev/null || echo inactive
+FAKE
 cat > "$WORK/bin/df" <<'FAKE'
 #!/usr/bin/env bash
 echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
@@ -55,7 +62,7 @@ touch "$WORK/fake/healthy"
 step() {   # step <seconds after T0>: one timer run
   local rc=0
   env STATE_DIRECTORY="$WORK/state" BESIDE_ENV_FILE="$WORK/env" WATCHDOG_NOW=$((T0 + $1)) \
-    BESIDE_MAINTENANCE_FILES="$WORK/maintenance $WORK/fault/MAINTENANCE" bash "$SCRIPT" >> "$WORK/log" 2>&1 || rc=$?
+    BACKUP_OK_FILE="$WORK/backup/last.ok" BESIDE_MAINTENANCE_FILES="$WORK/maintenance $WORK/fault/MAINTENANCE" bash "$SCRIPT" >> "$WORK/log" 2>&1 || rc=$?
   return "$rc"
 }
 fail() { echo "FAIL: $*"; echo "--- log"; cat "$WORK/log"; echo "--- messages"; cat "$WORK/fake/messages" 2>/dev/null; exit 1; }
@@ -138,11 +145,42 @@ echo 79 > "$WORK/fake/disk"
 step 40000
 [[ "$(count '디스크')" == 2 ]] || fail "disk warning below 80 %"
 
+# off-VM backup (R1). Not installed (no last good run, unit inactive): nothing, as in every run above.
+backup() { count 'VM 밖 백업(R1)이 멈췄어요'; }
+[[ "$(backup)" == 0 ]] || fail "backup alert while the backup is not installed"
+# installed but failing from its first run: one message, again only after 6 h
+mkdir -p "$WORK/backup"
+echo failed > "$WORK/fake/backup-state"
+step 41000; step 41030; step 45000
+[[ "$(backup)" == 1 ]] || fail "a backup that never succeeded alerted $(backup) times within 6 h"
+grep -q '한 번도 성공하지 않았어요' "$WORK/fake/messages" || fail "no never-succeeded reason"
+step $((41000 + 21600))
+[[ "$(backup)" == 2 ]] || fail "no backup reminder after 6 h"
+# the first good run after an alert is reported once
+echo inactive > "$WORK/fake/backup-state"
+echo $((T0 + 63000)) > "$WORK/backup/last.ok"
+step 63030; step 63060
+[[ "$(count 'VM 밖 백업이 다시 성공')" == 1 ]] || fail "backup recovery reported $(count 'VM 밖 백업이 다시 성공') times"
+# one or two failed hourly runs (a good run less than 3 h ago) are not reported, even with the unit failed
+echo failed > "$WORK/fake/backup-state"
+step $((63000 + 10800 - 30))
+[[ "$(backup)" == 2 ]] || fail "alerted before the last good run was 3 h old"
+# a run in progress is not judged (after a VM that was off, the timer catches up at boot)
+echo activating > "$WORK/fake/backup-state"
+step $((63000 + 10800 + 60))
+[[ "$(backup)" == 2 ]] || fail "alerted while a backup run was in progress"
+# no good run for 3 h (failing runs, or the timer stopped): alert, whatever the unit state
+echo inactive > "$WORK/fake/backup-state"
+step $((63000 + 10800 + 90))
+[[ "$(backup)" == 3 ]] || fail "no alert when the last good run was 3 h old"
+grep -q '마지막 성공이 3시간 전' "$WORK/fake/messages" || fail "no age in the stale-backup alert"
+echo $((T0 + 80000)) > "$WORK/backup/last.ok"
+
 # no webhook configured: messages only in the log, curl never called
 echo 'BESIDE_DOMAIN=example.test' > "$WORK/env"
 calls="$(wc -l < "$WORK/fake/curl-argv")"
 echo 90 > "$WORK/fake/disk"
-step 50000
+step 80030
 [[ "$(wc -l < "$WORK/fake/curl-argv")" == "$calls" ]] || fail "curl called without a webhook"
 grep -q "message only logged" "$WORK/log" || fail "no log line without a webhook"
 
@@ -153,4 +191,4 @@ grep -qxF "url = \"$HOOK\"" "$WORK/fake/curl-config" || fail "webhook URL not pa
 python3 -I -c 'import json, sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]' "$WORK/fake/messages" \
   || fail "a message is not valid JSON"
 [[ "$(stat -c %a "$WORK/state")" == 700 ]] || fail "state folder is not 700"
-echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, disk and webhook handling ok"
+echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, disk, backup and webhook handling ok"

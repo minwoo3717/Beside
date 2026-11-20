@@ -10,9 +10,14 @@
 #   - Maintenance: while /etc/beside-maintenance or ~beside/fault/MAINTENANCE exists, no restarts (load tests, drills).
 #     A reminder goes out when such a flag is older than 12 h.
 #   - Disk: / at 80 % or more -> one Discord warning per hour.
+#   - Off-VM backup (R1, deploy/backup): its last good run (/var/lib/beside-backup/last.ok) 3 h old, or its unit failed
+#     and never succeeded -> a Discord message every 6 h until a good run, which is reported once. A failed backup
+#     unit alone leaves nothing but the journal; this keeps a stopped backup from going unnoticed. Nothing while the
+#     backup is not installed or a run is in progress.
 # The webhook is NOTIFY_WEBHOOK_URL from ~beside/Beside/deploy/.env (the backend's own); it is never printed and never
 # put on a command line. State: /var/lib/beside-watchdog. Logs (changes only): journalctl -u beside-watchdog.
-# Tests: scripts/test_watchdog.sh (stub docker/curl/df). Every setting below can be overridden by the environment.
+# Tests: scripts/test_watchdog.sh (stub docker/curl/systemctl/df). Every setting below can be overridden by the
+# environment.
 set -uo pipefail
 export LC_ALL=C
 
@@ -30,6 +35,10 @@ DISK_PATH="${DISK_PATH:-/}"
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 DISK_EVERY_S="${DISK_ALERT_EVERY_S:-3600}"
 MAINT_REMIND_S="${MAINTENANCE_REMIND_S:-43200}"
+BACKUP_UNIT="${BACKUP_UNIT:-beside-backup.service}"
+BACKUP_OK_FILE="${BACKUP_OK_FILE:-/var/lib/beside-backup/last.ok}"   # written by offsite_backup.sh after a good run
+BACKUP_STALE_S="${BACKUP_STALE_S:-10800}"        # hourly runs: 3 h = three missed or failed runs
+BACKUP_EVERY_S="${BACKUP_ALERT_EVERY_S:-21600}"
 NOW="${WATCHDOG_NOW:-$(date +%s)}"
 HOST="$(hostname 2>/dev/null || echo vm)"
 
@@ -91,6 +100,33 @@ check_disk() {
   if ((NOW - last >= DISK_EVERY_S)); then
     notify "💾 VM 디스크 $DISK_PATH 사용률 ${pct}% (기준 ${DISK_WARN_PCT}%, VM 감시 · $HOST) — docker image prune -f, 오래된 로그·부하 시험 볼륨을 확인해 주세요"
     put disk.last "$NOW"
+  fi
+}
+
+check_backup() {
+  local state ok age reason last
+  state="$(systemctl show -p ActiveState --value "$BACKUP_UNIT" 2>/dev/null)"
+  [[ "$state" != activating ]] || return 0   # a run is going (after boot the timer catches up): judge it afterwards
+  ok="$(cat "$BACKUP_OK_FILE" 2>/dev/null || true)"
+  if [[ "$ok" =~ ^[0-9]+$ ]]; then
+    age=$((NOW - ok))
+    if ((age < BACKUP_STALE_S)); then
+      if [[ -n "$(get backup.alerted)" ]]; then
+        notify "✅ VM 밖 백업이 다시 성공했어요 (VM 감시 · $HOST)"
+        del backup.alerted
+      fi
+      return 0
+    fi
+    reason="마지막 성공이 $((age / 3600))시간 전이에요"
+  elif [[ "$state" == failed ]]; then
+    reason="설치한 뒤 한 번도 성공하지 않았어요"
+  else
+    return 0   # not installed (yet)
+  fi
+  last="$(get backup.alerted 0)"
+  if ((NOW - last >= BACKUP_EVERY_S)); then
+    notify "🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · $HOST) — $reason. journalctl -u beside-backup -n 30 으로 원인(서비스 계정·범위, 버킷)을 확인해 주세요"
+    put backup.alerted "$NOW"
   fi
 }
 
@@ -172,5 +208,6 @@ check_backend() {
 
 rc=0
 check_disk
+check_backup
 check_backend || rc=1
 exit "$rc"

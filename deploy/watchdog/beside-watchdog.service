@@ -1,8 +1,9 @@
-# One watchdog pass: backend health on the management port (restart after 3 failures, at most every 10 min), disk use.
+# One watchdog pass: backend health on the management port (restart after 3 failures, at most every 10 min), disk use,
+# age of the last good off-VM backup (deploy/backup).
 # Install: deploy/README.md '운영 대응 설치' (copies deploy/watchdog/beside-watchdog.sh to /usr/local/sbin/beside-watchdog).
 # Logs (changes only): journalctl -u beside-watchdog. Pause restarts: sudo touch /etc/beside-maintenance (rm to resume).
 [Unit]
-Description=Beside backend watchdog (health, restart, disk warning)
+Description=Beside backend watchdog (health, restart, disk and backup warnings)
 After=docker.service
 
 [Service]
