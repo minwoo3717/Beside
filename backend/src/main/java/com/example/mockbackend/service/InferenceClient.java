@@ -26,7 +26,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -35,10 +34,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 /**
@@ -59,9 +60,23 @@ import java.util.stream.Stream;
  * other error status INFERENCE_FAILED. No connection (refused, dropped, none within 5 s) is INFERENCE_UNAVAILABLE, no
  * answer within inference.timeout-ms INFERENCE_TIMEOUT, and a 200 without a usable glbPath (path mode) or glbUrl
  * (upload mode: absent, blank, not starting with a single "/") CONVERSION_FAILED. Upload mode only: a GLB download
- * that does not end in 200 (other status, connection error, timeout) is CONVERSION_FAILED, and a stored photo Spring
- * cannot read is INFERENCE_FAILED (what the path mode service answers for "image not found").
+ * that does not end in 200 (other status, connection error, timeout, no data for inference.download-idle-ms) is
+ * CONVERSION_FAILED, a GLB this server cannot write (its own disk: full, failure drill FD4) INTERNAL_ERROR, and a
+ * stored photo Spring cannot read is INFERENCE_FAILED (what the path mode service answers for "image not found").
  * The worker checks the GLB header and copies it either way (RealJobWorker).
+ * <p>
+ * A request that cannot be answered any more is given up early (failure drill FD16b: a Pod stopped during a run left
+ * the only inference slot taken until inference.timeout-ms, 600 s, although the GPU was back after 3 min). Neither
+ * side sends anything while the VM waits for an answer, so a peer that vanished without closing the connection is
+ * never noticed by TCP. Two checks, both in addition to inference.timeout-ms:
+ * <ul>
+ *   <li>The caller's {@link Watch} (RealJobWorker: the service's /healthz instanceId changed since the run started,
+ *       so the process the request went to is gone) ends a POST as INFERENCE_UNAVAILABLE and a download as
+ *       CONVERSION_FAILED.</li>
+ *   <li>A GLB download with no bytes (headers or body) for inference.download-idle-ms (default 60 s, 0 = off) is
+ *       CONVERSION_FAILED. A normal download takes well under a second; the POST has no such limit, since the model
+ *       legitimately sends nothing while it runs.</li>
+ * </ul>
  */
 @Component
 @Profile("real")
@@ -78,6 +93,10 @@ public class InferenceClient {
      * and a late DELETE could land after a retry of the job already started on the service.
      */
     static final int CLEANUP_ATTEMPTS = 2;
+    /** How often a waiting request looks at its {@link Watch} and, for a download, at when data last came. */
+    static final Duration WATCH_INTERVAL = Duration.ofMillis(250);
+    /** inference.download-idle-ms default. */
+    public static final long DEFAULT_DOWNLOAD_IDLE_MS = 60_000;
     public static final String TOKEN_HEADER = "X-Inference-Token";
     /** Codes the inference service may send in detail.code. */
     private static final Set<ErrorCode> SERVICE_CODES = EnumSet.of(ErrorCode.INFERENCE_FAILED,
@@ -108,9 +127,27 @@ public class InferenceClient {
     private final String token;
     private final Path tmpDir;
     private final Duration timeout;
+    /** Zero = no limit. */
+    private final Duration downloadIdle;
     private final ObjectMapper objectMapper;
     private final HttpClient http;
     private final Logger log = LoggerFactory.getLogger(InferenceClient.class);
+
+    /**
+     * Tells a request in flight that it cannot be answered any more. Asked about every {@link #WATCH_INTERVAL} while
+     * the request waits; a non-null answer cancels it and says why (for the log).
+     */
+    @FunctionalInterface
+    public interface Watch {
+        Watch NONE = () -> null;
+
+        String lostBecause();
+    }
+
+    public InferenceClient(String baseUrl, long timeoutMs, String transfer, String token, String tmpDir,
+                           ObjectMapper objectMapper) {
+        this(baseUrl, timeoutMs, transfer, token, tmpDir, DEFAULT_DOWNLOAD_IDLE_MS, objectMapper);
+    }
 
     @Autowired
     public InferenceClient(@Value("${inference.base-url:http://localhost:8001}") String baseUrl,
@@ -118,7 +155,9 @@ public class InferenceClient {
                            @Value("${inference.transfer:path}") String transfer,
                            @Value("${inference.token:}") String token,
                            @Value("${storage.tmp.dir:storage/tmp}") String tmpDir,
+                           @Value("${inference.download-idle-ms:" + DEFAULT_DOWNLOAD_IDLE_MS + "}") long downloadIdleMs,
                            ObjectMapper objectMapper) {
+        this.downloadIdle = Duration.ofMillis(Math.max(0, downloadIdleMs));
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.inferUri = URI.create(this.baseUrl + "/infer");
         this.uploadUri = URI.create(this.baseUrl + "/infer/upload");
@@ -177,12 +216,20 @@ public class InferenceClient {
         return infer(jobId, images, names);
     }
 
-    /**
-     * Blocks until the service answers (and, in upload mode, the GLB is downloaded) or inference.timeout-ms passes.
-     * Interruptible (server shutdown). {@code filenames} are the uploads' original names, sent in upload mode.
-     */
+    /** Without a {@link Watch}. */
     public Result infer(String jobId, List<Path> images, List<String> filenames) throws InferenceFailure, InterruptedException {
-        return transfer == Transfer.UPLOAD ? inferUpload(jobId, images, filenames) : inferPath(jobId, images);
+        return infer(jobId, images, filenames, Watch.NONE);
+    }
+
+    /**
+     * Blocks until the service answers (and, in upload mode, the GLB is downloaded), inference.timeout-ms passes or
+     * {@code watch} says the request is lost. Interruptible (server shutdown). {@code filenames} are the uploads'
+     * original names, sent in upload mode.
+     */
+    public Result infer(String jobId, List<Path> images, List<String> filenames, Watch watch)
+            throws InferenceFailure, InterruptedException {
+        Watch checked = watch == null ? Watch.NONE : watch;
+        return transfer == Transfer.UPLOAD ? inferUpload(jobId, images, filenames, checked) : inferPath(jobId, images, checked);
     }
 
     /**
@@ -236,14 +283,14 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- path mode
 
-    private Result inferPath(String jobId, List<Path> images) throws InferenceFailure, InterruptedException {
+    private Result inferPath(String jobId, List<Path> images, Watch watch) throws InferenceFailure, InterruptedException {
         String call = "POST " + inferUri;
         HttpRequest request = withToken(HttpRequest.newBuilder(inferUri))
                 .timeout(timeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(pathRequestBody(jobId, images)))
                 .build();
-        JsonNode root = answerOf(send(request, call), call);
+        JsonNode root = answerOf(send(request, call, watch), call);
         String glbPath = root.path("glbPath").asText(null);
         if (glbPath == null || glbPath.isBlank()) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without glbPath",
@@ -268,7 +315,8 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- upload mode
 
-    private Result inferUpload(String jobId, List<Path> images, List<String> filenames) throws InferenceFailure, InterruptedException {
+    private Result inferUpload(String jobId, List<Path> images, List<String> filenames, Watch watch)
+            throws InferenceFailure, InterruptedException {
         String call = "POST " + uploadUri;
         String boundary = "BesideBoundary" + UUID.randomUUID().toString().replace("-", "");
         HttpRequest request = withToken(HttpRequest.newBuilder(uploadUri))
@@ -276,14 +324,14 @@ public class InferenceClient {
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(multipartBody(boundary, jobId, images, filenames))
                 .build();
-        JsonNode root = answerOf(send(request, call), call);
+        JsonNode root = answerOf(send(request, call, watch), call);
         String glbUrl = root.path("glbUrl").asText(null);
         URI artifact = artifactUri(glbUrl);
         if (artifact == null) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without a usable glbUrl",
                     call + " -> HTTP 200 glbUrl=" + glbUrl + ": " + quote(root.toString()));
         }
-        return resultOf(root, download(jobId, artifact));
+        return resultOf(root, download(jobId, artifact, watch));
     }
 
     /** glbUrl is relative to the service ("/artifacts/..."): the GLB is only ever fetched from inference.base-url. */
@@ -353,42 +401,67 @@ public class InferenceClient {
         return "application/octet-stream";
     }
 
-    /** GET glbUrl into {storage.tmp.dir}/{jobId}/base.glb. Only a 200 body is written; anything else is CONVERSION_FAILED. */
-    private Path download(String jobId, URI artifact) throws InferenceFailure, InterruptedException {
+    /**
+     * GET glbUrl into {storage.tmp.dir}/{jobId}/base.glb. Only a 200 body is written. A GLB that does not arrive is
+     * CONVERSION_FAILED; one this server cannot write (its own disk) is INTERNAL_ERROR.
+     */
+    private Path download(String jobId, URI artifact, Watch watch) throws InferenceFailure, InterruptedException {
         String call = "GET " + artifact;
         Path target = tmpDir.resolve(jobId).resolve("base.glb");
         try {
             Files.createDirectories(target.getParent());
         } catch (IOException e) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                    "Could not prepare the GLB download (" + e.getClass().getSimpleName() + ")", call + " -> " + target + ": " + e);
+            throw new InferenceFailure(ErrorCode.INTERNAL_ERROR,
+                    "Could not prepare the GLB download on this server (" + e.getClass().getSimpleName() + ")",
+                    call + " -> " + target + ": " + e);
         }
         HttpRequest request = withToken(HttpRequest.newBuilder(artifact)).timeout(timeout).GET().build();
-        HttpResponse<Path> response;
         // The request timeout of the JDK 17 client stops once the headers arrive, so a GPU PC that vanishes mid-body
-        // (no FIN over the tailnet) would block here for good while holding the only inference slot. The deadline
-        // below covers the whole exchange, body included.
-        CompletableFuture<HttpResponse<Path>> pending = http.sendAsync(request, info -> info.statusCode() == 200
-                ? HttpResponse.BodySubscribers.ofFile(target, StandardOpenOption.CREATE, StandardOpenOption.WRITE,
-                StandardOpenOption.TRUNCATE_EXISTING)
-                : HttpResponse.BodySubscribers.<Path>replacing(null));
+        // (no FIN over the tailnet) would block here for good while holding the only inference slot. await() covers
+        // the whole exchange, body included, and cuts it off after downloadIdle without data (FD16b).
+        AtomicLong lastData = new AtomicLong(System.nanoTime());
+        GlbFileSubscriber file = new GlbFileSubscriber(target, lastData);
+        CompletableFuture<HttpResponse<Path>> pending = http.sendAsync(request, info -> {
+            lastData.set(System.nanoTime());
+            return info.statusCode() == 200 ? file : HttpResponse.BodySubscribers.<Path>replacing(null);
+        });
+        Waited<Path> waited;
         try {
-            response = pending.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            pending.cancel(true);
-            deleteQuietly(target);
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                    "The GLB download did not finish within inference.timeout-ms=" + timeout.toMillis(), call + ": body timed out");
-        } catch (ExecutionException e) {
-            deleteQuietly(target);
-            Throwable cause = e.getCause() == null ? e : e.getCause();
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                    "Could not download the GLB from the inference service (" + cause.getClass().getSimpleName() + ")", call + ": " + cause);
+            waited = await(pending, watch, lastData, downloadIdle);
         } catch (InterruptedException e) {
-            pending.cancel(true);
+            file.abort();
             deleteQuietly(target);
             throw e;
         }
+        if (waited.end() != End.ANSWERED) {
+            file.abort();
+            deleteQuietly(target);
+        }
+        switch (waited.end()) {
+            case DEADLINE -> throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                    "The GLB download did not finish within inference.timeout-ms=" + timeout.toMillis(), call + ": body timed out");
+            case IDLE -> throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                    "The GLB download stalled: no data for inference.download-idle-ms=" + downloadIdle.toMillis(),
+                    call + ": no data for " + downloadIdle.toMillis() + " ms");
+            case LOST -> throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                    "The inference service restarted during the GLB download", call + ": " + waited.lost());
+            case FAILED -> {
+                IOException local = file.writeError();
+                if (local != null) {
+                    throw new InferenceFailure(ErrorCode.INTERNAL_ERROR,
+                            "Could not write the GLB on this server (" + local.getClass().getSimpleName() + ")",
+                            call + " -> " + target + ": " + local);
+                }
+                Throwable cause = waited.error();
+                throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                        "Could not download the GLB from the inference service (" + cause.getClass().getSimpleName() + ")",
+                        call + ": " + cause);
+            }
+            case ANSWERED -> {
+                // checked below
+            }
+        }
+        HttpResponse<Path> response = waited.response();
         if (response.statusCode() != 200) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
                     "Inference service answered HTTP " + response.statusCode() + " to the GLB download",
@@ -406,18 +479,94 @@ public class InferenceClient {
         return builder;
     }
 
-    private HttpResponse<String> send(HttpRequest request, String call) throws InferenceFailure, InterruptedException {
-        try {
-            return http.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (HttpConnectTimeoutException e) {
+    /** The POST: its answer, or the job failure code of what went wrong. */
+    private HttpResponse<String> send(HttpRequest request, String call, Watch watch) throws InferenceFailure, InterruptedException {
+        Waited<String> waited = await(http.sendAsync(request, HttpResponse.BodyHandlers.ofString()), watch, null, Duration.ZERO);
+        switch (waited.end()) {
+            case ANSWERED -> {
+                return waited.response();
+            }
+            case LOST -> throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
+                    "The inference service restarted while this run was in flight", call + ": " + waited.lost());
+            case DEADLINE -> throw new InferenceFailure(ErrorCode.INFERENCE_TIMEOUT,
+                    "No answer from the inference service within inference.timeout-ms=" + timeout.toMillis(),
+                    call + ": no complete answer in time");
+            default -> {
+                // FAILED, below (IDLE is download only)
+            }
+        }
+        Throwable cause = waited.error();
+        if (cause instanceof HttpConnectTimeoutException) {
             throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
-                    "No connection to the inference service within " + CONNECT_TIMEOUT.toMillis() + " ms", call + ": " + e);
-        } catch (HttpTimeoutException e) {
+                    "No connection to the inference service within " + CONNECT_TIMEOUT.toMillis() + " ms", call + ": " + cause);
+        }
+        if (cause instanceof HttpTimeoutException) {
             throw new InferenceFailure(ErrorCode.INFERENCE_TIMEOUT,
-                    "No answer from the inference service within inference.timeout-ms=" + timeout.toMillis(), call + ": " + e);
-        } catch (IOException e) {
-            throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
-                    "Inference service unreachable (" + e.getClass().getSimpleName() + ")", call + ": " + e);
+                    "No answer from the inference service within inference.timeout-ms=" + timeout.toMillis(), call + ": " + cause);
+        }
+        if (cause instanceof RuntimeException unexpected) {
+            throw unexpected;   // as http.send threw it: the worker ends the run INTERNAL_ERROR
+        }
+        if (cause instanceof Error error) {
+            throw error;
+        }
+        throw new InferenceFailure(ErrorCode.INFERENCE_UNAVAILABLE,
+                "Inference service unreachable (" + cause.getClass().getSimpleName() + ")", call + ": " + cause);
+    }
+
+    /** How a wait for an exchange ended. */
+    private enum End { ANSWERED, FAILED, DEADLINE, IDLE, LOST }
+
+    /** {@code response} when ANSWERED, {@code error} when FAILED, {@code lost} (the Watch's reason) when LOST. */
+    private record Waited<T>(End end, HttpResponse<T> response, Throwable error, String lost) {
+    }
+
+    /**
+     * Waits for {@code pending} up to inference.timeout-ms, whole body included, looking every
+     * {@link #WATCH_INTERVAL} at {@code watch} and, when {@code idle} is not zero, at {@code lastData}. Any end but
+     * ANSWERED and FAILED cancels the exchange. Interrupted: cancels it and rethrows.
+     */
+    private <T> Waited<T> await(CompletableFuture<HttpResponse<T>> pending, Watch watch, AtomicLong lastData, Duration idle)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (true) {
+            long left = deadline - System.nanoTime();
+            if (left <= 0) {
+                pending.cancel(true);
+                return new Waited<>(End.DEADLINE, null, null, null);
+            }
+            try {
+                HttpResponse<T> response = pending.get(Math.min(left, WATCH_INTERVAL.toNanos()), TimeUnit.NANOSECONDS);
+                return new Waited<>(End.ANSWERED, response, null, null);
+            } catch (TimeoutException stillWaiting) {
+                // look at the watch and the data clock below
+            } catch (ExecutionException e) {
+                return new Waited<>(End.FAILED, null, e.getCause() == null ? e : e.getCause(), null);
+            } catch (CancellationException e) {
+                return new Waited<>(End.FAILED, null, e, null);
+            } catch (InterruptedException e) {
+                pending.cancel(true);
+                throw e;
+            }
+            String lost = lostBecause(watch);
+            if (lost != null) {
+                pending.cancel(true);
+                return new Waited<>(End.LOST, null, null, lost);
+            }
+            if (lastData != null && !idle.isZero() && System.nanoTime() - lastData.get() > idle.toNanos()) {
+                pending.cancel(true);
+                return new Waited<>(End.IDLE, null, null, null);
+            }
+        }
+    }
+
+    /** A Watch that throws is treated as saying nothing: it must not end a run the service may still answer. */
+    private String lostBecause(Watch watch) {
+        try {
+            return watch.lostBecause();
+        } catch (RuntimeException e) {
+            log.debug("inference request watch failed: {}", e.toString());
+            return null;
         }
     }
 
