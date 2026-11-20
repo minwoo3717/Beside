@@ -338,8 +338,28 @@ public class WebhookNotifier {
         }
     }
 
-    /** Sender thread: sends what is waiting, one message at a time, until the queues are empty or a send fails. */
+    /**
+     * Sender thread: sends what is waiting, one message at a time, until the queues are empty or a send fails. Anything
+     * thrown (an Error such as OutOfMemoryError while building a request) counts as a failed send and is logged: the
+     * scheduled task would otherwise swallow it silently and leave {@code draining} true with nothing scheduled, so no
+     * message would ever go out again.
+     */
     private void drain() {
+        try {
+            drainLoop();
+        } catch (Throwable unexpected) {
+            long pauseMs;
+            synchronized (outbox) {
+                inFlight.clear();
+                failures++;
+                pauseMs = Math.min(MAX_RETRY_DELAY.toMillis(), retryBaseMs << Math.min(failures - 1, 20));
+            }
+            log.error("webhook sender failed ({}); next try in {} ms", unexpected.toString(), pauseMs);
+            schedule(pauseMs);
+        }
+    }
+
+    private void drainLoop() {
         while (true) {
             Batch batch;
             synchronized (outbox) {
