@@ -44,7 +44,7 @@ services:
       # ONNX Runtime 스레드마다 glibc arena 가 늘어 RSS 가 커지는 것을 막는다.
       MALLOC_ARENA_MAX: "2"
     volumes:
-      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
+      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매시 H2 백업, 최신 48개). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
       # 전처리 모델(약 210 MB, scripts/fetch_models.sh 가 받는다). 이미지에 넣지 않고 읽기 전용으로 붙인다.
       - ${BESIDE_MODELS_DIR:-../backend/models}:/app/models:ro
