@@ -136,6 +136,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | `beside.jobs.queue` | `beside_jobs_queue` | gauge | `state`(`pending`\|`processing`) | 지금 PENDING / PROCESSING 인 작업 수. 5초(`metrics.queue.refresh-ms`)마다 DB 에서 센 값을 들고 있어 스크레이프는 DB 를 읽지 않는다(최대 5초 묵은 값). 두 상태는 같은 갱신에서 센 값이 함께 바뀐다. 세기가 실패하면 다음 성공까지 두 값 모두 `NaN`(그래프에 빈칸, 옛 숫자를 그대로 두지 않음)이고, 실패가 시작될 때 서버 로그에 WARN 한 줄이 남는다(종료 중에는 DEBUG) | `JobQueueGauge` |
 | `beside.jobs.created` | `beside_jobs_created_total` | counter | — | 접수해 워커에 넘긴 작업(v1·v0). Idempotency-Key 재요청과 종료 중 거절은 세지 않는다 | `JobServiceImpl` |
 | `beside.jobs.retried` | `beside_jobs_retried_total` | counter | — | 접수해 워커에 넘긴 retry | `JobServiceImpl` |
+| `beside.jobs.refused` | `beside_jobs_refused_total` | counter | `op`(`create`\|`retry`) | 대기열 상한(`admission.max-pending`)에 걸려 503 `QUEUE_FULL` 로 거절한 v1 생성·retry. 503 으로 답한 것만 센다(같은 작업의 다른 retry 때문에 409 로 바뀐 것은 세지 않음). 상한이 꺼져 있으면(기본) 늘 0. 거절마다 서버 로그에 `Queue full: refused op=… jobId=… pending=… reserved=… cap=… retryAfter=…s` 한 줄(INFO)이 남는다(거절할 때 센 PENDING 과 접수 중 요청 수, pending + reserved ≥ cap). 의도한 503 이라 §5.3 5xx 비율에서 뺄지는 회의가 정한다(D9). **[제안값] 안건 #21 — 계약 회의 전, main 미병합** | `AdmissionGate` |
 | `beside.asset.downloads` | `beside_asset_downloads_total` | counter | `outcome`(아래) | `GET /api/v1/jobs/{id}/asset` 한 번마다 하나 | `AssetDownloadMetricsFilter` |
 | `beside.asset.download` | `beside_asset_download_seconds_*` | timer | `outcome` | 요청 도착 → 마지막 바이트를 쓴 때 | 같은 곳 |
 
@@ -149,7 +150,7 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | `not_completed` | 409 (`JOB_NOT_COMPLETED`, 완료 전에 받으려 함) |
 | `error` | 5xx, 처리 중 예외, 그 밖의 상태(400 잘못된 variant) |
 
-바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 도 처음부터 있다. `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
+바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 와 `beside_jobs_refused_total` 의 `op` 두 값도 처음부터 있다. `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
 
 버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30.
 
