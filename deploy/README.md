@@ -52,14 +52,13 @@
 
 **지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다. 이 강화는 `deploy/gcp` → `main` PR 로만 들어가고 `feat/preprocess` 에서 pull 해도 오지 않으므로, PR 이 병합되기 전에는 VM 의 Caddyfile 을 되돌리지 않는다. 병합 뒤 VM 에서 `git checkout deploy/Caddyfile && git checkout main && git pull --ff-only`, 그다음 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`(main 의 compose 변경으로 컨테이너가 다시 만들어진다). 2026-11-17 에 VM 에 Tailscale 을 설치하고(apt 저장소, `beside-vm` 100.98.76.5) `INFERENCE_BASE_URL` 을 Runpod Pod(100.83.86.62:8002)로 바꿨다. 이전 값은 `deploy/.env.bak-20261117-stub` 에 있고 스텁 컨테이너 `beside-stub` 는 되돌릴 때를 위해 남겨 두었다.
 
-**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다(`create_vm.sh` 는 이제 서비스 계정 없이 만든다). 바꾸려면 VM 을 잠깐 멈춰야 한다(약 1분 중단, 컨테이너는 스스로 다시 뜬다). 기본 네트워크가 만든 RDP 규칙도 필요 없다.
+**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정(GCS 읽기 범위)을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다. 이것은 아래 '운영 대응 설치'의 2번(컨테이너의 메타데이터 서버 차단)과 3번(기본 계정 대신 버킷에 만들기만 되는 `beside-backup@` 를 붙임)이 함께 고친다. **R1(VM 밖 백업)을 쓰면 계정을 `--no-service-account` 로 떼지 않는다** — 그러면 백업이 매시 실패한다(7번 VM 감시가 3시간 뒤 알린다). R1 을 쓰지 않기로 한 경우에만 `stop` → `set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes` → `start` 로 뗀다(약 1분 중단). 기본 네트워크가 만든 RDP 규칙은 어느 쪽이든 필요 없다.
 
 ```bash
-gcloud compute instances stop beside-vm --zone=asia-northeast3-a
-gcloud compute instances set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes
-gcloud compute instances start beside-vm --zone=asia-northeast3-a
 gcloud compute firewall-rules delete default-allow-rdp
 ```
+
+VM 을 새로 만들면(`create_vm.sh` 는 2026-11-13 결정대로 서비스 계정 없이 만든다. 스냅샷에서 만들 때 `--service-account` 를 주지 않으면 기본 계정이 붙는다) R1 을 위해 '운영 대응 설치' 3번의 붙이기(`set-service-account ... --service-account=beside-backup@<프로젝트>.iam.gserviceaccount.com --scopes=storage-rw,logging-write,monitoring-write`)를 다시 한다. `create_vm.sh` 로 빈 디스크부터 만들었으면 2·4·7번 설치도 다시 한다(스냅샷에서 만든 디스크에는 이미 들어 있다).
 
 **GPU 없이 먼저 전체 흐름 확인(스텁)**: 리포의 추론 서비스를 패스스루 모드로 VM 안에 띄우고 `INFERENCE_BASE_URL=http://beside-stub:8001` 로 둔다. 이미지는 `python:3.12-slim` + `generation/inference_service/requirements.txt`, 앱 코드는 읽기 전용 마운트, 샘플 GLB 는 **유효한 GLB** 여야 한다(리포의 `backend/storage/results/sample-dog.glb` 는 0바이트라 쓸 수 없다). `--network beside_default`, 포트는 게시하지 않고, `BESIDE_INFERENCE_TOKEN` 은 `.env` 의 `INFERENCE_TOKEN` 과 같게(권한 600 인 env 파일로 넘긴다). Runpod Pod 를 연결하면 `INFERENCE_BASE_URL` 을 바꾸고 `docker rm -f beside-stub`.
 
@@ -218,7 +217,7 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 | Docker · OS | 한도 없음, 약 0.5GB |
 | **합계** | **약 5.6GB + OS** (한도 합) |
 
-caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다 **[구현됨: compose 값, CI 가 확인]**. 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다).
+caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다. compose 값 **[구현됨]** · `docker compose config` 로 두 값을 확인하는 CI 단언은 넣었지만 아직 돌지 않았다(개발 PC 에 Docker 가 없다. PR CI 의 docker 작업이 통과하면 그 커밋을 여기에 적는다). 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다).
 
 지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 4GB VM 이면 한도 합이 RAM 을 넘으므로 **swap 2GB 가 필요**하다(한 번). A1 때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
 
@@ -307,7 +306,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 ## 운영 대응 설치 (R1~R5)
 
-2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·gcloud·iptables, CI 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]** 이고, **VM·GCP 에 적용한 것은 아직 없다 [계획]**. 적용하면 날짜와 확인 결과를 이 표에 적는다.
+2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이고, **VM·GCP 에 적용한 것은 아직 없다 [계획]**. 적용하면 날짜와 확인 결과를 이 표에 적는다.
 
 | 대응 | 막는 장애 | 파일 | 상태 |
 |---|---|---|---|
@@ -315,7 +314,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 적용 [계획] |
 | R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
 | R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [계획] |
-| R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose·CI [구현됨] · VM 반영 [계획] |
+| R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [계획] |
 
 - **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 지금은 DB 가 하루 1번 같은 디스크, 사진·GLB 는 VM 밖 사본이 없다.
 - **순서**: 메타데이터 차단(2) → 버킷·계정(3) → VM 에 계정 붙이기(정지 필요) → 백업 타이머(4). 차단을 먼저 하는 이유: 계정을 붙인 순간부터 컨테이너가 그 토큰을 받을 수 있다. 지금 VM 의 기본 서비스 계정(GCS 읽기 범위)도 같은 문제라 차단은 바로 걸어도 이득이다.
