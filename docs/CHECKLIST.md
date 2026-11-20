@@ -22,7 +22,7 @@
 
 막는 범위가 큰 것부터.
 
-1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 23개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#19 큐 상한(503 `QUEUE_FULL`)·#20 요청 제한(429 `RATE_LIMITED`)·#21 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
+1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 23개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#21 큐 상한(503 `QUEUE_FULL`)·#22 요청 제한(429 `RATE_LIMITED`)·#23 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
 2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 2026-11-17 Runpod A40 에 AnimalLift 설치·모델 모드 실행, 1건 시간·GPU 메모리·출력 크기를 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md) 에 기록(inferMs 약 4 s, gpuPeakMB 5,120, 표본 4건). 2026-11-18 2차 부하 시험에서 같은 사진으로 539건을 더 쟀다(exp-01 6절). 남은 것: 품질 채점, 사진 10장 이상. 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [x] **`deploy/vm-4b` → main PR 열기** — CI 가 main push(`af4a747`)와 PR #4 에서 Docker 이미지 빌드·Caddy 경로 시험까지 통과했다. (BE)
 4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13). 2026-11-17 Runpod 크레딧 결제, VM·Pod Tailscale 연결, 공개 주소 → VM → Pod 사진 1건 성공(패스스루), 같은 날 Pod 에 AnimalLift 를 설치해 실제 모델로 3건 성공([deploy/2026-11-17_runpod-connect.md](deploy/2026-11-17_runpod-connect.md)). 남은 것: 폰 앱으로 1건. (BE+GEN)
@@ -181,7 +181,7 @@
   - `SEED_ONLY` 의 `IDS_OUT` 검사가 기대는 k6 `open()` 오류 문구를 Linux k6 에서(Windows k6 v2.3.0 에서만 확인. 2026-11-18 VM 1차는 Linux k6(Runpod Pod)로 A2 시드를 돌렸지만 이 오류 경로를 확인한 기록은 없다).
   - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(로컬 측정: 개발 PC·k6 v2.3.0, `api_staged.js` 를 `PRE_VUS`=`MAX_VUS` 20 과 300 으로 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`, 루프백 mock jar) 돌려 k6 프로세스의 최대 작업 집합 83.9 MB·393.2 MB 를 비교한 값, VU 마다 0.4 MB 사진 사본 포함). A1 기본 `MAX_VUS` 3,300(흐름 VU. 시작 때는 사전 할당 450 만 만들고 나머지는 흐름이 길어질 때 생기므로 최악)이면 초기화만 약 3.6 GB, 흐름을 돈 VU 마다 0.8 MB 본문(실패 주입 흐름을 돈 VU 는 0.8 MB 더)이 붙어 약 6.3~8.9 GB [파생], 둘러보기 VU(최대 200)가 약 0.2 GB 더. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB, 업로드가 길어져 기본 `MAX_VUS` 600 까지 늘면 약 15 GB [파생]. 시험 중 k6 메모리를 CPU 와 함께 본다. 2026-11-18 VM 1차(Runpod Pod, Linux k6)에서는 A1 `PRE_VUS` 2,000(VU 2,017)에 k6 RSS 최대 6,662 MB, A2 VU 2,000 에 2,201 MB 였다 **[실험 결과]**(각 실행 `client-cpu.csv`).
 - [ ] 판정 기준 결정 — 지금 코드의 동작은 **[구현됨]**, 바꿀지는 미정. (BE, 첫째는 계약 회의)
-  - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #19·#20 과 함께 정한다.
+  - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #21·#22 와 함께 정한다.
   - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다. 3차 F1a(`f1ar2`)는 0.975(40건 중 1건이 두 번 실패)로 통과했다.
   - `collect.py` 의 `http_5xx_ratio` 질의에 `or vector(0)` 을 붙일지: 서버가 뜬 뒤 5xx 를 한 번도 내지 않아 5xx 시계열이 없으면 머리줄만 있는 CSV 와 'no data: http_5xx_ratio' 가 된다(Prometheus 대역에서 봄).
 - [ ] 찾은 개선 **[계획]**. (BE)
