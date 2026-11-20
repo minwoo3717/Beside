@@ -67,6 +67,13 @@ done
 DRY_RUN=1 BESIDE_GCP_PROJECT=beside-test bash "$GCP/uptime_check.sh" create 1234567890 > "$WORK/out.txt" 2>&1 \
   || fail "uptime dry run"
 cp "$WORK/out.txt" "$WORK/dry-uptime.txt"
+# the team project's default names are the bucket and account made on 2026-11-20 (deploy/README.md '운영 대응 설치')
+DRY_RUN=1 BESIDE_GCP_PROJECT=beside-514511 bash "$GCP/backup_bucket.sh" > "$WORK/out.txt" 2>&1 || fail "team project dry run"
+grep -q "^+ gcloud .*storage buckets create gs://beside-514511-backups " "$WORK/out.txt" \
+  || fail "team project: default bucket is not beside-514511-backups"
+grep -q "echo 'BUCKET=beside-514511-backups'" "$WORK/out.txt" || fail "team project: printed BUCKET line"
+grep -q -- "--service-account=beside-backup@beside-514511.iam.gserviceaccount.com " "$WORK/out.txt" \
+  || fail "team project: printed account"
 DRY_RUN=1 BESIDE_GCP_PROJECT=beside-test bash "$GCP/uptime_check.sh" pause > "$WORK/out.txt" 2>&1 || fail "pause dry run"
 grep -q -- "--no-enabled" "$WORK/out.txt" || fail "pause dry run printed no update"
 [[ -z "$(calls)" ]] || fail "DRY_RUN called gcloud: $(calls)"
@@ -74,7 +81,7 @@ grep -q "^+ gcloud .*resource-policies create snapshot-schedule beside-daily-sna
   "$WORK/dry-snapshot_schedule.txt" || fail "dry run: no snapshot schedule command"
 grep -q "^+ gcloud .*disks add-resource-policies beside-vm --zone=asia-northeast3-a --resource-policies=beside-daily-snapshot" \
   "$WORK/dry-snapshot_schedule.txt" || fail "dry run: no attach command"
-grep -q "^+ gcloud .*storage buckets create gs://beside-test-beside-backup --location=asia-northeast3 .*--uniform-bucket-level-access --public-access-prevention" \
+grep -q "^+ gcloud .*storage buckets create gs://beside-test-backups --location=asia-northeast3 .*--uniform-bucket-level-access --public-access-prevention" \
   "$WORK/dry-backup_bucket.txt" || fail "dry run: no bucket command"
 grep -q "roles/storage.objectCreator" "$WORK/dry-backup_bucket.txt" || fail "dry run: no role binding"
 grep -q -- "--scopes=storage-rw,logging-write,monitoring-write" "$WORK/dry-backup_bucket.txt" || fail "dry run: no attach hint"
@@ -107,7 +114,7 @@ import json, sys
 rules = json.load(open(sys.argv[1]))["rule"]
 assert rules == [{"action": {"type": "Delete"}, "condition": {"age": 30, "matchesPrefix": ["db/"]}}], rules
 PY
-calls | grep -q "^storage buckets add-iam-policy-binding gs://beside-test-beside-backup --member=serviceAccount:beside-backup@beside-test.iam.gserviceaccount.com --role=roles/storage.objectCreator$" \
+calls | grep -q "^storage buckets add-iam-policy-binding gs://beside-test-backups --member=serviceAccount:beside-backup@beside-test.iam.gserviceaccount.com --role=roles/storage.objectCreator$" \
   || fail "role binding: $(calls)"
 calls | grep -q "keys create" && fail "a key file was made"
 grep -q "set-service-account beside-vm" "$WORK/out.txt" || fail "no attach commands printed"

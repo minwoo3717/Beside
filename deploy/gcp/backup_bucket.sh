@@ -2,7 +2,8 @@
 # Backup bucket outside the VM and the VM's create-only service account (R1). Run it where gcloud is signed in to the
 # project (Cloud Shell, or the dev PC), like gcp/create_vm.sh. Re-running is safe: what exists is kept, the settings below
 # are applied again.
-#   bash backup_bucket.sh                                  # bucket <project>-beside-backup in asia-northeast3 (Seoul)
+#   bash backup_bucket.sh                                  # bucket <project>-backups in asia-northeast3 (Seoul)
+#                                                          # (beside-514511-backups: made with these settings 2026-11-20)
 #   BESIDE_BACKUP_BUCKET=<name> bash backup_bucket.sh      # another (globally unique) bucket name
 #   DRY_RUN=1 bash backup_bucket.sh                        # print the gcloud commands, change nothing
 # Optional overrides: BESIDE_GCP_PROJECT, BESIDE_GCP_REGION (asia-northeast3), BESIDE_GCP_ZONE (asia-northeast3-a),
@@ -34,7 +35,7 @@ if [[ -z "$PROJECT" || "$PROJECT" == "(unset)" ]]; then
   fi
   PROJECT=PROJECT_ID
 fi
-BUCKET="${BESIDE_BACKUP_BUCKET:-$PROJECT-beside-backup}"
+BUCKET="${BESIDE_BACKUP_BUCKET:-$PROJECT-backups}"
 if [[ ! "$BUCKET" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]]; then
   echo "not a bucket name: $BUCKET (lower-case letters, digits, - _ . ; set BESIDE_BACKUP_BUCKET)" >&2
   exit 2

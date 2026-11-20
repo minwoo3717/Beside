@@ -38,6 +38,7 @@
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
+| 서비스 계정·백업 버킷 | `beside-backup@beside-514511.iam.gserviceaccount.com`(키 없음, 범위 `storage-rw,logging-write,monitoring-write`, 2026-11-20 04:26 UTC 까지 붙임) — 버킷 `gs://beside-514511-backups` 에 만들기만(`roles/storage.objectCreator`). 아래 '운영 대응 설치' 3번 |
 | 코드 | VM 의 `~/Beside` 는 `main`(2026-11-19 PR #6~#11 병합 뒤 `1c87da5`, 11:04 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 배포). 추론 서비스 변경(PR #11)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
@@ -53,13 +54,13 @@
 
 **지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다. 이 강화는 `deploy/gcp` → `main` PR 로만 들어가고 `feat/preprocess` 에서 pull 해도 오지 않으므로, PR 이 병합되기 전에는 VM 의 Caddyfile 을 되돌리지 않는다. 병합 뒤 VM 에서 `git checkout deploy/Caddyfile && git checkout main && git pull --ff-only`, 그다음 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`(main 의 compose 변경으로 컨테이너가 다시 만들어진다). 2026-11-17 에 VM 에 Tailscale 을 설치하고(apt 저장소, `beside-vm` 100.98.76.5) `INFERENCE_BASE_URL` 을 Runpod Pod(100.83.86.62:8002)로 바꿨다. 이전 값은 `deploy/.env.bak-20261117-stub` 에 있고 스텁 컨테이너 `beside-stub` 는 되돌릴 때를 위해 남겨 두었다.
 
-**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정(GCS 읽기 범위)을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다. 이것은 아래 '운영 대응 설치'의 2번(컨테이너의 메타데이터 서버 차단)과 3번(기본 계정 대신 버킷에 만들기만 되는 `beside-backup@` 를 붙임)이 함께 고친다. **R1(VM 밖 백업)을 쓰면 계정을 `--no-service-account` 로 떼지 않는다** — 그러면 백업이 매시 실패한다(7번 VM 감시가 3시간 뒤 알린다). R1 을 쓰지 않기로 한 경우에만 `stop` → `set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes` → `start` 로 뗀다(약 1분 중단). 기본 네트워크가 만든 RDP 규칙은 어느 쪽이든 필요 없다.
+**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 2026-11-20 04:26 UTC 전까지 VM 은 기본 서비스 계정(GCS 읽기 범위)을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있었다. 그때 아래 '운영 대응 설치' 3번대로 기본 계정 대신 버킷 `beside-514511-backups` 에 만들기만 되는 `beside-backup@beside-514511.iam.gserviceaccount.com` 을 붙였다 **[구현됨: 적용]**(운영자 적용·보고). 컨테이너가 이 계정의 토큰을 받지 못하게 하는 2번(컨테이너의 메타데이터 서버 차단)은 아직 **[계획]** 이다 — 그때까지는 컨테이너도 그 버킷에 객체를 만들 수 있다(읽기·목록·덮어쓰기·삭제는 안 된다). **R1(VM 밖 백업)을 쓰면 계정을 `--no-service-account` 로 떼지 않는다** — 그러면 백업이 매시 실패한다(7번 VM 감시가 3시간 뒤 알린다). R1 을 쓰지 않기로 한 경우에만 `stop` → `set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes` → `start` 로 뗀다(약 1분 중단). 기본 네트워크가 만든 RDP 규칙은 어느 쪽이든 필요 없다.
 
 ```bash
 gcloud compute firewall-rules delete default-allow-rdp
 ```
 
-VM 을 새로 만들면(`create_vm.sh` 는 2026-11-13 결정대로 서비스 계정 없이 만든다. 스냅샷에서 만들 때 `--service-account` 를 주지 않으면 기본 계정이 붙는다) R1 을 위해 '운영 대응 설치' 3번의 붙이기(`set-service-account ... --service-account=beside-backup@<프로젝트>.iam.gserviceaccount.com --scopes=storage-rw,logging-write,monitoring-write`)를 다시 한다. `create_vm.sh` 로 빈 디스크부터 만들었으면 2·4·7번 설치도 다시 한다(스냅샷에서 만든 디스크에는 이미 들어 있다).
+VM 을 새로 만들면(`create_vm.sh` 는 2026-11-13 결정대로 서비스 계정 없이 만든다. 스냅샷에서 만들 때 `--service-account` 를 주지 않으면 기본 계정이 붙는다) R1 을 위해 '운영 대응 설치' 3번의 붙이기(`set-service-account ... --service-account=beside-backup@beside-514511.iam.gserviceaccount.com --scopes=storage-rw,logging-write,monitoring-write`)를 다시 한다. `create_vm.sh` 로 빈 디스크부터 만들었으면 2·4·7번 설치도 다시 한다(스냅샷에서 만든 디스크에는 이미 들어 있다).
 
 **GPU 없이 먼저 전체 흐름 확인(스텁)**: 리포의 추론 서비스를 패스스루 모드로 VM 안에 띄우고 `INFERENCE_BASE_URL=http://beside-stub:8001` 로 둔다. 이미지는 `python:3.12-slim` + `generation/inference_service/requirements.txt`, 앱 코드는 읽기 전용 마운트, 샘플 GLB 는 **유효한 GLB** 여야 한다(리포의 `backend/storage/results/sample-dog.glb` 는 0바이트라 쓸 수 없다). `--network beside_default`, 포트는 게시하지 않고, `BESIDE_INFERENCE_TOKEN` 은 `.env` 의 `INFERENCE_TOKEN` 과 같게(권한 600 인 env 파일로 넘긴다). Runpod Pod 를 연결하면 `INFERENCE_BASE_URL` 을 바꾸고 `docker rm -f beside-stub`.
 
@@ -299,7 +300,7 @@ $C start backend
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
 - **[구현됨]** prod 는 서버를 멈추지 않고 매시 5분(한국 시각 기준 `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 48개(이틀)를 남긴다(`storage.backup.*`, 2026-11-20 까지는 매일 04:30·7개). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
-- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷)으로 매시 올리는 것은 아래 '운영 대응 설치' R1 이다 **[계획]**.
+- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 올리는 것은 아래 '운영 대응 설치' R1 이다. 버킷·계정은 2026-11-20 에 만들어 VM 에 붙였고 **[구현됨: 적용]**, VM 의 업로드 타이머 설치는 **[계획]** 이다.
 
 ### 부하 시험
 
@@ -307,20 +308,32 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 ## 운영 대응 설치 (R1~R5)
 
-2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이고, **VM·GCP 에 적용한 것은 아직 없다 [계획]**. 적용하면 날짜와 확인 결과를 이 표에 적는다.
+2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 3번(버킷·계정·VM 에 붙이기)만 2026-11-20 04:26 UTC 까지 했고 [구현됨: 적용], 나머지는 [계획]** 이다. 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
 
 | 대응 | 막는 장애 | 파일 | 상태 |
 |---|---|---|---|
-| R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 적용 [계획] |
+| R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기 [구현됨: 적용] 2026-11-20 · VM 설치(차단·타이머) [계획] |
 | R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 적용 [계획] |
 | R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
 | R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [계획] |
 | R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [계획] |
 
 - **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 지금은 DB 가 하루 1번 같은 디스크, 사진·GLB 는 VM 밖 사본이 없다.
-- **순서**: 메타데이터 차단(2) → 버킷·계정(3) → VM 에 계정 붙이기(정지 필요) → 백업 타이머(4). 차단을 먼저 하는 이유: 계정을 붙인 순간부터 컨테이너가 그 토큰을 받을 수 있다. 지금 VM 의 기본 서비스 계정(GCS 읽기 범위)도 같은 문제라 차단은 바로 걸어도 이득이다.
+- **순서**: 메타데이터 차단(2) → 버킷·계정(3) → VM 에 계정 붙이기(정지 필요) → 백업 타이머(4). 차단을 먼저 하는 이유: 계정을 붙인 순간부터 컨테이너가 그 토큰을 받을 수 있다. 2026-11-20 에는 3번(붙이기)을 2번보다 먼저 했으므로, 남은 단계 가운데 2번을 가장 먼저 한다(그 전까지 컨테이너가 받을 수 있는 것은 그 버킷에 만들기만 되는 토큰이다).
 - **스크립트는 복사해서 쓴다**: root 가 돌리는 파일이 `git pull` 만으로 바뀌지 않게 `/usr/local/sbin` 으로 `install` 한다. 리포의 스크립트가 바뀌면 아래 `install` 줄을 다시 실행한다.
 - 비밀(웹훅·토큰)은 출력하지 않는다. 백업 스크립트는 메타데이터 서버 토큰을, 감시 스크립트는 `deploy/.env` 의 `NOTIFY_WEBHOOK_URL` 을 curl 설정(stdin)으로만 넘긴다.
+
+**적용 기록**(적용한 사람이 채운다. 시각은 UTC. 확인 결과에는 아래 각 단계의 확인 명령이 보여 준 것을 적는다):
+
+| 단계 | 상태 | 적용 시각 (UTC) | 확인 결과 |
+|---|---|---|---|
+| 1. 백엔드 배포(R1 매시 백업, R5) | [계획] | | (caddy `Memory`·`GOMEMLIMIT`, 정시 5분 뒤 새 zip) |
+| 2. 메타데이터 차단(R1) | [계획] — 남은 것 가운데 먼저 | | (`beside-block-metadata check` 의 ok 3줄) |
+| 3. 버킷·계정·VM 에 붙이기(R1) | **[구현됨: 적용]** (운영자 적용·보고, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 04:26 까지 | 버킷 `gs://beside-514511-backups`: asia-northeast3, 균일 접근, 공개 액세스 방지 enforced, 소프트 삭제 7일, 수명 주기 `db/` 만 30일 뒤 삭제. 키 없는 `beside-backup@beside-514511.iam.gserviceaccount.com` 에 그 버킷의 `roles/storage.objectCreator`. `beside-vm` 에 `--scopes=storage-rw,logging-write,monitoring-write` 로 붙임 |
+| 4. 백업 타이머(R1) | [계획] | | (첫 실행 `journalctl` 의 `db:`·`files:` 줄, `gcloud storage ls gs://beside-514511-backups/db/`) |
+| 5. 스냅샷 일정(R2) | [계획] | | (첫 스냅샷 이름·시각) |
+| 6. 외부 가동 확인(R3) | [계획] | | (알림 채널 종류, 가동 확인 이름) |
+| 7. VM 감시(R4) | [계획] | | (`list-timers` 의 다음 실행) |
 
 **1. 백엔드 배포(R1 의 매시 백업, R5)**: 이 변경이 main 에 들어간 뒤 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
 
@@ -344,7 +357,7 @@ curl -s -H 'Metadata-Flavor: Google' http://169.254.169.254/computeMetadata/v1/i
 - 규칙은 `DOCKER-USER` 맨 위의 `-d 169.254.169.254/32 -p tcp ! --dport 53 -j DROP` 이다. 53(DNS)은 열어 둔다: 메타데이터 서버가 VM 의 DNS 다. Docker 를 다시 시작하면 단위가 규칙을 다시 넣는다(`PartOf=docker.service`).
 - backend 를 호스트 네트워크로 옮기면(위 compose 주석의 대안) 이 차단이 적용되지 않는다.
 
-**3. 버킷·계정(R1, gcloud 가 로그인된 곳)**: `bash deploy/gcp/backup_bucket.sh`(먼저 `DRY_RUN=1` 로 명령 확인). 버킷 `<프로젝트>-beside-backup`(서울, 균일 접근, 공개 차단, 소프트 삭제 기본 7일, `db/` 만 30일 뒤 삭제)과 키 없는 `beside-backup@` 계정(그 버킷에만 `roles/storage.objectCreator`)을 만들고, VM 에 붙이는 명령을 출력만 한다. 붙이려면 VM 을 멈춰야 하므로(약 1분, 진행 중 작업은 `INTERNAL_ERROR`) 팀 공지 뒤 출력된 `stop` → `set-service-account ... --scopes=storage-rw,logging-write,monitoring-write` → `start` 를 한다. 2026-11-13 결정(컨테이너에 클라우드 자격 증명을 주지 않는다)은 그대로다: 계정은 VM 호스트만 쓰고 컨테이너는 2번으로 막는다.
+**3. 버킷·계정(R1, gcloud 가 로그인된 곳)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 새로 만들 때의 붙이기뿐이다(위 'GCP 메인 서버'). 스크립트는 다시 실행해도 있는 버킷·계정은 그대로 두고 설정만 다시 넣는다: `bash deploy/gcp/backup_bucket.sh`(먼저 `DRY_RUN=1` 로 명령 확인). 버킷 `<프로젝트>-backups`(이 프로젝트는 `beside-514511-backups`. 서울, 균일 접근, 공개 차단, 소프트 삭제 기본 7일, `db/` 만 30일 뒤 삭제)과 키 없는 `beside-backup@` 계정(그 버킷에만 `roles/storage.objectCreator`)을 만들고, VM 에 붙이는 명령을 출력만 한다. 붙이려면 VM 을 멈춰야 하므로(약 1분, 진행 중 작업은 `INTERNAL_ERROR`) 팀 공지 뒤 출력된 `stop` → `set-service-account ... --scopes=storage-rw,logging-write,monitoring-write` → `start` 를 한다. 2026-11-13 결정(컨테이너에 클라우드 자격 증명을 주지 않는다)은 그대로다: 계정은 VM 호스트만 쓰고 컨테이너는 2번으로 막는다.
 
 - 이 계정은 만들기만 된다(읽기·목록·덮어쓰기·삭제 불가). 그래서 업로드는 `gcloud storage cp` 가 아니라 JSON API + `ifGenerationMatch=0` 이다(`gcloud storage cp` 는 `--no-clobber` 여부와 상관없이 대상 객체를 먼저 GET 해서 403 이 난다 — 스크립트 머리말).
 - 버킷의 파일은 VM 쪽에서 지울 수 없다. 앱에서 작업을 지워도 그 사진·GLB 사본은 버킷에 남으므로, 지워야 하면 프로젝트 소유자 계정으로 `gcloud storage rm` 한다.
@@ -352,7 +365,7 @@ curl -s -H 'Metadata-Flavor: Google' http://169.254.169.254/computeMetadata/v1/i
 **4. 백업 타이머(R1, VM — 3번 뒤)**:
 
 ```bash
-echo 'BUCKET=<3번이 출력한 버킷>' | sudo tee /etc/beside-backup.env
+echo 'BUCKET=beside-514511-backups' | sudo tee /etc/beside-backup.env   # 3번에서 만든 버킷(2026-11-20)
 sudo install -m 755 deploy/backup/offsite_backup.sh /usr/local/sbin/beside-offsite-backup
 sudo install -m 644 deploy/backup/beside-backup.service deploy/backup/beside-backup.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -363,7 +376,7 @@ systemctl list-timers beside-backup.timer
 ```
 
 - 실패하면 서비스가 failed 로 남고 다음 정시 20분에 못 보낸 것부터 다시 보낸다. 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남기고, 7번 VM 감시가 이것이 3시간 넘게 묵거나(매시 실행 세 번이 실패·누락) 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 감시를 설치하기 전에는 실패해도 저널에만 남는다.
-- 복구 확인(한 번, 개발 PC): `gcloud storage ls gs://<버킷>/db/ | tail -n 1` 의 zip 을 받아 H2 로 열어 작업 수를 본다(FD5 훈련과 같은 `Restore` 절차).
+- 복구 확인(한 번, 개발 PC): `gcloud storage ls gs://beside-514511-backups/db/ | tail -n 1` 의 zip 을 받아 H2 로 열어 작업 수를 본다(FD5 훈련과 같은 `Restore` 절차).
 
 **5. 스냅샷 일정(R2, gcloud)**: `bash deploy/gcp/snapshot_schedule.sh`. 다음 19:00 UTC 뒤 `gcloud compute snapshots list --filter="sourceDisk~/disks/beside-vm$"` 로 첫 스냅샷을 확인한다. 스냅샷은 전원을 내린 것과 같은 상태라, 복구한 VM 에서 H2 파일이 열리지 않으면 `storage/backup` 의 최신 zip 으로 되돌린다.
 
