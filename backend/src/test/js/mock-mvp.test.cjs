@@ -200,6 +200,12 @@ test("the generate button comes back when Retry-After has passed, still without 
   try {
     await app.select(); await app.submit(); await settle();
     assert.equal(app.element("#error-message").textContent, QUEUE_FULL_COPY);
+    assert.match(app.element("#status-description").textContent, /^1초 뒤\(\d{2}:\d{2}:\d{2} 이후\)/);
+    // It was locked first: the label said when generating comes back, and only later went back to normal.
+    const labels = app.element("#generate-button").querySelector("span").history;
+    const locked = labels.findIndex((text) => /^\d{2}:\d{2}:\d{2} 이후 생성 가능$/.test(text));
+    assert.ok(locked >= 0, labels.join(" | "));
+    assert.ok(labels.lastIndexOf("3D 모델 생성") > locked, labels.join(" | "));
     assert.equal(app.element("#generate-button").disabled, false);
     assert.equal(app.element("#generate-button").querySelector("span").textContent, "3D 모델 생성");
     assert.equal(posts, 1);
@@ -207,7 +213,10 @@ test("the generate button comes back when Retry-After has passed, still without 
 });
 
 test("Retry-After that is not a positive integer of seconds is ignored", async () => {
-  for (const value of ["0", "-5", "1.5", "abc", "", "Wed, 21 Oct 2026 07:28:00 GMT", "99999999999999999999"]) {
+  // "5.5", "5e2", "0x10" and "+5" read as 5 s or more under a lenient parseInt or Number parser; the test
+  // setTimeout never fires waits over 1000 ms, so such a parser would leave the button locked here.
+  for (const value of ["0", "-5", "1.5", "5.5", "5e2", "0x10", "+5", "abc", "", "Wed, 21 Oct 2026 07:28:00 GMT",
+    "99999999999999999999"]) {
     const app = setup(async () => apiError(503, "QUEUE_FULL", { "Retry-After": value }));
     try {
       await app.select(); await app.submit(); await settle();
