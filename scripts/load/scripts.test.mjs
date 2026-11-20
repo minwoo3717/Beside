@@ -183,7 +183,8 @@ test('gpu_queue.js: Poisson arrivals by thinning, VUs for bursts, prediction rec
   assert.deepEqual(state.requests.map((r) => r.tags.endpoint), ['healthz', 'create', 'poll', 'asset']);
 
   const out = again.handleSummary({ metrics: { load_serverProcessingMs: { values: { avg: 11800, med: 11700, 'p(95)': 12500, count: 20 } },
-    load_postMs: { values: { avg: 100, med: 100, 'p(95)': 120, count: 140 } } }, setup_data: {}, state: {} });
+    load_postMs: { values: { avg: 100, med: 100, 'p(95)': 120, count: 140 } }, load_createdCount: { values: { count: 140, rate: 0.08 } } },
+  setup_data: {}, state: {} });
   const doc = JSON.parse(out[BASE_ENV.SUMMARY_PATH]);
   assert.equal(doc.meta.arrivalProcess, 'poisson (thinned x20)');
   assert.equal(doc.meta.arrivalThin, 20);

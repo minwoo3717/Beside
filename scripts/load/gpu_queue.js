@@ -23,8 +23,9 @@
 // Predictions: meta.prediction uses T_SEC as the slot time and the requested rate. A run differs in both:
 // - Arrival rate: the number of jobs a finite run creates is a Poisson count around lambda x DURATION_S (sd = its
 //   square root, about 10 % for the 90 jobs of a 1,800 s G1 at RHO 0.5), so the summary records what the run created:
-//   meta.measuredCreates (load_postMs count) in meta.measuredArrivalWindowS (DURATION_S, or less when the load stopped
-//   early) as meta.measuredJobsPerHour (docs/perf/load/TRAFFIC_MODEL.md §9).
+//   meta.measuredCreates (the creates answered 202, load_createdCount count) in meta.measuredArrivalWindowS
+//   (DURATION_S, or less when the load stopped early) as meta.measuredJobsPerHour (docs/perf/load/TRAFFIC_MODEL.md §9).
+//   meta.measuredCreatePosts is every create sent (load_postMs count, refused or failed ones too).
 // - Slot time: the backend holds a slot longer than T_SEC. With prod's inference.offline-wait-ms > 0 it first calls the
 //   stub's /healthz afresh, then uploads the photos, waits out the stub's sleep and downloads the GLB (only these three
 //   are the server's processingMs), then writes job_runs / events.jsonl and sends the cleanup DELETE. Mean processingMs
@@ -38,6 +39,12 @@
 // its job ended FAILED, so failures were injected (an F1a / F2 run without SCENARIO) or occurred, and the same holds.
 // An F2 run whose jobs all waited out the outage has no retry: only SCENARIO=F2 marks it. The stdout report ends with
 // these.
+// Queue cap ([계획] agenda #21: the server refuses a create or a retry with 503 QUEUE_FULL + Retry-After once N jobs
+// wait). QUEUE_CAP is the N the server was set to (meta.queueCap, null when not given, 0 = cap off), so every run
+// records it; meta.measuredRefused / measuredRefusedRetries are the 503 QUEUE_FULL of creates / retries, and
+// meta.measuredRetryAfterChecks the Retry-After checks of lib/flow.js (QUEUE_RETRY_AFTER, lib/config.js). The queue
+// model assumes no job is refused (M/D/1 and M/M/c have no loss), so recompute is also null for a run with
+// QUEUE_CAP > 0, or with any refusal (then the server had a cap the run did not record: the note says so).
 //
 //   k6 run -e BASE_URL=https://<domain> -e RUN_ID=g1r07 -e RTT_BASE_MS=23 -e RHO=0.7 -e SLOTS=1 -e T_SEC=10 \
 //          scripts/load/gpu_queue.js
@@ -45,7 +52,7 @@
 // Env: RHO (0.7), SLOTS (1), T_SEC (10), DURATION_S (1800), ARRIVAL_THIN (20, whole number >= 1), FAIL_RATIO (0; F1a
 //      uses the stub's own fail rate), FAIL_TOKEN, SCENARIO (G1|G2|G3|F1a|F1b|F2, see above), MAX_VUS (whole number
 //      >= 1; the VUs set up front are the computed pre-allocation capped at MAX_VUS, both in meta.preAllocatedVUs and
-//      meta.maxVUs), PROM_URL, plus lib/config.js.
+//      meta.maxVUs), QUEUE_CAP (whole number >= 0, see above), PROM_URL, plus lib/config.js (QUEUE_RETRY_AFTER).
 import { CONFIG, ENV, flowDrainS, photoPaths, readNum, readStr, requireRtt } from './lib/config.js';
 import { lazyBodies, openOnce } from './lib/bodies.js';
 import { makeContext, userFlow } from './lib/flow.js';
@@ -67,6 +74,10 @@ const DURATION_S = readNum(ENV, 'DURATION_S', 1800);
 const FAIL_RATIO = readNum(ENV, 'FAIL_RATIO', 0);
 const THIN = readNum(ENV, 'ARRIVAL_THIN', 20);
 if (!(THIN >= 1) || Math.floor(THIN) !== THIN) throw new Error(`gpu_queue.js: ARRIVAL_THIN must be a whole number >= 1 (got ${THIN})`);
+const QUEUE_CAP = readNum(ENV, 'QUEUE_CAP', null);
+if (QUEUE_CAP !== null && !(QUEUE_CAP >= 0 && Math.floor(QUEUE_CAP) === QUEUE_CAP)) {
+  throw new Error(`gpu_queue.js: QUEUE_CAP must be a whole number >= 0, the server's cap (got ${QUEUE_CAP})`);
+}
 const LABEL = scenarioLabel({ scenario: readStr(ENV, 'SCENARIO', ''), rho: RHO, slots: SLOTS, failRatio: FAIL_RATIO,
   failToken: CONFIG.failToken });
 const QUEUE_RUN = isQueueRun(LABEL);
@@ -86,6 +97,12 @@ if (!(MAX_VUS >= 1) || Math.floor(MAX_VUS) !== MAX_VUS) throw new Error(`gpu_que
 const PRE_ALLOCATED_VUS = Math.min(PRE_VUS, MAX_VUS);
 // Long enough for the longest flow (a FAILED wait, the retry and a second wait), so a normal end cuts off no flow.
 const DRAIN_S = flowDrainS(CONFIG);
+// The 503 QUEUE_FULL of creates and of retries (meta.measuredRefused / measuredRefusedRetries): k6 keeps a tag-filtered
+// submetric in the summary only when a threshold names it, so each gets a no-op one.
+const REFUSED = { create: 'load_queueFullCount{endpoint:create}', retry: 'load_queueFullCount{endpoint:retry}' };
+const REFUSED_KEPT = {};
+REFUSED_KEPT[REFUSED.create] = ['count>=0'];
+REFUSED_KEPT[REFUSED.retry] = ['count>=0'];
 
 export const options = {
   discardResponseBodies: true,
@@ -104,9 +121,10 @@ export const options = {
       tags: { stage: '0', phase: 'hold' },
     },
   }, guardScenario(CONFIG, DURATION_S, DURATION_S + DRAIN_S)), // returns when the last flow is done
-  // Overload (rho >= 1) is expected to time flows out, so the flow criteria apply only below saturation.
+  // Overload (rho >= 1) is expected to time flows out, so the flow criteria apply only below saturation. A refused flow
+  // (503 QUEUE_FULL) is not ok in load_flowOkRatio, so below saturation a cap that refuses over 5 % fails rate>=0.95.
   thresholds: merge(latencyThresholds(RTT, ['healthz', 'create', 'poll', 'asset'], null), errorThresholds(null, true),
-    RHO < 1 ? flowThresholds(null) : {}, { dropped_iterations: ['count==0'] }),
+    RHO < 1 ? flowThresholds(null) : {}, { dropped_iterations: ['count==0'] }, REFUSED_KEPT),
 };
 
 const ctx = makeContext({ cfg: CONFIG, body: BODIES.body, makeFailBody: BODIES.makeFailBody, failRatio: FAIL_RATIO });
@@ -129,12 +147,19 @@ function trendValues(data, name) {
   return m ? { mean: m.avg, med: m.med, p95: m['p(95)'], count: m.count } : null;
 }
 
-// Requests of one endpoint metric (load_postMs, load_retryMs): 0 when none was sent (k6 leaves a metric with no sample
-// out of the summary), null when no load ran (setup() failed: no setup_data).
-function requestCount(data, name) {
+// Samples of one metric (load_postMs, load_createdCount, load_retryMs, a kept load_queueFullCount submetric): 0 when it
+// got none (k6 leaves a metric with no sample out of the summary), null when no load ran (setup() failed: no setup_data).
+function countOf(data, name) {
   if (!data.setup_data) return null;
   const m = data.metrics && data.metrics[name] ? data.metrics[name].values : null;
   return (m && m.count) || 0;
+}
+
+// Passes and fails of a Rate (load_retryAfterOkRatio): 0 / 0 when it got no sample, null when no load ran.
+function rateCounts(data, name) {
+  if (!data.setup_data) return null;
+  const m = data.metrics && data.metrics[name] ? data.metrics[name].values : null;
+  return { passed: (m && m.passes) || 0, failed: (m && m.fails) || 0 };
 }
 
 // Seconds in which flows could start: DURATION_S, or less when the load stopped early (seconds since markReady() at the
@@ -159,16 +184,43 @@ function retriedText(n) {
   return `${retriesText(n)}: failures were injected or occurred (an F1a/F2 run without SCENARIO?)`;
 }
 
-// The stdout lines under the common report: what the run created, and for a G run the measured means and the recompute.
+// What the queue cap did, for meta.predictionNote and the stdout report: null when the run neither set a cap
+// (QUEUE_CAP > 0) nor got a 503 QUEUE_FULL, else the refusals that take the queue model away. A refusal without
+// QUEUE_CAP > 0 means the server had a cap the run did not record.
+function capText(x) {
+  const capped = x.queueCap !== null && x.queueCap > 0;
+  if (!capped && !(x.measuredRefused > 0) && !(x.measuredRefusedRetries > 0)) return null;
+  const seen = x.measuredCreatePosts === null ? 'no load ran'
+    : `${x.measuredRefused} of ${x.measuredCreatePosts} creates` +
+      (x.measuredRefusedRetries > 0 ? ` and ${x.measuredRefusedRetries} of ${x.measuredRetries} retries` : '') +
+      ' refused with 503 QUEUE_FULL';
+  return capped ? `QUEUE_CAP=${x.queueCap}: ${seen}`
+    : `QUEUE_CAP ${x.queueCap === null ? 'not set' : '0'}, yet ${seen}: the server has a cap this run did not record (set QUEUE_CAP)`;
+}
+
+// The stdout lines under the common report: what the run created, for a G run the measured means and the recompute (or
+// why there is none), the queue cap when it was set or refused, and the Retry-After checks when a 503 QUEUE_FULL came.
 function queueLines(x) {
   const created = x.measuredCreates === null ? 'no load ran'
     : `${x.measuredCreates} jobs created in ${x.measuredArrivalWindowS} s = ${x.measuredJobsPerHour === null ? '-' : x.measuredJobsPerHour}/h ` +
       `(requested ${x.prediction.jobsPerHour}/h), ${retriesText(x.measuredRetries)}`;
-  if (!QUEUE_RUN) return `queue ${LABEL}: ${created}; fault run, so no queue prediction or recompute\n`;
-  const lines = [`queue ${LABEL}: ${created}; mean slot (server processingMs) ${meanMs(x.measuredProcessingMs)}, ` +
-    `mean queuedMs ${meanMs(x.measuredQueuedMs)}`];
-  if (x.measuredRetries > 0) lines.push(`  ${retriedText(x.measuredRetries)}, so no recompute`);
-  else lines.push(`  recompute: ${x.recompute === null ? '- (no job created or no processingMs)' : x.recompute}`);
+  const cap = capText(x);
+  const lines = [];
+  if (!QUEUE_RUN) {
+    lines.push(`queue ${LABEL}: ${created}; fault run, so no queue prediction or recompute`);
+    if (cap !== null) lines.push(`  ${cap}`);
+  } else {
+    lines.push(`queue ${LABEL}: ${created}; mean slot (server processingMs) ${meanMs(x.measuredProcessingMs)}, ` +
+      `mean queuedMs ${meanMs(x.measuredQueuedMs)}`);
+    if (cap !== null) lines.push(`  ${cap}, so no recompute (the queue model assumes no job is refused)`);
+    else if (x.measuredRetries > 0) lines.push(`  ${retriedText(x.measuredRetries)}, so no recompute`);
+    else lines.push(`  recompute: ${x.recompute === null ? '- (no job created or no processingMs)' : x.recompute}`);
+  }
+  const ra = x.measuredRetryAfterChecks;
+  if (ra !== null && ra.passed + ra.failed > 0) {
+    lines.push(`  Retry-After on 503 QUEUE_FULL: ${ra.passed} passed, ${ra.failed} failed (want whole seconds >= 1` +
+      `${x.queueRetryAfterS === null ? '' : `, = QUEUE_RETRY_AFTER ${x.queueRetryAfterS}`})`);
+  }
   return lines.join('\n') + '\n';
 }
 
@@ -176,11 +228,10 @@ export function handleSummary(data) {
   const queued = trendValues(data, 'load_serverQueuedMs');
   const processing = trendValues(data, 'load_serverProcessingMs');
   const slotS = processing && processing.mean > 0 ? Math.round(processing.mean) / 1000 : null;
-  const creates = requestCount(data, 'load_postMs');
-  const retries = requestCount(data, 'load_retryMs');
-  // A retry follows a FAILED job, so the run had failures (injected, e.g. an F1a/F2 run without SCENARIO, or not):
-  // retries add arrivals and failed attempts are in the mean slot time, as in a fault run, so no queue recompute.
-  const queueModel = QUEUE_RUN && !(retries > 0);
+  // Jobs the run created: the creates answered 202. load_postMs also counts the refused (503 QUEUE_FULL) and failed
+  // POSTs, which put no job in the queue.
+  const creates = countOf(data, 'load_createdCount');
+  const retries = countOf(data, 'load_retryMs');
   const windowS = arrivalWindowS(data);
   const perHour = realizedPerHour(creates, windowS);
   const extra = {
@@ -191,29 +242,48 @@ export function handleSummary(data) {
     preAllocatedVUs: PRE_ALLOCATED_VUS,
     maxVUs: MAX_VUS,
     prediction: PREDICTION,
-    predictionNote: !QUEUE_RUN
-      ? `${LABEL} is a fault run: the queue model does not apply (retries add arrivals, failures and timeouts are in the ` +
-        'slot time), so recompute is null'
-      : !queueModel
-        ? `${retriedText(retries)}, so the queue model does not apply (retries add arrivals, failed attempts are in ` +
-          'the slot time) and recompute is null'
-        : 'prediction uses T_SEC as the slot time and the requested rate; compare measuredQueuedMs with the values that ' +
-          '`recompute` prints (the jobs the run created, measuredJobsPerHour; mean server processingMs as the slot time, ' +
-          'a little short of it; Poisson arrivals)',
+    predictionNote: null, // below, once the counts are known
     measuredQueuedMs: queued,
     measuredProcessingMs: processing,
     measuredCreates: creates,
+    measuredCreatePosts: countOf(data, 'load_postMs'),
     measuredRetries: retries,
+    measuredRefused: countOf(data, REFUSED.create),
+    measuredRefusedRetries: countOf(data, REFUSED.retry),
+    measuredRetryAfterChecks: rateCounts(data, 'load_retryAfterOkRatio'),
     measuredArrivalWindowS: windowS,
     measuredJobsPerHour: perHour,
-    recompute: !queueModel || slotS === null || !(perHour > 0) ? null
-      : `python scripts/load/model.py --queue-rate-per-h ${perHour} --queue-service-s ${slotS} --queue-slots ${SLOTS}`,
+    queueCap: QUEUE_CAP,
+    queueRetryAfterS: CONFIG.queueRetryAfterS,
+    recompute: null,
     failRatio: FAIL_RATIO,
     failToken: FAIL_RATIO > 0 ? CONFIG.failToken : null,
     stubNote: 'stub passthrough: BESIDE_PASSTHROUGH_DELAY_MS = T_SEC x 1000, BESIDE_PASSTHROUGH_SLOTS = SLOTS and the backend\'s ' +
       'inference.max-concurrency = SLOTS (otherwise c is the smaller of the two)',
     server: (data.setup_data && data.setup_data.server) || null,
   };
+  // A cap refuses arrivals, and the queue model has no loss. A retry follows a FAILED job, so the run had failures
+  // (injected, e.g. an F1a/F2 run without SCENARIO, or not): retries add arrivals and failed attempts are in the mean
+  // slot time, as in a fault run. Either way there is no queue recompute.
+  const cap = capText(extra);
+  const queueModel = QUEUE_RUN && cap === null && !(retries > 0);
+  if (!QUEUE_RUN) {
+    extra.predictionNote = `${LABEL} is a fault run: the queue model does not apply (retries add arrivals, failures and ` +
+      'timeouts are in the slot time), so recompute is null';
+  } else if (cap !== null) {
+    extra.predictionNote = `${cap}; the queue model assumes no job is refused (M/D/1 and M/M/c have no loss), so it ` +
+      'does not apply and recompute is null';
+  } else if (!queueModel) {
+    extra.predictionNote = `${retriedText(retries)}, so the queue model does not apply (retries add arrivals, failed ` +
+      'attempts are in the slot time) and recompute is null';
+  } else {
+    extra.predictionNote = 'prediction uses T_SEC as the slot time and the requested rate; compare measuredQueuedMs with ' +
+      'the values that `recompute` prints (the jobs the run created, measuredJobsPerHour; mean server processingMs as ' +
+      'the slot time, a little short of it; Poisson arrivals)';
+  }
+  if (queueModel && slotS !== null && perHour > 0) {
+    extra.recompute = `python scripts/load/model.py --queue-rate-per-h ${perHour} --queue-service-s ${slotS} --queue-slots ${SLOTS}`;
+  }
   const out = summaryOutputs(data, { script: 'gpu_queue.js', scenario: LABEL, plannedS: DURATION_S, thresholds: options.thresholds,
     stages: [], extra }, CONFIG);
   out.stdout += queueLines(extra);

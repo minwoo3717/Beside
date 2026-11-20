@@ -190,9 +190,11 @@ RTT_base 는 A0(연기 시험)에서 잰 healthz p50 이다. 네트워크 왕복
   - 4차(2026-11-19 UTC)는 그 기본값(75 s·스레드 8)과 backend HttpClient 유휴 60 s 로 h0 0.293 s, 빈 큐 S0 8.64 s 였다 [실험 결과·계산, [2026-11-20_vm-4th.md](2026-11-20_vm-4th.md) 2절]. 같은 4차 Pod 의 c=1 과부하 S_busy 는 8.67 s(415건/h), 슬롯 넘김 중앙값은 0.577 s 였다 [계산, 같은 문서 4절]. c=2 는 같은 요청 λ 에서 넘치지 않아 슬롯 시간을 바로 재지 못했다(센 용량 하한 495건/h).
   - 측정 대기는 실제 도착·처리 시간으로 다시 돌린 FIFO 재현(평균 3~6 % 안)과 유한 실행 몬테카를로로 비교했다 [계산, [2026-11-18_vm-2nd.md](2026-11-18_vm-2nd.md) 요약·3·4절]. ρ0.7 은 느린 작업이 몰려 온 순서 때문에 몬테카를로 구간 아래쪽이었다.
 - **예측은 실행 뒤 잰 값으로 다시 계산한다.** `gpu_queue.js` 가 두 값과 그 값을 넣은 명령(`meta.recompute`)을 요약에 남긴다.
-  - 도착률: 실제로 만든 작업 수(생성 요청 수, `load_postMs` count = `meta.measuredCreates`) × 3600 ÷ 도착 구간(`meta.measuredArrivalWindowS`: `DURATION_S`, 부하가 일찍 멈췄으면 setup 이 끝난 뒤 멈출 때까지의 초) = `meta.measuredJobsPerHour` 건/h. 솎아내기라 작업 수가 실행마다 다르므로(포아송, 표준편차 ≈ √건수) 요청한 λ 대신 이 값을 쓴다.
+  - 도착률: 실제로 만든 작업 수(202 를 받은 생성 요청 수, `load_createdCount` count = `meta.measuredCreates`) × 3600 ÷ 도착 구간(`meta.measuredArrivalWindowS`: `DURATION_S`, 부하가 일찍 멈췄으면 setup 이 끝난 뒤 멈출 때까지의 초) = `meta.measuredJobsPerHour` 건/h. 솎아내기라 작업 수가 실행마다 다르므로(포아송, 표준편차 ≈ √건수) 요청한 λ 대신 이 값을 쓴다.
+  - 보낸 생성 요청 수(`load_postMs` count)는 `meta.measuredCreatePosts` 다. 503 `QUEUE_FULL` 로 거절된 요청과 실패한 요청(응답 없음·5xx)은 작업을 만들지 않으므로 `meta.measuredCreates` 에 들지 않는다. 이 정의를 바꾸기 전(2026-11-20, 1~4차 VM 측정 포함)의 요약에서는 `meta.measuredCreates` 가 보낸 요청 수였다. 그때 서버에는 상한이 없어 거절이 없었으므로, 두 정의의 차이는 실패한 생성 요청 수뿐이다.
   - 평균 슬롯 시간: k6 가 COMPLETED 응답에서 읽은 서버 `processingMs` 의 평균(`meta.measuredProcessingMs.mean`, 서버 쪽은 `events.jsonl` 또는 Prometheus `beside_job_processing_seconds_sum / _count`). `processingMs` 는 업로드·스텁 지연·GLB 내려받기·저장뿐이라 슬롯보다 조금 짧다(작업마다 스텁 왕복 두 번 남짓과 기록). 앞의 `/healthz` 는 그 작업의 `queuedMs` 에 들어가므로 큐가 비어도 `queuedMs` 에 스텁 왕복 한 번쯤이 남는다.
   - F 실행(F1a·F1b·F2)과 retry 가 한 번이라도 있는 G 실행은 다시 계산하지 않는다(`meta.recompute` null). retry 는 도착을 늘리고 실패한 시도가 슬롯 시간에 섞이기 때문이다.
+  - 큐 상한을 켠 실행(`QUEUE_CAP` > 0, `meta.queueCap`)과 503 `QUEUE_FULL` 거절이 하나라도 있는 실행(`meta.measuredRefused`·`meta.measuredRefusedRetries`)도 다시 계산하지 않는다. M/D/1·M/M/c 는 도착을 하나도 거절하지 않는다고 놓은 식이기 때문이다. `QUEUE_CAP` 없이 거절이 나오면 실행이 적지 않은 상한이 서버에 있었다는 뜻이라 `meta.predictionNote` 가 그렇게 적는다. 상한이 있는 큐(M/D/1/K)와 비교하는 것은 [계획]이다(안건 #21).
 
   ```
   python scripts/load/model.py --queue-rate-per-h <meta.measuredJobsPerHour> --queue-service-s <meta.measuredProcessingMs.mean / 1000> --queue-slots <c>
