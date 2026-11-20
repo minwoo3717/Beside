@@ -250,6 +250,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 | 내려받은 GLB 를 Spring 서버 디스크에 쓰지 못함(디스크 가득 참 등) | 업로드 | `INTERNAL_ERROR` (장애 훈련 FD4. 전에는 `CONVERSION_FAILED`) |
 | 내려받은 파일이 glTF 2.0 바이너리 아님 | 업로드 | `CONVERSION_FAILED` (경로 모드와 같은 헤더 확인) |
 | 받은 GLB 를 결과 폴더(`storage.result.dir`)로 복사하지 못함 | 두 모드 | `INTERNAL_ERROR` (FD4. 전에는 `CONVERSION_FAILED`) |
+| 위 복사가 실패했고 그 뒤 서비스 쪽 원본 GLB 가 없음(헤더 확인과 복사 사이에 서비스의 작업 폴더 정리가 지움) | 경로 | `CONVERSION_FAILED` (서비스 쪽 사정. `RealJobWorker.copyFailureCode`) |
 
 이 서비스가 직접 보내는 401 은 `detail.code` 가 `INFERENCE_UNAVAILABLE` 이라 위 규칙과 결과가 같다.
 
