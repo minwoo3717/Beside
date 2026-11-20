@@ -93,8 +93,9 @@ jobs:
         run: |
           trap 'docker logs --tail 80 beside-smoke || true; docker rm -f beside-smoke >/dev/null 2>&1 || true' EXIT
           # Preprocessing off: the image has no models (backend/models/README.md) and the 1x1 probe below is no pet photo.
+          # A fresh volume: prod refuses to start without its H2 file (failure drill FD5) unless told to create it.
           docker run -d --name beside-smoke -p 127.0.0.1:18080:8080 \
-            -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 \
+            -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 -e STORAGE_DB_CREATEIFMISSING=true \
             -e PREPROCESS_CHECK_ENABLED=false -e PREPROCESS_CUTOUT_ENABLED=false beside-backend:ci
           for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:18080/api/v1/healthz && break; sleep 2; done
           curl -fsS http://127.0.0.1:18080/api/v1/healthz; echo
@@ -115,13 +116,26 @@ jobs:
         run: |
           set +e
           out="$(timeout 180 docker run --rm -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 \
-            -e PREPROCESS_CHECK_ENABLED=true beside-backend:ci 2>&1)"
+            -e STORAGE_DB_CREATEIFMISSING=true -e PREPROCESS_CHECK_ENABLED=true beside-backend:ci 2>&1)"
           code=$?
           set -e
           echo "$out" | grep -E "preprocess|APPLICATION FAILED" | tail -5
           echo "exit code $code"
           test "$code" -ne 0 && test "$code" -ne 124
           echo "$out" | grep -q "fetch_models"
+
+      - name: prod without its H2 file refuses to start (failure drill FD5) and says how to restore
+        run: |
+          set +e
+          out="$(timeout 180 docker run --rm -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://127.0.0.1:9 \
+            -e PREPROCESS_CHECK_ENABLED=false -e PREPROCESS_CUTOUT_ENABLED=false beside-backend:ci 2>&1)"
+          code=$?
+          set -e
+          echo "$out" | grep -E "H2 database file|APPLICATION FAILED" | tail -3
+          echo "exit code $code"
+          test "$code" -ne 0 && test "$code" -ne 124
+          echo "$out" | grep -q "does not exist and storage.db.create-if-missing=false"
+          echo "$out" | grep -q "docs/ops/RUNBOOK.md"   # ASCII only: the JVM may print Korean as ? without a UTF-8 locale
 
       - name: compose file + .env.example (bcrypt $ survives single quotes)
         run: |
