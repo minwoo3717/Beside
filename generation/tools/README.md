@@ -16,7 +16,7 @@ python tools/convert_asset.py \
 - GLB_SPEC §1~§4 를 적용한다: 텍스처 임베드, 노드 하나(`base`), Y-up, 1 unit = 1 m, 바운딩 박스 최장 축 1.0 m, 최저점 y = 0·x/z 가운데, 정면 +Z(AnimalLift 템플릿은 머리가 +X 라 기본 `--forward-axis +x`), metallic 0·roughness 0.9.
 - 상한(삼각형·텍스처·파일 크기)이나 UV 없음 등 위반은 종료 코드 2 와 `CONVERSION_FAILED: 이유` → 추론 서비스가 `CONVERSION_FAILED` 로 답한다.
 - 표준 출력과 `--metrics` 파일: `{ "vertices", "triangles", "textureSize", "bytes", "convertMs" }` (이름 고정, [docs/METRICS.md](../../docs/METRICS.md)).
-- `--hair` 를 주면 GLB 옆에 `hair_length.png`·`hair_flow.png`·`hair_maps.json`(앱 셸 털용 맵)을 따로 쓴다. GLB 안에는 넣지 않으므로 지금 앱은 서버에서 만든 모델에 털을 그리지 못한다(앱은 GLB 안 `extras.beside` 의 맵을 기대) — GLB_SPEC 과의 차이는 계약 회의 안건([REVIEW_CHECKLIST](../../docs/api/REVIEW_CHECKLIST.md) #14).
+- `--hair` 를 주면 앱 셸 털용 맵 두 장(길이·방향)을 GLB 안에 넣고 루트 `extras.beside` 에 이미지 번호와 `furLength` 를 적는다([GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md)). 앱(`RuntimeModelLoader`)은 이 자리에서 맵을 읽는다. 같은 맵을 GLB 옆에도 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 로 쓰지만 확인용이다. `hair.npz` 를 못 읽거나 맵이 텍스처 상한보다 크면 `CONVERSION_FAILED` 다. 2026-11-21 전에는 GLB 옆 PNG 로만 써서 서버 모델에 털이 그려지지 않았다(안건 [#14](../../docs/api/REVIEW_CHECKLIST.md)).
 
 ## `rig_transfer.py` — 템플릿의 뼈대·애니메이션 이식
 

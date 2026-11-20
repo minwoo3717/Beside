@@ -989,7 +989,11 @@ class RealConversionCancelTest(_ModelModeCase):
         self.assertEqual(answer.status_code, 200, answer.text)
         for name in ("base.glb", "base.metrics.json", "hair_length.png", "hair_flow.png", "hair_maps.json"):
             self.assertTrue((self.job_dir / name).is_file(), name)
-        self.assertEqual(self.client.get(answer.json()["glbUrl"]).content[:4], b"glTF")
+        served = self.client.get(answer.json()["glbUrl"]).content
+        self.assertEqual(served[:4], b"glTF")
+        fur = _app_reads_fur(served)   # the only file Spring and the app get carries the fur maps
+        self.assertIsNotNone(fur)
+        self.assertEqual(fur[0], (self.job_dir / "hair_length.png").read_bytes())
         self.assertEqual(self.delete(), 204)
         self.assertFalse(self.job_dir.exists())
 
@@ -1008,6 +1012,94 @@ class RealConversionCancelTest(_ModelModeCase):
             made = Path(folder) / "made"   # the CLI default still creates it
             convert_asset.convert(str(raw / "mesh.obj"), str(raw / "uv.png"), str(made / "base.glb"))
             self.assertTrue((made / "base.glb").is_file())
+
+
+def _app_reads_fur(glb):
+    """RuntimeModelLoader.TryReadEmbeddedHair (Unity) in Python, step for step: JSON chunk length at byte 12, root
+    extras.beside.{hairLengthImage, hairFlowImage, furLength}, image -> bufferView -> bytes at 20 + jsonLen + 8 +
+    byteOffset. Returns (length PNG, flow PNG, furLength) or None when the app would find no fur."""
+    import struct
+
+    json_len = struct.unpack_from("<I", glb, 12)[0]
+    root = json.loads(glb[20:20 + json_len])
+    beside = (root.get("extras") or {}).get("beside")
+    if beside is None:
+        return None
+    bin_start = 20 + json_len + 8
+
+    def image(index):
+        if index is None:
+            return None
+        view = root["bufferViews"][root["images"][index]["bufferView"]]
+        start = bin_start + view.get("byteOffset", 0)
+        return glb[start:start + view["byteLength"]]
+
+    length = image(beside.get("hairLengthImage"))
+    return None if length is None else (length, image(beside.get("hairFlowImage")), beside.get("furLength", -1.0))
+
+
+@unittest.skipIf(not _has_converter_deps(), "numpy/trimesh/pillow not installed")
+class FurMapsInGlbTest(unittest.TestCase):
+    """tools/convert_asset.py puts the fur maps inside base.glb where the app looks for them (GLB_SPEC §4.1). Before
+    2026-11-21 they were only PNG files next to the GLB, which nobody served, so the app drew no fur on any model."""
+
+    def setUp(self):
+        import convert_asset
+
+        self.convert_asset = convert_asset
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.raw = Path(folder.name) / "raw"
+        self.raw.mkdir()
+        _write_real_raw(self.raw)
+        self.out = Path(folder.name) / "out"
+
+    def convert(self, hair=True):
+        return self.convert_asset.convert(str(self.raw / "mesh.obj"), str(self.raw / "uv.png"), str(self.out / "base.glb"),
+                                          str(self.out / "base.metrics.json"),
+                                          hair_npz=str(self.raw / "hair.npz") if hair else None)
+
+    def test_the_app_reads_the_fur_maps_from_the_glb(self):
+        import struct
+
+        import trimesh
+
+        metrics = self.convert()
+        glb = (self.out / "base.glb").read_bytes()
+        self.assertEqual(struct.unpack_from("<I", glb, 8)[0], len(glb))   # header length still matches the file
+        self.assertEqual(metrics["bytes"], len(glb))
+        fur = _app_reads_fur(glb)
+        self.assertIsNotNone(fur)
+        self.assertEqual(fur[0], (self.out / "hair_length.png").read_bytes())
+        self.assertEqual(fur[1], (self.out / "hair_flow.png").read_bytes())
+        self.assertEqual(fur[2], json.loads((self.out / "hair_maps.json").read_text())["furLength"])
+        self.assertGreater(fur[2], 0)
+        self.assertEqual(fur[0][:8], b"\x89PNG\r\n\x1a\n")
+        # texture 0 (the app's fallback) is still the body texture, no material uses the fur maps
+        root = json.loads(glb[20:20 + struct.unpack_from("<I", glb, 12)[0]])
+        self.assertEqual(len(root["textures"]), 1)
+        self.assertEqual([i.get("name") for i in root["images"]][1:], ["hair_length", "hair_flow"])
+        loaded = trimesh.load(str(self.out / "base.glb"), force="scene")   # still an ordinary GLB for other readers
+        self.assertEqual(len(loaded.geometry), 1)
+
+    def test_without_hair_the_glb_has_no_fur_entry(self):
+        self.convert(hair=False)
+        self.assertIsNone(_app_reads_fur((self.out / "base.glb").read_bytes()))
+        self.assertFalse((self.out / "hair_length.png").exists())
+
+    def test_an_unreadable_hair_file_is_a_conversion_error(self):
+        (self.raw / "hair.npz").write_bytes(b"not an npz")
+        with self.assertRaisesRegex(self.convert_asset.ConversionError, "cannot read hair"):
+            self.convert()
+        self.assertFalse((self.out / "base.glb").exists())
+
+    def test_fur_maps_over_the_texture_limit_are_refused(self):
+        import numpy as np
+
+        np.savez(self.raw / "hair.npz", hair_offsets_local_q=np.zeros((4, 9, 2, 3), np.int8), offset_scale=np.float32(0.01))
+        with self.assertRaisesRegex(self.convert_asset.ConversionError, r"hair maps 9x4 > limit 8"):
+            self.convert_asset.convert(str(self.raw / "mesh.obj"), str(self.raw / "uv.png"), str(self.out / "base.glb"),
+                                       hair_npz=str(self.raw / "hair.npz"), max_texture=8)
 
 
 class _RiggedCase(_ModelModeCase):
@@ -1098,10 +1190,8 @@ def _has_numpy():
     return True
 
 
-@unittest.skipIf(TestClient is None or not _has_numpy(), "fastapi/httpx or numpy not installed")
-class RigTransferVertexOrderTest(unittest.TestCase):
-    """tools/rig_transfer.py keeps the template's triangles, UVs and skin weights and takes only the new positions,
-    so a base GLB with the template's counts but another vertex order must be refused, not rigged into a torn mesh."""
+class _RigCase(unittest.TestCase):
+    """A two-joint pyramid template and pyramid base GLBs for tools/rig_transfer.py."""
 
     def setUp(self):
         import numpy as np
@@ -1140,6 +1230,12 @@ class RigTransferVertexOrderTest(unittest.TestCase):
                    [pos, self.normals(pos), self.np.array(faces, self.np.uint16).reshape(-1)])
         return path
 
+
+@unittest.skipIf(TestClient is None or not _has_numpy(), "fastapi/httpx or numpy not installed")
+class RigTransferVertexOrderTest(_RigCase):
+    """tools/rig_transfer.py keeps the template's triangles, UVs and skin weights and takes only the new positions,
+    so a base GLB with the template's counts but another vertex order must be refused, not rigged into a torn mesh."""
+
     def test_the_same_vertex_order_is_rigged_also_with_faces_listed_differently(self):
         np = self.np
         bigger = np.array(PYRAMID) * 1.2
@@ -1168,6 +1264,36 @@ class RigTransferVertexOrderTest(unittest.TestCase):
             code = self.rig.main(["--base", str(base), "--template", str(self.template), "--out", str(out)])
         self.assertEqual(code, 2)
         self.assertIn("RIG_FAILED: vertex order differs", stderr.getvalue())
+
+
+@unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")
+class RigTransferFurMapsTest(_RigCase):
+    """The rigged GLB is rebuilt from the template's JSON, so the base GLB's fur maps (extras.beside) have to be
+    carried over, and a template's own fur maps (another animal) must not reach the new model."""
+
+    def with_fur(self, path, length, flow, fur_length):
+        import convert_asset
+
+        path.write_bytes(convert_asset.embed_hair(path.read_bytes(), length, flow, fur_length))
+        return path
+
+    def rigged(self, base):
+        out = self.folder / "rigged.glb"
+        info = self.rig.transfer(str(base), None, str(self.template), str(out))
+        glb = out.read_bytes()
+        self.assertEqual(info["bytes"], len(glb))
+        return glb
+
+    def test_the_base_glbs_fur_maps_are_kept(self):
+        base = self.with_fur(self.base(self.np.array(PYRAMID) * 1.1, PYRAMID_FACES), b"LENGTH-PNG", b"FLOW-PNG", 0.012)
+        self.assertEqual(_app_reads_fur(self.rigged(base)), (b"LENGTH-PNG", b"FLOW-PNG", 0.012))
+
+    def test_the_templates_own_fur_is_never_kept(self):
+        self.with_fur(self.template, b"TEMPLATE-LENGTH", b"TEMPLATE-FLOW", 0.5)
+        plain = self.base(PYRAMID, PYRAMID_FACES)
+        self.assertIsNone(_app_reads_fur(self.rigged(plain)))
+        furry = self.with_fur(self.base(PYRAMID, PYRAMID_FACES), b"LENGTH-PNG", b"FLOW-PNG", 0.012)
+        self.assertEqual(_app_reads_fur(self.rigged(furry)), (b"LENGTH-PNG", b"FLOW-PNG", 0.012))
 
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")

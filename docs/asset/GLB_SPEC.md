@@ -41,11 +41,29 @@
 - 해상도 ≤ 2048 × 2048 (제안값), 정사각형 권장. PNG 또는 JPEG 로 임베드. 색 공간 sRGB.
 - base 1장, hair 1장(선택). 노멀맵·러프니스맵은 없음을 기본으로 한다.
 
+### 4.1 셸 털 맵 (`extras.beside`)
+
+[구현됨: 2026-11-21 브랜치 `fix/hair-maps-in-glb`, 병합·Pod 반영 전] 앱의 셸 털(`ShellFurRenderer`)이 쓰는 맵 두 장을 `base.glb` 안에 넣는다. 전에는 변환기가 GLB 옆에 PNG 로만 써서 어떤 경로로도 앱에 닿지 않았고, 서버에서 만든 모델에는 털이 그려지지 않았다(안건 #14). 필드 **추가**라 기존 독자(glTFast, Spring 헤더 검사)에는 영향이 없다.
+
+| 항목 | 값 |
+|---|---|
+| 위치 | glTF 루트 `extras.beside` = `{ "hairLengthImage": <image 번호>, "hairFlowImage": <image 번호>, "furLength": <m> }` |
+| 이미지 | PNG 두 장(`images[].name` = `hair_length`, `hair_flow`), BIN 청크의 bufferView. 어떤 texture·material 도 가리키지 않는다 → `textures[0]` 은 몸 텍스처 그대로 |
+| `hair_length` | 그레이스케일. 털 길이 / 99.5 백분위 길이, 0~1 |
+| `hair_flow` | RGB. R·G = 털 끝 방향의 접선 성분, B = 법선 성분, 각각 `값 * 0.5 + 0.5` |
+| `furLength` | 99.5 백분위 털 길이, GLB 단위(m, 최장 축 1 m 기준). 앱은 셰이더 `_FurLength` 로 쓴다 |
+| UV | 몸 메시 `TEXCOORD_0` 과 같은 배치, PNG 위쪽 행 = glTF v 0(몸 텍스처와 같은 관례) |
+| 크기 | §4 와 같은 해상도 상한, GLB 전체는 §1 크기 상한 안 |
+
+- 모델이 `hair.npz` 를 내지 않으면 `extras.beside` 가 없고, 앱은 털을 그리지 않는다(정상).
+- 리깅 GLB(`rig_transfer.py`)도 이 항목을 옮긴다. 템플릿에 있던 `extras.beside`(다른 동물의 털)는 버린다.
+- 읽는 쪽: `RuntimeModelLoader.TryReadEmbeddedHair`. 같은 순서로 읽는 파이썬 시험 `_app_reads_fur`(`generation/inference_service/test_app.py`)가 변환기 출력과 리깅 출력을 확인한다.
+
 ## 5. 변환기 출력 (`generation/tools/convert_asset.py`)
 
 | 입력 | 출력 |
 |---|---|
-| `mesh.obj` + `uv.png` (+ `hair.npz`) | `{jobId}/base.glb`, 선택 `{jobId}/hair.glb`, 각 GLB 옆에 `base.metrics.json` / `hair.metrics.json` |
+| `mesh.obj` + `uv.png` (+ `hair.npz`) | `{jobId}/base.glb`(`hair.npz` 가 있으면 §4.1 털 맵 포함), 선택 `{jobId}/hair.glb`, 각 GLB 옆에 `base.metrics.json` / `hair.metrics.json`. 털 맵 사본 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 도 옆에 쓰지만 확인용이고 서빙하지 않는다 |
 
 경로 모양은 `tools/README.md` 의 CLI(`--out results/<jobId>/base.glb`)와 Spring 저장 규칙(§6, `storage/results/{jobId}/base.glb`)과 같다(2026-10-06 표기 통일 — 전에는 `{jobId}-base.glb` 로도 적혀 있었다). 입력 파일 형식(`mesh.obj + uv.png`)은 문서상 가정이며 exp-01 에서 공식 코드의 실제 출력으로 확인한다.
 

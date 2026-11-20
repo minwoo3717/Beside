@@ -283,8 +283,8 @@ def _startup() -> None:
 
 class InferOptions(BaseModel):
     hair: bool = Field(default=False, description="Hair variant ({jobId}/hair.glb) is [계획]: accepted but ignored today. "
-                       "The hair_length/flow PNGs are written next to base.glb whenever the model writes hair.npz "
-                       "(AnimalLift: every job), whatever this flag")
+                       "The shell fur maps go inside base.glb (extras.beside, GLB_SPEC 4.1) whenever the model writes "
+                       "hair.npz (AnimalLift: every job), whatever this flag")
 
 
 class InferRequest(BaseModel):
@@ -851,7 +851,7 @@ def infer(request: InferRequest) -> InferResponse:
     return InferResponse(
         # passthrough answers the sample's own path, a model result the path Spring can open (BESIDE_PATH_MAP)
         glbPath=str(result.glb) if result.passthrough else _to_remote(str(result.glb)),
-        hairGlbPath=None,   # hair variant GLB is [계획]; hair_length/flow PNGs are written next to base.glb
+        hairGlbPath=None,   # hair variant GLB is [계획]; the shell fur maps are inside base.glb (extras.beside)
         metrics=result.metrics,
         passthrough=result.passthrough,
         modelVersion=result.model_version,

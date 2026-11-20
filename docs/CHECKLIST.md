@@ -84,7 +84,7 @@
 - [ ] minSdk 34 가 의도인지 확인(README 는 24).
 - [ ] 커밋 안 된 `unity/ProjectSettings` 변경 정리(URP 전역 설정 목록이 비워짐, 나머지는 줄바꿈만 다름) — 담당자가 판단.
 - [ ] DoD 증빙: 1·2·4단계 영상, logcat, `metrics.csv`, FPS, 기기 2종.
-- [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 쓴다 → 안건 #14 결정 후 한쪽에 맞춤(GEN 과 함께).
+- [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 썼다 → 변환기를 앱에 맞춤 [구현됨: 2026-11-21 브랜치 `fix/hair-maps-in-glb`, 병합 전]([GLB_SPEC §4.1](asset/GLB_SPEC.md)). 남은 것: 병합 → Pod 리포 갱신 → 실제 사진 1건으로 기기에서 털이 보이는지, `loadMs`·FPS 가 털 없을 때와 얼마나 다른지 기록.
 - [ ] (v1.1 을 받으면) 진행 화면에 `queue`/`estimate`, 취소 버튼이 `POST /cancel` 호출(지금은 앱 안 코루틴만 멈춤), `CANCELED` 문구.
 - [ ] 코드 리뷰 보고 7건: 에셋 다운로드 실패 때 화면이 멈춤, 바뀐 템플릿·GltfImport 를 해제하지 않아 memMB 가 계속 오름, 재개·retry 실행도 `metrics.csv` 에 줄을 더함(METRICS §3 '작업당 한 줄') 등 — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고'.
 - [ ] 대표 사진 검사 문구 7개(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 2026-11-04 백엔드가 `ErrorMessages.cs` 에 넣었다(재시도 대상 아님). 실기기에서 real 서버에 두 마리 사진과 동물이 없는 사진을 올려 문구가 나오는지 확인한다. real·prod 서버에 '캡처로 테스트'를 하면 이제 400(`NO_ANIMAL_DETECTED`)이다(mock 은 그대로).

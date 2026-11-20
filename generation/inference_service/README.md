@@ -150,7 +150,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 |---|---|---|
 | `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
-| `options.hair` | bool | 받기만 하고 지금은 무시한다. true 일 때 hair variant(`{jobId}/hair.glb`)를 만드는 것은 **[계획]**. 털 맵(`hair_length.png`·`hair_flow.png`·`hair_maps.json`)은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 옆에 쓴다 |
+| `options.hair` | bool | 받기만 하고 지금은 무시한다. true 일 때 hair variant(`{jobId}/hair.glb`)를 만드는 것은 **[계획]**. 털 맵은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 넣는다. 옆에 쓰는 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 은 확인용 사본이고 `/artifacts` 로 내주지 않는다 |
 
 응답 200:
 

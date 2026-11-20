@@ -14,6 +14,8 @@ weights carry over unchanged; only the joint positions have to follow the new bo
      under any affine change of the body), re-evaluated on the new vertices -> new bind pose + inverse binds
   4. texture: replaced by the new uv.png (same UV layout as the template)
   5. root translation keys (body bob / sitting down) scaled by the pelvis-height ratio
+  6. fur maps: the base GLB's extras.beside images (convert_asset.py, GLB_SPEC §4.1) are copied in. A template's
+     own extras.beside (another animal's fur) is dropped, so the app never draws it on the new model
 
 The template GLB is SMAL-derived (academic licence): keep it out of git, pass its path at runtime.
 Exit code 2 = cannot transfer (different topology etc.); the caller should then keep the static GLB.
@@ -148,6 +150,33 @@ def _triangle_set(tri: np.ndarray) -> np.ndarray:
     return rows[np.lexsort(rows.T[::-1])]
 
 
+_FUR_IMAGES = ("hairLengthImage", "hairFlowImage")
+
+
+def _copy_fur_maps(src: Glb, dst: Glb) -> None:
+    """dst gets src's extras.beside (fur maps, GLB_SPEC §4.1) with its images appended; dst's own entry is dropped."""
+    extras = dst.json.get("extras") if isinstance(dst.json.get("extras"), dict) else {}
+    extras.pop("beside", None)
+    src_extras = src.json.get("extras")
+    beside = src_extras.get("beside") if isinstance(src_extras, dict) else None
+    if isinstance(beside, dict) and beside.get("hairLengthImage") is not None:
+        beside = dict(beside)
+        for key in _FUR_IMAGES:
+            if beside.get(key) is None:
+                continue
+            img = src.json["images"][beside[key]]
+            dst.views.append(src.views[img["bufferView"]])
+            dst.json["bufferViews"].append({"buffer": 0, "byteLength": len(dst.views[-1])})
+            dst.json.setdefault("images", []).append(
+                {k: v for k, v in img.items() if k in ("name", "mimeType")} | {"bufferView": len(dst.views) - 1})
+            beside[key] = len(dst.json["images"]) - 1
+        extras["beside"] = beside
+    if extras:
+        dst.json["extras"] = extras
+    else:
+        dst.json.pop("extras", None)
+
+
 def transfer(base_glb: str, texture_png: str | None, template_glb: str, out_glb: str) -> dict:
     tpl = Glb(template_glb)
     new = Glb(base_glb)
@@ -231,6 +260,7 @@ def transfer(base_glb: str, texture_png: str | None, template_glb: str, out_glb:
                 acc = anim["samplers"][ch["sampler"]]["output"]
                 tpl.write(acc, tpl.read(acc) * ratio)
 
+    _copy_fur_maps(new, tpl)
     size = tpl.save(out_glb)
     return {"joints": len(joints), "fitErrorM": round(float(fit_err), 6), "heightRatio": round(ratio, 4),
             "clips": [a.get("name") for a in tj["animations"]], "bytes": size}
