@@ -29,6 +29,8 @@ Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
          (Spring on a cloud VM, this service on the GPU PC over Tailscale: no shared disk).
   BESIDE_INFERENCE_TOKEN=<secret>: /infer, /infer/upload and /artifacts/* then need the X-Inference-Token header
          (401 otherwise); /healthz stays open. Set it whenever the service listens beyond 127.0.0.1.
+  GET /healthz also answers tokenOk (only when X-Inference-Token is sent: would /infer take it) and busyForMs (age
+         of the oldest predict / simulated generation still running, 0 when idle) for Spring's monitor alerts.
   DELETE /artifacts/{jobId} also cancels a run of that job still on this machine (Spring gave up on it): the run
          stops at its next step and removes whatever it wrote after the DELETE (README 'DELETE /artifacts/{jobId}').
   BESIDE_WORK_SWEEP_MINUTES=<N> (default unset = off): at startup and every min(N, 10) minutes, remove
@@ -111,6 +113,14 @@ def _needs_token(path: str) -> bool:
     return path == "/infer" or path.startswith("/infer/") or path == "/artifacts" or path.startswith("/artifacts/")
 
 
+def _token_matches(given: str) -> bool:
+    """True when /infer would take this X-Inference-Token value: no token configured (no check) or the same value
+    (constant-time compare). The token check below and /healthz tokenOk both use it, so tokenOk predicts the 401."""
+    if not INFERENCE_TOKEN:
+        return True
+    return hmac.compare_digest(given.encode("utf-8"), INFERENCE_TOKEN.encode("utf-8"))
+
+
 @app.middleware("http")
 async def _check_token(request: Request, call_next):
     """X-Inference-Token, checked before the body is read (an unauthenticated upload is never stored).
@@ -119,8 +129,7 @@ async def _check_token(request: Request, call_next):
     header, so a Host such as "a?" or "a/b" would hide /artifacts/... from this check on older Starlette versions.
     """
     if INFERENCE_TOKEN and _needs_token(request.scope.get("path", "")):
-        given = request.headers.get("x-inference-token", "")
-        if not hmac.compare_digest(given.encode("utf-8"), INFERENCE_TOKEN.encode("utf-8")):
+        if not _token_matches(request.headers.get("x-inference-token", "")):
             return JSONResponse(
                 status_code=401,
                 content={"detail": {"code": "INFERENCE_UNAVAILABLE", "message": "missing or wrong X-Inference-Token"}},
@@ -300,6 +309,17 @@ class HealthResponse(BaseModel):
     device: str
     modelLoaded: bool
     passthrough: bool
+    # Additions of 2026-11-20 (docs/CONTRACT.md section 6): Spring's InferenceHealthMonitor alerts on them.
+    tokenOk: Optional[bool] = Field(
+        default=None,
+        description="Only when the request carries X-Inference-Token: whether /infer would take it (true also when "
+        "the service checks no token). null without the header. /healthz itself never answers 401.",
+    )
+    busyForMs: int = Field(
+        default=0,
+        description="ms since the oldest model predict or passthrough simulated generation still running began; "
+        "0 when none runs. Waiting for MODEL_LOCK or a passthrough slot does not count.",
+    )
 
 
 # --------------------------------------------------------------------------- helpers
@@ -515,6 +535,40 @@ def _sweep_loop(minutes: float) -> None:
         time.sleep(min(minutes, 10.0) * 60)
 
 
+# --------------------------------------------------------------------------- busy clock: /healthz busyForMs
+# FD13 (2026-11-20 failure drills): /healthz answers UP while a predict hangs, so Spring kept sending jobs that each
+# timed out after inference.timeout-ms. Every MODEL.predict call and every passthrough simulated generation registers
+# here for exactly as long as it runs (inside MODEL_LOCK / the slot, so waiting for them does not count), whatever
+# its attempt's state: a predict Spring gave up on still holds the GPU. busyForMs is the age of the oldest one.
+
+_BUSY_GUARD = threading.Lock()    # guards _BUSY
+_BUSY: dict = {}                  # work number -> time.monotonic() when it began (insertion order = start order)
+_BUSY_NUMBERS = itertools.count(1)
+
+
+@contextlib.contextmanager
+def _busy_work():
+    """Registers one piece of GPU work (or its passthrough stand-in) for the with block, also when it raises."""
+    with _BUSY_GUARD:
+        number = next(_BUSY_NUMBERS)
+        _BUSY[number] = time.monotonic()
+    try:
+        yield
+    finally:
+        with _BUSY_GUARD:
+            del _BUSY[number]
+
+
+def _busy_for_ms(now: Optional[float] = None) -> int:
+    """ms since the oldest registered work began (now: a time.monotonic() value, for tests); 0 when none runs."""
+    with _BUSY_GUARD:
+        oldest = min(_BUSY.values(), default=None)
+    if oldest is None:
+        return 0
+    now = time.monotonic() if now is None else now
+    return max(0, int((now - oldest) * 1000))
+
+
 # --------------------------------------------------------------------------- passthrough load-test knobs
 # Passthrough only (BESIDE_SAMPLE_GLB). They turn the instant sample answer into a simulated GPU: a generation time,
 # a bounded number of concurrent generations, failures and slow jobs (docs: README '패스스루 부하 설정').
@@ -605,8 +659,9 @@ def _simulate_generation(job_id: str, image_paths: List[str], attempt: Optional[
         else:
             sleep_ms = knobs.delay_ms + (random.uniform(0, knobs.jitter_ms) if knobs.jitter_ms else 0)
         started = time.perf_counter()
-        if sleep_ms > 0:
-            _sleep(sleep_ms / 1000)
+        with _busy_work():   # /healthz busyForMs: the FD13 drill's stuck run is this sleep
+            if sleep_ms > 0:
+                _sleep(sleep_ms / 1000)
         if knobs.fail_token and knobs.fail_token in name:
             failure = "fail token"
         elif knobs.fail_rate and random.random() < knobs.fail_rate:
@@ -667,7 +722,8 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
     with MODEL_LOCK:
         _stop_if_cancelled(attempt, "before the model")   # waited here after its client gave up: no GPU time for it
         try:
-            pred = MODEL.predict(image, str(raw_dir))
+            with _busy_work():   # /healthz busyForMs
+                pred = MODEL.predict(image, str(raw_dir))
         except Exception as e:  # noqa: BLE001  OOM, unreadable image, model errors
             _stop_if_cancelled(attempt, "after a model error")   # e.g. its folder was deleted under it
             log.exception("job %s: inference failed", job_id)
@@ -731,12 +787,17 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
 
 
 @app.get("/healthz", response_model=HealthResponse)
-def healthz() -> HealthResponse:
+def healthz(request: Request) -> HealthResponse:
+    """Open (no token needed) and always 200 while the service answers. X-Inference-Token, when sent, is only
+    compared (tokenOk), never echoed or logged."""
+    given = request.headers.get("x-inference-token")
     return HealthResponse(
         status="ok",
         device=_device(),
         modelLoaded=MODEL is not None,  # false while loading or after a load error (see the service log)
         passthrough=bool(SAMPLE_GLB),
+        tokenOk=None if given is None else _token_matches(given),
+        busyForMs=_busy_for_ms(),
     )
 
 

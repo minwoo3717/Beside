@@ -355,6 +355,130 @@ class PassthroughKnobTest(unittest.TestCase):
         self.assertIs(service._passthrough_slots(2), service._passthrough_slots(2))
         self.assertIsNot(service._passthrough_slots(3), service._passthrough_slots(2))   # a new size, a new semaphore
 
+    def test_healthz_busy_for_ms_counts_a_simulated_generation_in_flight(self):
+        """FD13 drill: the stub sleeps BESIDE_PASSTHROUGH_DELAY_MS in its slot while /healthz still answers."""
+        entered, release = threading.Event(), threading.Event()
+
+        def generation(seconds):
+            entered.set()
+            release.wait(10)
+
+        self.sleep.side_effect = generation
+        idle = self.client.get("/healthz")
+        with _knobs(delay_ms=600000):
+            thread, box = _in_thread(lambda: self.upload("lt-fd13-dog.jpg"))
+            try:
+                self.assertTrue(entered.wait(10))
+                time.sleep(0.1)
+                busy = self.client.get("/healthz")
+            finally:
+                release.set()
+                thread.join(10)
+        self.assertEqual((idle.status_code, idle.json()["busyForMs"]), (200, 0))
+        self.assertEqual(busy.status_code, 200)
+        self.assertGreaterEqual(busy.json()["busyForMs"], 50)
+        self.assertLess(busy.json()["busyForMs"], 10000)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)   # the run ended
+        self.assertEqual(service._BUSY, {})
+
+    def test_a_run_waiting_for_a_slot_is_not_busy_yet(self):
+        """Only the time inside the slot counts: a queue behind a stuck run shows the stuck run's age, not its own."""
+        gate = _GateLock()
+        gate.lock.acquire()   # the one slot is taken
+        with _knobs(delay_ms=10000), mock.patch.object(service, "_passthrough_slots", return_value=gate):
+            thread, box = _in_thread(self.infer)
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                time.sleep(0.05)
+                waiting = self.client.get("/healthz").json()["busyForMs"]
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        self.assertEqual(waiting, 0)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(service._BUSY, {})
+
+    def test_a_simulated_failure_ends_the_busy_time_too(self):
+        with _knobs(delay_ms=100, fail_rate=1):
+            answer = self.infer()
+        self.assertEqual(answer.status_code, 500)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class BusyClockTest(unittest.TestCase):
+    """_busy_work registers one piece of work (a predict call or a simulated generation); _busy_for_ms is the age of
+    the oldest one still running."""
+
+    def test_the_oldest_work_still_running_sets_the_age(self):
+        self.assertEqual(service._busy_for_ms(), 0)
+        first, second = service._busy_work(), service._busy_work()
+        first.__enter__()
+        (first_start,) = service._BUSY.values()
+        second.__enter__()
+        second_start = list(service._BUSY.values())[-1]
+        try:
+            self.assertEqual(service._busy_for_ms(now=first_start + 2.5), 2500)
+            first.__exit__(None, None, None)   # the older one ends first: the younger one sets the age now
+            self.assertEqual(service._busy_for_ms(now=second_start + 1.0), 1000)
+        finally:
+            second.__exit__(None, None, None)
+        self.assertEqual(service._busy_for_ms(), 0)
+        self.assertEqual(service._BUSY, {})
+
+    def test_never_negative_and_released_on_an_exception(self):
+        with self.assertRaises(RuntimeError):
+            with service._busy_work():
+                (start,) = service._BUSY.values()
+                self.assertEqual(service._busy_for_ms(now=start - 1.0), 0)
+                raise RuntimeError("CUDA out of memory")
+        self.assertEqual(service._BUSY, {})
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzTokenTest(unittest.TestCase):
+    """/healthz stays open and 200. With an X-Inference-Token header it also says whether /infer would take that
+    token (tokenOk), so Spring's monitor sees a token mismatch before every job fails 401 (FD17)."""
+
+    def setUp(self):
+        self.client = TestClient(service.app)
+
+    def healthz(self, token=None):
+        return self.client.get("/healthz", headers=None if token is None else {"X-Inference-Token": token})
+
+    def test_without_the_header_token_ok_is_null_and_the_old_fields_stay(self):
+        for configured in (None, "secret"):
+            with mock.patch.object(service, "INFERENCE_TOKEN", configured):
+                answer = self.healthz()
+            self.assertEqual(answer.status_code, 200)
+            body = answer.json()
+            self.assertIsNone(body["tokenOk"], configured)
+            self.assertEqual(body["status"], "ok")
+            for field in ("device", "modelLoaded", "passthrough", "busyForMs"):
+                self.assertIn(field, body)
+
+    def test_the_header_is_checked_as_infer_checks_it(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "secret"):
+            right, wrong, empty = self.healthz("secret"), self.healthz("other"), self.healthz("")
+            refused = self.client.post("/infer", headers={"X-Inference-Token": "other"},
+                                       json={"jobId": "job-1", "imagePaths": ["/no/such/photo.jpg"]})
+        self.assertEqual([a.status_code for a in (right, wrong, empty)], [200, 200, 200])   # healthz never 401
+        self.assertEqual([a.json()["tokenOk"] for a in (right, wrong, empty)], [True, False, False])
+        self.assertEqual(refused.status_code, 401)   # what tokenOk=false predicts for every job
+
+    def test_a_service_without_a_token_takes_any_header(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", None):
+            answer = self.healthz("anything")
+        self.assertEqual((answer.status_code, answer.json()["tokenOk"]), (200, True))
+
+    def test_the_comparison_is_constant_time(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "secret"), \
+                mock.patch.object(service.hmac, "compare_digest", wraps=service.hmac.compare_digest) as compare:
+            self.healthz("secrex")
+        compare.assert_called_once_with(b"secrex", b"secret")
+
 
 GLB_STUB = b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
 TETRA_OBJ = """v 0 0 0
@@ -651,6 +775,61 @@ class CancelOnDeleteTest(_ModelModeCase):
         self.assertEqual(answer.status_code, 500)   # Spring logs it (README DELETE), the sweep is the backstop
         self.assertEqual(rmtree.call_count, service._REMOVE_TRIES)
         self.assertTrue(self.job_dir.exists())
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzBusyModelTest(_ModelModeCase):
+    """busyForMs in model mode: the age of the MODEL.predict call still running (FD13: healthz UP, inference stuck)."""
+
+    def test_busy_for_ms_counts_the_model_run_and_is_0_after_it(self):
+        entered, go = threading.Event(), threading.Event()
+
+        def stuck_predict(call):
+            entered.set()
+            go.wait(10)
+
+        self.model.hook = stuck_predict
+        thread, box = _in_thread(self.upload)
+        try:
+            self.assertTrue(entered.wait(10))
+            time.sleep(0.1)
+            busy = self.client.get("/healthz")
+        finally:
+            go.set()
+            thread.join(10)
+        self.assertEqual(busy.status_code, 200)
+        self.assertTrue(busy.json()["modelLoaded"])
+        self.assertGreaterEqual(busy.json()["busyForMs"], 50)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
+
+    def test_waiting_for_the_model_lock_is_not_busy(self):
+        gate = _GateLock()
+        gate.lock.acquire()   # an earlier job holds the GPU (its own predict is what busyForMs would show)
+        with mock.patch.object(service, "MODEL_LOCK", gate):
+            thread, box = _in_thread(self.upload)
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                time.sleep(0.05)
+                waiting = self.client.get("/healthz").json()["busyForMs"]
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        self.assertEqual(waiting, 0)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+
+    def test_a_model_error_ends_the_busy_time_too(self):
+        def broken(call):
+            raise RuntimeError("CUDA out of memory")
+
+        self.model.hook = broken
+        with self.assertLogs(service.log, "ERROR"):
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 500)
+        self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
 
 
 @unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")
