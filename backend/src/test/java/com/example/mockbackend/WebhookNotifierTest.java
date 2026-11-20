@@ -1,6 +1,8 @@
 package com.example.mockbackend;
 
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.service.InferenceHealthMonitor.Alert;
+import com.example.mockbackend.service.InferenceHealthMonitor.AlertChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.State;
 import com.example.mockbackend.service.InferenceHealthMonitor.StateChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.Status;
@@ -225,6 +227,106 @@ class WebhookNotifierTest {
         assertThat(gpuMessages().get(1)).startsWith("🟢 GPU 추론 서버 연결됨");
     }
 
+    @Test
+    void alertMessagesSayWhatIsWrongAndWhatToCheck() {
+        Instant now = Instant.now();
+        Status up = new Status(State.UP, "cuda", now, now, "ok", false, 125_000L);
+        Status fine = new Status(State.UP, "cuda", now, now, "ok", true, 0L);
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, true, up, 120_000), "Runpod A40"))
+                .isEqualTo("🔑 GPU 추론 서버(Runpod A40)가 백엔드의 추론 토큰을 받지 않아요 — 새 작업이 모두 바로 실패합니다"
+                        + " (INFERENCE_UNAVAILABLE). 양쪽 INFERENCE_TOKEN 을 확인해 주세요");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, false, fine, 120_000), ""))
+                .isEqualTo("🔑 GPU 추론 서버가 추론 토큰을 다시 받아요");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.STUCK, true, up, 120_000), "Runpod A40"))
+                .isEqualTo("🐢 GPU 추론 서버(Runpod A40)의 작업 하나가 2분 5초째 끝나지 않아요 (기준 2분 0초)"
+                        + " — 추론이 멈췄을 수 있어요. 그동안 다른 작업은 기다리거나 시간 초과로 실패합니다");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.STUCK, false, fine, 120_000), ""))
+                .isEqualTo("🟢 GPU 추론 서버의 오래 걸리던 작업이 끝났어요");
+        // Nothing in them names the token, a host or a path.
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, true, up, 120_000), ""))
+                .doesNotContain("http").doesNotContain("/");
+    }
+
+    /** One message per change, at once (the DOWN grace time is for the relay's missed checks, not for these). */
+    @Test
+    void tokenAndStuckAlertsArePostedOncePerChange() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "Runpod A40", 45_000, JSON);
+        Instant now = Instant.now();
+        Status rejected = new Status(State.UP, "cuda", now, now, "ok", false, 0L);
+        Status stuck = new Status(State.UP, "cuda", now, now, "ok", true, 130_000L);
+        Status fine = new Status(State.UP, "cuda", now, now, "ok", true, 0L);
+
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));           // never announced: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true, rejected, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true, rejected, 120_000)); // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, true, stuck, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, true, stuck, 120_000));             // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, false, fine, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));            // a repeat: silent
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 4);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 4);
+        assertThat(alertMessages().get(0)).startsWith("🔑 GPU 추론 서버(Runpod A40)가 백엔드의 추론 토큰을 받지 않아요");
+        assertThat(alertMessages().get(1)).startsWith("🐢 GPU 추론 서버(Runpod A40)의 작업 하나가 2분 10초째");
+        assertThat(alertMessages().get(2)).isEqualTo("🔑 GPU 추론 서버(Runpod A40)가 추론 토큰을 다시 받아요");
+        assertThat(alertMessages().get(3)).isEqualTo("🟢 GPU 추론 서버(Runpod A40)의 오래 걸리던 작업이 끝났어요");
+    }
+
+    /** FD18: the message names the exception type only, never the service's text (paths). */
+    @Test
+    void modelLoadMessagesNameTheErrorTypeOnly() {
+        Instant now = Instant.now();
+        Status failed = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, true,
+                "FileNotFoundError: [Errno 2] No such file or directory: '/workspace/AnimalLift/ckpt/wrong.pt'");
+        Status loading = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, false, null);
+        String alert = WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000),
+                "Runpod A40");
+        assertThat(alert).isEqualTo("🧩 GPU 추론 서버(Runpod A40)가 모델을 불러오지 못했어요 (FileNotFoundError)"
+                + " — 고쳐서 다시 띄우기 전에는 새 작업이 처리되지 않아요. 추론 서비스 로그를 확인해 주세요");
+        assertThat(alert).doesNotContain("/").doesNotContain("workspace").doesNotContain("Errno");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000), ""))
+                .isEqualTo("🧩 GPU 추론 서버의 모델 불러오기 오류가 풀렸어요");
+        // A text that does not start with a type name, or none at all: a plain word instead.
+        for (String odd : new String[]{"<b>bold</b>: x", "no colon here at all", "", null}) {
+            Status reading = new Status(State.LOADING, null, now, now, "no model loaded", null, null, true, odd);
+            assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, reading, 120_000), ""))
+                    .startsWith("🧩 GPU 추론 서버가 모델을 불러오지 못했어요 (알 수 없는 오류) — ");
+        }
+        Status bare = new Status(State.LOADING, null, now, now, "no model loaded", null, null, true, "MemoryError");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, bare, 120_000), ""))
+                .contains("(MemoryError)");
+    }
+
+    @Test
+    void modelLoadAlertIsPostedOncePerChange() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "", 45_000, JSON);
+        Instant now = Instant.now();
+        Status failed = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, true,
+                "FileNotFoundError: [Errno 2] No such file or directory: '<path>'");
+        Status loading = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, false, null);
+
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));   // never announced
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000));    // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));  // a repeat: silent
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 2);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 2);
+        assertThat(alertMessages().get(0)).startsWith("🧩 GPU 추론 서버가 모델을 불러오지 못했어요 (FileNotFoundError)");
+        assertThat(alertMessages().get(1)).isEqualTo("🧩 GPU 추론 서버의 모델 불러오기 오류가 풀렸어요");
+    }
+
+    @Test
+    void alertsAreOffWithoutAWebhook() {
+        WebhookNotifier notifier = new WebhookNotifier("", "", JSON);
+        Instant now = Instant.now();
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true,
+                new Status(State.UP, "cuda", now, now, "ok", false, 0L), 120_000));
+        await().during(Duration.ofMillis(400)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().isEmpty());
+    }
+
     private static String hookUrl() {
         return "http://127.0.0.1:" + webhook.getAddress().getPort() + "/hook";
     }
@@ -232,6 +334,12 @@ class WebhookNotifierTest {
     /** GPU messages only: job messages from the other tests' uploads may still arrive. */
     private static List<String> gpuMessages() {
         return received.stream().map(WebhookNotifierTest::content).filter(text -> text.contains("GPU 추론 서버")).toList();
+    }
+
+    /** The token, stuck-run and model-load alerts among the GPU messages. */
+    private static List<String> alertMessages() {
+        return gpuMessages().stream().filter(text -> text.startsWith("🔑") || text.startsWith("🐢")
+                || text.contains("오래 걸리던 작업") || text.startsWith("🧩")).toList();
     }
 
     private String upload(String filename) throws Exception {

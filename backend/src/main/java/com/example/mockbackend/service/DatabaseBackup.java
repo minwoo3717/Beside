@@ -19,11 +19,12 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Daily online copy of the H2 file database (prod: storage.backup.enabled=true). H2's BACKUP TO writes a consistent
- * zip while the server keeps running, so the VM never has to stop for a backup. Files are
- * {storage.backup.dir}/beside-{time}.zip; only the newest storage.backup.keep stay. A failed backup is logged and
+ * Scheduled online copy of the H2 file database (prod: storage.backup.enabled=true, every hour, 48 kept). H2's
+ * BACKUP TO writes a consistent zip while the server keeps running, so the VM never has to stop for a backup. Files
+ * are {storage.backup.dir}/beside-{time}.zip; only the newest storage.backup.keep stay. A failed backup is logged and
  * retried at the next schedule; it never touches jobs. The schedule and the time in the names are in
  * storage.backup.zone (default Asia/Seoul): the VM's container runs in UTC, where 04:30 would be 13:30 in Korea.
+ * The zips stay on the VM's disk; deploy/backup/offsite_backup.sh copies new ones to a bucket outside the VM.
  */
 @Component
 @ConditionalOnProperty(name = "storage.backup.enabled", havingValue = "true")

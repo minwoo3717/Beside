@@ -126,7 +126,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
   - 전송 시간은 Spring 쪽이 받기를 끝낸 시각에서 이 줄의 `at` + `end_ms` 를 빼서 구한다. 경로(tailscaled·tailnet·VM) 몫이다.
 - **클라이언트가 떠난 뒤 끝난 답**은 보통 줄처럼 찍힌다. uvicorn 이 보낼 곳 없는 답을 조용히 버리기 때문이다. 이때 uvicorn 의 접근 로그 줄은 없다.
 - **Pod 에서 켜기**: `start_pod.sh` 는 이미 떠 있는 서비스를 다시 띄우지 않는다.
-  1. 먼저 `kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다.
+  1. 먼저 `touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다. 2026-11-20 부터 `start_pod.sh` 의 감독 루프가 끝난 서비스를 5 s 뒤 예전 설정으로 다시 띄우므로, 표시 파일 없이 `kill` 만 하면 새 설정이 들어가지 않는다([deploy/README.md](../../deploy/README.md) Runpod 절 '서비스 자동 재시작'). 2번의 `start_pod.sh` 가 표시 파일을 지운다.
   2. `BESIDE_REQUEST_TIMING=1 bash /workspace/Beside/deploy/runpod/start_pod.sh` 로 다시 띄운다. 환경변수는 두 모드 모두 uvicorn 까지 이어진다.
   3. `curl -s http://127.0.0.1:8002/healthz` 한 번 뒤 `grep '^timing ' /workspace/beside-logs/inference.log` 에 줄이 나오는지 본다.
 - 쓰는 곳: 3차 부하 시험 4절의 가설을 가리는 4차 시험. 동시 작업에서 응답·내려받기가 길어지는 것이 이쪽이 늦게 답해서인지, 경로에서 늦어져서인지 본다.
@@ -252,8 +252,16 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false }
+{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0, "loadError": null }
 ```
+
+토큰 없이 열려 있고, 서비스가 응답하는 한 늘 200 이다. `tokenOk`·`busyForMs`·`loadError` 는 2026-11-20 에 더한 필드다 **[구현됨]**(`test_app.py` 의 `HealthzTokenTest`·`BusyClockTest`·`HealthzBusyModelTest`·`HealthzLoadErrorTest`, `PassthroughKnobTest` 의 busy 시험). 모르는 필드를 무시하는 옛 Spring 에는 영향이 없다.
+
+- `tokenOk`: 요청에 `X-Inference-Token` 헤더가 있을 때만 `true`/`false` 다. `/infer` 가 그 값을 받아들일지를 말한다(위 '인증' 과 같은 상수 시간 비교. 서비스에 `BESIDE_INFERENCE_TOKEN` 이 없으면 검사하지 않으므로 `true`). 헤더가 없으면 `null`. `false` 여도 `/healthz` 는 401 이 아니라 200 이다. 토큰 값은 응답·로그에 남기지 않는다.
+- `busyForMs`: 아직 돌고 있는 `MODEL.predict` 호출 또는 패스스루 모의 생성(`BESIDE_PASSTHROUGH_*` 의 잠자기) 가운데 가장 오래된 것이 시작한 뒤 지난 ms. 돌고 있는 것이 없으면 0. `MODEL_LOCK`·패스스루 슬롯을 기다리는 시간, 사진 저장·변환·리깅은 넣지 않는다. Spring 이 포기한(DELETE 로 취소된) 실행도 `predict` 가 끝날 때까지는 GPU 를 쥐고 있으므로 센다.
+- `loadError`: 모델을 불러오지 못했을 때 그 이유 한 줄이다. 예외 이름과 짧은 메시지이고, 경로는 `<path>`, 토큰은 `<token>` 으로 바꾸며 200자에서 자른다. FD18 처럼 체크포인트 파일이 없으면 `animallift_runner.py` 가 낸 메시지 그대로 `FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>` 다(`HealthzLoadErrorTest` 가 실제 러너로 확인). 슬래시가 든 것은 모두 경로로 보므로 받는 방법의 Hugging Face 저장소 이름 `Chunyi99/AnimalLift` 도 `<path>` 가 된다 — 모양만으로는 `ckpt/latest.pt` 같은 상대 경로와 가를 수 없어 일부러 그대로 둔다. 불러오는 도중 다른 파일이 없으면 `FileNotFoundError: [Errno 2] No such file or directory: '<path>'` 꼴이다. 전체 메시지(경로·받는 방법)와 traceback 은 서비스 로그의 `model failed to load` 와 토큰이 필요한 `/infer` 의 503 메시지에만 있다. 불러오는 중·불러온 뒤·패스스루·모델 미설정이면 `null` 이다. 장애 훈련 FD18(2026-11-20, 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)에서 `modelLoaded=false` 만으로는 "아직 불러오는 중"과 "불러오기 실패"를 가를 수 없어서 더했다. 서비스는 다시 불러오지 않으므로 고친 뒤 서비스를 다시 띄울 때까지 이 값이 남는다. `status`·`modelLoaded`, 그리고 `/infer` 의 503 `INFERENCE_UNAVAILABLE` 은 그대로다.
+
+Spring 의 `InferenceHealthMonitor` 는 `inference.token` 이 있으면 이 헤더를 붙여 15초마다(`inference.health-poll-ms`) 부른다. `tokenOk=false`(장애 FD17: 모든 작업이 바로 `INFERENCE_UNAVAILABLE`)와 `busyForMs` 가 `inference.stuck-alert-ms`(기본 120000)를 넘는 것(FD13: healthz 는 UP 인데 추론만 멈춤), `loadError` 가 생긴 것(FD18: LOADING 이 끝나지 않음. 메시지에는 예외 이름만, 🧩)을 Discord 로 시작할 때 한 번, 풀릴 때 한 번 알린다 **[구현됨]**(`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`). 필드가 없거나(옛 서비스) 응답이 없으면 모름으로 보고 알리지 않는다. 작업을 보낼지 정하는 UP/LOADING/DOWN 판정은 이 세 필드를 보지 않는다(모델을 불러오지 못한 서비스에도 작업은 지금처럼 `inference.offline-wait-ms` 까지 PENDING 으로 기다린다). VM·Pod 에서 실제로 받아 본 것은 아직 없다 **[계획]**. 운영 대응은 [deploy/README.md](../../deploy/README.md) '문제 해결'.
 
 ## 가정과 열린 결정 (계약 회의 안건)
 

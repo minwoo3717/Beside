@@ -51,6 +51,34 @@ jobs:
           python3 -I -m unittest discover -s scripts/load -p "test_*.py"
           node --test scripts/load/*.test.mjs
 
+      - name: VM operations scripts against stubs (watchdog, offsite backup, metadata block, GCP setup)
+        run: |
+          bash scripts/test_watchdog.sh
+          bash scripts/test_offsite_backup.sh
+          bash scripts/test_block_metadata.sh
+          bash scripts/test_gcp_ops.sh
+
+      - name: systemd units of deploy/backup and deploy/watchdog (systemd-analyze verify)
+        run: |
+          # The units start /usr/local/sbin/beside-*; verify copies pointing at the scripts under the runner's temp dir.
+          units="$RUNNER_TEMP/units"
+          mkdir -p "$units/sbin"
+          install -m 755 deploy/backup/offsite_backup.sh "$units/sbin/beside-offsite-backup"
+          install -m 755 deploy/backup/block-metadata.sh "$units/sbin/beside-block-metadata"
+          install -m 755 deploy/watchdog/beside-watchdog.sh "$units/sbin/beside-watchdog"
+          for unit in deploy/backup/*.service deploy/backup/*.timer deploy/watchdog/*.service deploy/watchdog/*.timer; do
+            sed "s#/usr/local/sbin/#$units/sbin/#" "$unit" > "$units/$(basename "$unit")"
+          done
+          # beside-block-metadata.service needs docker.service; a stand-in keeps the check independent of the runner
+          printf '[Unit]\nDescription=stand-in\n[Service]\nExecStart=/bin/true\n' > "$units/docker.service"
+          cd "$units"
+          systemd-analyze verify --man=no ./beside-*.service ./beside-*.timer
+
+      - name: Runpod Pod scripts (start_pod.sh under its restart supervisor; fake service and Tailscale, no network)
+        run: |
+          for f in deploy/runpod/*.sh; do bash -n "$f"; done
+          bash deploy/runpod/test_start_pod_supervisor.sh
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
@@ -136,6 +164,29 @@ jobs:
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
+
+          def mem_bytes(value):
+              # compose prints mem_limit as bytes; accept a unit suffix too, in case a version keeps "2g"
+              text = str(value).strip().lower()
+              for unit, size in (("gb", 1024**3), ("mb", 1024**2), ("kb", 1024), ("g", 1024**3), ("m", 1024**2), ("k", 1024), ("b", 1)):
+                  if text.endswith(unit) and text[: -len(unit)].isdigit():
+                      return int(text[: -len(unit)]) * size
+              return int(text)
+
+          def go_bytes(value):
+              # GOMEMLIMIT syntax: a number with B, KiB, MiB or GiB
+              for unit, size in (("GiB", 1024**3), ("MiB", 1024**2), ("KiB", 1024), ("B", 1)):
+                  if value.endswith(unit):
+                      return int(value[: -len(unit)]) * size
+              return int(value)
+
+          # Caddy has a memory cap (A1 load test: 2.2 GiB without one) and its Go GC aims at about 80 % of it
+          caddy = base["services"]["caddy"]
+          limit = mem_bytes(caddy.get("mem_limit", 0))
+          assert limit == 2 * 1024**3, f"caddy mem_limit {caddy.get('mem_limit')!r}"
+          gomem = go_bytes(caddy["environment"]["GOMEMLIMIT"])
+          assert 0.75 <= gomem / limit <= 0.85, f"GOMEMLIMIT {caddy['environment']['GOMEMLIMIT']} vs mem_limit {limit}"
+          assert mem_bytes(base["services"]["backend"]["mem_limit"]) == 3 * 1024**3, base["services"]["backend"]["mem_limit"]
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token

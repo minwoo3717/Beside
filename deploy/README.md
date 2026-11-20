@@ -21,8 +21,9 @@
 | 실제 VM·도메인 | **[구현됨]** GCP `beside-vm` + `https://beside-team.duckdns.org`(2026-11-13, 아래 'GCP 메인 서버', 기록 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md)) |
 | Tailscale, 공개 주소 → VM → Runpod Pod 1건 | **[구현됨]** 2026-11-17: VM·Pod 를 Tailscale 로 잇고 Pod 의 패스스루 서비스로 사진 1건 전체 흐름(개발 PC 에서, 합계 7.3 s, 기록 [docs/deploy/2026-11-17_runpod-connect.md](../docs/deploy/2026-11-17_runpod-connect.md)). 같은 날 Pod 에 AnimalLift 를 설치해(`runpod/install_animallift.sh`) 실제 모델로 3건 성공(모델 4~6 s, 전체 12~16 s, [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)). 그날 VM ↔ Pod 는 DERP 중계(왕복 약 300 ms)였고, 2026-11-18·19 2·3차 부하 시험 때는 직접 연결(`tailscale ping` 263~269 ms)이었다 **[실험 결과]**. 날마다 바뀔 수 있다. 폰 앱 시험은 **[계획]** |
 | prod 프로파일(H2 콘솔·Swagger off, forward-headers, 업로드 사진 시그니처 검사) | **[구현됨]** (S1, `ProdProfileTest`). Caddy 의 404·401 규칙은 공개 주소에서 확인했고, 첫 배포 감사에서 나온 우회(끝의 `/`, `/webjars`, 소문자 method, 손님의 `X-Forwarded-Prefix`)를 막았다(2026-11-13). 파일 로그는 두지 않았다 — `docker compose logs` 를 쓴다 |
+| Runpod Pod 추론 서비스 자동 재시작([runpod/supervise_inference.sh](runpod/supervise_inference.sh), 장애 대응 R7) | **[구현됨]** 2026-11-20: `start_pod.sh` 가 서비스를 감독 루프 아래에서 띄운다. 가짜 서비스·가짜 Tailscale 로 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사(passthrough·model 모드)가 WSL(Ubuntu 26.04)에서 통과했고 CI 단계로 넣었다. 실제 Pod 에서 `kill -9` 뒤 다시 뜨는 시간과 그동안의 디스코드 알림은 **[계획]**. 아래 'Runpod Pod 쪽'의 '서비스 자동 재시작' |
 | `/infer` 업로드 모드(`INFERENCE_TRANSFER=upload`, `INFERENCE_TOKEN`) | **[구현됨]** (S2). VM 의 backend ↔ VM 안 스텁(별도 컨테이너, 토큰), 그다음 VM ↔ Runpod Pod(Tailscale, 2026-11-17)로 공개 주소에서 전체 흐름 확인 |
-| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다. Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
+| GPU 오프라인 대기(최대 30분 PENDING), H2 온라인 백업(매시 5분, 48개. 2026-11-20 까지는 매일 04:30, 7개), Discord 알림(`NOTIFY_WEBHOOK_URL`, 서버 이름 `NOTIFY_INFERENCE_LABEL`, prod 는 45초 넘은 끊김만) | **[구현됨]** (S3, 테스트로 확인. 매시·48개는 `DatabaseBackupScheduleTest`, VM 반영은 [계획] — 아래 '운영 대응 설치'). VM 에서: 백업은 2026-11-14~17 매일 zip 이 생겼다(매일 04:30 설정 때). Discord 는 2026-11-18 웹훅을 넣고 Pod 를 멈춘 상태로 backend 를 다시 띄워 끊김 메시지 1건이 오류 없이 나갔다(서버 이름·45초 유예는 2026-11-18 VM 리포를 main `b6c0e6c` 로 바꿔 배포한 뒤부터다. 서버 이름이 든 메시지를 확인한 기록은 아직 없다. 같은 날 부하 시험 뒤 운영 복구 때 Pod 가 꺼져 있어 `UNKNOWN -> DOWN` 이 backend 로그에 남았다). 오프라인 대기 중 작업이 이어지는 것은 2026-11-19 3차 부하 시험(같은 VM, 부하 덮어쓰기 backend `real,prod`, 웹훅 끔)의 계획 밖 경로 끊김 두 번과 F2-real 에서 확인했다 **[실험 결과]**([docs/perf/load/2026-11-19_vm-3rd.md](../docs/perf/load/2026-11-19_vm-3rd.md) 5·8절). 운영 backend 에서 본 기록은 아직 없다 |
 | 모니터링(compose `monitoring` 프로필: Prometheus + Grafana 대시보드 'Beside 운영'), Caddy `/actuator*` 404·`/grafana*` 인증, 컨테이너 로그 회전 | 파일 **[구현됨]**(대시보드 JSON 은 `json.tool` 로 형식만 확인) · compose 설정 검증(`monitoring` 프로필·부하 덮어쓰기)과 경로 시험(`/actuator*` 404, `/grafana*` 401)은 CI(PR #3, main `18c345f`, 2026-11-13)에서 통과 **[구현됨]** · Prometheus 는 2026-11-18 부하 시험 때 VM 에서 띄워 Spring 지표를 수집했다 **[실험 결과]**(시험 뒤 다시 멈춤). Grafana 를 실제로 띄워 보는 것은 **[계획]**. 아래 '모니터링' |
 | 부하 시험 덮어쓰기(`docker-compose.loadtest.yml`: backend 만 부하용 볼륨·mock 설정으로 바꿈)와 절차 | 파일 **[구현됨]** · VM 실행 1차(A0~A4, mock) 2026-11-18, 2차(실제 A40, G0r·G1r·G3r) 2026-11-18, 3차(G2r·F2-real·F1b-real·F1a) 2026-11-19 **[실험 결과]** — [loadtest/README.md](loadtest/README.md), [1차](../docs/perf/load/2026-11-18_vm-1st.md)·[2차](../docs/perf/load/2026-11-18_vm-2nd.md)·[3차](../docs/perf/load/2026-11-19_vm-3rd.md) |
 
@@ -37,6 +38,7 @@
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
+| 서비스 계정·백업 버킷 | `beside-backup@beside-514511.iam.gserviceaccount.com`(키 없음, 범위 `storage-rw,logging-write,monitoring-write`, 2026-11-20 04:26 UTC 까지 붙임) — 버킷 `gs://beside-514511-backups` 에 만들기만(`roles/storage.objectCreator`). 아래 '운영 대응 설치' 3번. 컨테이너는 2번(메타데이터 차단, 2026-11-20)으로 이 토큰을 받지 못한다 |
 | 코드 | VM 의 `~/Beside` 는 `main`(2026-11-19 PR #6~#11 병합 뒤 `1c87da5`, 11:04 UTC 에 `scripts/deploy_vm.sh` 로 backend 다시 배포). 추론 서비스 변경(PR #11)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
@@ -52,14 +54,13 @@
 
 **지금 상태(2026-11-13)**: 공개 주소에서 HTTPS·Basic 인증·404 규칙·전체 흐름(스텁)·재부팅 복구·`deploy_vm.sh beside-gcp` 를 확인했다. 수치와 보안 감사 결과는 [docs/deploy/2026-11-13_gcp-first-deploy.md](../docs/deploy/2026-11-13_gcp-first-deploy.md). 감사 뒤 강화한 `deploy/Caddyfile` 은 VM 의 `~/Beside` 에 **로컬 수정**으로 들어가 있다. 이 강화는 `deploy/gcp` → `main` PR 로만 들어가고 `feat/preprocess` 에서 pull 해도 오지 않으므로, PR 이 병합되기 전에는 VM 의 Caddyfile 을 되돌리지 않는다. 병합 뒤 VM 에서 `git checkout deploy/Caddyfile && git checkout main && git pull --ff-only`, 그다음 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`(main 의 compose 변경으로 컨테이너가 다시 만들어진다). 2026-11-17 에 VM 에 Tailscale 을 설치하고(apt 저장소, `beside-vm` 100.98.76.5) `INFERENCE_BASE_URL` 을 Runpod Pod(100.83.86.62:8002)로 바꿨다. 이전 값은 `deploy/.env.bak-20261117-stub` 에 있고 스텁 컨테이너 `beside-stub` 는 되돌릴 때를 위해 남겨 두었다.
 
-**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 지금 VM 은 기본 서비스 계정을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있다(`create_vm.sh` 는 이제 서비스 계정 없이 만든다). 바꾸려면 VM 을 잠깐 멈춰야 한다(약 1분 중단, 컨테이너는 스스로 다시 뜬다). 기본 네트워크가 만든 RDP 규칙도 필요 없다.
+**남은 GCP 쪽 정리(Cloud Shell, 선택)**: 2026-11-20 04:26 UTC 전까지 VM 은 기본 서비스 계정(GCS 읽기 범위)을 달고 있어 컨테이너가 메타데이터 서버에서 GCP 토큰을 받을 수 있었다. 그때 아래 '운영 대응 설치' 3번대로 기본 계정 대신 버킷 `beside-514511-backups` 에 만들기만 되는 `beside-backup@beside-514511.iam.gserviceaccount.com` 을 붙였고, 같은 날 2번(컨테이너의 메타데이터 서버 차단)도 적용해 그 토큰은 VM 호스트(백업 스크립트)만 받는다 **[구현됨: 적용]**(운영자 적용·보고, 아래 '적용 기록'). **R1(VM 밖 백업)을 쓰면 계정을 `--no-service-account` 로 떼지 않는다** — 그러면 백업이 매시 실패한다(7번 VM 감시가 3시간 뒤 알린다). R1 을 쓰지 않기로 한 경우에만 `stop` → `set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes` → `start` 로 뗀다(약 1분 중단). 기본 네트워크가 만든 RDP 규칙은 어느 쪽이든 필요 없다.
 
 ```bash
-gcloud compute instances stop beside-vm --zone=asia-northeast3-a
-gcloud compute instances set-service-account beside-vm --zone=asia-northeast3-a --no-service-account --no-scopes
-gcloud compute instances start beside-vm --zone=asia-northeast3-a
 gcloud compute firewall-rules delete default-allow-rdp
 ```
+
+VM 을 새로 만들면(`create_vm.sh` 는 2026-11-13 결정대로 서비스 계정 없이 만든다. 스냅샷에서 만들 때 `--service-account` 를 주지 않으면 기본 계정이 붙는다) R1 을 위해 '운영 대응 설치' 3번의 붙이기(`set-service-account ... --service-account=beside-backup@beside-514511.iam.gserviceaccount.com --scopes=storage-rw,logging-write,monitoring-write`)를 다시 한다. `create_vm.sh` 로 빈 디스크부터 만들었으면 2·4·7번 설치도 다시 한다(스냅샷에서 만든 디스크에는 이미 들어 있다).
 
 **GPU 없이 먼저 전체 흐름 확인(스텁)**: 리포의 추론 서비스를 패스스루 모드로 VM 안에 띄우고 `INFERENCE_BASE_URL=http://beside-stub:8001` 로 둔다. 이미지는 `python:3.12-slim` + `generation/inference_service/requirements.txt`, 앱 코드는 읽기 전용 마운트, 샘플 GLB 는 **유효한 GLB** 여야 한다(리포의 `backend/storage/results/sample-dog.glb` 는 0바이트라 쓸 수 없다). `--network beside_default`, 포트는 게시하지 않고, `BESIDE_INFERENCE_TOKEN` 은 `.env` 의 `INFERENCE_TOKEN` 과 같게(권한 600 인 env 파일로 넘긴다). Runpod Pod 를 연결하면 `INFERENCE_BASE_URL` 을 바꾸고 `docker rm -f beside-stub`.
 
@@ -150,7 +151,7 @@ nano deploy/.env
 | `BASIC_AUTH_HASH` | `caddy hash-password` 출력. **작은따옴표로 감싼다**: `BASIC_AUTH_HASH='$2a$14$...'` |
 | `INFERENCE_BASE_URL` | `http://<Runpod Pod 의 Tailscale IP>:8002`(`start_pod.sh` 가 마지막에 출력), GPU PC 면 `http://<그 PC 의 Tailscale IP>:8001` |
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU 쪽 `BESIDE_INFERENCE_TOKEN` 과 같게 |
-| `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
+| `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김, 추론 토큰 불일치(🔑)·멈춘 듯한 작업(🐢)·모델 불러오기 실패(🧩, 아래 '문제 해결')를 팀 채널에 알린다. 비우면 끔 |
 | `NOTIFY_INFERENCE_LABEL` | (선택) GPU 알림에 붙는 서버 이름(예: `Runpod A40` → "🟢 GPU 추론 서버(Runpod A40) 연결됨"). 비우면 이름 없이. prod 는 끊김(🔴)을 45초(`notify.down-grace-ms`) 넘게 이어질 때만 알린다. 그 안에 바로 다시 연결되면 🔴·🟢 둘 다 보내지 않고, 서비스가 다시 시작돼 모델을 불러오는 중(🟡)을 거쳐 돌아오면 🟡·🟢 만 보낸다. `#` 는 쓰지 않는다(따옴표 없는 값에서 compose 가 ` #` 뒤를 주석으로 자른다) |
 | `GRAFANA_ADMIN_USER` · `GRAFANA_ADMIN_PASSWORD` | (monitoring 프로필을 쓸 때만) Grafana 관리자 계정. 비밀번호는 `openssl rand -base64 24`. 견본에는 일부러 비어 있고, 비어 있으면 grafana 컨테이너가 뜨지 않는다(아래 '모니터링') |
 
@@ -212,12 +213,15 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 | 컨테이너 | 한도 |
 |---|---|
 | backend | 3g (`mem_limit`, 힙은 그 40 %, 나머지는 전처리 모델의 ONNX Runtime 네이티브 메모리) |
+| caddy | 2g (`mem_limit`) + `GOMEMLIMIT=1638MiB`(약 80 %, Go GC 목표) |
 | prometheus | 384m |
 | grafana | 256m |
-| caddy · Docker · OS | 한도 없음, 약 0.5GB |
-| **합계** | **약 4.2 / 4GB** (한도 합) |
+| Docker · OS | 한도 없음, 약 0.5GB |
+| **합계** | **약 5.6GB + OS** (한도 합) |
 
-monitoring 프로필까지 띄우면 한도 합이 4GB 를 넘으므로 **swap 2GB 가 필요**하다(한 번). 지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 다만 caddy 는 한도가 없고 2026-11-18 부하 시험 A1 에서 최대 2,246 MiB 까지 썼다(위 표의 추정보다 크다). 그때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
+caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다. compose 값 **[구현됨]** · `docker compose config` 로 두 값을 확인하는 CI 단언은 넣었지만 아직 돌지 않았다(개발 PC 에 Docker 가 없다. PR CI 의 docker 작업이 통과하면 그 커밋을 여기에 적는다). 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다).
+
+지금 GCP VM 은 8GB(+ swap 2GB)라 한도 합이 RAM 안에 든다. 4GB VM 이면 한도 합이 RAM 을 넘으므로 **swap 2GB 가 필요**하다(한 번). A1 때 컨테이너 합계는 최대 약 2.9 GiB 였다(docker stats, [docs/perf/load/2026-11-18_vm-1st.md](../docs/perf/load/2026-11-18_vm-1st.md)). swap 을 만드는 명령:
 
 ```bash
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
@@ -295,11 +299,102 @@ $C start backend
 복원: `$C stop backend` → `docker run --rm -v beside-storage:/data -v "$PWD/deploy/backups:/backup:ro" alpine:3.22 sh -c 'rm -rf /data/* && tar xzf /backup/<파일>.tgz -C /data'` → `$C start backend`.
 
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
-- **[구현됨]** prod 는 서버를 멈추지 않고 매일 04:30(한국 시각, `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 7개를 남긴다(`storage.backup.*`). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
+- **[구현됨]** prod 는 서버를 멈추지 않고 매시 5분(한국 시각 기준 `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 48개(이틀)를 남긴다(`storage.backup.*`, 2026-11-20 까지는 매일 04:30·7개). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
+- 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번) 전이라 VM 의 prod 는 아직 매일 04:30 KST·7개로 백업하므로, 그때까지 버킷에 새로 올라가는 DB zip 은 하루 1개다.
 
 ### 부하 시험
 
 VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.loadtest.yml](docker-compose.loadtest.yml) 로 부하용 backend(볼륨 `beside-loadtest-storage`, 웹훅·H2 백업 끔, `env=loadtest`)를 대신 띄운 뒤, 끝나면 운영으로 되돌린다. 팀 공지 → 운영 백업 → 띄우기 → 합성 GLB → k6 → 수집 → 복구 → 확인 순서와 중단 조건은 [loadtest/README.md](loadtest/README.md) 에 있다. 2026-11-18~19 에 세 번 실행했다 **[실험 결과]**. 다른 측정 중에는 하지 않는다.
+
+## 운영 대응 설치 (R1~R5)
+
+2026-11-20 장애 시나리오 대응 가운데 VM·GCP 쪽 다섯 가지다. 스크립트·systemd 단위와 그 시험(가짜 docker·curl·systemctl·gcloud·iptables 의 `scripts/test_{watchdog,offsite_backup,block_metadata,gcp_ops}.sh` 와 `systemd-analyze verify`)은 **[구현됨]**(2026-11-20 WSL Ubuntu 에서 통과. 같은 명령을 CI 에 넣었고 PR CI 에서 처음 돈다)이다. **VM·GCP 적용은 2026-11-20 에 2~5번(메타데이터 차단, 버킷·계정·VM 에 붙이기, 백업 타이머, 스냅샷 일정)을 했고 [구현됨: 적용], 1·6·7번은 [계획]** 이다. 3번은 운영자 보고, 2·4·5번은 장애 훈련 기록 `docs/ops/2026-11-20_failure-drills.md`(`ops/failure-drills` 커밋 `723fda8`)의 '적용함(2026-11-20, 운영)' 에 따른 것이고, 이 브랜치에서 VM 을 다시 들여다보지는 않았다. 적용하면 아래 '적용 기록' 표에 날짜와 확인 결과를 적는다.
+
+| 대응 | 막는 장애 | 파일 | 상태 |
+|---|---|---|---|
+| R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기·VM 설치(차단·타이머) [구현됨: 적용] 2026-11-20 · 매시 H2 백업의 VM 반영(1번) [계획] |
+| R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 일정 `beside-daily-snapshot` [구현됨: 적용] 2026-11-20 · 일정이 만든 첫 스냅샷 확인 [계획] |
+| R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
+| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [계획] |
+| R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [계획] |
+
+- **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 1번(매시 백업)을 배포하기 전인 지금은 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
+- **순서**: 메타데이터 차단(2) → 버킷·계정(3) → VM 에 계정 붙이기(정지 필요) → 백업 타이머(4). 차단을 먼저 하는 이유: 계정을 붙인 순간부터 컨테이너가 그 토큰을 받을 수 있다. 2026-11-20 에 2~4번을 모두 적용했으므로(단계별 시각은 남기지 않았다) 이 순서는 VM 을 빈 디스크(`create_vm.sh`)로 다시 만들 때 지킨다.
+- **스크립트는 복사해서 쓴다**: root 가 돌리는 파일이 `git pull` 만으로 바뀌지 않게 `/usr/local/sbin` 으로 `install` 한다. 리포의 스크립트가 바뀌면 아래 `install` 줄을 다시 실행한다.
+- 비밀(웹훅·토큰)은 출력하지 않는다. 백업 스크립트는 메타데이터 서버 토큰을, 감시 스크립트는 `deploy/.env` 의 `NOTIFY_WEBHOOK_URL` 을 curl 설정(stdin)으로만 넘긴다.
+
+**적용 기록**(적용한 사람이 채운다. 시각은 UTC. 확인 결과에는 아래 각 단계의 확인 명령이 보여 준 것을 적는다):
+
+| 단계 | 상태 | 적용 시각 (UTC) | 확인 결과 |
+|---|---|---|---|
+| 1. 백엔드 배포(R1 매시 백업, R5) | [계획] | | (caddy `Memory`·`GOMEMLIMIT`, 정시 5분 뒤 새 zip) |
+| 2. 메타데이터 차단(R1) | **[구현됨: 적용]** (장애 훈련 기록 `723fda8` 의 운영자 적용, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 (시각 기록 없음) | 컨테이너에서 메타데이터 HTTP 000(무응답), 호스트 200, 컨테이너의 이름 풀이 정상 |
+| 3. 버킷·계정·VM 에 붙이기(R1) | **[구현됨: 적용]** (운영자 적용·보고, 이 리포의 시험으로 본 것은 아님) | 2026-11-20 04:26 까지 | 버킷 `gs://beside-514511-backups`: asia-northeast3, 균일 접근, 공개 액세스 방지 enforced, 소프트 삭제 7일, 수명 주기 `db/` 만 30일 뒤 삭제. 키 없는 `beside-backup@beside-514511.iam.gserviceaccount.com` 에 그 버킷의 `roles/storage.objectCreator`. `beside-vm` 에 `--scopes=storage-rw,logging-write,monitoring-write` 로 붙임 |
+| 4. 백업 타이머(R1) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음) | 매시 20분 타이머. 첫 실행이 DB 백업 zip 7개(1번 배포 전이라 매일 04:30 KST 것)와 사진·GLB 29개를 올림. 버킷에서 받은 zip 을 H2 로 열어 작업 15건 확인 |
+| 5. 스냅샷 일정(R2) | **[구현됨: 적용]** (2번과 같음) | 2026-11-20 (시각 기록 없음) | 일정 `beside-daily-snapshot`: 매일 19:00 UTC, 7일 보관. 일정이 만든 첫 스냅샷(2026-11-20 19:00 UTC 뒤)은 아직 확인하지 않음 [계획] |
+| 6. 외부 가동 확인(R3) | [계획] | | (알림 채널 종류, 가동 확인 이름) |
+| 7. VM 감시(R4) | [계획] | | (`list-timers` 의 다음 실행) |
+
+**1. 백엔드 배포(R1 의 매시 백업, R5)**: 이 변경이 main 에 들어간 뒤 개발 PC 에서 `scripts/deploy_vm.sh beside-gcp`. compose 의 caddy 설정이 바뀌었으므로 caddy 도 다시 만들어진다(몇 초 끊김, 인증서는 `caddy_data` 에 남는다). 확인(VM):
+
+```bash
+docker inspect -f '{{.HostConfig.Memory}}' beside-caddy-1          # 2147483648
+docker exec beside-caddy-1 printenv GOMEMLIMIT                     # 1638MiB
+sudo ls -t /var/lib/docker/volumes/beside-storage/_data/backup | head -n 3   # 다음 정시 5분 뒤 새 zip
+```
+
+**2. 메타데이터 차단(R1, VM)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 빈 디스크로 새로 만들 때와 리포의 스크립트가 바뀌었을 때(`install` 줄)뿐이다:
+
+```bash
+cd ~/Beside
+sudo install -m 755 deploy/backup/block-metadata.sh /usr/local/sbin/beside-block-metadata
+sudo install -m 644 deploy/backup/beside-block-metadata.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now beside-block-metadata.service
+sudo beside-block-metadata check     # ok 3줄: 규칙, 컨테이너의 메타데이터 HTTP 무응답(000), 컨테이너의 이름 풀이
+curl -s -H 'Metadata-Flavor: Google' http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email; echo   # 호스트는 그대로 닿는다
+```
+
+- 규칙은 `DOCKER-USER` 맨 위의 `-d 169.254.169.254/32 -p tcp ! --dport 53 -j DROP` 이다. 53(DNS)은 열어 둔다: 메타데이터 서버가 VM 의 DNS 다. Docker 를 다시 시작하면 단위가 규칙을 다시 넣는다(`PartOf=docker.service`).
+- backend 를 호스트 네트워크로 옮기면(위 compose 주석의 대안) 이 차단이 적용되지 않는다.
+
+**3. 버킷·계정(R1, gcloud 가 로그인된 곳)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 VM 을 새로 만들 때의 붙이기뿐이다(위 'GCP 메인 서버'). 스크립트는 다시 실행해도 있는 버킷·계정은 그대로 두고 설정만 다시 넣는다: `bash deploy/gcp/backup_bucket.sh`(먼저 `DRY_RUN=1` 로 명령 확인). 버킷 `<프로젝트>-backups`(이 프로젝트는 `beside-514511-backups`. 서울, 균일 접근, 공개 차단, 소프트 삭제 기본 7일, `db/` 만 30일 뒤 삭제)과 키 없는 `beside-backup@` 계정(그 버킷에만 `roles/storage.objectCreator`)을 만들고, VM 에 붙이는 명령을 출력만 한다. 붙이려면 VM 을 멈춰야 하므로(약 1분, 진행 중 작업은 `INTERNAL_ERROR`) 팀 공지 뒤 출력된 `stop` → `set-service-account ... --scopes=storage-rw,logging-write,monitoring-write` → `start` 를 한다. 2026-11-13 결정(컨테이너에 클라우드 자격 증명을 주지 않는다)은 그대로다: 계정은 VM 호스트만 쓰고 컨테이너는 2번으로 막는다.
+
+- 이 계정은 만들기만 된다(읽기·목록·덮어쓰기·삭제 불가). 그래서 업로드는 `gcloud storage cp` 가 아니라 JSON API + `ifGenerationMatch=0` 이다(`gcloud storage cp` 는 `--no-clobber` 여부와 상관없이 대상 객체를 먼저 GET 해서 403 이 난다 — 스크립트 머리말).
+- 버킷의 파일은 VM 쪽에서 지울 수 없다. 앱에서 작업을 지워도 그 사진·GLB 사본은 버킷에 남으므로, 지워야 하면 프로젝트 소유자 계정으로 `gcloud storage rm` 한다.
+
+**4. 백업 타이머(R1, VM — 3번 뒤)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'). 다시 할 일은 2번과 같다:
+
+```bash
+echo 'BUCKET=beside-514511-backups' | sudo tee /etc/beside-backup.env   # 3번에서 만든 버킷(2026-11-20)
+sudo install -m 755 deploy/backup/offsite_backup.sh /usr/local/sbin/beside-offsite-backup
+sudo install -m 644 deploy/backup/beside-backup.service deploy/backup/beside-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start beside-backup.service          # 첫 실행: zip 전부 + 사진·GLB 전부
+journalctl -u beside-backup -n 20 --no-pager        # "db: N new backup(s) sent", "files: N new file(s) sent, 0 failed"
+sudo systemctl enable --now beside-backup.timer
+systemctl list-timers beside-backup.timer
+```
+
+- 실패하면 서비스가 failed 로 남고 다음 정시 20분에 못 보낸 것부터 다시 보낸다. 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남기고, 7번 VM 감시가 이것이 3시간 넘게 묵거나(매시 실행 세 번이 실패·누락) 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 감시를 설치하기 전에는 실패해도 저널에만 남는다.
+- 복구 확인(한 번, 개발 PC): `gcloud storage ls gs://beside-514511-backups/db/ | tail -n 1` 의 zip 을 받아 H2 로 열어 작업 수를 본다(FD5 훈련과 같은 `Restore` 절차).
+
+**5. 스냅샷 일정(R2, gcloud)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'): `bash deploy/gcp/snapshot_schedule.sh`(다시 실행해도 있는 일정과 이미 붙인 디스크는 그대로 둔다). 다음 19:00 UTC 뒤 `gcloud compute snapshots list --filter="sourceDisk~/disks/beside-vm$"` 로 첫 스냅샷을 확인한다(2026-11-20 적용분은 아직 **[계획]**). 스냅샷은 전원을 내린 것과 같은 상태라, 복구한 VM 에서 H2 파일이 열리지 않으면 `storage/backup` 의 최신 zip 으로 되돌린다.
+
+**6. 외부 가동 확인(R3, gcloud)**: 콘솔 Monitoring → Alerting → Edit notification channels 에서 메일 채널을 만든 뒤 `gcloud beta monitoring channels list --format='table(name.basename(),type,displayName)'` 로 id 를 보고 `bash deploy/gcp/uptime_check.sh create <id>`. 부하 시험·장애 훈련 동안은 `bash deploy/gcp/uptime_check.sh pause`, 끝나면 `resume`(가동 확인 자체는 계속 돌고 기록된다).
+
+**7. VM 감시(R4, VM)**:
+
+```bash
+sudo install -m 755 deploy/watchdog/beside-watchdog.sh /usr/local/sbin/beside-watchdog
+sudo install -m 644 deploy/watchdog/beside-watchdog.service deploy/watchdog/beside-watchdog.timer /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now beside-watchdog.timer
+systemctl list-timers beside-watchdog.timer
+journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 남기지 않는다
+```
+
+- 판단: backend 컨테이너 안에서 관리 포트 `/actuator/health`(DB·ping. Spring 의 디스크 여유 검사는 prod 에서 끈다 — 재시작해도 디스크는 비지 않고 진행 중 작업만 끝나므로, 디스크는 아래 80 % 경고가 맡는다. `ProdProfileTest`)를 묻고, 연속 3번(약 1~1.5분) 실패하면 `docker restart` + 디스코드. 10분에 한 번까지, 시작 90초 안은 판단하지 않음, 멈춘(`compose stop`)·재시작 중인 컨테이너는 손대지 않음. `/` 사용률 80 % 이상이면 1시간에 한 번 알린다. VM 밖 백업(4번)의 마지막 성공이 3시간 넘었거나 한 번도 성공하지 못하고 failed 면 6시간에 한 번 알린다(백업이 아직 설치되지 않았거나 실행 중이면 보지 않는다).
+- **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
+- 재시작하면 그때 PENDING·PROCESSING 이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱은 retry). GPU·추론 서비스 상태는 보지 않는다(backend 의 GPU 알림이 맡는다).
 
 ## Runpod Pod 쪽
 
@@ -338,9 +433,46 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 5. 첫 실행은 Tailscale 1.104.6 을 `/workspace/tailscale` 에 받고(sha256 고정) 로그인 링크를 `/workspace/beside-logs/tailscale-up.log` 에 쓴다. 그 링크를 승인하면 `start.log` 끝에 `INFERENCE_BASE_URL=http://100.x.y.z:8002` 가 나온다. 터미널을 보고 있다면 `nohup ... &` 없이 실행해도 같은 내용이 화면에 나온다.
 6. VM: `deploy/.env` 의 `INFERENCE_BASE_URL` 을 그 값으로 바꾸고 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 를 실행한다. 확인은 `/healthz` 만이 아니라 실제 사진 1건(`scripts/e2e_mock.sh https://<도메인> <사진>`)으로 한다 — tailnet 의 MTU 가 작아 큰 업로드만 막히는 경우를 healthz 는 잡지 못한다. 끝나면 `docker rm -f beside-stub`.
 
-**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. `pull` 을 쓰지 않는 이유: 4차 부하 시험(2026-11-19 UTC) 시작 때 볼륨의 리포는 브랜치가 아닌 detached HEAD(3차 중에 바꾼 `b6c0e6c`)였다. detached HEAD 에서 `git pull` 은 인자 없이는 브랜치가 없다며 거부하고, `origin main` 을 주면 빨리감기는 해도 detached 인 채로 남는다(개발 PC git 2.54 로 확인). 볼륨의 커밋이 main 의 조상이 아니면(예: main 에 병합되지 않은 브랜치의 커밋) `--ff-only` 가 실패한다. `checkout -B main origin/main` 은 어느 상태에서든 `main` 브랜치를 origin 의 main 으로 맞춘다. 볼륨 리포에서 고친 파일이 없어야 한다(로컬 `main` 은 덮인다). 4차 때 이 명령으로 main `a9aa091` 에 맞췄다(PR #11 DELETE 취소·시작 기본값·요청별 시간 기록 포함). `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 pid 를 `kill` 하라고 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
+**다시 쓸 때마다**(새로 만든 Pod 든 정지했다 켠 Pod 든) 먼저 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main` 으로 볼륨의 리포를 main 에 맞추고, 4번의 마지막 두 줄만 실행한다. `start_pod.sh` 는 리포를 당기지 않는다. `pull` 을 쓰지 않는 이유: 4차 부하 시험(2026-11-19 UTC) 시작 때 볼륨의 리포는 브랜치가 아닌 detached HEAD(3차 중에 바꾼 `b6c0e6c`)였다. detached HEAD 에서 `git pull` 은 인자 없이는 브랜치가 없다며 거부하고, `origin main` 을 주면 빨리감기는 해도 detached 인 채로 남는다(개발 PC git 2.54 로 확인). 볼륨의 커밋이 main 의 조상이 아니면(예: main 에 병합되지 않은 브랜치의 커밋) `--ff-only` 가 실패한다. `checkout -B main origin/main` 은 어느 상태에서든 `main` 브랜치를 origin 의 main 으로 맞춘다. 볼륨 리포에서 고친 파일이 없어야 한다(로컬 `main` 은 덮인다). 4차 때 이 명령으로 main `a9aa091` 에 맞췄다(PR #11 DELETE 취소·시작 기본값·요청별 시간 기록 포함). `git -C /workspace/Beside rev-parse --short HEAD` 가 VM 의 main 과 같은지 본다. 노드 상태가 `/workspace/tailscale` 에 있어서 로그인 없이 같은 100.x 로 돌아오고 VM `.env` 는 그대로 둔다. 이미 떠 있는 것은 다시 띄우지 않는다. 단, 떠 있는 서비스의 모드가 지금 모드와 다르면(패스스루 시험 중에 AnimalLift 를 설치한 경우) 그 서비스를 일부러 내리라고(`touch /workspace/beside-norestart && kill <pid>`, 아래 '서비스 자동 재시작') 알리고 멈춘다. 스크립트는 한 번에 하나만 돈다(앞의 실행이 끝나지 않았으면 거부). 한 볼륨을 두 Pod 가 동시에 쓰지 않는다(같은 노드 키로 서로 밀어낸다). 스크립트가 마지막으로 쓴 Pod id 를 기록해 두고, 다르면 알려 준다.
 
-**추론 서비스 기본값**(2026-11-20 KST = 2026-11-19 16:33 UTC, `3b12c7b`): `start_pod.sh` 는 uvicorn 유휴 연결 75 s(`UVICORN_TIMEOUT_KEEP_ALIVE`)와 torch·BLAS 스레드 8(`THREADS` → `OMP/MKL/OPENBLAS_NUM_THREADS`)로 서비스를 띄운다 **[구현됨]**. 근거는 3차 부하 시험 2절이다: 처리 중앙값 −0.88 s, Pod CPU 한도에 걸린 100 ms 주기 0. 8 은 A40 Pod 의 cgroup CPU 한도(7.65 코어)에 맞춘 값이다. 다른 Pod 종류면 `THREADS` 를 그 Pod 의 cgroup CPU 한도(`cpu.cfs_quota_us / cpu.cfs_period_us` 또는 `cpu.max`, 반올림)로 준다. 콘솔이 보여 주는 vCPU 수(이 A40 Pod 는 9)가 아니다. `THREADS=default` 면 스레드 변수를 넣지 않는다(3차 G2r·F 와 같은 라이브러리 기본). backend 의 HttpClient 는 유휴 연결을 60 s 에 놓는다(`backend/Dockerfile` 의 `jdk.httpclient.keepalive.timeout`, JDK 기본 1200 s). 서비스(75 s)보다 먼저 놓아야, 이미 닫힌 연결로 `POST /infer/upload` 를 보내지 않는다. 값은 서비스를 띄울 때만 들어간다. 이미 떠 있는 서비스가 다른 값이면 `[4/4]` 줄 다음에 NOTE 가 나오므로, 그 pid 를 `kill` 하고 다시 실행한다. `[4/4]` 줄에는 서비스 프로세스가 실제로 받은 값(`/proc/<pid>/environ`)이 나온다. 4차 부하 시험(2026-11-19 UTC, 새 A40 Pod)에서 실제 Pod 로 확인했다 **[실험 결과]**: `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. G0 에서 Pod CPU 한도에 걸린 주기는 0 이었고, 작업 연결 하나를 31건이 이어 썼다(작업 사이 유휴 약 22 s, [docs/perf/load/2026-11-20_vm-4th.md](../docs/perf/load/2026-11-20_vm-4th.md) 2절).
+**추론 서비스 기본값**(2026-11-20 KST = 2026-11-19 16:33 UTC, `3b12c7b`): `start_pod.sh` 는 uvicorn 유휴 연결 75 s(`UVICORN_TIMEOUT_KEEP_ALIVE`)와 torch·BLAS 스레드 8(`THREADS` → `OMP/MKL/OPENBLAS_NUM_THREADS`)로 서비스를 띄운다 **[구현됨]**. 근거는 3차 부하 시험 2절이다: 처리 중앙값 −0.88 s, Pod CPU 한도에 걸린 100 ms 주기 0. 8 은 A40 Pod 의 cgroup CPU 한도(7.65 코어)에 맞춘 값이다. 다른 Pod 종류면 `THREADS` 를 그 Pod 의 cgroup CPU 한도(`cpu.cfs_quota_us / cpu.cfs_period_us` 또는 `cpu.max`, 반올림)로 준다. 콘솔이 보여 주는 vCPU 수(이 A40 Pod 는 9)가 아니다. `THREADS=default` 면 스레드 변수를 넣지 않는다(3차 G2r·F 와 같은 라이브러리 기본). backend 의 HttpClient 는 유휴 연결을 60 s 에 놓는다(`backend/Dockerfile` 의 `jdk.httpclient.keepalive.timeout`, JDK 기본 1200 s). 서비스(75 s)보다 먼저 놓아야, 이미 닫힌 연결로 `POST /infer/upload` 를 보내지 않는다. 값은 서비스를 띄울 때만 들어간다(감독 루프가 다시 띄울 때는 처음 값 그대로다). 이미 떠 있는 서비스가 다른 값이면 `[4/4]` 줄 다음에 NOTE 가 나오므로, 그 서비스를 일부러 내리고(`touch /workspace/beside-norestart && kill <pid>`) 다시 실행한다. `[4/4]` 줄에는 서비스 프로세스가 실제로 받은 값(`/proc/<pid>/environ`)이 나온다. 4차 부하 시험(2026-11-19 UTC, 새 A40 Pod)에서 실제 Pod 로 확인했다 **[실험 결과]**: `[4/4]` 줄에 keep-alive 75 s·threads 8 이 나왔고 `/proc/<pid>/environ` 에도 같은 값이 있었다. G0 에서 Pod CPU 한도에 걸린 주기는 0 이었고, 작업 연결 하나를 31건이 이어 썼다(작업 사이 유휴 약 22 s, [docs/perf/load/2026-11-20_vm-4th.md](../docs/perf/load/2026-11-20_vm-4th.md) 2절).
+
+**서비스 자동 재시작**(2026-11-20, 장애 대응 R7) **[구현됨]**: 그전에는 서비스가 죽으면 누가 `start_pod.sh` 를 다시 실행할 때까지 꺼진 채로 남았다. 이제 `start_pod.sh` 는 서비스를 감독 루프 [runpod/supervise_inference.sh](runpod/supervise_inference.sh) 아래에서 띄운다.
+
+- 서비스 프로세스가 끝나면(오류로 죽음, 메모리 부족으로 죽음, `kill -9`) 같은 환경변수·작업 폴더로 다시 띄운다. keep-alive·스레드·토큰·모드가 처음과 같다.
+- 다시 띄우기 전 기다리는 시간은 5 s 다. 연달아 죽으면 두 배씩 늘고 60 s 에서 멈춘다(5 → 10 → 20 → 40 → 60 s). 한 번 300 s 넘게 돌았으면 다시 5 s 부터다. 값은 `RESTART_DELAY_S`·`RESTART_MAX_DELAY_S`·`RESTART_STABLE_S` 로 바꾼다.
+- 프로세스가 끝났을 때만 다시 띄운다. 살아 있지만 멈춘 서비스는 그대로 둔다. 멈춘 서비스를 누가 알아채는지는 `/healthz` 가 답하느냐에 달렸다.
+  - SIGSTOP 처럼 `/healthz` 도 답하지 못하면: backend 의 `InferenceHealthMonitor` 가 다음 검사(15 s 마다)에서 2 s 안에 답이 없어 DOWN 으로 읽는다. `NOTIFY_WEBHOOK_URL` 을 넣었으면 DOWN 이 45 s 이어진 뒤(`notify.down-grace-ms=45000`) 디스코드 GPU 알림이 간다. 코드를 읽어 정리한 것이고, 실제 Pod 에서 SIGSTOP 으로 확인하는 것은 **[계획]** 이다.
+  - `/healthz` 는 답하는데 추론만 멈추면: backend 는 UP 으로 보고 작업을 계속 보내며, 감독 루프도 프로세스가 살아 있어 그대로 둔다. 작업마다 `inference.timeout-ms`(600 s) 뒤 `INFERENCE_TIMEOUT` 으로 실패한다. 이것을 알아채는 것은 장애 대응 R6 의 멈춤 알림이다: `/healthz` 의 `busyForMs`(아직 도는 `predict`·패스스루 모의 생성이 시작한 뒤 ms)가 `inference.stuck-alert-ms`(기본 120 s)를 넘으면 웹훅을 넣었을 때 디스코드 🐢 가 한 번, 풀리면 🟢 가 한 번 간다(아래 '문제 해결'). 변환·리깅에서 멈춘 것은 `busyForMs` 에 들어가지 않아 작업 시간 초과 말고는 잡는 장치가 없다. 알림은 시험(`test_app.py`·`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`)으로 확인했고 **[구현됨]**, VM·Pod 에서 실제로 받아 보는 것은 **[계획]** 이다.
+  - 모델을 불러오지 못한 서비스(장애 훈련 FD18, 2026-11-20: 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)도 프로세스는 살아 있어 다시 띄우지 않는다. 서비스는 다시 불러오지 않고 `/healthz` 가 `modelLoaded=false` 로 답하므로 backend 는 LOADING 으로 보고 새 작업은 `inference.offline-wait-ms`(prod 30분)까지 PENDING 으로 기다린다. 2026-11-20 부터 `/healthz` 의 `loadError` 가 이유를 알려 주고 backend 가 디스코드 🧩 를 한 번 보낸다(아래 '문제 해결'). 시험으로 **[구현됨]**, VM·Pod 에서 받아 보는 것은 **[계획]**.
+  - 어느 경우든 자동으로 다시 띄우지는 않는다. 멈춘 서비스는 `kill -9 $(cat /var/run/beside/inference.pid)` 로 끝내면 감독 루프가 5 s 뒤 같은 설정으로 다시 띄운다(SIGTERM 은 처리 중인 요청이 끝나기를 기다린다 — [loadtest/README.md](loadtest/README.md) F2 와 같은 이유).
+- 기록: `/workspace/beside-logs/supervisor.log` 에 시작·종료·재시작마다 UTC 시각을 붙인 한 줄(끝난 pid, 종료 상태, 돈 시간, 몇 번째 재시작, 기다릴 시간)이 남는다. `inference.log` 에도 `=== <시각> supervise_inference.sh restart N ===` 줄이 붙는다.
+- `/var/run/beside/inference.pid` 는 지금 떠 있는 uvicorn 프로세스다. model 모드의 `start_inference_wsl.sh` 는 uvicorn 을 `exec` 하므로 pid 가 같다(감독 루프의 바로 아래 자식이다. 아래 시험의 model 모드 부분으로 확인했고, 진짜 conda·uvicorn 으로는 **[계획]**). SIGSTOP·`kill` 은 이 pid 에 보낸다. 감독 루프의 pid 는 `/var/run/beside/supervisor.pid` 다.
+- 감독 루프는 한 번에 하나만 돈다(`/var/run/beside/supervisor.lock` 을 잡는다). 서비스는 내려가 있고 감독 루프가 재시작을 기다리는 중이면 `start_pod.sh` 는 그 pid 를 알리고 멈춘다.
+- 처음 띄울 때 서비스가 바로 끝나면(포트 충돌, conda 환경 없음 등) `start_pod.sh` 는 감독 루프도 끝내고 실패로 멈춘다. 망가진 설정을 끝없이 다시 띄우지 않게 하려는 것이다.
+- 2026-11-20 전의 `start_pod.sh` 로 띄운 서비스에는 감독 루프가 없다. `start_pod.sh` 가 `NOTE: no supervisor watches it` 로 알린다. 일부러 내린 뒤 다시 실행하면 감독 아래에서 뜬다.
+
+**일부러 내릴 때**(모드 바꾸기, 설정 바꾸기, F2·FD18 같은 훈련): 그냥 `kill` 하면 5 s 뒤 예전 설정으로 다시 뜬다. 표시 파일을 먼저 만든다.
+
+```bash
+touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)   # F2 처럼 꺼진 채로 둘 때는 kill -9
+bash /workspace/Beside/deploy/runpod/start_pod.sh                                # 다시 띄울 때. 표시 파일을 지운다
+```
+
+- 표시 파일이 있으면 서비스가 끝나도 다시 띄우지 않고, 감독 루프도 끝난다. 재시작을 기다리는 중에 만들어도 같다.
+- `start_pod.sh` 는 서비스를 새로 띄울 때 표시 파일을 지우고 그렇게 했다고 출력한다. 파일이 볼륨(`/workspace`)에 있어 Pod 를 새로 만들어도 남기 때문이다. 지우지 않으면 다음 Pod 의 서비스도 재시작이 꺼진 채로 돈다.
+- 서비스가 떠 있는데 표시 파일이 있으면 `start_pod.sh` 가 NOTE 로 알린다.
+- 감독 루프와 서비스를 함께 내리려면 `kill $(cat /var/run/beside/supervisor.pid)` 한다. 감독 루프가 SIGTERM 을 서비스에 넘기고, 서비스가 끝나면 함께 끝난다.
+- `ps` 에는 감독 루프의 인자에도 uvicorn 명령이 보인다. `pkill -f uvicorn` 은 둘 다 맞히므로 pid 로 보낸다.
+
+확인한 것과 남은 것:
+
+- **[구현됨]** WSL(Ubuntu 26.04, bash 5.3)에서 [runpod/test_start_pod_supervisor.sh](runpod/test_start_pod_supervisor.sh) 127개 검사가 통과했다(가짜 서비스·가짜 Tailscale·가짜 venv·가짜 conda 환경, 127.0.0.1 밖으로 나가지 않음). 같은 시험을 6개 동시에 돌려도 통과했다.
+  - 감독 루프만: `kill -9` 뒤 새 pid 로 다시 뜸, pid 파일이 새 프로세스를 가리킴, SIGSTOP 에는 다시 띄우지 않음, 기다리는 시간 1·2·4·4 s(시험 값: 처음 1 s, 상한 4 s), 오래 돈 뒤에는 처음 값으로 돌아감, 표시 파일(끝날 때·기다리는 중), 두 번째 감독 루프 거부, SIGTERM 전달(멈춘 서비스도), 감독 루프를 `kill -9` 해도 서비스가 잠금을 쥐지 않음.
+  - `start_pod.sh` 와 함께(passthrough): `[4/4]` 줄의 설정, 두 번 띄우지 않음, 다시 뜬 서비스의 환경변수·작업 폴더가 처음과 같음, 모드가 다르면 거부, 재시작을 기다리는 감독 루프가 있으면 거부, 표시 파일을 지우고 다시 띄움, 시작하자마자 끝나는 서비스면 감독 루프도 끝냄, 감독 없는 서비스 알림.
+  - `start_pod.sh` 와 함께(model, 2026-11-20 검토 반영): 진짜 `scripts/start_inference_wsl.sh` 가 가짜 conda 환경(`conda activate` 를 기록하고 그 환경의 `python -m uvicorn` 이 가짜 서비스를 띄움)으로 뜬다. `inference.pid` 가 uvicorn 명령의 프로세스이고 감독 루프의 바로 아래 자식임, 서비스 환경의 `BESIDE_ANIMALLIFT_DIR`·`BESIDE_WORK_DIR`·`CONDA_HOME`·`PORT`·`BESIDE_HOST`·keep-alive·스레드·토큰, `kill -9` 뒤 같은 감독 루프가 `start_inference_wsl.sh` 를 다시 돌려(conda 활성화 두 번, 설정 줄 두 번) 같은 값으로 띄움, 표시 파일 + `kill` 로 일부러 내리면 그대로 꺼져 있음.
+  - 시험이 잡는지 일부러 고장 낸 판으로 확인했다: 8가지(잠금 상속, 표시 파일 무시, 두 배 안 함, 처음 값으로 안 돌아감, 예전 `start_pod.sh`, 시작 실패 때 감독 루프를 안 끔, 표시 파일을 안 지움, SIGTERM 을 안 넘김)가 모두 실패로 나왔다. model 부분은 3가지(`start_inference_wsl.sh` 에서 `exec` 를 뺌, `start_pod.sh` 가 `ANIMALLIFT_DIR` 를 넘기지 않음, 감독 루프가 다시 띄울 때 `PORT` 를 잃음)가 각각 검사 9·4·5개 실패로 나왔고, 실패한 실행 뒤에도 남은 프로세스가 없었다.
+- **[계획]** 실제 Pod: model 모드에서 `kill -9` 뒤 다시 뜨기까지(5 s + 모델 로드 31~73 s, 지난 기록) 걸리는 시간, 그동안 backend 의 GPU 알림. 끊김이 45 s 유예 안에 끝나면 🟡·🟢 만 갈 것으로 예상하지만 확인하지 않았다.
 
 **네트워크 볼륨이 아니라 Pod 볼륨 디스크로 만든 Pod 를 Terminate 했을 때**는 `/workspace` 가 지워져 새 노드가 된다. 다시 로그인하고, Tailscale 관리 콘솔에서 옛 `beside-gpu` 노드를 지운 뒤, VM 의 `INFERENCE_BASE_URL` 을 새 주소로 바꾼다.
 
@@ -356,9 +488,10 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | `/workspace/tailscale/` | 바이너리와 노드 상태(노드 키, 권한 700), 마지막 Pod id |
 | `/workspace/beside-token` | 추론 토큰(권한 600). `BESIDE_INFERENCE_TOKEN` 환경 변수가 있으면 그쪽이 먼저다 |
 | `/workspace/.cache/` | SD VAE·DINOv2 가중치 캐시(`HF_HOME`, `TORCH_HOME`). 없으면 컨테이너 디스크에 받아 정지할 때마다 다시 받는다 |
-| `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`. 실행마다 시각 표시를 붙여 이어 쓴다 |
+| `/workspace/beside-logs/` | `start.log`, `tailscaled.log`, `tailscale-up.log`, `inference.log`, `supervisor.log`(서비스 시작·종료·재시작). 실행마다 시각 표시를 붙여 이어 쓴다 |
+| `/workspace/beside-norestart` | 있으면 감독 루프가 끝난 서비스를 다시 띄우지 않는다(일부러 내릴 때 만든다). `start_pod.sh` 가 서비스를 새로 띄울 때 지운다 |
 | `/workspace/beside-work/` | 작업 폴더(Spring 이 GLB 를 받은 뒤 `DELETE` 로 지운다). 남은 폴더는 `BESIDE_WORK_SWEEP_MINUTES` 로 지울 수 있다(`start_pod.sh` 는 켜지 않는다) |
-| `/var/run/beside/` | 소켓과 pid. 정지하면 사라진다 |
+| `/var/run/beside/` | 소켓, pid(`inference.pid` 는 uvicorn, `supervisor.pid` 는 감독 루프, `tailscaled.pid`), 잠금. 정지하면 사라진다 |
 
 **확인한 것**
 
@@ -401,7 +534,11 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 맞는 비밀번호인데 계속 401 | `... exec caddy printenv BASIC_AUTH_HASH` 가 `$2a$14$` 로 시작하는 완전한 해시인지 | `.env` 에서 작은따옴표로 감싸고 `up -d`(환경변수가 바뀌면 caddy 가 새로 만들어진다) |
 | 업로드 413 | 응답 본문이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)면 Spring(장당 5MB·요청 20MB), 본문이 비었으면 Caddy(25MB) | 사진을 줄인다. 상한을 바꾸려면 Spring 설정과 Caddyfile 을 함께(계약 회의) |
 | 502 Bad Gateway | `... ps` 에서 backend 상태, `... logs backend` | 기동 중(첫 30~60초)이면 기다린다. 종료됐으면 로그의 원인(DB 잠김·메모리) |
-| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/`(`supervisor.log` 에 서비스가 죽고 다시 뜬 기록) | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| Discord 🔑 "백엔드의 추론 토큰을 받지 않아요" (healthz `tokenOk=false`) | backend 컨테이너 안에서 `sh -c 'curl -sS -H "X-Inference-Token: $INFERENCE_TOKEN" http://<GPU 쪽 100.x>:<포트>/healthz'` 의 `tokenOk`(토큰은 출력되지 않는다). VM `deploy/.env` 의 `INFERENCE_TOKEN` 과 Pod `/workspace/beside-token` 중 어느 쪽이 바뀌었는지 | 이 동안 새 작업은 기다리지 않고 바로 `INFERENCE_UNAVAILABLE`(401)로 끝난다. 틀린 쪽을 고친다: Pod 는 위 '처음 한 번' 4번의 토큰 줄로 다시 쓰고 `touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)` 뒤 4번의 마지막 두 줄(감독 루프는 처음 토큰으로 다시 띄우므로 표시 파일 없이 `kill` 만 하면 토큰이 바뀌지 않는다. 'Runpod Pod 쪽' '서비스 자동 재시작'), VM 은 `up -d backend`. Pod 쪽을 고치면 약 15초(`inference.health-poll-ms`) 안에 🔑 "다시 받아요" 가 온다. backend 를 다시 띄운 경우 새 backend 는 앞 알림을 모르므로 회복 메시지 없이 🔑 가 다시 오지 않는 것으로 확인한다. 실패한 작업은 앱에서 다시 시도 |
+| Discord 🐢 "작업 하나가 …째 끝나지 않아요" (healthz `busyForMs` > `inference.stuck-alert-ms`, 기본 120000) | Pod `/workspace/beside-logs/inference.log` 의 마지막 `job …` 줄, `nvidia-smi`, `curl -sS http://<GPU 쪽 100.x>:<포트>/healthz` 의 `busyForMs` 가 계속 느는지 | 그 작업은 `inference.timeout-ms`(600초) 뒤 `INFERENCE_TIMEOUT` 이 되고, 뒤 작업도 GPU 잠금을 기다리다 차례로 시간 초과된다. `predict` 는 DELETE 로도 멈추지 않으므로 몇 분 더 늘면 Pod 에서 `kill -9 $(cat /var/run/beside/inference.pid)` 한다(SIGTERM 은 처리 중인 요청을 기다린다). 감독 루프가 5 s 뒤 같은 설정으로 다시 띄운다(모델을 다시 불러오는 동안 🟡, 'Runpod Pod 쪽' '서비스 자동 재시작'). 2026-11-20 전 `start_pod.sh` 로 띄워 감독 루프가 없으면 4번의 마지막 두 줄로 다시 띄운다. 변환·리깅에서 멈춘 것은 `busyForMs` 에 들어가지 않아 🐢 가 오지 않는다(작업 시간 초과만). 🟢 "오래 걸리던 작업이 끝났어요" 가 오면 풀린 것이다 |
+| Discord 🧩 "모델을 불러오지 못했어요 (<예외 이름>)" (healthz `modelLoaded=false` + `loadError`, 🟡 뒤 🟢 가 오지 않음) | Pod 에서 `curl -sS http://127.0.0.1:8002/healthz` 의 `loadError`, `/workspace/beside-logs/inference.log` 의 `model failed to load` 와 traceback(경로는 여기에만 있다), 체크포인트(`BESIDE_ANIMALLIFT_CKPT`, 없으면 `/workspace/AnimalLift/ckpt/latest.pt`)가 있는지, `nvidia-smi` | 서비스는 다시 불러오지 않고, 감독 루프도 프로세스가 살아 있어 다시 띄우지 않는다(장애 훈련 FD18). 그동안 새 작업은 PENDING 으로 기다리다 `inference.offline-wait-ms`(prod 30분) 뒤 `INFERENCE_UNAVAILABLE` 로 끝난다. 원인을 고친 뒤 다시 띄운다: 파일만 고쳤으면 `kill $(cat /var/run/beside/inference.pid)`(감독 루프가 5 s 뒤 같은 환경변수로 다시 띄운다), 환경변수(`BESIDE_ANIMALLIFT_CKPT` 등)를 바꿔야 하면 `touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)` 뒤 새 값을 넣고 4번의 마지막 두 줄. 다시 불러오기 시작하면 🧩 "풀렸어요", 모델이 올라오면 🟢. 그동안 실패한 작업은 앱에서 다시 시도 |
+| Pod `supervisor.log` 에 `restart N in 60 s` 가 이어짐(서비스가 뜨자마자 죽음) | `inference.log` 에서 각 `supervise_inference.sh restart` 줄 바로 앞의 오류(포트, CUDA, conda, 토큰) | 감독 루프는 60 s 마다 계속 다시 띄운다. `kill $(cat /var/run/beside/supervisor.pid)` 로 멈추고, 원인을 고친 뒤 `start_pod.sh` 를 실행한다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
 | grafana 가 계속 재시작, 로그에 `GRAFANA_ADMIN_PASSWORD 를 넣는다` | `deploy/.env` 의 `GRAFANA_ADMIN_PASSWORD` | 값을 넣고 `$M up -d grafana` |

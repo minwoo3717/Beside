@@ -355,6 +355,247 @@ class PassthroughKnobTest(unittest.TestCase):
         self.assertIs(service._passthrough_slots(2), service._passthrough_slots(2))
         self.assertIsNot(service._passthrough_slots(3), service._passthrough_slots(2))   # a new size, a new semaphore
 
+    def test_healthz_busy_for_ms_counts_a_simulated_generation_in_flight(self):
+        """FD13 drill: the stub sleeps BESIDE_PASSTHROUGH_DELAY_MS in its slot while /healthz still answers."""
+        entered, release = threading.Event(), threading.Event()
+
+        def generation(seconds):
+            entered.set()
+            release.wait(10)
+
+        self.sleep.side_effect = generation
+        idle = self.client.get("/healthz")
+        with _knobs(delay_ms=600000):
+            thread, box = _in_thread(lambda: self.upload("lt-fd13-dog.jpg"))
+            try:
+                self.assertTrue(entered.wait(10))
+                time.sleep(0.1)
+                busy = self.client.get("/healthz")
+            finally:
+                release.set()
+                thread.join(10)
+        self.assertEqual((idle.status_code, idle.json()["busyForMs"]), (200, 0))
+        self.assertEqual(busy.status_code, 200)
+        self.assertGreaterEqual(busy.json()["busyForMs"], 50)
+        self.assertLess(busy.json()["busyForMs"], 10000)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)   # the run ended
+        self.assertEqual(service._BUSY, {})
+
+    def test_a_run_waiting_for_a_slot_is_not_busy_yet(self):
+        """Only the time inside the slot counts: a queue behind a stuck run shows the stuck run's age, not its own."""
+        gate = _GateLock()
+        gate.lock.acquire()   # the one slot is taken
+        with _knobs(delay_ms=10000), mock.patch.object(service, "_passthrough_slots", return_value=gate):
+            thread, box = _in_thread(self.infer)
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                time.sleep(0.05)
+                waiting = self.client.get("/healthz").json()["busyForMs"]
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        self.assertEqual(waiting, 0)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(service._BUSY, {})
+
+    def test_a_simulated_failure_ends_the_busy_time_too(self):
+        with _knobs(delay_ms=100, fail_rate=1):
+            answer = self.infer()
+        self.assertEqual(answer.status_code, 500)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class BusyClockTest(unittest.TestCase):
+    """_busy_work registers one piece of work (a predict call or a simulated generation); _busy_for_ms is the age of
+    the oldest one still running."""
+
+    def test_the_oldest_work_still_running_sets_the_age(self):
+        self.assertEqual(service._busy_for_ms(), 0)
+        first, second = service._busy_work(), service._busy_work()
+        first.__enter__()
+        (first_start,) = service._BUSY.values()
+        second.__enter__()
+        second_start = list(service._BUSY.values())[-1]
+        try:
+            self.assertEqual(service._busy_for_ms(now=first_start + 2.5), 2500)
+            first.__exit__(None, None, None)   # the older one ends first: the younger one sets the age now
+            self.assertEqual(service._busy_for_ms(now=second_start + 1.0), 1000)
+        finally:
+            second.__exit__(None, None, None)
+        self.assertEqual(service._busy_for_ms(), 0)
+        self.assertEqual(service._BUSY, {})
+
+    def test_never_negative_and_released_on_an_exception(self):
+        with self.assertRaises(RuntimeError):
+            with service._busy_work():
+                (start,) = service._BUSY.values()
+                self.assertEqual(service._busy_for_ms(now=start - 1.0), 0)
+                raise RuntimeError("CUDA out of memory")
+        self.assertEqual(service._BUSY, {})
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzTokenTest(unittest.TestCase):
+    """/healthz stays open and 200. With an X-Inference-Token header it also says whether /infer would take that
+    token (tokenOk), so Spring's monitor sees a token mismatch before every job fails 401 (FD17)."""
+
+    def setUp(self):
+        self.client = TestClient(service.app)
+
+    def healthz(self, token=None):
+        return self.client.get("/healthz", headers=None if token is None else {"X-Inference-Token": token})
+
+    def test_without_the_header_token_ok_is_null_and_the_old_fields_stay(self):
+        for configured in (None, "secret"):
+            with mock.patch.object(service, "INFERENCE_TOKEN", configured):
+                answer = self.healthz()
+            self.assertEqual(answer.status_code, 200)
+            body = answer.json()
+            self.assertIsNone(body["tokenOk"], configured)
+            self.assertEqual(body["status"], "ok")
+            for field in ("device", "modelLoaded", "passthrough", "busyForMs"):
+                self.assertIn(field, body)
+
+    def test_the_header_is_checked_as_infer_checks_it(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "secret"):
+            right, wrong, empty = self.healthz("secret"), self.healthz("other"), self.healthz("")
+            refused = self.client.post("/infer", headers={"X-Inference-Token": "other"},
+                                       json={"jobId": "job-1", "imagePaths": ["/no/such/photo.jpg"]})
+        self.assertEqual([a.status_code for a in (right, wrong, empty)], [200, 200, 200])   # healthz never 401
+        self.assertEqual([a.json()["tokenOk"] for a in (right, wrong, empty)], [True, False, False])
+        self.assertEqual(refused.status_code, 401)   # what tokenOk=false predicts for every job
+
+    def test_a_service_without_a_token_takes_any_header(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", None):
+            answer = self.healthz("anything")
+        self.assertEqual((answer.status_code, answer.json()["tokenOk"]), (200, True))
+
+    def test_the_comparison_is_constant_time(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "secret"), \
+                mock.patch.object(service.hmac, "compare_digest", wraps=service.hmac.compare_digest) as compare:
+            self.healthz("secrex")
+        compare.assert_called_once_with(b"secrex", b"secret")
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzLoadErrorTest(unittest.TestCase):
+    """loadError (failure drill FD18, 2026-11-20): with a wrong BESIDE_ANIMALLIFT_CKPT the load raised
+    FileNotFoundError and /healthz said only modelLoaded=false, the same as a model still loading, so Spring showed
+    LOADING and jobs waited out inference.offline-wait-ms. /healthz now also names the failure: the exception type and
+    a short one-line message without file paths or the token (it is open). status, modelLoaded and the 503 of /infer
+    stay as they were. The drill's own message (the real runner's 'missing checkpoint') is
+    test_fd18_the_real_runner_with_a_wrong_checkpoint; the errno form is what a file missing deeper in the load gives."""
+
+    CKPT = "/workspace/AnimalLift/ckpt/wrong.pt"
+
+    def setUp(self):
+        self.raise_on_load = None
+        test = self
+
+        class Runner:   # the runner interface's constructor; predict is never reached here
+            device, version, model_params = "cpu", "fake@load-test", 1
+
+            def __init__(self, model_dir, **kwargs):
+                if test.raise_on_load is not None:
+                    raise test.raise_on_load
+
+        module = types.ModuleType("beside_fake_runner")
+        module.Runner = Runner
+        patches = [mock.patch.dict(sys.modules, {"beside_fake_runner": module}),
+                   mock.patch.object(service, "RUNNER_SPEC", "beside_fake_runner:Runner"),
+                   mock.patch.object(service, "SAMPLE_GLB", None), mock.patch.object(service, "ANIMALLIFT_DIR", "model"),
+                   mock.patch.object(service, "MODEL", None), mock.patch.object(service, "MODEL_ERROR", None),
+                   mock.patch.object(service, "MODEL_LOAD_ERROR", None)]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.client = TestClient(service.app)
+
+    def load(self, error=None):
+        """What the startup thread runs, here in the test's thread; error is what the runner raises."""
+        self.raise_on_load = error
+        if error is None:
+            service._load_model()
+        else:
+            with self.assertLogs(service.log, "ERROR") as logged:   # the full text stays in the service log
+                service._load_model()
+            self.assertIn("model failed to load", logged.output[0])
+
+    def healthz(self):
+        answer = self.client.get("/healthz")
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual(answer.json()["status"], "ok")
+        return answer.json()
+
+    def test_while_loading_there_is_no_load_error(self):
+        body = self.healthz()
+        self.assertEqual((body["modelLoaded"], body["loadError"]), (False, None))
+
+    def test_a_failed_load_names_the_error_without_its_path(self):
+        self.load(FileNotFoundError(errno.ENOENT, "No such file or directory", self.CKPT))
+        body = self.healthz()
+        self.assertFalse(body["modelLoaded"])
+        self.assertEqual(body["loadError"], "FileNotFoundError: [Errno 2] No such file or directory: '<path>'")
+        self.assertNotIn("workspace", json.dumps(body))
+        self.assertNotIn("wrong.pt", json.dumps(body))
+        # Jobs are refused as before (Spring maps it to INFERENCE_UNAVAILABLE); its message is not part of this change.
+        job = "t-" + uuid.uuid4().hex[:12]
+        self.addCleanup(shutil.rmtree, service.WORK_DIR / job, True)
+        refused = self.client.post("/infer/upload", data={"request": json.dumps({"jobId": job})},
+                                   files=[("photos", ("dog.jpg", b"\xff\xd8\xff\xe0 jpeg", "image/jpeg"))])
+        self.assertEqual(refused.status_code, 503, refused.text)
+        self.assertEqual(refused.json()["detail"]["code"], "INFERENCE_UNAVAILABLE")
+        self.assertIn("failed to load", refused.json()["detail"]["message"])
+
+    def test_fd18_the_real_runner_with_a_wrong_checkpoint(self):
+        """FD18 as it ran: the real AnimalLiftRunner (not the stand-in above) with BESIDE_ANIMALLIFT_CKPT naming no file.
+        The runner's own message is not the errno form: 'missing checkpoint (<how to fetch it>): <path>'. Its fetch hint
+        holds the Hugging Face repo id Chunyi99/AnimalLift, which has a slash and is masked like every path, so loadError
+        says 'hf download <path>'; the full text stays in MODEL_ERROR (the 503 of /infer, behind the token) and the log."""
+        repo = Path(tempfile.mkdtemp(prefix="beside-fd18-"))
+        self.addCleanup(shutil.rmtree, repo, True)
+        (repo / "animallift").mkdir()
+        (repo / "animallift" / "inference.py").write_text("")   # a checkout, so the checkpoint check is the one that fails
+        wrong = repo / "ckpt" / "wrong.pt"
+        with mock.patch.object(service, "RUNNER_SPEC", "animallift_runner:AnimalLiftRunner"), \
+                mock.patch.object(service, "ANIMALLIFT_DIR", str(repo)), \
+                mock.patch.dict(os.environ, {"BESIDE_ANIMALLIFT_CKPT": str(wrong)}):
+            with self.assertLogs(service.log, "ERROR") as logged:
+                service._load_model()
+        self.assertIn("model failed to load (animallift_runner:AnimalLiftRunner)", logged.output[0])
+        self.assertEqual(service.MODEL_ERROR, "FileNotFoundError: missing checkpoint "
+                         f"(hf download Chunyi99/AnimalLift --local-dir ckpt): {wrong.resolve()}")
+        body = self.healthz()
+        self.assertFalse(body["modelLoaded"])
+        self.assertEqual(body["loadError"],
+                         "FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>")
+        self.assertNotIn(repo.name, json.dumps(body))
+        self.assertNotIn("wrong.pt", json.dumps(body))
+
+    def test_a_loaded_model_has_no_load_error(self):
+        self.load()
+        body = self.healthz()
+        self.assertEqual((body["modelLoaded"], body["loadError"]), (True, None))
+
+    def test_windows_and_relative_paths_and_the_token_are_left_out(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "s3cret-token-value"):
+            self.load(RuntimeError("cannot open C:\\beside\\AnimalLift\\ckpt\\x.pt or ckpt/latest.pt "
+                                   "(token s3cret-token-value)"))
+            body = self.healthz()
+        self.assertEqual(body["loadError"], "RuntimeError: cannot open <path> or <path> (token <token>)")
+
+    def test_the_message_is_one_short_line_and_an_empty_one_leaves_the_type(self):
+        self.load(ValueError("line one\n\tline two " + "x" * 1000))
+        error = self.healthz()["loadError"]
+        self.assertTrue(error.startswith("ValueError: line one line two x"), error)
+        self.assertLessEqual(len(error), service.LOAD_ERROR_MAX)
+        self.assertNotIn("\n", error)
+        self.load(MemoryError())
+        self.assertEqual(self.healthz()["loadError"], "MemoryError")
+
 
 GLB_STUB = b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
 TETRA_OBJ = """v 0 0 0
@@ -651,6 +892,61 @@ class CancelOnDeleteTest(_ModelModeCase):
         self.assertEqual(answer.status_code, 500)   # Spring logs it (README DELETE), the sweep is the backstop
         self.assertEqual(rmtree.call_count, service._REMOVE_TRIES)
         self.assertTrue(self.job_dir.exists())
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzBusyModelTest(_ModelModeCase):
+    """busyForMs in model mode: the age of the MODEL.predict call still running (FD13: healthz UP, inference stuck)."""
+
+    def test_busy_for_ms_counts_the_model_run_and_is_0_after_it(self):
+        entered, go = threading.Event(), threading.Event()
+
+        def stuck_predict(call):
+            entered.set()
+            go.wait(10)
+
+        self.model.hook = stuck_predict
+        thread, box = _in_thread(self.upload)
+        try:
+            self.assertTrue(entered.wait(10))
+            time.sleep(0.1)
+            busy = self.client.get("/healthz")
+        finally:
+            go.set()
+            thread.join(10)
+        self.assertEqual(busy.status_code, 200)
+        self.assertTrue(busy.json()["modelLoaded"])
+        self.assertGreaterEqual(busy.json()["busyForMs"], 50)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
+
+    def test_waiting_for_the_model_lock_is_not_busy(self):
+        gate = _GateLock()
+        gate.lock.acquire()   # an earlier job holds the GPU (its own predict is what busyForMs would show)
+        with mock.patch.object(service, "MODEL_LOCK", gate):
+            thread, box = _in_thread(self.upload)
+            try:
+                self.assertTrue(gate.waiting.wait(10))
+                time.sleep(0.05)
+                waiting = self.client.get("/healthz").json()["busyForMs"]
+            finally:
+                gate.lock.release()
+                thread.join(10)
+        self.assertEqual(waiting, 0)
+        self.assertEqual(box["answer"].status_code, 200, box["answer"].text)
+
+    def test_a_model_error_ends_the_busy_time_too(self):
+        def broken(call):
+            raise RuntimeError("CUDA out of memory")
+
+        self.model.hook = broken
+        with self.assertLogs(service.log, "ERROR"):
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 500)
+        self.assertEqual(answer.json()["detail"]["code"], "INFERENCE_FAILED")
+        self.assertEqual(self.client.get("/healthz").json()["busyForMs"], 0)
+        self.assertEqual(service._BUSY, {})
 
 
 @unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")

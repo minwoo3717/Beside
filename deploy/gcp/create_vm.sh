@@ -85,8 +85,10 @@ else
     --metadata=enable-oslogin=FALSE --metadata-from-file=ssh-keys="$KEYS" \
     --no-service-account --no-scopes \
     --deletion-protection
-  # No service account: nothing on the VM calls Google APIs, and with the default one any container could take a token
-  # from the metadata server (2026-11-13 audit). SSH keys still come from metadata, which needs no service account.
+  # No service account: with the default one any container could take a token from the metadata server (2026-11-13
+  # audit). SSH keys still come from metadata, which needs no service account. The off-VM backup (R1) is the one host
+  # job that calls Google APIs: attach beside-backup@ afterwards as deploy/gcp/backup_bucket.sh prints, after
+  # deploy/backup/block-metadata.sh is installed (deploy/README.md '운영 대응 설치').
 fi
 
 echo "[5/5] status: $("${G[@]}" compute instances describe "$VM" --zone="$ZONE" --format='value(status)')"

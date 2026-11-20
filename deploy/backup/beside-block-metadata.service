@@ -1,0 +1,17 @@
+# Containers cannot reach the GCE metadata server's HTTP API (the VM service-account token); DNS on port 53 stays.
+# Install: deploy/README.md '운영 대응 설치' (copies deploy/backup/block-metadata.sh to /usr/local/sbin/beside-block-metadata).
+# Runs after Docker has made DOCKER-USER, and again whenever docker.service restarts (PartOf). Check: sudo beside-block-metadata check
+[Unit]
+Description=Beside: block container access to the GCE metadata server (DNS stays open)
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/beside-block-metadata apply
+SyslogIdentifier=beside-block-metadata
+
+[Install]
+WantedBy=docker.service

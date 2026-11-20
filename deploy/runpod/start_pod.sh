@@ -22,6 +22,12 @@
 # /workspace on a network volume survives Terminate too (a new Pod in the same data center gets the same node);
 # a Pod volume disk does not: then log in again, remove the old node in the admin console, update the VM .env.
 #
+# The service runs under deploy/runpod/supervise_inference.sh: when it exits (crash, kill -9) it is started again with
+# the same settings after 5 s, then 10, 20, 40, 60 s while it keeps exiting (log /workspace/beside-logs/supervisor.log).
+# A plain kill therefore brings it back. To stop it on purpose (switch MODE, new settings, F2 / FD18 drills):
+#   touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)     # kill -9 for F2
+# and run this script again to start it; that removes /workspace/beside-norestart, so restarts are on again.
+#
 # MODE=passthrough  fixed sample GLB, no model: tests the VM <-> Pod path before AnimalLift is installed
 # MODE=model        AnimalLift through scripts/start_inference_wsl.sh; conda, AnimalLift and checkpoints under
 #                   /workspace (generation/inference_service/ANIMALLIFT_SETUP.md). Refuses to start without a GPU.
@@ -30,7 +36,8 @@
 #   TOKEN_FILE (/workspace/beside-token), ANIMALLIFT_DIR, CONDA_HOME, CONDA_ENV, WORK_DIR, RIG_TEMPLATE, SAMPLE_GLB,
 #   HF_HOME, TORCH_HOME (model caches, default under /workspace/.cache), ALLOW_NO_GPU=1, TS_VERSION + TS_SHA256,
 #   UVICORN_TIMEOUT_KEEP_ALIVE (75 s), THREADS (8: OMP/MKL/OPENBLAS_NUM_THREADS; "default" leaves them unset) - both
-#   apply when the service starts
+#   apply when the service starts, NORESTART_FILE (/workspace/beside-norestart), RESTART_DELAY_S (5),
+#   RESTART_MAX_DELAY_S (60), RESTART_STABLE_S (300: a run this long resets the delay) - read by the supervisor
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -48,6 +55,8 @@ TOKEN_FILE="${TOKEN_FILE:-$WS/beside-token}"
 ANIMALLIFT_DIR="${ANIMALLIFT_DIR:-$WS/AnimalLift}"
 MODE="${MODE:-}"
 SERVE="uvicorn app:app --host 127.0.0.1 --port $PORT"   # also how a running service is recognised
+SUPERVISOR="$REPO/deploy/runpod/supervise_inference.sh"
+NORESTART_FILE="${NORESTART_FILE:-$WS/beside-norestart}"   # while it exists the supervisor does not restart the service
 # Service defaults measured on the A40 Pod (2026-11-19 load test round 3, docs/perf/load/2026-11-19_vm-3rd.md 2절):
 # - uvicorn closes an idle connection after 5 s by default, so with jobs more than 5 s apart Spring opened a new
 #   VM <-> Pod connection for every job; 75 s keeps it (processing median 9.09 -> 8.22 s at one job per 30 s).
@@ -115,6 +124,19 @@ service_settings() {
   if [[ -n "$ka" ]]; then ka="$ka s"; else ka="5 s (uvicorn default)"; fi
   echo "keep-alive $ka, threads ${th:-library default (not set)}"
 }
+
+# The supervisor's pid while one runs: it holds supervisor.lock for its whole life (its pid file may be stale).
+supervisor_pid() {
+  flock -n "$RUN_DIR/supervisor.lock" true 2>/dev/null && return 1
+  cat "$RUN_DIR/supervisor.pid" 2>/dev/null || echo unknown
+}
+alive() { [[ "$1" =~ ^[0-9]+$ ]] && kill -0 "$1" 2>/dev/null; }
+stop_supervisor() {   # SIGTERM: the supervisor passes it on to the service and ends
+  kill -TERM "$1" 2>/dev/null || return 0
+  for _ in $(seq 1 20); do alive "$1" || return 0; sleep 0.5; done
+  echo "WARNING: the supervisor (pid $1) did not end within 10 s" >&2
+}
+STOP_HINT="touch $NORESTART_FILE && kill"   # stop the service so that its supervisor does not start it again
 
 mkdir -p "$TS_DIR/state" "$RUN_DIR" "$LOG_DIR"
 # One run at a time: an exec tool that stops waiting does not stop the command, so a retry could overlap it.
@@ -184,16 +206,38 @@ if pid="$(running_pid "$RUN_DIR/inference.pid" "$SERVE")"; then
   # passthrough test, the old service must not be taken for the model.
   running_mode="$(cat "$RUN_DIR/inference.mode" 2>/dev/null || echo unknown)"
   [[ "$running_mode" == "$MODE" ]] ||
-    die "the inference service (pid $pid) runs in $running_mode mode, MODE is $MODE - kill $pid and run this again"
+    die "the inference service (pid $pid) runs in $running_mode mode, MODE is $MODE - stop it ($STOP_HINT $pid) and run this again"
   curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$PORT/healthz" 2>/dev/null ||
-    die "the inference service (pid $pid) does not answer /healthz - see $LOG_DIR/inference.log, kill $pid and run this again"
+    die "the inference service (pid $pid) does not answer /healthz - see $LOG_DIR/inference.log, stop it ($STOP_HINT $pid) and run this again"
   settings="$(service_settings "$pid")"
-  echo "[4/4] inference service already running ($MODE, pid $pid, $settings, stop: kill $pid)"
+  echo "[4/4] inference service already running ($MODE, pid $pid, $settings, stop: $STOP_HINT $pid)"
   if [[ "$settings" != "$WANTED_SETTINGS" && "$settings" != "settings unknown"* ]]; then
-    echo "NOTE: it was started with other settings; kill $pid and run this again for $WANTED_SETTINGS"
+    echo "NOTE: it was started with other settings; stop it ($STOP_HINT $pid) and run this again for $WANTED_SETTINGS"
+  fi
+  if sup="$(supervisor_pid)"; then
+    if [[ -e "$NORESTART_FILE" ]]; then
+      echo "NOTE: $NORESTART_FILE exists, so the supervisor (pid $sup) will not restart the service when it exits - rm it to keep restarts on"
+    else
+      echo "      supervisor pid $sup restarts it when it exits ($LOG_DIR/supervisor.log)"
+    fi
+  else
+    echo "NOTE: no supervisor watches it (started by hand or by an older start_pod.sh, or the supervisor was killed):"
+    echo "      nothing restarts it when it exits. For restarts: kill $pid, wait until it has exited, run this again"
   fi
 else
+  # Its supervisor may still run: ending after a stop on purpose (give it a moment), or waiting to restart it.
+  if supervisor_pid > /dev/null && [[ -e "$NORESTART_FILE" ]]; then
+    for _ in $(seq 1 10); do sleep 0.5; supervisor_pid > /dev/null || break; done
+  fi
+  if sup="$(supervisor_pid)"; then
+    die "the inference service is not running but its supervisor (pid $sup) is: it starts the service again after a delay ($LOG_DIR/supervisor.log). Run this again later, or stop the supervisor first (kill $sup) to start the service with this run's settings"
+  fi
   port_busy "$PORT" && die "127.0.0.1:$PORT is already in use by something this script did not start - stop it or set PORT (and the VM's INFERENCE_BASE_URL)"
+  if [[ -e "$NORESTART_FILE" ]]; then
+    rm -f "$NORESTART_FILE"
+    echo "      removed $NORESTART_FILE (left from a stop on purpose): the service is restarted again when it exits"
+  fi
+  rm -f "$RUN_DIR/inference.pid"   # the supervisor writes the new service's pid
   if [[ "$MODE" == passthrough ]]; then
     venv="$WS/beside-venv"
     if ! "$venv/bin/python" -c 'import sys' 2>/dev/null; then
@@ -230,30 +274,47 @@ PY
       echo "      wrote a one-triangle sample GLB: $glb"
     fi
     stamp "$LOG_DIR/inference.log"
-    # "&" on the command alone (not on a "cd && ..." list) so $! is the server's own pid
-    (cd "$REPO/generation/inference_service" || exit 1
-     BESIDE_SAMPLE_GLB="$glb" BESIDE_WORK_DIR="${WORK_DIR:-$WS/beside-work}" \
-       nohup "$venv/bin/python" -m $SERVE >> "$LOG_DIR/inference.log" 2>&1 9>&- &
-     echo $! > "$RUN_DIR/inference.pid") || die "cannot cd to $REPO/generation/inference_service"
+    cd "$REPO/generation/inference_service" || die "cannot cd to $REPO/generation/inference_service"
+    # The supervisor runs the service in this directory with this environment, at every (re)start.
+    # "&" on the command alone so $! is the supervisor's pid; it writes the service's own pid to inference.pid.
+    BESIDE_SAMPLE_GLB="$glb" BESIDE_WORK_DIR="${WORK_DIR:-$WS/beside-work}" \
+      RUN_DIR="$RUN_DIR" LOG_DIR="$LOG_DIR" NORESTART_FILE="$NORESTART_FILE" \
+      nohup bash "$SUPERVISOR" "$venv/bin/python" -m $SERVE >> "$LOG_DIR/inference.log" 2>&1 9>&- &
+    suppid=$!
   else
     stamp "$LOG_DIR/inference.log"
+    # start_inference_wsl.sh execs uvicorn, so the pid the supervisor records is the uvicorn process
     CONDA_HOME="${CONDA_HOME:-$WS/miniconda3}" CONDA_ENV="${CONDA_ENV:-animallift}" ANIMALLIFT_DIR="$ANIMALLIFT_DIR" \
       WORK_DIR="${WORK_DIR:-$WS/beside-work}" RIG_TEMPLATE="${RIG_TEMPLATE:-$WS/beside-rig/template-rigged.glb}" \
       BESIDE_HOST=127.0.0.1 PORT="$PORT" \
-      nohup bash "$REPO/scripts/start_inference_wsl.sh" >> "$LOG_DIR/inference.log" 2>&1 9>&- &
-    echo $! > "$RUN_DIR/inference.pid"
+      RUN_DIR="$RUN_DIR" LOG_DIR="$LOG_DIR" NORESTART_FILE="$NORESTART_FILE" \
+      nohup bash "$SUPERVISOR" bash "$REPO/scripts/start_inference_wsl.sh" >> "$LOG_DIR/inference.log" 2>&1 9>&- &
+    suppid=$!
   fi
   echo "$MODE" > "$RUN_DIR/inference.mode"
-  svpid="$(cat "$RUN_DIR/inference.pid")"
-  up=0
-  for _ in $(seq 1 120); do   # a fuse /workspace makes the first torch import slow
-    if curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$PORT/healthz" 2>/dev/null; then up=1; break; fi
-    kill -0 "$svpid" 2>/dev/null || break   # exited (port taken, conda env missing ...): stop waiting
-    sleep 1
+  svpid=""
+  for _ in $(seq 1 20); do   # the supervisor writes the service's pid as soon as it has started it
+    svpid="$(cat "$RUN_DIR/inference.pid" 2>/dev/null || true)"
+    if [[ -n "$svpid" ]] || ! alive "$suppid"; then break; fi
+    sleep 0.5
   done
-  [[ $up == 1 ]] && kill -0 "$svpid" 2>/dev/null ||
-    { tail -n 30 "$LOG_DIR/inference.log" >&2; die "inference service did not answer /healthz ($LOG_DIR/inference.log)"; }
+  up=0
+  if alive "$svpid"; then
+    for _ in $(seq 1 120); do   # a fuse /workspace makes the first torch import slow
+      if curl -fsS --max-time 3 -o /dev/null "http://127.0.0.1:$PORT/healthz" 2>/dev/null; then up=1; break; fi
+      alive "$svpid" || break   # exited (port taken, conda env missing ...): stop waiting
+      sleep 1
+    done
+  fi
+  if [[ $up != 1 ]] || ! alive "$svpid"; then
+    # Exited at start-up: stop the supervisor too, or it would retry a broken setup forever.
+    # A service that is alive but slow keeps its supervisor (the next run reports it).
+    alive "$svpid" || stop_supervisor "$suppid"
+    tail -n 30 "$LOG_DIR/inference.log" >&2
+    die "inference service did not answer /healthz ($LOG_DIR/inference.log, $LOG_DIR/supervisor.log)"
+  fi
   echo "[4/4] inference service up ($MODE, 127.0.0.1:$PORT, X-Inference-Token required, $(service_settings "$svpid"))"
+  echo "      supervisor pid $suppid restarts it when it exits ($LOG_DIR/supervisor.log); stop on purpose: $STOP_HINT $svpid"
 fi
 
 echo
@@ -261,4 +322,5 @@ echo "Pod tailnet address : $TS_IP"
 echo "VM deploy/.env      : INFERENCE_BASE_URL=http://$TS_IP:$PORT"
 echo "check from the VM   : curl -sS http://$TS_IP:$PORT/healthz"
 echo "service log         : tail -f $LOG_DIR/inference.log"
+echo "restart log         : $LOG_DIR/supervisor.log (stop on purpose: touch $NORESTART_FILE first)"
 if [[ "$MODE" == model ]]; then echo "model               : wait for 'model loaded ... on cuda' in the log (healthz modelLoaded)"; fi
