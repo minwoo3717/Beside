@@ -245,7 +245,10 @@ def storage_props(storage: Path) -> list:
     return [f"--storage.db.path={d}/db/beside", f"--storage.upload.dir={d}/uploads",
             f"--storage.events.path={d}/events.jsonl", f"--storage.result.dir={d}/results",
             f"--storage.tmp.dir={d}/tmp", f"--storage.thumb.dir={d}/thumbs", f"--storage.backup.dir={d}/backup",
-            f"--storage.root.dir={d}", f"--storage.preprocessed.dir={d}/preprocessed"]
+            f"--storage.root.dir={d}", f"--storage.preprocessed.dir={d}/preprocessed",
+            # Every run starts on a fresh folder: prod would refuse to start without its H2 file (failure drill FD5,
+            # 2026-11-20). Older jars ignore the unknown key.
+            "--storage.db.create-if-missing=true"]
 
 
 # The first-photo check and the cutout (2026-11) are off in every measured server: the fixtures are not pet photos,

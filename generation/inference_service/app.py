@@ -32,7 +32,8 @@ Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
          (401 otherwise); /healthz stays open. Set it whenever the service listens beyond 127.0.0.1.
   GET /healthz also answers tokenOk (only when X-Inference-Token is sent: would /infer take it) and busyForMs (age
          of the oldest predict / simulated generation still running, 0 when idle) for Spring's monitor alerts, and
-         loadError (why the model failed to load, one short line without paths; null while loading or loaded).
+         loadError (why the model failed to load, one short line without paths; null while loading or loaded),
+         and instanceId (random per process start: a new value means this service restarted, failure drill FD16b).
   DELETE /artifacts/{jobId} also cancels a run of that job still on this machine (Spring gave up on it): the run
          stops at its next step and removes whatever it wrote after the DELETE (README 'DELETE /artifacts/{jobId}').
   BESIDE_WORK_SWEEP_MINUTES=<N> (default unset = off): at startup and every min(N, 10) minutes, remove
@@ -54,6 +55,7 @@ import shutil
 import sys
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -105,6 +107,9 @@ LOAD_ERROR_MAX = 200                    # characters of loadError
 # the log, /healthz (open) says only what went wrong.
 _PATHISH = re.compile(r"""(?:[A-Za-z]:|[\w.~-]+)?[\\/][^\s'"]*""")
 MODEL_LOCK = threading.Lock()  # one GPU job at a time (Spring also limits to inference.max-concurrency=1)
+# /healthz instanceId: new at every process start. Spring gives up on a request still in flight to an earlier
+# instance (a stopped and restarted Pod never answers it, failure drill FD16b) instead of waiting out its timeout.
+INSTANCE_ID = uuid.uuid4().hex[:12]
 
 log = logging.getLogger("beside.inference")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools"))   # convert_asset.py
@@ -347,6 +352,12 @@ class HealthResponse(BaseModel):
         description="Why the model failed to load: exception type and a short one-line message, paths and the token "
         "left out (the full text is in the service log). null while it loads, once it is loaded, in passthrough and "
         "with no model configured. modelLoaded stays false and status ok, as before; the service does not retry.",
+    )
+    # Addition of 2026-11-20 (failure drill FD16b): which process answered.
+    instanceId: str = Field(
+        default="",
+        description="Random id of this service process, new at every start (12 hex characters). A request Spring sent "
+        "to an earlier instance will never be answered: Spring then gives up on it instead of waiting out its timeout.",
     )
 
 
@@ -827,6 +838,7 @@ def healthz(request: Request) -> HealthResponse:
         tokenOk=None if given is None else _token_matches(given),
         busyForMs=_busy_for_ms(),
         loadError=None if MODEL is not None else MODEL_LOAD_ERROR,
+        instanceId=INSTANCE_ID,
     )
 
 

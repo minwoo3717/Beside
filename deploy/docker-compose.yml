@@ -43,6 +43,10 @@ services:
       PREPROCESS_CUTOUT_ENABLED: ${PREPROCESS_CUTOUT_ENABLED:-true}
       # ONNX Runtime 스레드마다 glibc arena 가 늘어 RSS 가 커지는 것을 막는다.
       MALLOC_ARENA_MAX: "2"
+      # H2 DB 파일(beside-storage 의 db/beside-real.mv.db)이 없으면 시작하지 않는다(prod 기본, 장애 훈련 FD5: 빈 DB 를
+      # 조용히 만들어 기존 작업이 모두 404 였다). 새 서버의 첫 시작만 셸에서 STORAGE_DB_CREATE_IF_MISSING=true 를 붙인다
+      # (README 'VM 첫 설정' 6번). 잃은 DB 는 백업으로 되돌린다(docs/ops/RUNBOOK.md 'DB 복구').
+      STORAGE_DB_CREATEIFMISSING: ${STORAGE_DB_CREATE_IF_MISSING:-false}
     volumes:
       # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매시 H2 백업, 최신 48개). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage

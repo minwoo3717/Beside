@@ -176,6 +176,7 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 `GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드.
 필드 추가(2026-11-20) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `tokenOk`(요청에 `X-Inference-Token` 이 있을 때만 `/infer` 가 그 값을 받을지 true/false, 없으면 null)·`busyForMs`(아직 도는 가장 오래된 `predict`·패스스루 모의 생성이 시작한 뒤 ms, 없으면 0). 응답은 여전히 200 이고, Spring 은 두 필드로 Discord 알림만 보낸다(`inference.stuck-alert-ms`, 기본 120000). 작업을 보낼지 정하는 UP 판정은 바꾸지 않는다.
 필드 추가(2026-11-20, 장애 훈련 FD18) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `loadError`(모델을 불러오지 못한 이유 한 줄 — 예외 이름과 짧은 메시지, 경로·토큰 없음, 최대 200자. 불러오는 중·불러온 뒤·패스스루는 null). `status`·`modelLoaded`·UP 판정은 그대로이고(작업은 지금처럼 PENDING 으로 기다린다), Spring 은 생기고 풀릴 때 Discord 알림(🧩, 예외 이름만)을 한 번씩 보낸다.
+필드 추가(2026-11-20, 장애 훈련 FD16b) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `instanceId`(서비스 프로세스마다 새로 정하는 무작위 16진 12자). 상태·UP 판정·알림은 그대로이고, prod Spring 은 요청을 보낼 때 본 값과 다른 `instanceId` 가 보이면 끝나지 않은 그 요청을 포기한다(`POST` 중 `INFERENCE_UNAVAILABLE`, 내려받는 중 `CONVERSION_FAILED`, [inference_service/README.md](../generation/inference_service/README.md) 'Spring 쪽 매핑 추가').
 
 ### 6.1 업로드 모드 — [구현됨: Spring·FastAPI, 같은 PC 패스스루로 연동 확인] / [계획: VM ↔ GPU PC 실제 배치] (2026-10-30 결정, REVIEW_CHECKLIST #6 (b))
 

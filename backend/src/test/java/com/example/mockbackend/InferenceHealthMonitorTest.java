@@ -315,6 +315,34 @@ class InferenceHealthMonitorTest {
         assertThat(alerts().subList(2, 4)).allSatisfy(alert -> assertThat(alert.active()).isFalse());
     }
 
+    /**
+     * FD16b: instanceId names the service process. It is kept on every reading (also when the state stays), never
+     * changes the state or raises an alert, and a new one between two readings of the same state is logged.
+     */
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void instanceIdIsReadAndARestartBetweenTwoReadingsIsLogged(CapturedOutput output) {
+        InferenceHealthMonitor monitor = monitor("s3cret", 1_000);
+        answer(true, false, ",\"instanceId\":\"aaaaaaaaaaaa\"");
+        assertThat(monitor.refresh().instanceId()).isEqualTo("aaaaaaaaaaaa");
+        answer(true, false, ",\"instanceId\":\"bbbbbbbbbbbb\"");   // R7 brought a killed service back within 15 s
+        Status reading = monitor.refresh();
+        assertThat(reading.instanceId()).isEqualTo("bbbbbbbbbbbb");
+        assertThat(reading.ready()).isTrue();
+        assertThat(stateChanges()).hasSize(1);   // UNKNOWN -> UP only
+        assertThat(alerts()).isEmpty();
+        assertThat(output.getAll()).contains("restarted between two checks (instance aaaaaaaaaaaa -> bbbbbbbbbbbb)");
+
+        status.set(503);
+        assertThat(monitor.refresh().instanceId()).as("nothing answered").isNull();
+        answer(true, false, ",\"instanceId\":7");
+        assertThat(monitor.refresh().instanceId()).as("not a text: unknown").isNull();
+        answer(true, false, ",\"instanceId\":\"x\\ny" + "z".repeat(100) + "\"");
+        assertThat(monitor.refresh().instanceId()).doesNotContain("\n").hasSizeLessThanOrEqualTo(64);
+        answer(true, false);   // an older service
+        assertThat(monitor.refresh().instanceId()).isNull();
+    }
+
     @Test
     @ExtendWith(OutputCaptureExtension.class)
     void theTokenNeverReachesTheLog(CapturedOutput output) {

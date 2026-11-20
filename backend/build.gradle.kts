@@ -48,6 +48,9 @@ tasks.test {
     // 모델 테스트(@Tag("models"))의 모델 폴더: -Dbeside.models=<dir> 또는 환경변수 PREPROCESS_MODELSDIR. 없으면 건너뛴다.
     System.getProperty("beside.models")?.let { systemProperty("beside.models", it) }
     System.getenv("PREPROCESS_MODELSDIR")?.let { environment("PREPROCESS_MODELSDIR", it) }
+    // Spring's test context cache keeps about 30 contexts alive (each with its in-memory H2 and pools) next to the image
+    // tests' large arrays; the 512 MB default ran out in CutoutTest on 2026-11-20 once two more contexts were added.
+    maxHeapSize = "1g"
     testLogging {
         events("passed", "failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

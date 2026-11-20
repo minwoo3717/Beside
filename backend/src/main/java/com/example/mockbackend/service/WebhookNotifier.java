@@ -22,7 +22,17 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
@@ -49,6 +59,14 @@ import java.util.regex.Pattern;
  * inference.stuck-alert-ms (busyForMs, healthz UP but inference stuck), and the model failed to load (loadError,
  * healthz LOADING for good: failure drill FD18; the message names the exception type only). Each posts once when it
  * starts and once when it ends, with no grace time.
+ * <p>
+ * Sending (failure drill FD9, 2026-11-20: with the webhook unreachable every message waited out its own 5 s timeout, one
+ * after another, so alerts came minutes late behind job results): messages wait in two bounded queues, GPU messages
+ * (state and alerts) always before job results. After a failed send nothing is tried for a growing pause
+ * (notify.retry-base-ms, doubling, at most {@link #MAX_RETRY_DELAY}); a 429 waits its Retry-After. A GPU message that
+ * fails stays first in line ({@link #MAX_ATTEMPTS} tries); job results that fail, or overflow their queue, are dropped
+ * and counted, and the first message that gets through after that is a summary of what was lost. Several job results
+ * waiting at once go out as one message. A message sent more than a minute late says the time it is about.
  */
 @Component
 public class WebhookNotifier {
@@ -59,6 +77,20 @@ public class WebhookNotifier {
     static final int MAX_LABEL = 40;
     /** A Python exception class name, as the model-load alert shows it. */
     private static final Pattern EXCEPTION_TYPE = Pattern.compile("[A-Za-z_][A-Za-z0-9_.]{0,79}");
+    /** notify.retry-base-ms default: the pause after the first failed send, doubled after each further one. */
+    static final long DEFAULT_RETRY_BASE_MS = 5_000;
+    static final Duration MAX_RETRY_DELAY = Duration.ofMinutes(5);
+    /** Tries of one GPU message before it is dropped (about 10 min of pauses with the default base). */
+    static final int MAX_ATTEMPTS = 8;
+    static final int MAX_URGENT = 20;
+    static final int MAX_JOBS = 50;
+    /** This many job results waiting together go out as one message. */
+    static final int BATCH_FROM = 3;
+    /** A message sent this much later than it was queued names the time it is about. */
+    static final Duration LATE = Duration.ofMinutes(1);
+    /** The team reads the times in Korean time. */
+    static final ZoneId TEAM_ZONE = ZoneId.of("Asia/Seoul");
+    private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
     private final URI webhook;
     private final String publicBaseUrl;
@@ -83,8 +115,35 @@ public class WebhookNotifier {
     /** The alerts the channel last heard as started (and not yet as ended). Guarded by this. */
     private final Set<Alert> alertsAnnounced = EnumSet.noneOf(Alert.class);
 
+    /** One message waiting to be sent; {@code status} only for job results. */
+    record Note(String text, boolean urgent, JobStatus status, long queuedNanos, Instant queuedAt) {
+    }
+
+    private final long retryBaseMs;
+    /** Guards the two queues and the counters below. */
+    private final Object outbox = new Object();
+    private final Deque<Note> urgentQueue = new ArrayDeque<>();
+    private final Deque<Note> jobQueue = new ArrayDeque<>();
+    /** A drain is running or scheduled (a pause after a failure counts). Guarded by outbox. */
+    private boolean draining;
+    /** Failed sends in a row, and tries of the GPU message first in line. Guarded by outbox. */
+    private int failures;
+    private int headAttempts;
+    /** The notes of the send in progress: an overflow never drops them (they may yet be delivered). Guarded by outbox. */
+    private final Set<Note> inFlight = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Messages not sent (failed or overflowed) and not yet summed up, and when the first of them was lost. */
+    private int lostCompleted;
+    private int lostFailed;
+    private int lostGpu;
+    private Instant lostSince;
+
     public WebhookNotifier(String webhookUrl, String publicBaseUrl, ObjectMapper objectMapper) {
         this(webhookUrl, publicBaseUrl, "", 0, objectMapper);
+    }
+
+    public WebhookNotifier(String webhookUrl, String publicBaseUrl, String inferenceLabel, long downGraceMs,
+                           ObjectMapper objectMapper) {
+        this(webhookUrl, publicBaseUrl, inferenceLabel, downGraceMs, DEFAULT_RETRY_BASE_MS, objectMapper);
     }
 
     @Autowired
@@ -92,7 +151,9 @@ public class WebhookNotifier {
                            @Value("${notify.public-base-url:}") String publicBaseUrl,
                            @Value("${notify.inference-label:}") String inferenceLabel,
                            @Value("${notify.down-grace-ms:0}") long downGraceMs,
+                           @Value("${notify.retry-base-ms:" + DEFAULT_RETRY_BASE_MS + "}") long retryBaseMs,
                            ObjectMapper objectMapper) {
+        this.retryBaseMs = Math.max(1, retryBaseMs);
         this.webhook = webhookUrl == null || webhookUrl.isBlank() ? null : URI.create(webhookUrl.trim());
         this.publicBaseUrl = publicBaseUrl == null ? "" : publicBaseUrl.trim().replaceAll("/+$", "");
         this.inferenceLabel = cleanLabel(inferenceLabel);
@@ -119,7 +180,8 @@ public class WebhookNotifier {
     @EventListener
     public void onJobFinished(JobFinishedEvent event) {
         if (enabled()) {
-            post(jobMessage(event, linkFor(event.jobId())));
+            queue(new Note(jobMessage(event, linkFor(event.jobId())), false, event.status(), System.nanoTime(),
+                    Instant.now()));
         }
     }
 
@@ -151,7 +213,7 @@ public class WebhookNotifier {
         } else {
             alertsAnnounced.remove(event.alert());
         }
-        post(alertText(event, inferenceLabel));
+        postUrgent(alertText(event, inferenceLabel));
     }
 
     /**
@@ -203,15 +265,265 @@ public class WebhookNotifier {
         if (before == State.UNKNOWN && to == State.UP) {
             return;
         }
-        post(stateText(current, inferenceLabel));
+        postUrgent(stateText(current, inferenceLabel));
     }
 
-    private void post(String message) {
-        try {
-            sender.execute(() -> send(message));
-        } catch (RejectedExecutionException e) {
-            log.debug("webhook sender stopped; message dropped");
+    private void postUrgent(String message) {
+        queue(new Note(message, true, null, System.nanoTime(), Instant.now()));
+    }
+
+    /**
+     * Adds to its queue and starts a drain unless one is running or pausing. When the queue already holds its limit of
+     * messages that are not being sent, the oldest of those is dropped and counted.
+     */
+    private void queue(Note note) {
+        synchronized (outbox) {
+            Deque<Note> queue = note.urgent() ? urgentQueue : jobQueue;
+            if (waiting(queue) >= (note.urgent() ? MAX_URGENT : MAX_JOBS)) {
+                dropOldestWaiting(queue);
+                log.warn("webhook queue full: oldest {} message dropped", note.urgent() ? "GPU" : "job");
+            }
+            queue.addLast(note);
+            if (draining) {
+                return;
+            }
+            draining = true;
         }
+        schedule(0);
+    }
+
+    private void schedule(long delayMs) {
+        try {
+            sender.schedule(this::drain, delayMs, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            log.debug("webhook sender stopped; messages dropped");
+        }
+    }
+
+    /** Caller holds outbox. Messages in {@code queue} that are not being sent. */
+    private int waiting(Deque<Note> queue) {
+        int waiting = 0;
+        for (Note note : queue) {
+            if (!inFlight.contains(note)) {
+                waiting++;
+            }
+        }
+        return waiting;
+    }
+
+    /** Caller holds outbox. Drops and counts the oldest message of {@code queue} that is not being sent. */
+    private void dropOldestWaiting(Deque<Note> queue) {
+        boolean head = true;
+        for (Iterator<Note> it = queue.iterator(); it.hasNext(); head = false) {
+            Note note = it.next();
+            if (inFlight.contains(note)) {
+                continue;
+            }
+            it.remove();
+            lose(note);
+            if (head && note.urgent()) {
+                headAttempts = 0;   // the GPU message first in line is another one now, not yet tried
+            }
+            return;
+        }
+    }
+
+    /**
+     * What one send carries: the text and its notes; for the summary of lost messages, no notes and the counts it
+     * reports (completed, failed, GPU), so losses counted while it is on its way stay for the next one.
+     */
+    private record Batch(String text, List<Note> notes, int[] summed) {
+        boolean summary() {
+            return summed != null;
+        }
+    }
+
+    /**
+     * Sender thread: sends what is waiting, one message at a time, until the queues are empty or a send fails. Anything
+     * thrown (an Error such as OutOfMemoryError while building a request) counts as a failed send and is logged: the
+     * scheduled task would otherwise swallow it silently and leave {@code draining} true with nothing scheduled, so no
+     * message would ever go out again.
+     */
+    private void drain() {
+        try {
+            drainLoop();
+        } catch (Throwable unexpected) {
+            long pauseMs;
+            synchronized (outbox) {
+                inFlight.clear();
+                failures++;
+                pauseMs = Math.min(MAX_RETRY_DELAY.toMillis(), retryBaseMs << Math.min(failures - 1, 20));
+            }
+            log.error("webhook sender failed ({}); next try in {} ms", unexpected.toString(), pauseMs);
+            schedule(pauseMs);
+        }
+    }
+
+    private void drainLoop() {
+        while (true) {
+            Batch batch;
+            synchronized (outbox) {
+                batch = next();
+                if (batch == null) {
+                    draining = false;
+                    return;
+                }
+            }
+            Outcome outcome = send(batch.text());
+            long pauseMs;
+            synchronized (outbox) {
+                pauseMs = settle(batch, outcome);
+            }
+            if (pauseMs > 0) {
+                schedule(pauseMs);   // draining stays true: new messages wait out the pause instead of a send each
+                return;
+            }
+        }
+    }
+
+    /** Caller holds outbox. GPU messages first, then the summary of lost messages, then job results (several as one). */
+    private Batch next() {
+        Batch batch = choose();
+        inFlight.clear();
+        if (batch != null) {
+            inFlight.addAll(batch.notes());
+        }
+        return batch;
+    }
+
+    /** Caller holds outbox. */
+    private Batch choose() {
+        Note head = urgentQueue.peekFirst();
+        if (head != null) {
+            return new Batch(late(head), List.of(head), null);
+        }
+        if (lostCompleted + lostFailed + lostGpu > 0) {
+            return new Batch(lostText(), List.of(), new int[]{lostCompleted, lostFailed, lostGpu});
+        }
+        if (jobQueue.isEmpty()) {
+            return null;
+        }
+        if (jobQueue.size() < BATCH_FROM) {
+            Note job = jobQueue.peekFirst();
+            return new Batch(late(job), List.of(job), null);
+        }
+        List<Note> jobs = new ArrayList<>(jobQueue);
+        return new Batch(batchText(jobs), jobs, null);
+    }
+
+    /** Caller holds outbox. Updates the queues after a send; returns the pause before the next one, 0 to go on. */
+    private long settle(Batch batch, Outcome outcome) {
+        inFlight.clear();
+        if (outcome.sent()) {
+            for (Note note : batch.notes()) {
+                (note.urgent() ? urgentQueue : jobQueue).remove(note);
+                if (note.urgent()) {
+                    headAttempts = 0;
+                }
+            }
+            if (batch.summary()) {
+                lostCompleted -= batch.summed()[0];
+                lostFailed -= batch.summed()[1];
+                lostGpu -= batch.summed()[2];
+                if (lostCompleted + lostFailed + lostGpu == 0) {
+                    lostSince = null;
+                }
+            }
+            failures = 0;
+            return 0;
+        }
+        if (outcome.retryAfterMs() > 0) {   // 429: nothing is lost, only later
+            log.warn("webhook rate limited (HTTP 429): next send in {} ms", outcome.retryAfterMs());
+            return outcome.retryAfterMs();
+        }
+        failures++;
+        for (Note note : batch.notes()) {
+            if (!note.urgent()) {
+                if (jobQueue.remove(note)) {
+                    lose(note);
+                }
+            } else if (++headAttempts >= MAX_ATTEMPTS) {
+                if (urgentQueue.remove(note)) {
+                    lose(note);
+                }
+                headAttempts = 0;
+            }
+        }
+        long pause = Math.min(MAX_RETRY_DELAY.toMillis(), retryBaseMs << Math.min(failures - 1, 20));
+        log.warn("webhook not sent: {}; {} GPU and {} job messages waiting, next try in {} ms", outcome.reason(),
+                urgentQueue.size(), jobQueue.size(), pause);
+        return pause;
+    }
+
+    /** Caller holds outbox. */
+    private void lose(Note note) {
+        if (lostSince == null) {
+            lostSince = Instant.now();
+        }
+        if (note.urgent()) {
+            lostGpu++;
+        } else if (note.status() == JobStatus.COMPLETED) {
+            lostCompleted++;
+        } else {
+            lostFailed++;
+        }
+    }
+
+    /** Caller holds outbox. */
+    private String lostText() {
+        StringBuilder text = new StringBuilder("📭 디스코드 알림을 보내지 못해 빠진 알림이 있어요");
+        if (lostSince != null) {
+            text.append(" (").append(clock(lostSince)).append("부터 실패)");
+        }
+        List<String> parts = new ArrayList<>();
+        if (lostCompleted > 0) {
+            parts.add("✅ 완성 " + lostCompleted + "건");
+        }
+        if (lostFailed > 0) {
+            parts.add("⚠️ 실패 " + lostFailed + "건");
+        }
+        if (lostGpu > 0) {
+            parts.add("GPU 알림 " + lostGpu + "건");
+        }
+        return text.append(" — ").append(String.join(" · ", parts))
+                .append(". 작업 결과는 관리 페이지에서 확인해 주세요").toString();
+    }
+
+    /** Several job results as one message: the counts, then the first line of each while it fits. */
+    static String batchText(List<Note> jobs) {
+        long completed = jobs.stream().filter(job -> job.status() == JobStatus.COMPLETED).count();
+        StringBuilder text = new StringBuilder("📦 작업 알림 ").append(jobs.size()).append("건을 한 번에 보내요 (✅ ")
+                .append(completed).append(" · ⚠️ ").append(jobs.size() - completed).append(")");
+        int shown = 0;
+        for (Note job : jobs) {
+            String line = late(job);
+            int newline = line.indexOf('\n');
+            line = newline < 0 ? line : line.substring(0, newline);
+            if (text.length() + line.length() + 40 > MAX_CONTENT) {
+                break;
+            }
+            text.append('\n').append(line);
+            shown++;
+        }
+        if (shown < jobs.size()) {
+            text.append('\n').append("… 외 ").append(jobs.size() - shown).append("건");
+        }
+        return text.toString();
+    }
+
+    /** The note's text; when it waited more than {@link #LATE}, its first line also says the time it is about. */
+    static String late(Note note) {
+        if (System.nanoTime() - note.queuedNanos() < LATE.toNanos()) {
+            return note.text();
+        }
+        String stamp = " · ⏱ " + clock(note.queuedAt()) + " 기준";
+        int newline = note.text().indexOf('\n');
+        return newline < 0 ? note.text() + stamp
+                : note.text().substring(0, newline) + stamp + note.text().substring(newline);
+    }
+
+    private static String clock(Instant at) {
+        return CLOCK.format(at.atZone(TEAM_ZONE));
     }
 
     @PreDestroy
@@ -359,7 +671,12 @@ public class WebhookNotifier {
         return (seconds / 60) + "분 " + (seconds % 60) + "초";
     }
 
-    private void send(String content) {
+    /** One send: whether it got a 2xx, else why not and, for a 429, how long to wait. */
+    private record Outcome(boolean sent, String reason, long retryAfterMs) {
+        static final Outcome SENT = new Outcome(true, null, 0);
+    }
+
+    private Outcome send(String content) {
         String clipped = content.length() > MAX_CONTENT ? content.substring(0, MAX_CONTENT) : content;
         try {
             String body = objectMapper.writeValueAsString(Map.of("content", clipped));
@@ -369,13 +686,35 @@ public class WebhookNotifier {
                     .POST(HttpRequest.BodyPublishers.ofString(body))
                     .build();
             HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-            if (response.statusCode() / 100 != 2) {
-                log.warn("webhook answered HTTP {}", response.statusCode());
+            int status = response.statusCode();
+            if (status / 100 == 2) {
+                return Outcome.SENT;
             }
+            if (status == 429) {
+                return new Outcome(false, "HTTP 429", retryAfterMs(response.headers().firstValue("Retry-After").orElse(null)));
+            }
+            return new Outcome(false, "HTTP " + status, 0);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return new Outcome(false, "interrupted", 0);
         } catch (IOException | RuntimeException e) {
-            log.warn("webhook not sent: {}", e.getClass().getSimpleName());
+            return new Outcome(false, e.getClass().getSimpleName(), 0);
         }
+    }
+
+    /** Retry-After in seconds (Discord may send a fraction): at least 0.1 s, at most {@link #MAX_RETRY_DELAY}. */
+    public static long retryAfterMs(String header) {
+        double seconds = 1;
+        if (header != null) {
+            try {
+                seconds = Double.parseDouble(header.strip());
+            } catch (NumberFormatException ignored) {
+                // an HTTP date or junk: one second
+            }
+        }
+        if (!(seconds > 0.1)) {
+            seconds = 0.1;
+        }
+        return Math.min(MAX_RETRY_DELAY.toMillis(), Math.round(seconds * 1000));
     }
 }

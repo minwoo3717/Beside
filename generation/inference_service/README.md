@@ -245,20 +245,25 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 | HTTP 401·403, `detail.code` 없음·모르는 코드 (토큰 누락·불일치, 프록시 거부) | 두 모드 | `INFERENCE_UNAVAILABLE` |
 | 200 인데 `glbUrl` 없음·빈 값·`/` 로 시작하지 않음 | 업로드 | `CONVERSION_FAILED` |
 | `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
+| `GET glbUrl` 이 `inference.download-idle-ms`(기본 60000) 동안 한 바이트도 받지 못함(헤더 전 포함) | 업로드 | `CONVERSION_FAILED` (장애 훈련 FD16b, 2026-11-20) |
+| 요청이 끝나기 전에 `/healthz` 의 `instanceId` 가 바뀜(서비스·Pod 가 다시 시작됨, `inference.offline-wait-ms` 를 켠 prod 만) | 두 모드 | `POST` 중이면 `INFERENCE_UNAVAILABLE`, 내려받는 중이면 `CONVERSION_FAILED` (FD16b) |
+| 내려받은 GLB 를 Spring 서버 디스크에 쓰지 못함(디스크 가득 참 등) | 업로드 | `INTERNAL_ERROR` (장애 훈련 FD4. 전에는 `CONVERSION_FAILED`) |
 | 내려받은 파일이 glTF 2.0 바이너리 아님 | 업로드 | `CONVERSION_FAILED` (경로 모드와 같은 헤더 확인) |
+| 받은 GLB 를 결과 폴더(`storage.result.dir`)로 복사하지 못함 | 두 모드 | `INTERNAL_ERROR` (FD4. 전에는 `CONVERSION_FAILED`) |
 
 이 서비스가 직접 보내는 401 은 `detail.code` 가 `INFERENCE_UNAVAILABLE` 이라 위 규칙과 결과가 같다.
 
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0, "loadError": null }
+{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0, "loadError": null, "instanceId": "3f9c0a1b2d4e" }
 ```
 
-토큰 없이 열려 있고, 서비스가 응답하는 한 늘 200 이다. `tokenOk`·`busyForMs`·`loadError` 는 2026-11-20 에 더한 필드다 **[구현됨]**(`test_app.py` 의 `HealthzTokenTest`·`BusyClockTest`·`HealthzBusyModelTest`·`HealthzLoadErrorTest`, `PassthroughKnobTest` 의 busy 시험). 모르는 필드를 무시하는 옛 Spring 에는 영향이 없다.
+토큰 없이 열려 있고, 서비스가 응답하는 한 늘 200 이다. `tokenOk`·`busyForMs`·`loadError`·`instanceId` 는 2026-11-20 에 더한 필드다 **[구현됨]**(`test_app.py` 의 `HealthzTokenTest`·`BusyClockTest`·`HealthzBusyModelTest`·`HealthzLoadErrorTest`, `PassthroughKnobTest` 의 busy 시험). 모르는 필드를 무시하는 옛 Spring 에는 영향이 없다.
 
 - `tokenOk`: 요청에 `X-Inference-Token` 헤더가 있을 때만 `true`/`false` 다. `/infer` 가 그 값을 받아들일지를 말한다(위 '인증' 과 같은 상수 시간 비교. 서비스에 `BESIDE_INFERENCE_TOKEN` 이 없으면 검사하지 않으므로 `true`). 헤더가 없으면 `null`. `false` 여도 `/healthz` 는 401 이 아니라 200 이다. 토큰 값은 응답·로그에 남기지 않는다.
 - `busyForMs`: 아직 돌고 있는 `MODEL.predict` 호출 또는 패스스루 모의 생성(`BESIDE_PASSTHROUGH_*` 의 잠자기) 가운데 가장 오래된 것이 시작한 뒤 지난 ms. 돌고 있는 것이 없으면 0. `MODEL_LOCK`·패스스루 슬롯을 기다리는 시간, 사진 저장·변환·리깅은 넣지 않는다. Spring 이 포기한(DELETE 로 취소된) 실행도 `predict` 가 끝날 때까지는 GPU 를 쥐고 있으므로 센다.
+- `instanceId`: 이 서비스 프로세스의 무작위 id(16진 12자). 프로세스를 띄울 때마다 새로 정한다(감독 루프가 다시 띄워도, Pod 를 다시 켜도). 장애 훈련 FD16b(2026-11-20)에서 부하 중 Pod 를 멈췄다 다시 켜자, 멈추기 직전에 보낸 요청 하나가 끝나지 않고 하나뿐인 슬롯을 600 s 동안 잡았다. 끊긴 Pod 는 연결을 닫지 않아 VM 은 응답을 기다리기만 했다. 그래서 Spring(prod)은 요청을 보낼 때 본 `instanceId` 와 다른 값이 `/healthz` 에 나오면 그 요청을 바로 포기한다. 응답이 없을 때(DOWN)는 아무것도 바꾸지 않는다. 경로만 잠깐 끊긴 경우(FD10)는 같은 프로세스라 요청이 살아남기 때문이다.
 - `loadError`: 모델을 불러오지 못했을 때 그 이유 한 줄이다. 예외 이름과 짧은 메시지이고, 경로는 `<path>`, 토큰은 `<token>` 으로 바꾸며 200자에서 자른다. FD18 처럼 체크포인트 파일이 없으면 `animallift_runner.py` 가 낸 메시지 그대로 `FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>` 다(`HealthzLoadErrorTest` 가 실제 러너로 확인). 슬래시가 든 것은 모두 경로로 보므로 받는 방법의 Hugging Face 저장소 이름 `Chunyi99/AnimalLift` 도 `<path>` 가 된다 — 모양만으로는 `ckpt/latest.pt` 같은 상대 경로와 가를 수 없어 일부러 그대로 둔다. 불러오는 도중 다른 파일이 없으면 `FileNotFoundError: [Errno 2] No such file or directory: '<path>'` 꼴이다. 전체 메시지(경로·받는 방법)와 traceback 은 서비스 로그의 `model failed to load` 와 토큰이 필요한 `/infer` 의 503 메시지에만 있다. 불러오는 중·불러온 뒤·패스스루·모델 미설정이면 `null` 이다. 장애 훈련 FD18(2026-11-20, 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)에서 `modelLoaded=false` 만으로는 "아직 불러오는 중"과 "불러오기 실패"를 가를 수 없어서 더했다. 서비스는 다시 불러오지 않으므로 고친 뒤 서비스를 다시 띄울 때까지 이 값이 남는다. `status`·`modelLoaded`, 그리고 `/infer` 의 503 `INFERENCE_UNAVAILABLE` 은 그대로다.
 
 Spring 의 `InferenceHealthMonitor` 는 `inference.token` 이 있으면 이 헤더를 붙여 15초마다(`inference.health-poll-ms`) 부른다. `tokenOk=false`(장애 FD17: 모든 작업이 바로 `INFERENCE_UNAVAILABLE`)와 `busyForMs` 가 `inference.stuck-alert-ms`(기본 120000)를 넘는 것(FD13: healthz 는 UP 인데 추론만 멈춤), `loadError` 가 생긴 것(FD18: LOADING 이 끝나지 않음. 메시지에는 예외 이름만, 🧩)을 Discord 로 시작할 때 한 번, 풀릴 때 한 번 알린다 **[구현됨]**(`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`). 필드가 없거나(옛 서비스) 응답이 없으면 모름으로 보고 알리지 않는다. 작업을 보낼지 정하는 UP/LOADING/DOWN 판정은 이 세 필드를 보지 않는다(모델을 불러오지 못한 서비스에도 작업은 지금처럼 `inference.offline-wait-ms` 까지 PENDING 으로 기다린다). 2026-11-20 장애 훈련 2차 확인에서 받았다 **[실험 결과]**: 🔑·🐢 는 VM 의 훈련 스텁(패스스루)으로, 🧩 는 실제 A40 Pod 를 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 띄워([docs/ops/2026-11-20_failure-drills.md](../../docs/ops/2026-11-20_failure-drills.md) '2차 확인'). 실제 모델이 멈춘 경우의 🐢 는 **[계획]**. 운영 대응은 [deploy/README.md](../../deploy/README.md) '문제 해결'.

@@ -459,6 +459,16 @@ class HealthzTokenTest(unittest.TestCase):
             for field in ("device", "modelLoaded", "passthrough", "busyForMs"):
                 self.assertIn(field, body)
 
+    def test_instance_id_names_this_process_and_stays_the_same(self):
+        """FD16b: Spring compares instanceId with the one it saw when it sent a request; a new value means the service
+        restarted and that request will never be answered."""
+        first, second = self.healthz().json(), self.healthz("anything").json()
+        self.assertRegex(first["instanceId"], r"^[0-9a-f]{12}$")
+        self.assertEqual(first["instanceId"], second["instanceId"])
+        self.assertEqual(first["instanceId"], service.INSTANCE_ID)
+        with mock.patch.object(service, "INSTANCE_ID", "0123456789ab"):   # what a restarted process would answer
+            self.assertEqual(self.healthz().json()["instanceId"], "0123456789ab")
+
     def test_the_header_is_checked_as_infer_checks_it(self):
         with mock.patch.object(service, "INFERENCE_TOKEN", "secret"):
             right, wrong, empty = self.healthz("secret"), self.healthz("other"), self.healthz("")
