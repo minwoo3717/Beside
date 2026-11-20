@@ -136,6 +136,12 @@ jobs:
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
+          # queue cap (REVIEW_CHECKLIST #21 proposal, before the contract meeting): off unless deploy/.env turns it on,
+          # and the compose default Retry-After is the server's own default (application.properties)
+          props = dict(line.split("=", 1) for line in open("backend/src/main/resources/application.properties", encoding="utf-8")
+                       .read().splitlines() if "=" in line and not line.startswith("#"))
+          assert mon["services"]["backend"]["environment"]["ADMISSION_MAXPENDING"] == "0"
+          assert mon["services"]["backend"]["environment"]["ADMISSION_RETRYAFTERSECONDS"] == props["admission.retry-after-seconds"]
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token

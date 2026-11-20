@@ -152,6 +152,8 @@ nano deploy/.env
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU 쪽 `BESIDE_INFERENCE_TOKEN` 과 같게 |
 | `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
 | `NOTIFY_INFERENCE_LABEL` | (선택) GPU 알림에 붙는 서버 이름(예: `Runpod A40` → "🟢 GPU 추론 서버(Runpod A40) 연결됨"). 비우면 이름 없이. prod 는 끊김(🔴)을 45초(`notify.down-grace-ms`) 넘게 이어질 때만 알린다. 그 안에 바로 다시 연결되면 🔴·🟢 둘 다 보내지 않고, 서비스가 다시 시작돼 모델을 불러오는 중(🟡)을 거쳐 돌아오면 🟡·🟢 만 보낸다. `#` 는 쓰지 않는다(따옴표 없는 값에서 compose 가 ` #` 뒤를 주석으로 자른다) |
+| `ADMISSION_MAX_PENDING` | (선택, 기본 꺼짐) 대기열 상한 N — 안건 #21 **[제안값]**, 계약 회의 전(상한 코드는 검토 브랜치에만). 비우거나 0 이면 꺼짐(compose 기본 0). 켜면 대기 작업 + 접수 중 요청이 N 이상일 때 v1 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절한다. 켜기 전에 새 앱 빌드를 기기에 깐다. 0 이상 정수가 아니면 backend 가 시작하지 못하므로 `.env.example` 의 형식 확인 명령을 먼저 돌린다. 되돌리기는 0 으로 바꾸고 `up -d backend`(부하 중에도 된다. 그때 대기·처리 중이던 많아야 N + c 건이 `INTERNAL_ERROR` 로 실패하고 retry 할 수 있다) |
+| `ADMISSION_RETRY_AFTER_SECONDS` | (선택) 상한이 거절할 때의 `Retry-After` 초 R. 비우면 165(c=1·N 19 의 추천 **[제안값]**). 1 이상 정수. N 과 함께 정한다(R = N × 3600 / 잰 처리량). `inference.max-concurrency`(슬롯 수)나 GPU 수가 바뀌면 N 과 R 을 함께 다시 계산한다(값 규칙은 `.env.example`) |
 | `GRAFANA_ADMIN_USER` · `GRAFANA_ADMIN_PASSWORD` | (monitoring 프로필을 쓸 때만) Grafana 관리자 계정. 비밀번호는 `openssl rand -base64 24`. 견본에는 일부러 비어 있고, 비어 있으면 grafana 컨테이너가 뜨지 않는다(아래 '모니터링') |
 
 **해시의 `$` 처리**: docker compose v2 는 `.env` 의 따옴표 없는 값과 큰따옴표 값에서 `$이름`·`${이름}` 을 변수로 바꾸고, **작은따옴표 값은 글자 그대로** 쓴다(Docker 문서 'Interpolation — .env file syntax'). bcrypt 해시(`$2a$14$...`)를 따옴표 없이 넣으면 `$14...` 같은 부분이 빈 값으로 바뀌어 로그인이 영영 안 된다. `$$` 는 compose **YAML 파일 안**에서 `$` 를 쓰는 방법이고 `.env` 에서는 쓰지 않는다. 들어간 값은 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec caddy printenv BASIC_AUTH_HASH` 로 확인한다(CI 도 견본 파일로 같은 확인을 한다).

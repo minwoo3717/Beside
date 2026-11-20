@@ -41,6 +41,11 @@ services:
       PREPROCESS_MODELSDIR: /app/models
       PREPROCESS_CHECK_ENABLED: ${PREPROCESS_CHECK_ENABLED:-true}
       PREPROCESS_CUTOUT_ENABLED: ${PREPROCESS_CUTOUT_ENABLED:-true}
+      # (선택) 대기열 상한 — 안건 #21 [제안값], 계약 회의 전(상한 코드는 검토 브랜치에만). admission.max-pending ↔
+      # ADMISSION_MAXPENDING, admission.retry-after-seconds ↔ ADMISSION_RETRYAFTERSECONDS. 기본 0 = 꺼짐(지금과 같다).
+      # 켜는 법·값 규칙·형식 확인·되돌리기는 deploy/.env.example. 165 는 application.properties 의 기본값과 같게 둔다.
+      ADMISSION_MAXPENDING: ${ADMISSION_MAX_PENDING:-0}
+      ADMISSION_RETRYAFTERSECONDS: ${ADMISSION_RETRY_AFTER_SECONDS:-165}
       # ONNX Runtime 스레드마다 glibc arena 가 늘어 RSS 가 커지는 것을 막는다.
       MALLOC_ARENA_MAX: "2"
     volumes:
