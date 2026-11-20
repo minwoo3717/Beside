@@ -34,6 +34,12 @@ import java.time.Instant;
  * drill FD17) and {@link Alert#STUCK} while busyForMs is above inference.stuck-alert-ms (FD13: healthz UP, inference
  * stuck), each once when it starts and once when it ends. A reading without the field (DOWN, an older service, no
  * token sent) is unknown and changes nothing.
+ * <p>
+ * A third field came the same day from failure drill FD18 (a wrong checkpoint): {@code loadError}, why the service's
+ * model failed to load (null while it loads or once it is loaded). Before it, a failed load read as LOADING like a
+ * model still loading, and jobs waited out inference.offline-wait-ms with nobody told. It stays LOADING and jobs wait
+ * as before; {@link Alert#MODEL_LOAD_FAILED} is published once when the field turns to a text and once when it turns
+ * back to null (the service was restarted). Missing, or neither text nor null, is unknown.
  * API v1 does not expose it yet; a healthz field is a contract addition for the meeting (REVIEW_CHECKLIST #11).
  */
 @Component
@@ -42,18 +48,27 @@ public class InferenceHealthMonitor {
     static final Duration CHECK_TIMEOUT = Duration.ofSeconds(2);
     /** inference.stuck-alert-ms default: about 14 normal A40 runs (8.7 s each, load test round 4). */
     static final long DEFAULT_STUCK_ALERT_MS = 120_000;
+    /** Characters of the service's loadError kept (the service sends at most 200). */
+    static final int MAX_LOAD_ERROR = 200;
 
     public enum State { UNKNOWN, UP, LOADING, DOWN }
 
     /**
      * One reading. {@code since} is when the current state began; {@code detail} never names hosts or paths.
      * {@code tokenOk} and {@code busyForMs} are what /healthz said, null when it said nothing usable (no answer, an
-     * older service, or no token sent); they are not part of {@link #ready()}.
+     * older service, or no token sent); they are not part of {@link #ready()}. So is {@code loadFailed}: true when
+     * /healthz named a model load error, false when it said loadError null, null when it said nothing usable; then
+     * {@code loadError} is the service's text on one line (null unless loadFailed).
      */
     public record Status(State state, String device, Instant checkedAt, Instant since, String detail,
-                         Boolean tokenOk, Long busyForMs) {
+                         Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError) {
         public Status(State state, String device, Instant checkedAt, Instant since, String detail) {
             this(state, device, checkedAt, since, detail, null, null);
+        }
+
+        public Status(State state, String device, Instant checkedAt, Instant since, String detail,
+                      Boolean tokenOk, Long busyForMs) {
+            this(state, device, checkedAt, since, detail, tokenOk, busyForMs, null, null);
         }
 
         public boolean ready() {
@@ -70,7 +85,9 @@ public class InferenceHealthMonitor {
         /** tokenOk=false: the service would answer 401 to every /infer (inference.token differs from its token). */
         TOKEN_REJECTED,
         /** busyForMs above inference.stuck-alert-ms: one run has held the GPU for too long. */
-        STUCK
+        STUCK,
+        /** loadError set: the model failed to load, so the service stays LOADING until it is fixed and restarted. */
+        MODEL_LOAD_FAILED
     }
 
     /**
@@ -91,6 +108,7 @@ public class InferenceHealthMonitor {
     /** Whether each alert was last published as active. Guarded by this. */
     private boolean tokenRejected;
     private boolean stuck;
+    private boolean loadFailed;
 
     public InferenceHealthMonitor(String baseUrl, String token, ObjectMapper objectMapper,
                                   ApplicationEventPublisher events) {
@@ -126,7 +144,7 @@ public class InferenceHealthMonitor {
         Status reading = check();
         if (reading.state() == previous.state()) {
             status = new Status(reading.state(), reading.device(), reading.checkedAt(), previous.since(), reading.detail(),
-                    reading.tokenOk(), reading.busyForMs());
+                    reading.tokenOk(), reading.busyForMs(), reading.loadFailed(), reading.loadError());
         } else {
             status = reading;
             log.info("inference service {} -> {} ({})", previous.state(), reading.state(), reading.detail());
@@ -164,6 +182,17 @@ public class InferenceHealthMonitor {
                 events.publishEvent(new AlertChanged(Alert.STUCK, over, reading, stuckAlertMs));
             }
         }
+        if (reading.loadFailed() != null && reading.loadFailed() != loadFailed) {
+            loadFailed = reading.loadFailed();
+            if (loadFailed) {
+                log.warn("inference service could not load its model (healthz loadError: {}): it stays LOADING, so jobs "
+                        + "wait PENDING up to inference.offline-wait-ms until it is fixed and restarted",
+                        reading.loadError());
+            } else {
+                log.info("inference service no longer reports a model load error (healthz loadError=null)");
+            }
+            events.publishEvent(new AlertChanged(Alert.MODEL_LOAD_FAILED, loadFailed, reading, stuckAlertMs));
+        }
     }
 
     private Status check() {
@@ -183,15 +212,30 @@ public class InferenceHealthMonitor {
             // tokenOk is about the header this check sent: without one, whatever the service says is not about us.
             JsonNode tokenOk = body.path("tokenOk");
             JsonNode busy = body.path("busyForMs");
+            // loadError: a text = failed, null = none (loading or loaded), missing or anything else = unknown.
+            JsonNode loadError = body.path("loadError");
+            String error = loadError.isTextual() ? oneLine(loadError.asText()) : null;
+            Boolean loadFailed = loadError.isNull() ? Boolean.FALSE : error != null ? Boolean.TRUE : null;
             return new Status(ready ? State.UP : State.LOADING, device, now, now, ready ? "ok" : "no model loaded",
                     !token.isEmpty() && tokenOk.isBoolean() ? Boolean.valueOf(tokenOk.booleanValue()) : null,
                     busy.isIntegralNumber() && busy.canConvertToLong() && busy.longValue() >= 0
-                            ? Long.valueOf(busy.longValue()) : null);
+                            ? Long.valueOf(busy.longValue()) : null,
+                    loadFailed, error);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Status(State.DOWN, null, now, now, "check interrupted");
         } catch (IOException | RuntimeException e) {
             return new Status(State.DOWN, null, now, now, e.getClass().getSimpleName());
         }
+    }
+
+    /** The service's text as one line (it reaches the log): control characters and runs of spaces become one space. */
+    private static String oneLine(String text) {
+        String line = text.replaceAll("[\\p{Cntrl}\\s]+", " ").strip();
+        if (line.isEmpty()) {
+            return null;
+        }
+        return line.codePointCount(0, line.length()) <= MAX_LOAD_ERROR ? line
+                : line.substring(0, line.offsetByCodePoints(0, MAX_LOAD_ERROR)).strip();
     }
 }

@@ -110,7 +110,7 @@ cd backend
 | `inference.transfer` | `path` | `path` 또는 `upload`. 다른 값이면 기동 실패 |
 | `inference.token` | 빈 값 | 비어 있지 않으면 두 모드 모두 `X-Inference-Token` 헤더로 보낸다. 서비스의 `BESIDE_INFERENCE_TOKEN` 과 같아야 한다(다르면 401 → `INFERENCE_UNAVAILABLE`). 파일에 적지 말고 환경변수 `INFERENCE_TOKEN` 으로 준다 |
 | `storage.tmp.dir` | `storage/tmp` | 업로드 모드에서 내려받은 GLB 가 복사 전까지 머무는 곳 |
-| `inference.stuck-alert-ms` | `120000` | 추론 서비스 `/healthz` 의 `busyForMs`(GPU 에서 도는 가장 오래된 실행의 나이)가 이 값을 넘으면 Discord(`notify.webhook-url`)에 한 번, 내려오면 한 번 알린다. `tokenOk=false`(토큰 불일치)도 같은 방식으로 알린다. 0 이면 멈춤 알림 끔. 작업 처리(UP 판정)는 바뀌지 않는다 (2026-11-20, `InferenceHealthMonitorTest`) |
+| `inference.stuck-alert-ms` | `120000` | 추론 서비스 `/healthz` 의 `busyForMs`(GPU 에서 도는 가장 오래된 실행의 나이)가 이 값을 넘으면 Discord(`notify.webhook-url`)에 한 번, 내려오면 한 번 알린다. `tokenOk=false`(토큰 불일치)와 `loadError`(모델 불러오기 실패, FD18 — 메시지에는 예외 이름만)도 같은 방식으로 알린다. 0 이면 멈춤 알림 끔(다른 두 알림은 그대로). 작업 처리(UP 판정)는 바뀌지 않는다 (2026-11-20, `InferenceHealthMonitorTest`·`InferenceAlertIntegrationTest`) |
 
 이 PC 에서 패스스루로 시험. 2026-10-30 에 같은 설정을 `java -jar`(bootJar)·포트 18001/18081·토큰은 환경변수 `INFERENCE_TOKEN` 으로 돌려 `e2e_mock.ps1` COMPLETED, GPU 쪽 작업 폴더와 Spring `storage/tmp` 가 비는 것까지 확인했다:
 

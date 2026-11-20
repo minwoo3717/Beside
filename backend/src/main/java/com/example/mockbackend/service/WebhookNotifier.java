@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * Team chat notifications (Discord incoming webhook: POST {"content": "..."}) when a run ends and when the GPU
@@ -43,10 +44,11 @@ import java.util.concurrent.TimeUnit;
  * check (seen 2026-11-17, back 15 s later), which would otherwise post a false "unreachable" and "connected" pair.
  * A LOADING after a short DOWN (the service restarted and loads its model) is still news and is announced.
  * <p>
- * Two alerts come from readings the service did answer (InferenceHealthMonitor.AlertChanged, 2026-11-20): the service
- * rejects the backend's token (tokenOk=false, every job fails at once) and one run has held the GPU longer than
- * inference.stuck-alert-ms (busyForMs, healthz UP but inference stuck). Each posts once when it starts and once when
- * it ends, with no grace time.
+ * Three alerts come from readings the service did answer (InferenceHealthMonitor.AlertChanged, 2026-11-20): the
+ * service rejects the backend's token (tokenOk=false, every job fails at once), one run has held the GPU longer than
+ * inference.stuck-alert-ms (busyForMs, healthz UP but inference stuck), and the model failed to load (loadError,
+ * healthz LOADING for good: failure drill FD18; the message names the exception type only). Each posts once when it
+ * starts and once when it ends, with no grace time.
  */
 @Component
 public class WebhookNotifier {
@@ -55,6 +57,8 @@ public class WebhookNotifier {
     static final int MAX_CONTENT = 2000;
     /** Longer labels are cut so a GPU message stays one short line. */
     static final int MAX_LABEL = 40;
+    /** A Python exception class name, as the model-load alert shows it. */
+    private static final Pattern EXCEPTION_TYPE = Pattern.compile("[A-Za-z_][A-Za-z0-9_.]{0,79}");
 
     private final URI webhook;
     private final String publicBaseUrl;
@@ -127,9 +131,9 @@ public class WebhookNotifier {
     }
 
     /**
-     * Token mismatch and stuck-run alerts (InferenceHealthMonitor publishes them only when they start or end). Posted
-     * at once, without the DOWN grace time: they come from readings the service did answer. A repeat of what the
-     * channel already heard, or the end of an alert it never heard, posts nothing.
+     * Token mismatch, stuck-run and model-load alerts (InferenceHealthMonitor publishes them only when they start or
+     * end). Posted at once, without the DOWN grace time: they come from readings the service did answer. A repeat of
+     * what the channel already heard, or the end of an alert it never heard, posts nothing.
      */
     @EventListener
     public void onInferenceAlert(AlertChanged event) {
@@ -287,7 +291,27 @@ public class WebhookNotifier {
                             + duration(event.stuckAlertMs()) + ") — 추론이 멈췄을 수 있어요."
                             + " 그동안 다른 작업은 기다리거나 시간 초과로 실패합니다"
                     : "🟢 " + server + "의 오래 걸리던 작업이 끝났어요";
+            case MODEL_LOAD_FAILED -> event.active()
+                    ? "🧩 " + server + "가 모델을 불러오지 못했어요 (" + loadErrorType(event) + ")"
+                            + " — 고쳐서 다시 띄우기 전에는 새 작업이 처리되지 않아요. 추론 서비스 로그를 확인해 주세요"
+                    : "🧩 " + server + "의 모델 불러오기 오류가 풀렸어요";
         };
+    }
+
+    /**
+     * The exception type that starts the service's loadError ("FileNotFoundError: ..."), never the rest of the text
+     * (it may describe paths); a text that does not start with a type name gives a plain word.
+     */
+    private static String loadErrorType(AlertChanged event) {
+        String error = event.current() == null ? null : event.current().loadError();
+        if (error != null) {
+            int colon = error.indexOf(':');
+            String type = (colon < 0 ? error : error.substring(0, colon)).strip();
+            if (EXCEPTION_TYPE.matcher(type).matches()) {
+                return type;
+            }
+        }
+        return "알 수 없는 오류";
     }
 
     private static long busyForMs(AlertChanged event) {

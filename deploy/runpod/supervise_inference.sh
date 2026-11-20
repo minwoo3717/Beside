@@ -10,7 +10,9 @@
 # predict or passthrough simulated generation still running) passes inference.stuck-alert-ms (120 s) and, with a
 # webhook set, the backend posts one stuck-run message (R6; tested in the backend and inference-service suites, not
 # yet seen on a real Pod). A hang in conversion or rigging is not in busyForMs: only the job timeout catches it.
-# Neither case restarts anything: kill -9 $(cat /var/run/beside/inference.pid) and this loop starts it again.
+# A model that failed to load (failure drill FD18) leaves a live process too: /healthz then names it in loadError and
+# the backend posts one model-load message, while jobs wait PENDING (same tests, not yet seen on a real Pod).
+# None of these restarts anything: kill -9 $(cat /var/run/beside/inference.pid) and this loop starts it again.
 #
 #   supervise_inference.sh COMMAND [ARG...]        (deploy/runpod/test_start_pod_supervisor.sh runs a fake COMMAND)
 #

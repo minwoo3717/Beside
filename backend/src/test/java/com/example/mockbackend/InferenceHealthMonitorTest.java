@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * The GPU PC's /healthz read as UP / LOADING / DOWN, with an event on every change of state, and the 2026-11-20
- * fields tokenOk / busyForMs turned into alert events (FD17 token mismatch, FD13 stuck run) that never move the state.
+ * fields tokenOk / busyForMs / loadError turned into alert events (FD17 token mismatch, FD13 stuck run, FD18 model
+ * load failure) that never move the state.
  */
 class InferenceHealthMonitorTest {
     private HttpServer server;
@@ -193,6 +194,60 @@ class InferenceHealthMonitorTest {
         assertThat(stateChanges()).hasSize(1);
     }
 
+    /**
+     * FD18: the service answers but its model failed to load (a wrong checkpoint). Still LOADING, so jobs wait PENDING
+     * as today; one alert when loadError appears, one when it clears (the restarted service loads again).
+     */
+    @Test
+    void aModelLoadErrorIsAlertedOnceAndItsClearingOnceWithoutChangingTheState() {
+        InferenceHealthMonitor monitor = monitor("s3cret");
+        answer(false, false, ",\"tokenOk\":true,\"busyForMs\":0,\"loadError\":null");   // still loading: no error
+        Status loading = monitor.refresh();
+        assertThat(loading.loadFailed()).isFalse();
+        assertThat(loading.loadError()).isNull();
+        assertThat(alerts()).isEmpty();
+
+        String error = "FileNotFoundError: [Errno 2] No such file or directory: '<path>'";
+        answer(false, false, ",\"tokenOk\":true,\"busyForMs\":0,\"loadError\":\"" + error + "\"");
+        for (int i = 0; i < 3; i++) {
+            Status reading = monitor.refresh();
+            assertThat(reading.state()).isEqualTo(State.LOADING);   // jobs keep waiting PENDING as before
+            assertThat(reading.ready()).isFalse();
+            assertThat(reading.loadFailed()).isTrue();
+            assertThat(reading.loadError()).isEqualTo(error);
+        }
+        assertThat(alerts()).singleElement().satisfies(alert -> {
+            assertThat(alert.alert()).isEqualTo(Alert.MODEL_LOAD_FAILED);
+            assertThat(alert.active()).isTrue();
+            assertThat(alert.current().loadError()).isEqualTo(error);
+        });
+
+        status.set(503);                                                                  // restarted ...
+        monitor.refresh();
+        answer(false, false, ",\"tokenOk\":true,\"busyForMs\":0,\"loadError\":null");   // ... and loading again
+        monitor.refresh();
+        answer(true, false, ",\"tokenOk\":true,\"busyForMs\":0,\"loadError\":null");
+        monitor.refresh();
+        assertThat(alerts()).hasSize(2);
+        assertThat(alerts().get(1).alert()).isEqualTo(Alert.MODEL_LOAD_FAILED);
+        assertThat(alerts().get(1).active()).isFalse();
+        assertThat(stateChanges()).extracting(change -> change.current().state())
+                .containsExactly(State.LOADING, State.DOWN, State.LOADING, State.UP);
+    }
+
+    /** The service's text is kept as one short line: a newline in it cannot forge a log line. */
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void aLoadErrorIsKeptAsOneShortLine(CapturedOutput output) {
+        InferenceHealthMonitor monitor = monitor("");
+        answer(false, false, ",\"loadError\":\"RuntimeError: first\\nFORGED line " + "x".repeat(500) + "\"");
+        Status reading = monitor.refresh();
+        assertThat(reading.loadFailed()).isTrue();
+        assertThat(reading.loadError()).startsWith("RuntimeError: first FORGED line x").doesNotContain("\n")
+                .hasSizeLessThanOrEqualTo(200);
+        assertThat(output.getAll()).contains("RuntimeError: first FORGED line").doesNotContain("first\nFORGED");
+    }
+
     @Test
     void theDefaultLimitIsTwoMinutesAndZeroTurnsTheStuckAlertOff() {
         InferenceHealthMonitor byDefault = monitor("s3cret");
@@ -215,14 +270,21 @@ class InferenceHealthMonitorTest {
         Status reading = monitor.refresh();
         assertThat(reading.tokenOk()).isNull();
         assertThat(reading.busyForMs()).isNull();
-        answer(true, false, ",\"tokenOk\":\"no\",\"busyForMs\":\"999999\"");
+        assertThat(reading.loadFailed()).isNull();
+        answer(true, false, ",\"tokenOk\":\"no\",\"busyForMs\":\"999999\",\"loadError\":5");
         reading = monitor.refresh();
         assertThat(reading.tokenOk()).isNull();
         assertThat(reading.busyForMs()).isNull();
-        answer(true, false, ",\"tokenOk\":null,\"busyForMs\":-5");
-        monitor.refresh();
+        assertThat(reading.loadFailed()).isNull();
+        assertThat(reading.loadError()).isNull();
+        answer(true, false, ",\"tokenOk\":null,\"busyForMs\":-5,\"loadError\":\"  \"");
+        reading = monitor.refresh();
+        assertThat(reading.loadFailed()).isNull();
+        answer(false, false);  // an older service still loading or failed: it cannot tell, and neither can we
+        assertThat(monitor.refresh().loadFailed()).isNull();
         assertThat(alerts()).isEmpty();
-        assertThat(monitor.current().ready()).isTrue();
+        answer(true, false);
+        assertThat(monitor.refresh().ready()).isTrue();
 
         // Without a token of its own the monitor sends no header, so a tokenOk in the answer is not about it.
         InferenceHealthMonitor tokenless = monitor("", 1_000);

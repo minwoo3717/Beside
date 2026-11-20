@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -39,9 +41,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Profile "real" with the prod offline wait and a webhook: the /healthz poll carries the token, tokenOk=false (FD17)
- * and a busyForMs over inference.stuck-alert-ms (FD13) reach Discord once each and once more when they end, and jobs
- * are dispatched exactly as before (the alerts do not touch the UP/LOADING/DOWN readiness RealJobWorker reads).
+ * Profile "real" with the prod offline wait and a webhook: the /healthz poll carries the token, tokenOk=false (FD17),
+ * a busyForMs over inference.stuck-alert-ms (FD13) and a loadError (FD18) reach Discord once each and once more when
+ * they end, and jobs are dispatched or kept waiting exactly as before (the alerts do not touch the UP/LOADING/DOWN
+ * readiness RealJobWorker reads).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,7 +52,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class InferenceAlertIntegrationTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String TOKEN = "it-s3cret";
-    private static final AtomicReference<String> healthExtra = new AtomicReference<>(",\"tokenOk\":true,\"busyForMs\":0");
+    private static final String HEALTHY = ",\"tokenOk\":true,\"busyForMs\":0";
+    private static final AtomicReference<String> healthExtra = new AtomicReference<>(HEALTHY);
+    private static final AtomicBoolean modelLoaded = new AtomicBoolean(true);
     private static final AtomicReference<String> tokenSeen = new AtomicReference<>();
     private static final AtomicInteger inferCalls = new AtomicInteger();
     private static final List<String> posted = new CopyOnWriteArrayList<>();
@@ -86,8 +91,8 @@ class InferenceAlertIntegrationTest {
         inference.setExecutor(handlers);
         inference.createContext("/healthz", exchange -> {
             tokenSeen.set(exchange.getRequestHeaders().getFirst("X-Inference-Token"));
-            respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":true,\"passthrough\":false"
-                    + healthExtra.get() + "}");
+            respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":" + modelLoaded.get()
+                    + ",\"passthrough\":false" + healthExtra.get() + "}");
         });
         inference.createContext("/infer", exchange -> {
             inferCalls.incrementAndGet();
@@ -118,12 +123,52 @@ class InferenceAlertIntegrationTest {
     @Autowired
     InferenceHealthMonitor monitor;
 
+    /** Each test starts from a healthy service the monitor has read, with no alert open and nothing posted. */
+    @BeforeEach
+    void healthy() {
+        modelLoaded.set(true);
+        healthExtra.set(HEALTHY);
+        monitor.refresh();
+        posted.clear();
+    }
+
+    /**
+     * FD18: the service answers but its model failed to load. The job waits PENDING and ends INFERENCE_UNAVAILABLE
+     * after inference.offline-wait-ms exactly as for a model still loading (/infer is never called), and the channel
+     * hears the load error once and its clearing once.
+     */
+    @Test
+    void aModelLoadErrorReachesTheWebhookOnceWhileJobsWaitAsBefore() throws Exception {
+        int callsBefore = inferCalls.get();
+        modelLoaded.set(false);
+        healthExtra.set(HEALTHY + ",\"loadError\":\"FileNotFoundError: [Errno 2] No such file or directory: '<path>'\"");
+        monitor.refresh();
+        String waiting = upload();
+        await().during(Duration.ofMillis(1000)).atMost(Duration.ofSeconds(2)).until(() -> statusOf(waiting).equals("PENDING"));
+        await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(waiting).equals("FAILED"));
+        assertThat(errorCodeOf(waiting)).isEqualTo("INFERENCE_UNAVAILABLE");
+        assertThat(inferCalls.get()).isEqualTo(callsBefore);
+        assertThat(monitor.current().state()).isEqualTo(InferenceHealthMonitor.State.LOADING);
+
+        modelLoaded.set(true);   // fixed and started again: loads, then is ready
+        healthExtra.set(HEALTHY + ",\"loadError\":null");
+        monitor.refresh();
+        monitor.refresh();
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> loadAlerts().size() == 2);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> loadAlerts().size() == 2);
+        assertThat(loadAlerts().get(0)).startsWith("🧩 GPU 추론 서버가 모델을 불러오지 못했어요 (FileNotFoundError)");
+        assertThat(loadAlerts().get(1)).isEqualTo("🧩 GPU 추론 서버의 모델 불러오기 오류가 풀렸어요");
+        assertThat(posted).noneMatch(text -> text.contains("<path>") || text.contains("Errno"));
+    }
+
     @Test
     void tokenAndStuckAlertsReachTheWebhookOnceWhileJobsRunAsBefore() throws Exception {
+        int callsBefore = inferCalls.get();
         healthExtra.set(",\"tokenOk\":false,\"busyForMs\":0");
         String first = upload();   // the worker's own fresh /healthz check sees UP and starts the job
         await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(first).equals("COMPLETED"));
-        assertThat(inferCalls.get()).isEqualTo(1);
+        assertThat(inferCalls.get()).isEqualTo(callsBefore + 1);
         assertThat(tokenSeen.get()).isEqualTo(TOKEN);
         monitor.refresh();
         monitor.refresh();
@@ -133,7 +178,7 @@ class InferenceAlertIntegrationTest {
         monitor.refresh();
         String second = upload();
         await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(second).equals("COMPLETED"));
-        assertThat(inferCalls.get()).isEqualTo(2);
+        assertThat(inferCalls.get()).isEqualTo(callsBefore + 2);
         assertThat(monitor.current().ready()).isTrue();
 
         healthExtra.set(",\"tokenOk\":true,\"busyForMs\":0");
@@ -156,6 +201,11 @@ class InferenceAlertIntegrationTest {
                 || text.contains("오래 걸리던 작업")).toList();
     }
 
+    /** The model-load alert and its clearing among the posted messages. */
+    private static List<String> loadAlerts() {
+        return posted.stream().filter(text -> text.startsWith("🧩")).toList();
+    }
+
     private String upload() throws Exception {
         String body = mvc.perform(multipart("/api/v1/jobs")
                         .file(new MockMultipartFile("photos", "dog.png", "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))
@@ -167,6 +217,11 @@ class InferenceAlertIntegrationTest {
     private String statusOf(String jobId) throws Exception {
         String body = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         return JSON.readTree(body).path("status").asText();
+    }
+
+    private String errorCodeOf(String jobId) throws Exception {
+        String body = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return JSON.readTree(body).path("error").path("code").asText();
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {
