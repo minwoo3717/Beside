@@ -2,8 +2,9 @@
 # Test of deploy/backup/offsite_backup.sh without a VM or GCP: fake docker (volume path), fake curl (metadata server and
 # a bucket in a folder that answers like the JSON API: 200 created, 412 when the name is taken, 503 on demand).
 # Checks: zips go oldest first and only once, an unreadable zip is reported and skipped, a failed upload stops the db
-# order and is sent on the next run, photos/GLBs go once a day (or with FORCE_FILES=1), a lost state never overwrites
-# what the bucket has, a VM without the write scope uploads nothing, and the token is never on a command line or printed.
+# order and is sent on the next run, photos/GLBs go once a day (or with FORCE_FILES=1), a file deleted after the run
+# listed it is skipped without failing, only a good run writes last.ok, a lost state never overwrites what the bucket
+# has, a VM without the write scope uploads nothing, and the token is never on a command line or printed.
 #   bash scripts/test_offsite_backup.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -43,6 +44,7 @@ if ((meta)); then
   cat "$FAKE/meta/${url##*/}"
   exit 0
 fi
+[[ -f "$data" ]] || { printf '000'; exit 26; }   # curl: (26) cannot read the file to send
 answer() { printf '%s' "$2" > "$out"; printf '%s' "$1"; }
 [[ "$url" == https://gcs.test/upload/storage/v1/b/beside-test-backup/o ]] || { answer 404 '{"error":{"message":"no such bucket"}}'; exit 0; }
 grep -qxF "header = \"Authorization: Bearer $(cat "$FAKE/token-value")\"" <<<"$config" \
@@ -58,6 +60,11 @@ fi
 mkdir -p "$(dirname "$FAKE/bucket/$name")"
 cp "$data" "$FAKE/bucket/$name"
 echo "$name" >> "$FAKE/writes"
+# delete-after: "<object> <path in the volume>" lines; once <object> is written, that file is gone (a job deleted or a
+# zip pruned while the run is still going, after it made its list)
+if [[ -f "$FAKE/delete-after" ]]; then
+  while read -r trigger victim; do [[ "$trigger" != "$name" ]] || rm -f "$FAKE/vol/$victim"; done < "$FAKE/delete-after"
+fi
 answer 200 "{\"name\":\"$name\"}"
 FAKE
 chmod +x "$WORK/bin/"*
@@ -158,6 +165,22 @@ run || fail "run after the 503"
 in_bucket db/beside-20261120-130500-001.zip && in_bucket db/beside-20261120-140500-001.zip || fail "zips not sent after the 503"
 (($(cat "$WORK/state/last.ok") > 1)) || fail "the good run after the 503 did not move last.ok"
 
+# a zip or a job's file that vanishes after the run listed it is skipped: no write, no failure, the rest still goes
+zip_at beside-20261120-150500-001.zip 20
+zip_at beside-20261120-160500-001.zip 15
+file_at results/aaaa/base.glb 30
+file_at uploads/bbbb_dog.jpg 30
+printf '%s %s\n' db/beside-20261120-150500-001.zip backup/beside-20261120-160500-001.zip \
+  files/results/aaaa/base.glb uploads/bbbb_dog.jpg > "$WORK/delete-after"
+run FORCE_FILES=1 || fail "a file deleted after it was listed failed the run"
+rm "$WORK/delete-after"
+grep -q "pruned before it was sent, skipped: beside-20261120-160500-001.zip" "$WORK/out.txt" || fail "vanished zip not reported"
+grep -q "deleted before it was sent, skipped: uploads/bbbb_dog.jpg" "$WORK/out.txt" || fail "vanished file not reported"
+in_bucket db/beside-20261120-150500-001.zip && in_bucket files/results/aaaa/base.glb || fail "listed files that stayed were not sent"
+in_bucket db/beside-20261120-160500-001.zip && fail "a vanished zip was written"
+in_bucket files/uploads/bbbb_dog.jpg && fail "a vanished file was written"
+grep -q "files: .* 0 failed" "$WORK/out.txt" || fail "a vanished file counted as failed"
+
 # state lost (VM rebuilt from a snapshot): everything is offered again, the bucket answers 412 and nothing is replaced
 rm -rf "$WORK/state" "$WORK/vol/backup/beside-20261120-103000-000.zip"   # the broken zip was pruned meanwhile
 before="$(writes)"
@@ -169,4 +192,4 @@ grep -q "already in the bucket, kept as it is: db/beside-20261120-090500-001.zip
 grep -qF "$TOKEN_VALUE" "$WORK/argv" && fail "token on a curl command line"
 grep -qF "$TOKEN_VALUE" "$WORK/all.txt" && fail "token printed"
 [[ "$(stat -c %a "$WORK/state")" == 700 ]] || fail "state folder is not 700"
-echo "offsite_backup.sh: order, once-only, daily files, 412 keep, scope check and token handling ok"
+echo "offsite_backup.sh: order, once-only, daily files, vanished files, last.ok, 412 keep, scope check and token handling ok"

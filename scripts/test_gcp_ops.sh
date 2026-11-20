@@ -48,6 +48,16 @@ chmod +x "$WORK/bin/gcloud"
 export PATH="$WORK/bin:$PATH" FAKE="$WORK"
 fail() { echo "FAIL: $*"; cat "$WORK/out.txt" 2>/dev/null; exit 1; }
 calls() { cat "$WORK/calls" 2>/dev/null || true; }
+# has_args <call prefix> <arg>...: the first logged call starting with the prefix carries every arg as a whole word
+has_args() {
+  local line want
+  line="$(grep -m1 "^$1 " "$WORK/calls" || true)"
+  [[ -n "$line" ]] || fail "no call '$1': $(calls)"
+  shift
+  for want in "$@"; do
+    [[ " $line " == *" $want "* ]] || fail "'$want' missing from: $line"
+  done
+}
 
 # ---- DRY_RUN: every changing command is printed, gcloud is never called (not even for the project with it set)
 for s in snapshot_schedule backup_bucket; do
@@ -85,6 +95,10 @@ grep -q "uptime_check.sh pause" "$WORK/out.txt" || fail "usage does not list pau
 
 # ---- first real run against the fake project
 bash "$GCP/snapshot_schedule.sh" > "$WORK/out.txt" 2>&1 || fail "snapshot_schedule"
+# daily at 04:00 KST, 7 days, snapshots stored in Seoul and kept if the disk is deleted (the VM-loss case they are for)
+has_args "compute resource-policies create" snapshot-schedule beside-daily-snapshot --region=asia-northeast3 \
+  --daily-schedule --start-time=19:00 --max-retention-days=7 --on-source-disk-delete=keep-auto-snapshots \
+  --storage-location=asia-northeast3
 calls | grep -q "^compute disks add-resource-policies beside-vm-boot --zone=asia-northeast3-a --resource-policies=beside-daily-snapshot$" \
   || fail "the boot disk from the VM was not used: $(calls)"
 bash "$GCP/backup_bucket.sh" > "$WORK/out.txt" 2>&1 || fail "backup_bucket"
@@ -99,6 +113,11 @@ calls | grep -q "keys create" && fail "a key file was made"
 grep -q "set-service-account beside-vm" "$WORK/out.txt" || fail "no attach commands printed"
 calls | grep -q "set-service-account" && fail "the VM was changed by backup_bucket.sh"
 bash "$GCP/uptime_check.sh" create 1234567890 > "$WORK/out.txt" 2>&1 || fail "uptime_check create"
+# HTTPS with a valid certificate (an expired one is an outage for the app too) and the exact healthz body
+has_args "monitoring uptime create" beside-healthz --resource-type=uptime-url \
+  --resource-labels=host=beside-team.duckdns.org,project_id=beside-test --protocol=https --port=443 \
+  --path=/api/v1/healthz --request-method=get --validate-ssl=true --period=1 \
+  '--matcher-content="status":"ok"' --matcher-type=contains-string
 python3 -I - "$WORK/state/policy.json" <<'PY' || fail "alert policy"
 import json, sys
 p = json.load(open(sys.argv[1]))
