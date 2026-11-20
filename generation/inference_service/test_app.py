@@ -486,7 +486,8 @@ class HealthzLoadErrorTest(unittest.TestCase):
     FileNotFoundError and /healthz said only modelLoaded=false, the same as a model still loading, so Spring showed
     LOADING and jobs waited out inference.offline-wait-ms. /healthz now also names the failure: the exception type and
     a short one-line message without file paths or the token (it is open). status, modelLoaded and the 503 of /infer
-    stay as they were."""
+    stay as they were. The drill's own message (the real runner's 'missing checkpoint') is
+    test_fd18_the_real_runner_with_a_wrong_checkpoint; the errno form is what a file missing deeper in the load gives."""
 
     CKPT = "/workspace/AnimalLift/ckpt/wrong.pt"
 
@@ -548,6 +549,31 @@ class HealthzLoadErrorTest(unittest.TestCase):
         self.assertEqual(refused.status_code, 503, refused.text)
         self.assertEqual(refused.json()["detail"]["code"], "INFERENCE_UNAVAILABLE")
         self.assertIn("failed to load", refused.json()["detail"]["message"])
+
+    def test_fd18_the_real_runner_with_a_wrong_checkpoint(self):
+        """FD18 as it ran: the real AnimalLiftRunner (not the stand-in above) with BESIDE_ANIMALLIFT_CKPT naming no file.
+        The runner's own message is not the errno form: 'missing checkpoint (<how to fetch it>): <path>'. Its fetch hint
+        holds the Hugging Face repo id Chunyi99/AnimalLift, which has a slash and is masked like every path, so loadError
+        says 'hf download <path>'; the full text stays in MODEL_ERROR (the 503 of /infer, behind the token) and the log."""
+        repo = Path(tempfile.mkdtemp(prefix="beside-fd18-"))
+        self.addCleanup(shutil.rmtree, repo, True)
+        (repo / "animallift").mkdir()
+        (repo / "animallift" / "inference.py").write_text("")   # a checkout, so the checkpoint check is the one that fails
+        wrong = repo / "ckpt" / "wrong.pt"
+        with mock.patch.object(service, "RUNNER_SPEC", "animallift_runner:AnimalLiftRunner"), \
+                mock.patch.object(service, "ANIMALLIFT_DIR", str(repo)), \
+                mock.patch.dict(os.environ, {"BESIDE_ANIMALLIFT_CKPT": str(wrong)}):
+            with self.assertLogs(service.log, "ERROR") as logged:
+                service._load_model()
+        self.assertIn("model failed to load (animallift_runner:AnimalLiftRunner)", logged.output[0])
+        self.assertEqual(service.MODEL_ERROR, "FileNotFoundError: missing checkpoint "
+                         f"(hf download Chunyi99/AnimalLift --local-dir ckpt): {wrong.resolve()}")
+        body = self.healthz()
+        self.assertFalse(body["modelLoaded"])
+        self.assertEqual(body["loadError"],
+                         "FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>")
+        self.assertNotIn(repo.name, json.dumps(body))
+        self.assertNotIn("wrong.pt", json.dumps(body))
 
     def test_a_loaded_model_has_no_load_error(self):
         self.load()
