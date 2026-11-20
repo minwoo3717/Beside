@@ -1,0 +1,17 @@
+# 장애 훈련 덮어쓰기: 부하 시험 덮어쓰기(docker-compose.loadtest.yml) 뒤에 셋째로 붙인다. backend 서비스만 바꾼다.
+# 시나리오와 결과는 docs/ops/2026-11-20_failure-drills.md, 주입 명령은 scripts/fault/vm_drill.sh 머리말.
+# VM 에서는 이 파일을 ~/fault 로 복사해서 쓴다(~/Beside 의 브랜치는 바꾸지 않는다):
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring \
+#     -f deploy/docker-compose.loadtest.yml -f ~/fault/docker-compose.drill.yml up -d backend
+#
+# 부하 덮어쓰기는 웹훅을 비우고(NOTIFY_WEBHOOKURL "") H2 백업을 끈다. 훈련에서는 둘 다 필요하다:
+#  - 웹훅: 어디에도 닿지 않는 주소(TEST-NET-1, RFC 5737)로 둔다. 알림이 팀 채널로 가지 않으면서도 backend 가 보내려고
+#    한 시각이 "webhook not sent" 로그로 남는다(FD9, 그리고 다른 시나리오의 알림 시각).
+#  - H2 백업: FD5(DB 유실 → 백업 복구)에서만 켠다. 2분마다(Spring 6필드 cron).
+services:
+  backend:
+    environment:
+      NOTIFY_WEBHOOKURL: ${DRILL_WEBHOOK_URL:-http://192.0.2.1/}
+      STORAGE_BACKUP_ENABLED: ${DRILL_BACKUP_ENABLED:-false}
+      STORAGE_BACKUP_CRON: ${DRILL_BACKUP_CRON:-0 */2 * * * *}
+      STORAGE_BACKUP_KEEP: ${DRILL_BACKUP_KEEP:-20}

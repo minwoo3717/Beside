@@ -1,0 +1,57 @@
+2026-11-20T03:07:50.178Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T03:08:11.113Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T03:11:26.178Z WINDOW start: notice sent
+2026-11-20T03:12:07.396Z up stub  healthz 200
+2026-11-20T03:12:57.039Z stub-drill up DELAY_MS=12000 SLOTS=1
+2026-11-20T03:13:37.146Z FD1 kill -9 backend java pid 550187 (restarts 0)
+2026-11-20T03:13:56.266Z FD1 healthz 200
+2026-11-20T03:13:56.612Z FD1 exit=0 restarts=1 started=2026-11-20T03:13:37.502648565Z
+2026-11-20T03:14:03.647Z FD2 SIGSTOP backend pid 550889 for 180s (SIGCONT armed)
+2026-11-20T03:14:03.750Z FD2 docker health=healthy state=running/1
+2026-11-20T03:15:44.984Z FD2 docker health=unhealthy state=running/1
+2026-11-20T03:17:24.039Z FD2 docker health=healthy state=running/1
+2026-11-20T03:17:24.088Z FD2 after SIGCONT healthz 200
+2026-11-20T03:17:33.209Z FD7 kill -9 caddy pid 314836 (restarts 0)
+2026-11-20T03:17:34.652Z FD7 healthz 200
+2026-11-20T03:17:34.749Z FD7 exit=0 restarts=1
+2026-11-20T03:17:43.474Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T03:17:43.480Z FD17 start: backend with a wrong token
+2026-11-20T03:18:02.880Z up badtoken  healthz 200
+2026-11-20T03:20:02.897Z FD17 end
+2026-11-20T03:20:16.402Z stub-drill up DELAY_MS=600000 SLOTS=1
+2026-11-20T03:20:16.410Z FD13 start: stub delay 600 s, backend timeout 60 s
+2026-11-20T03:20:36.957Z up stub LOADTEST_INFERENCE_TIMEOUT_MS=60000 healthz 200
+2026-11-20T03:25:07.077Z FD13 end
+2026-11-20T03:25:20.972Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T03:25:51.801Z up stub LOADTEST_INFERENCE_OFFLINE_WAIT_MS=180000 healthz 200
+2026-11-20T03:26:26.860Z FD12 docker pause beside-stub-drill for 260s (unpause armed)
+2026-11-20T03:31:56.924Z FD12 end
+2026-11-20T03:32:21.062Z FD5 reset volume
+2026-11-20T03:32:41.948Z up stub DRILL_BACKUP_ENABLED=true healthz 200
+2026-11-20T03:34:22.935Z FD5 backend stopped; deleting the load-test DB file
+2026-11-20T03:34:42.156Z up stub DRILL_BACKUP_ENABLED=true healthz 200
+2026-11-20T03:34:58.561Z FD5 restore beside-20261120-123400-002.zip start
+2026-11-20T03:34:59.602Z FD5 restore beside-20261120-123400-002.zip files in place
+2026-11-20T03:35:18.776Z up stub DRILL_BACKUP_ENABLED=true healthz 200
+2026-11-20T03:35:57.562Z up loop  healthz 200
+2026-11-20T03:35:57.932Z FD4 filler 244 MB, 15 MB left
+2026-11-20T03:40:05.347Z FD4 disk at 0 free
+2026-11-20T03:41:20.526Z FD4 space freed
+2026-11-20T03:42:04.131Z BLOCK1 end
+2026-11-20T03:42:22.705Z BLOCK2 start (fresh volume)
+2026-11-20T03:42:56.817Z up pod  healthz 200
+2026-11-20T03:44:17.263Z FD10 iptables FORWARD drop to 100.83.86.62 for 120s (removal armed)
+2026-11-20T03:48:22.643Z FD10 observe end
+2026-11-20T03:48:31.029Z FD11 netem tailscale0 delay 300ms loss 5% for 180s (removal armed)
+2026-11-20T03:53:31.080Z FD11 observe end
+2026-11-20T03:53:47.284Z FD14 uvicorn SIGSTOP 03:53:40.571 (Pod clock) for 120 s
+2026-11-20T03:57:47.296Z FD14 observe end
+2026-11-20T03:58:21.064Z FD18 service killed 03:57:58.559 (Pod), restarted with a missing checkpoint
+2026-11-20T04:02:49.289Z FD18 observe end
+2026-11-20T04:07:04.708Z FD15 observe end
+2026-11-20T04:07:14.105Z FD16b Runpod stop request (under load)
+2026-11-20T04:07:42.621Z FD16b start request
+2026-11-20T04:10:51.304Z FD16b observe
+2026-11-20T04:18:41.085Z FD16b after timeout
+2026-11-20T04:24:07.002Z BLOCK2 end; restore start
+2026-11-20T04:28:08.587Z WINDOW end: notice sent

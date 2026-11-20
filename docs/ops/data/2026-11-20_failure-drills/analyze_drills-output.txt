@@ -1,0 +1,16 @@
+| 시나리오 | 탐침 수 | 200 아님 | 가장 긴 연속 끊김(s) | 끊김 종류 | 그 사이 만든 작업 | 작업 결과 | 완료 작업 최대 totalMs(s) |
+|---|---|---|---|---|---|---|---|
+| FD1 backend kill -9 | 26 | 18 | 17.8 | 502×18 | 1 | POST 502×1 | 0.0 |
+| FD2 backend SIGSTOP 180 s | 49 | 36 | 189.0 | 0 TimeoutError×36 | 3 | POST 0×2, COMPLETED×1 | 12.2 |
+| FD7 caddy kill -9 | 10 | 2 | 2.0 | 0 RemoteDisconnected×1, 0 URLError×1 | 1 | POST 0×1 | 0.0 |
+| FD17 wrong inference token | 121 | 0 | 0.0 | - | 8 | FAILED INFERENCE_UNAVAILABLE×8 | 0.0 |
+| FD13 inference stuck, healthz UP | 271 | 0 | 0.0 | - | 17 | FAILED INTERNAL_ERROR×11, FAILED INFERENCE_TIMEOUT×4, FAILED INFERENCE_UNAVAILABLE×1, COMPLETED×1 | 202.5 |
+| FD12 inference paused, offline wait 180 s | 329 | 0 | 0.0 | - | 20 | COMPLETED×14, FAILED INFERENCE_UNAVAILABLE×6 | 179.0 |
+| FD5 DB file deleted -> restore | 56 | 40 | 20.0 | 502×40 | 3 | POST 502×2, UNFINISHED×1 | 0.0 |
+| FD4 disk full | 342 | 0 | 0.0 | - | 21 | COMPLETED×9, FAILED CONVERSION_FAILED×7, POST 500 INTERNAL_ERROR×5 | 4.3 |
+| FD10 tailnet block 120 s | 245 | 0 | 0.0 | - | 11 | COMPLETED×11 | 122.2 |
+| FD11 netem 300 ms / 5 % 180 s | 300 | 0 | 0.0 | - | 14 | COMPLETED×14 | 111.6 |
+| FD14 uvicorn SIGSTOP 120 s | 247 | 0 | 0.0 | - | 12 | COMPLETED×12 | 122.7 |
+| FD18 model load failure | 291 | 0 | 0.0 | - | 14 | COMPLETED×14 | 246.9 |
+| FD15 GPU memory exhausted | 228 | 0 | 0.0 | - | 11 | COMPLETED×6, FAILED INFERENCE_FAILED×5 | 51.7 |
+| FD16b Pod stop under load | 1006 | 0 | 0.0 | - | 47 | COMPLETED×46, FAILED CONVERSION_FAILED×1 | 602.2 |

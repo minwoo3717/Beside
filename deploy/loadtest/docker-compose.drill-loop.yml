@@ -1,0 +1,8 @@
+# 장애 훈련 FD4(디스크 가득 참) 전용 넷째 덮어쓰기. 시험 저장소를 300 MB 루프 장치(/mnt/lt-full)로 바꾼다.
+# compose 는 서비스 volumes 를 컨테이너 경로로 합치므로 이 bind 가 beside-loadtest-storage:/app/storage 를 대신한다.
+# 루프 장치는 scripts/fault/vm_drill.sh loop-setup 이 만든다(ext4, 예약 블록 0, uid 10001 소유 — backend 는 uid 10001).
+# 시작 전에 vm_drill.sh 가 컨테이너 안 /app/storage 가 1 GB 미만인지 확인하고, 아니면 멈춘다(운영 볼륨 보호).
+services:
+  backend:
+    volumes:
+      - /mnt/lt-full:/app/storage
