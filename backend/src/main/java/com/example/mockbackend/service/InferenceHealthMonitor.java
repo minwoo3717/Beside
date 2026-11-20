@@ -41,6 +41,11 @@ import java.time.Instant;
  * as before; {@link Alert#MODEL_LOAD_FAILED} is published once when the field turns to a text and once when it turns
  * back to null (the service was restarted). Missing, or neither text nor null, is unknown.
  * API v1 does not expose it yet; a healthz field is a contract addition for the meeting (REVIEW_CHECKLIST #11).
+ * <p>
+ * A fourth, {@code instanceId} (failure drill FD16b), is random per service process. RealJobWorker gives up on a
+ * request still in flight to an earlier instance once a reading shows another one: a stopped and restarted Pod never
+ * answers it, and it used to hold the only inference slot until inference.timeout-ms. A new instance between two
+ * readings of the same state is only logged; the state, {@link Status#ready()} and the alerts do not change.
  */
 @Component
 @Profile("real")
@@ -50,6 +55,8 @@ public class InferenceHealthMonitor {
     static final long DEFAULT_STUCK_ALERT_MS = 120_000;
     /** Characters of the service's loadError kept (the service sends at most 200). */
     static final int MAX_LOAD_ERROR = 200;
+    /** Characters of instanceId kept (the service sends 12). */
+    static final int MAX_INSTANCE_ID = 64;
 
     public enum State { UNKNOWN, UP, LOADING, DOWN }
 
@@ -58,10 +65,11 @@ public class InferenceHealthMonitor {
      * {@code tokenOk} and {@code busyForMs} are what /healthz said, null when it said nothing usable (no answer, an
      * older service, or no token sent); they are not part of {@link #ready()}. So is {@code loadFailed}: true when
      * /healthz named a model load error, false when it said loadError null, null when it said nothing usable; then
-     * {@code loadError} is the service's text on one line (null unless loadFailed).
+     * {@code loadError} is the service's text on one line (null unless loadFailed). {@code instanceId} is the
+     * service process that answered (null when nothing answered or an older service sent none).
      */
     public record Status(State state, String device, Instant checkedAt, Instant since, String detail,
-                         Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError) {
+                         Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError, String instanceId) {
         public Status(State state, String device, Instant checkedAt, Instant since, String detail) {
             this(state, device, checkedAt, since, detail, null, null);
         }
@@ -69,6 +77,11 @@ public class InferenceHealthMonitor {
         public Status(State state, String device, Instant checkedAt, Instant since, String detail,
                       Boolean tokenOk, Long busyForMs) {
             this(state, device, checkedAt, since, detail, tokenOk, busyForMs, null, null);
+        }
+
+        public Status(State state, String device, Instant checkedAt, Instant since, String detail,
+                      Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError) {
+            this(state, device, checkedAt, since, detail, tokenOk, busyForMs, loadFailed, loadError, null);
         }
 
         public boolean ready() {
@@ -144,7 +157,13 @@ public class InferenceHealthMonitor {
         Status reading = check();
         if (reading.state() == previous.state()) {
             status = new Status(reading.state(), reading.device(), reading.checkedAt(), previous.since(), reading.detail(),
-                    reading.tokenOk(), reading.busyForMs(), reading.loadFailed(), reading.loadError());
+                    reading.tokenOk(), reading.busyForMs(), reading.loadFailed(), reading.loadError(), reading.instanceId());
+            if (reading.instanceId() != null && previous.instanceId() != null
+                    && !reading.instanceId().equals(previous.instanceId())) {
+                // Restarted between two readings (R7's supervisor brings a killed service back within seconds).
+                log.info("inference service restarted between two checks (instance {} -> {}), still {}",
+                        previous.instanceId(), reading.instanceId(), reading.state());
+            }
         } else {
             status = reading;
             log.info("inference service {} -> {} ({})", previous.state(), reading.state(), reading.detail());
@@ -216,11 +235,13 @@ public class InferenceHealthMonitor {
             JsonNode loadError = body.path("loadError");
             String error = loadError.isTextual() ? oneLine(loadError.asText()) : null;
             Boolean loadFailed = loadError.isNull() ? Boolean.FALSE : error != null ? Boolean.TRUE : null;
+            JsonNode instance = body.path("instanceId");
+            String instanceId = instance.isTextual() ? oneLine(instance.asText(), MAX_INSTANCE_ID) : null;
             return new Status(ready ? State.UP : State.LOADING, device, now, now, ready ? "ok" : "no model loaded",
                     !token.isEmpty() && tokenOk.isBoolean() ? Boolean.valueOf(tokenOk.booleanValue()) : null,
                     busy.isIntegralNumber() && busy.canConvertToLong() && busy.longValue() >= 0
                             ? Long.valueOf(busy.longValue()) : null,
-                    loadFailed, error);
+                    loadFailed, error, instanceId);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Status(State.DOWN, null, now, now, "check interrupted");
@@ -231,11 +252,16 @@ public class InferenceHealthMonitor {
 
     /** The service's text as one line (it reaches the log): control characters and runs of spaces become one space. */
     private static String oneLine(String text) {
+        return oneLine(text, MAX_LOAD_ERROR);
+    }
+
+    /** As above, cut to {@code max} code points; blank is null. */
+    private static String oneLine(String text, int max) {
         String line = text.replaceAll("[\\p{Cntrl}\\s]+", " ").strip();
         if (line.isEmpty()) {
             return null;
         }
-        return line.codePointCount(0, line.length()) <= MAX_LOAD_ERROR ? line
-                : line.substring(0, line.offsetByCodePoints(0, MAX_LOAD_ERROR)).strip();
+        return line.codePointCount(0, line.length()) <= max ? line
+                : line.substring(0, line.offsetByCodePoints(0, max)).strip();
     }
 }
