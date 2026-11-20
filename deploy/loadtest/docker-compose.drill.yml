@@ -1,5 +1,6 @@
 # 장애 훈련 덮어쓰기: 부하 시험 덮어쓰기(docker-compose.loadtest.yml) 뒤에 셋째로 붙인다. backend 서비스만 바꾼다.
-# 절차와 시나리오는 scripts/fault/README.md. VM 에서는 이 파일을 ~/fault 로 복사해서 쓴다(~/Beside 의 브랜치는 바꾸지 않는다):
+# 시나리오와 결과는 docs/ops/2026-11-20_failure-drills.md, 주입 명령은 scripts/fault/vm_drill.sh 머리말.
+# VM 에서는 이 파일을 ~/fault 로 복사해서 쓴다(~/Beside 의 브랜치는 바꾸지 않는다):
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring \
 #     -f deploy/docker-compose.loadtest.yml -f ~/fault/docker-compose.drill.yml up -d backend
 #
