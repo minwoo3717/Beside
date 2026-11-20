@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Test of deploy/runpod/supervise_inference.sh and of start_pod.sh running the service under it, without a Pod:
-# a fake service (python3; answers GET /healthz when given --port), fake tailscale/tailscaled and a fake venv python,
-# all under a temp dir. Nothing goes to the network except 127.0.0.1. Short delays (RESTART_DELAY_S=1,
+# a fake service (python3; answers GET /healthz when given --port), fake tailscale/tailscaled, a fake venv python
+# (MODE=passthrough) and a fake conda env (MODE=model: the real scripts/start_inference_wsl.sh activates it and execs
+# its python), all under a temp dir. Nothing goes to the network except 127.0.0.1. Short delays (RESTART_DELAY_S=1,
 # RESTART_MAX_DELAY_S=4, RESTART_STABLE_S=3) keep it at about a minute. Needs Linux bash, python3, curl, flock
 # (WSL works: tr -d '\r' < deploy/runpod/test_start_pod_supervisor.sh | wsl.exe bash -s -- <repo path in WSL>).
 #   bash deploy/runpod/test_start_pod_supervisor.sh [repo]
@@ -14,8 +15,13 @@ unset THREADS UVICORN_TIMEOUT_KEEP_ALIVE MODE PORT WORKSPACE RUN_DIR LOG_DIR NOR
   RESTART_DELAY_S RESTART_MAX_DELAY_S RESTART_STABLE_S RUNPOD_POD_ID ALLOW_NO_GPU SAMPLE_GLB TOKEN_FILE
 
 cleanup() {
-  # every process this test started has $T in its command line; supervisors first, so none starts a service after
+  # every process this test started has $T in its command line, except the model-mode supervisor (section C: its
+  # arguments are repo paths), whose environment has RUN_DIR under $T. Supervisors first, so none starts a service after.
   pkill -9 -f -- "supervise_inference\.sh .*$T/" 2>/dev/null
+  local p
+  for p in $(pgrep -f -- "supervise_inference\.sh" 2>/dev/null); do
+    tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -q "^RUN_DIR=$T/" && kill -9 "$p" 2>/dev/null
+  done
   sleep 0.2
   pkill -9 -f -- "$T/" 2>/dev/null
   rm -rf "$T"
@@ -359,6 +365,77 @@ run_pod
 check "unsupervised service: still reported as running" has "$B/out" "[4/4] inference service already running (passthrough, pid $p6"
 check "unsupervised service: NOTE that nothing restarts it" has "$B/out" "NOTE: no supervisor watches it"
 kill -9 "$p6"
+
+echo "== C. start_pod.sh MODE=model under the supervisor (real start_inference_wsl.sh, fake conda env)"
+# What the Pod runs: start_pod.sh -> supervisor -> bash scripts/start_inference_wsl.sh, which sources conda.sh,
+# activates the env and execs "python -m uvicorn ...". The fakes keep that shape: conda.sh defines conda() (records
+# its arguments; "activate ENV" puts that env's bin first on PATH, as conda does) and the env's python runs the fake
+# service. Paths are start_pod.sh's defaults (CONDA_HOME, CONDA_ENV, ANIMALLIFT_DIR, WORK_DIR); no GPU, so ALLOW_NO_GPU=1.
+down() { ! healthy; }
+ppid_of() { sed -n 's/^PPid:[[:space:]]*//p' "/proc/$1/status" 2>/dev/null; }
+wait_for 3 down || true
+CONDA="$WS/miniconda3"
+ENV_BIN="$CONDA/envs/animallift/bin"
+mkdir -p "$CONDA/etc/profile.d" "$ENV_BIN" "$WS/AnimalLift"
+cat > "$CONDA/etc/profile.d/conda.sh" <<SH
+conda() {
+  printf '%s\n' "\$*" >> "$B/conda-calls"
+  if [[ "\${1:-}" == activate ]]; then export PATH="$CONDA/envs/\$2/bin:\$PATH"; fi
+}
+SH
+printf '%s\n' '#!/usr/bin/env bash' \
+  "if [[ \"\${1:-} \${2:-}\" == \"-m uvicorn\" ]]; then exec python3 \"$FAKE\" \"\$@\"; fi" \
+  'exec python3 "$@"' > "$ENV_BIN/python"
+chmod +x "$ENV_BIN/python"
+WSL_LINE="AnimalLift: $WS/AnimalLift | work: $WS/beside-work | listen: 127.0.0.1:$PORT"   # start_inference_wsl.sh prints it
+MODEL_ENV=("BESIDE_ANIMALLIFT_DIR=$WS/AnimalLift" "BESIDE_WORK_DIR=$WS/beside-work" "CONDA_HOME=$CONDA" "PORT=$PORT"
+           BESIDE_HOST=127.0.0.1 UVICORN_TIMEOUT_KEEP_ALIVE=75 OMP_NUM_THREADS=8 BESIDE_INFERENCE_TOKEN=test-token-not-a-secret)
+
+run_pod MODE=model ALLOW_NO_GPU=1
+check "model: exit 0" test "$rc" = 0 || show
+m1="$(bpid)"
+msup="$(bsup)"
+check "model: [4/4] line with mode, port and the service's settings" \
+  has "$B/out" "[4/4] inference service up (model, 127.0.0.1:$PORT, X-Inference-Token required, keep-alive 75 s, threads 8)"
+check "model: names the supervisor and how to stop on purpose" \
+  has "$B/out" "supervisor pid $msup restarts it when it exits ($WS/beside-logs/supervisor.log); stop on purpose: touch $FLAG && kill $m1"
+check "model: the supervisor runs start_inference_wsl.sh" \
+  has "$blog" "start: service pid $m1, supervisor pid $msup: bash $REPO/scripts/start_inference_wsl.sh"
+check "model: pid file is the uvicorn process (start_inference_wsl.sh execs it)" is_service "$m1"
+check "model: that process is the supervisor's own child (no shell in between)" test "$(ppid_of "$m1")" = "$msup"
+check "model: healthz answers" healthy
+check "model: start_inference_wsl.sh activated the conda env" test "$(cat "$B/conda-calls" 2>/dev/null)" = "activate animallift"
+check "model: inference.log has start_inference_wsl.sh's settings line" has "$WS/beside-logs/inference.log" "$WSL_LINE"
+for kv in "${MODEL_ENV[@]}"; do check "model: service environment $kv" env_of "$m1" "$kv"; done
+check "model: working directory generation/inference_service" \
+  test "$(readlink "/proc/$m1/cwd")" = "$(cd "$REPO/generation/inference_service" && pwd -P)"
+
+kill -9 "$m1"
+wait_for 6 new_bpid "$m1" || true
+m2="$(bpid)"
+check "model kill -9: back with a new pid and healthz" new_bpid "$m1"
+check "model kill -9: new pid is the uvicorn process" is_service "$m2"
+check "model kill -9: again the same supervisor's own child" test "$(ppid_of "$m2"):$(bsup)" = "$msup:$msup"
+for kv in "${MODEL_ENV[@]}"; do check "model kill -9: same $kv" env_of "$m2" "$kv"; done
+check "model kill -9: start_inference_wsl.sh ran again (conda activated twice)" \
+  test "$(grep -c '^activate animallift$' "$B/conda-calls")" = 2
+check "model kill -9: start_inference_wsl.sh's settings line again, the same" \
+  test "$(grep -cF -- "$WSL_LINE" "$WS/beside-logs/inference.log")" = 2
+check "model kill -9: supervisor.log has the exit" has "$blog" "service pid $m1 exited (status 137, signal 9)"
+run_pod MODE=model ALLOW_NO_GPU=1
+check "model after the restart: start_pod.sh reports the new pid, same settings" \
+  has "$B/out" "[4/4] inference service already running (model, pid $m2, keep-alive 75 s, threads 8, stop: touch $FLAG && kill $m2)"
+
+# stop on purpose as documented (flag, then kill the pid file's process): it stays down
+touch "$FLAG"
+starts="$(lines "$B/starts")"
+kill "$m2"
+wait_for 5 dead "$msup" || true
+check "model stop on purpose: the supervisor ended" dead "$msup"
+check "model stop on purpose: logged, not restarting" has "$blog" "service pid $m2 exited (status 0) after"
+sleep 1.5
+stays_down() { test "$(lines "$B/starts")" = "$1" && down; }
+check "model stop on purpose: nothing started, healthz down" stays_down "$starts"
 
 echo
 echo "$checks checks, $fails failed"
