@@ -480,7 +480,98 @@ class HealthzTokenTest(unittest.TestCase):
         compare.assert_called_once_with(b"secrex", b"secret")
 
 
-GLB_STUB = b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class HealthzLoadErrorTest(unittest.TestCase):
+    """loadError (failure drill FD18, 2026-11-20): with a wrong BESIDE_ANIMALLIFT_CKPT the load raised
+    FileNotFoundError and /healthz said only modelLoaded=false, the same as a model still loading, so Spring showed
+    LOADING and jobs waited out inference.offline-wait-ms. /healthz now also names the failure: the exception type and
+    a short one-line message without file paths or the token (it is open). status, modelLoaded and the 503 of /infer
+    stay as they were."""
+
+    CKPT = "/workspace/AnimalLift/ckpt/wrong.pt"
+
+    def setUp(self):
+        self.raise_on_load = None
+        test = self
+
+        class Runner:   # the runner interface's constructor; predict is never reached here
+            device, version, model_params = "cpu", "fake@load-test", 1
+
+            def __init__(self, model_dir, **kwargs):
+                if test.raise_on_load is not None:
+                    raise test.raise_on_load
+
+        module = types.ModuleType("beside_fake_runner")
+        module.Runner = Runner
+        patches = [mock.patch.dict(sys.modules, {"beside_fake_runner": module}),
+                   mock.patch.object(service, "RUNNER_SPEC", "beside_fake_runner:Runner"),
+                   mock.patch.object(service, "SAMPLE_GLB", None), mock.patch.object(service, "ANIMALLIFT_DIR", "model"),
+                   mock.patch.object(service, "MODEL", None), mock.patch.object(service, "MODEL_ERROR", None),
+                   mock.patch.object(service, "MODEL_LOAD_ERROR", None)]
+        for patcher in patches:
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.client = TestClient(service.app)
+
+    def load(self, error=None):
+        """What the startup thread runs, here in the test's thread; error is what the runner raises."""
+        self.raise_on_load = error
+        if error is None:
+            service._load_model()
+        else:
+            with self.assertLogs(service.log, "ERROR") as logged:   # the full text stays in the service log
+                service._load_model()
+            self.assertIn("model failed to load", logged.output[0])
+
+    def healthz(self):
+        answer = self.client.get("/healthz")
+        self.assertEqual(answer.status_code, 200)
+        self.assertEqual(answer.json()["status"], "ok")
+        return answer.json()
+
+    def test_while_loading_there_is_no_load_error(self):
+        body = self.healthz()
+        self.assertEqual((body["modelLoaded"], body["loadError"]), (False, None))
+
+    def test_a_failed_load_names_the_error_without_its_path(self):
+        self.load(FileNotFoundError(errno.ENOENT, "No such file or directory", self.CKPT))
+        body = self.healthz()
+        self.assertFalse(body["modelLoaded"])
+        self.assertEqual(body["loadError"], "FileNotFoundError: [Errno 2] No such file or directory: '<path>'")
+        self.assertNotIn("workspace", json.dumps(body))
+        self.assertNotIn("wrong.pt", json.dumps(body))
+        # Jobs are refused as before (Spring maps it to INFERENCE_UNAVAILABLE); its message is not part of this change.
+        job = "t-" + uuid.uuid4().hex[:12]
+        self.addCleanup(shutil.rmtree, service.WORK_DIR / job, True)
+        refused = self.client.post("/infer/upload", data={"request": json.dumps({"jobId": job})},
+                                   files=[("photos", ("dog.jpg", b"\xff\xd8\xff\xe0 jpeg", "image/jpeg"))])
+        self.assertEqual(refused.status_code, 503, refused.text)
+        self.assertEqual(refused.json()["detail"]["code"], "INFERENCE_UNAVAILABLE")
+        self.assertIn("failed to load", refused.json()["detail"]["message"])
+
+    def test_a_loaded_model_has_no_load_error(self):
+        self.load()
+        body = self.healthz()
+        self.assertEqual((body["modelLoaded"], body["loadError"]), (True, None))
+
+    def test_windows_and_relative_paths_and_the_token_are_left_out(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "s3cret-token-value"):
+            self.load(RuntimeError("cannot open C:\\beside\\AnimalLift\\ckpt\\x.pt or ckpt/latest.pt "
+                                   "(token s3cret-token-value)"))
+            body = self.healthz()
+        self.assertEqual(body["loadError"], "RuntimeError: cannot open <path> or <path> (token <token>)")
+
+    def test_the_message_is_one_short_line_and_an_empty_one_leaves_the_type(self):
+        self.load(ValueError("line one\n\tline two " + "x" * 1000))
+        error = self.healthz()["loadError"]
+        self.assertTrue(error.startswith("ValueError: line one line two x"), error)
+        self.assertLessEqual(len(error), service.LOAD_ERROR_MAX)
+        self.assertNotIn("\n", error)
+        self.load(MemoryError())
+        self.assertEqual(self.healthz()["loadError"], "MemoryError")
+
+
+GLB_STUB =b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
 TETRA_OBJ = """v 0 0 0
 v 1 0 0
 v 0 1 0

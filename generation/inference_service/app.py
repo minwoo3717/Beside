@@ -13,6 +13,7 @@ Model mode (set BESIDE_ANIMALLIFT_DIR, run in the AnimalLift Python env):
             BESIDE_MODEL_DIR (alias of BESIDE_ANIMALLIFT_DIR), BESIDE_MODEL_NAME (modelVersion label, default animallift-baseline),
             BESIDE_RUNNER (module:Class, default animallift_runner:AnimalLiftRunner), BESIDE_FORWARD_AXIS (+x for SMAL/AnimalLift)
   The model loads in the background at startup; /healthz modelLoaded turns true when ready, /infer answers 503 until then.
+  A load that fails is not retried: /healthz loadError names it until the service is restarted.
 
 Run (GPU PC; Spring runs on the same host, so 127.0.0.1 is enough — scripts/run_real.ps1 does this):
     pip install -r requirements.txt
@@ -30,7 +31,8 @@ Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
   BESIDE_INFERENCE_TOKEN=<secret>: /infer, /infer/upload and /artifacts/* then need the X-Inference-Token header
          (401 otherwise); /healthz stays open. Set it whenever the service listens beyond 127.0.0.1.
   GET /healthz also answers tokenOk (only when X-Inference-Token is sent: would /infer take it) and busyForMs (age
-         of the oldest predict / simulated generation still running, 0 when idle) for Spring's monitor alerts.
+         of the oldest predict / simulated generation still running, 0 when idle) for Spring's monitor alerts, and
+         loadError (why the model failed to load, one short line without paths; null while loading or loaded).
   DELETE /artifacts/{jobId} also cancels a run of that job still on this machine (Spring gave up on it): the run
          stops at its next step and removes whatever it wrote after the DELETE (README 'DELETE /artifacts/{jobId}').
   BESIDE_WORK_SWEEP_MINUTES=<N> (default unset = off): at startup and every min(N, 10) minutes, remove
@@ -96,8 +98,13 @@ JOB_ID = re.compile(r"^[A-Za-z0-9-]{1,64}$")   # both modes: jobId names a folde
 ARTIFACTS = frozenset({"base.glb"})             # files GET /artifacts/{jobId}/{name} may serve
 MAX_PHOTOS = 10
 MODEL = None             # AnimalLiftRunner, loaded once in the background at startup
-MODEL_ERROR: Optional[str] = None
-MODEL_LOCK = threading.Lock()  # one GPU job at a time (Spring also limits to inference.max-concurrency=1)
+MODEL_ERROR: Optional[str] = None       # a failed load, in full: /infer's 503 message (behind the token) and the log
+MODEL_LOAD_ERROR: Optional[str] = None  # the same, short and without paths or the token: the open /healthz loadError
+LOAD_ERROR_MAX = 200                    # characters of loadError
+# Anything with a slash or backslash (POSIX, Windows, relative paths) up to a space or quote: where files are stays in
+# the log, /healthz (open) says only what went wrong.
+_PATHISH = re.compile(r"""(?:[A-Za-z]:|[\w.~-]+)?[\\/][^\s'"]*""")
+MODEL_LOCK =threading.Lock()  # one GPU job at a time (Spring also limits to inference.max-concurrency=1)
 
 log = logging.getLogger("beside.inference")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools"))   # convert_asset.py
@@ -219,8 +226,21 @@ if REQUEST_TIMING:
     app.add_middleware(_RequestTiming)   # added after _check_token, so it wraps it
 
 
+def _short_load_error(e: BaseException) -> str:
+    """/healthz loadError: '<ExceptionType>: <message>' on one line of at most LOAD_ERROR_MAX characters, every path
+    replaced by <path> and the token by <token> (failure drill FD18: a wrong BESIDE_ANIMALLIFT_CKPT)."""
+    try:
+        message = str(e)
+    except Exception:  # noqa: BLE001  a broken __str__ still leaves the type
+        message = ""
+    if INFERENCE_TOKEN:
+        message = message.replace(INFERENCE_TOKEN, "<token>")
+    message = " ".join(_PATHISH.sub("<path>", message).split())
+    return (f"{type(e).__name__}: {message}" if message else type(e).__name__)[:LOAD_ERROR_MAX]
+
+
 def _load_model() -> None:
-    global MODEL, MODEL_ERROR
+    global MODEL, MODEL_ERROR, MODEL_LOAD_ERROR
     try:
         import importlib
 
@@ -240,6 +260,7 @@ def _load_model() -> None:
         log.warning("model loaded in %.1fs on %s (%s via %s)", time.perf_counter() - started, MODEL.device, MODEL.version, RUNNER_SPEC)
     except Exception as e:  # noqa: BLE001  keep serving /healthz so the problem is visible
         MODEL_ERROR = f"{type(e).__name__}: {e}"
+        MODEL_LOAD_ERROR = _short_load_error(e)
         log.exception("model failed to load (%s)", RUNNER_SPEC)
 
 
@@ -319,6 +340,13 @@ class HealthResponse(BaseModel):
         default=0,
         description="ms since the oldest model predict or passthrough simulated generation still running began; "
         "0 when none runs. Waiting for MODEL_LOCK or a passthrough slot does not count.",
+    )
+    # Addition of 2026-11-20 (failure drill FD18): tells a failed model load from one still loading.
+    loadError: Optional[str] = Field(
+        default=None,
+        description="Why the model failed to load: exception type and a short one-line message, paths and the token "
+        "left out (the full text is in the service log). null while it loads, once it is loaded, in passthrough and "
+        "with no model configured. modelLoaded stays false and status ok, as before; the service does not retry.",
     )
 
 
@@ -794,10 +822,11 @@ def healthz(request: Request) -> HealthResponse:
     return HealthResponse(
         status="ok",
         device=_device(),
-        modelLoaded=MODEL is not None,  # false while loading or after a load error (see the service log)
+        modelLoaded=MODEL is not None,  # false while loading or after a load error (loadError, and the service log)
         passthrough=bool(SAMPLE_GLB),
         tokenOk=None if given is None else _token_matches(given),
         busyForMs=_busy_for_ms(),
+        loadError=None if MODEL is not None else MODEL_LOAD_ERROR,
     )
 
 
