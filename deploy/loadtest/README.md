@@ -257,7 +257,7 @@ RID=g3cap19; OUT=~/lt-$TS/$RID && mkdir -p "$OUT"
 LOADTEST_ADMISSION_MAX_PENDING=19 LOADTEST_ADMISSION_RETRY_AFTER_SECONDS=165 \
 LOADTEST_PROFILES=real,prod LOADTEST_INFERENCE_BASE_URL=http://100.83.86.62:8002 \
 LOADTEST_PREPROCESS_CHECK_ENABLED=true LOADTEST_PREPROCESS_CUTOUT_ENABLED=true $L up -d backend
-$L logs --no-color backend | grep "Queue admission" | tail -1     # Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=...
+$L logs --no-color backend | grep -E "Queue admission: (on|off)" | tail -1     # Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=...
 # k6 시작 직전: 거절 카운터의 시작 값(op 별). 끝 값은 5번의 refused-end.txt
 $L exec -T backend curl -fsS http://localhost:8081/actuator/prometheus | grep '^beside_jobs_refused_total' > "$OUT/refused-start.txt"
 # k6 Pod: 서버와 같은 N·R 을 준다(요약 meta.queueCap·meta.queueRetryAfterS, 거절마다 Retry-After check)
@@ -474,8 +474,10 @@ docker stats --no-stream --format '{{json .}}' > "$OUT/docker-stats-end.jsonl"
 df -h / > "$OUT/df.txt"
 git -C ~/Beside rev-parse HEAD > "$OUT/commit.txt"
 # 큐 상한(안건 #21): 이 backend 가 시작할 때 남긴 한 줄(off, 또는 on 과 max-pending·retry-after-seconds)과 거절 카운터의 끝 값.
-# 상한 코드가 없는 이미지는 둘 다 빈 파일이다(상한 0 과 같다). k6 의 -e QUEUE_CAP 은 이 값과 같아야 한다
-$L logs --no-color backend | grep "Queue admission" | tail -1 > "$OUT/admission.txt"
+# 상한 코드가 없는 이미지는 둘 다 빈 파일이다(상한 0 과 같다). k6 의 -e QUEUE_CAP 은 이 값과 같아야 한다.
+# 시작 줄(on/off)만 고른다: 실행 중에도 같은 머리말 "Queue admission:" 로 같은 Idempotency-Key 의 겹친 생성(INFO)과
+# 오래된 PENDING(WARN) 줄이 찍히므로, 머리말만으로 tail -1 을 하면 그 줄이 상한 기록을 대신한다
+$L logs --no-color backend | grep -E "Queue admission: (on|off)" | tail -1 > "$OUT/admission.txt"
 $L exec -T backend curl -fsS http://localhost:8081/actuator/prometheus | grep '^beside_jobs_refused_total' > "$OUT/refused-end.txt"
 sha256sum /tmp/lt-sample-1500000.glb > "$OUT/glb.sha256"        # A 시리즈(mock 이 내주는 GLB). G·F 는 아래 stub-glb.sha256
 # 대상 상태(Prometheus 는 VM 루프백에만 있으므로 VM 안에서 읽는다)
