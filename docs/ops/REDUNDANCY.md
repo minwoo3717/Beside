@@ -43,7 +43,7 @@
 | active-active(VM 2대 + LB + Cloud SQL + GCS) | 거의 전부 | 초 / 약 0 | 약 $160~290. VM 2대 약 $125, 외부 LB 약 $18.25(us-central1, computingforgeeks 2026-04), Cloud SQL $10~128(bytebase·usage.ai, 2026-11) | **하지 않음**: DB·파일·큐를 다시 짜야 한다 |
 | DuckDNS 스크립트 전환 | IP 바뀜 | TTL + 단말 캐시 | $0 | 절차만. 고정 IP 라 드묾 |
 | Cloudflare 프록시·LB | 원점 전환 | 약 1~2분 | LB $5~(cloudflare.com/plans) + 자체 도메인 | 하지 않음: DuckDNS 하위 도메인은 못 올림 |
-| GPU: Pod 안 서비스 자동 재시작 | 서비스 프로세스 죽음 | 모델 로드 약 42~73 s. `kill -9` → UP 41 s [실험 결과 2차] | $0 | **적용**(R7, main 의 `start_pod.sh` 로 Pod 를 켤 때마다) |
+| GPU: Pod 안 서비스 자동 재시작 | 서비스 프로세스 죽음 | 모델 로드 약 31~73 s(지난 기록). `kill -9` → UP 41 s(5 s 대기 포함, Pod·VM 시계 섞음) [실험 결과 2차] | $0 | **적용**(R7, main 의 `start_pod.sh` 로 Pod 를 켤 때마다) |
 | GPU: 새 Pod 복구 절차 | Pod 정지·재시작 실패 | 98 s [실험 결과 FD16a] | 쓰는 만큼 | **적용**(런북) |
 | GPU: 두 번째 Pod 상시 | Pod 장애 | 초 | A40 $0.59/h → 월 약 $431(runpod.io/pricing, 2026-11-20) | 시연 시간에만 고려 |
 | GPU: 다른 데이터센터 대기 볼륨 | 데이터센터 재고 없음 | Pod 만들기 + 모델 로드 | 볼륨 $0.07/GB·월 | [계획]. 아래 3절 |

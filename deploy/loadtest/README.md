@@ -189,7 +189,7 @@ sleep 90
 MODE=model bash /workspace/Beside/deploy/runpod/start_pod.sh    # 표시 파일을 지우고 감독 아래에서 다시 띄운다
 ```
 
-- 표시 파일 없이 `kill -9` 하면 감독 루프의 자동 복구를 잰다(5 s 뒤 같은 설정으로 다시 뜨고 모델을 다시 불러온다. 다시 뜬 시각은 Pod 의 `/workspace/beside-logs/supervisor.log`). 이 변형은 아직 돌리지 않았다 **[계획]**. 실행 이름과 기록에 어느 쪽인지 적는다.
+- 표시 파일 없이 `kill -9` 하면 감독 루프의 자동 복구를 잰다(5 s 뒤 같은 설정으로 다시 뜨고 모델을 다시 불러온다. 다시 뜬 시각은 Pod 의 `/workspace/beside-logs/supervisor.log`). 이 변형은 아직 돌리지 않았다 **[계획]**. 부하 없이 한 번은 2026-11-20 장애 훈련 2차 확인에서 쟀다(kill → UP 41 s, [docs/ops/2026-11-20_failure-drills.md](../../docs/ops/2026-11-20_failure-drills.md) '2차 확인'). 실행 이름과 기록에 어느 쪽인지 적는다.
 
 **F1a**: 같은 Pod 를 패스스루로 바꿔 돈다(표시 파일 + `kill` → 합성 1.5 MB GLB → `MODE=passthrough BESIDE_SAMPLE_GLB=… BESIDE_PASSTHROUGH_DELAY_MS=<G0 의 추론+변환 중앙값, 2차는 4,008 + 884 ≈ 4900, 3차는 3,768 + 878 ≈ 4600> BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_FAIL_RATE=0.2`). 이 실행만 `stub-glb.sha256` 를 첨부한다.
 
