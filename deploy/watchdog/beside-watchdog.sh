@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # VM watchdog for the backend (R4). Runs on the VM host as root every 30 s (beside-watchdog.timer).
 #   - Health: Actuator /actuator/health on the management port 8081, asked inside the backend container (compose does
-#     not publish 8081). It includes the database. 3 failures in a row while the container runs -> `docker restart` of
-#     the backend + a Discord message. Docker's own healthcheck only marks the container unhealthy and never restarts
-#     it, so a frozen backend (FD2) stayed down until someone looked. At most one restart per 10 min; a container that
-#     started less than 90 s ago is not judged (booting); a stopped or restarting container is left to Docker and the
-#     operator (compose stop for a backup must not be undone here).
+#     not publish 8081). It checks the database; prod leaves out Spring's disk-space check (application-prod.properties)
+#     because a restart frees no disk (the disk warning below covers that). 3 failures in a row while the container
+#     runs -> `docker restart` of the backend + a Discord message. Docker's own healthcheck only marks the container
+#     unhealthy and never restarts it, so a frozen backend (FD2) stayed down until someone looked. At most one restart
+#     per 10 min; a container that started less than 90 s ago is not judged (booting); a stopped or restarting
+#     container is left to Docker and the operator (compose stop for a backup must not be undone here).
 #   - Maintenance: while /etc/beside-maintenance or ~beside/fault/MAINTENANCE exists, no restarts (load tests, drills).
 #     A reminder goes out when such a flag is older than 12 h.
 #   - Disk: / at 80 % or more -> one Discord warning per hour.
