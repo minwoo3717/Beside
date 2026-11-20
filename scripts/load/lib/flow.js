@@ -31,8 +31,28 @@ export function makeContext(opts) {
   };
 }
 
+// The Retry-After of a 503 QUEUE_FULL ([계획] queue cap, agenda #21): the draft contract sends whole seconds >= 1
+// (openapi minimum 1), so an HTTP-date, a fraction, 0 or a missing header fail; wantS (QUEUE_RETRY_AFTER, null when
+// not set) is the value the server was set to send. k6 gives the header under its canonical name.
+export function retryAfterOk(value, wantS) {
+  if (typeof value !== 'string' || !/^[0-9]+$/.test(value)) return false;
+  const s = Number(value);
+  return s >= 1 && (wantS === null || wantS === undefined || s === wantS);
+}
+
+// Every 503 QUEUE_FULL: counted by endpoint (load_queueFullCount) and its Retry-After checked (a k6 check and
+// load_retryAfterOkRatio, whose passes / fails gpu_queue.js reports).
+function queueFull(ctx, res, endpoint, tags) {
+  const ok = retryAfterOk(res.headers ? res.headers['Retry-After'] : undefined, ctx.cfg.queueRetryAfterS);
+  m.queueFullCount.add(1, tags);
+  m.retryAfterOkRatio.add(ok ? 1 : 0, tags);
+  const checks = {};
+  checks[`${endpoint} QUEUE_FULL Retry-After`] = () => ok;
+  check(res, checks, { endpoint });
+}
+
 // One request: sends it, records load_errorRatio / unexpected / rejected and the response's status class (status 0,
-// 4xx, 5xx: load_status*Count with status=<code>) and returns { res, kind, tags }.
+// 4xx, 5xx: load_status*Count with status=<code>), checks a 503 QUEUE_FULL's Retry-After and returns { res, kind, tags }.
 export function call(ctx, endpoint, name, method, url, body, opts) {
   const o = opts || {};
   const expected = o.expected || [200];
@@ -50,7 +70,10 @@ export function call(ctx, endpoint, name, method, url, body, opts) {
   const cls = statusClass(res.status);
   if (cls !== null) m.statusCounts[cls].add(1, Object.assign({ status: String(res.status) }, tags));
   if (kind === 'unexpected') m.unexpectedCount.add(1, Object.assign({ status: String(res.status) }, tags));
-  if (kind === 'rejected') m.rejectedCount.add(1, tags);
+  if (kind === 'rejected') {
+    m.rejectedCount.add(1, tags);
+    if (res.status === 503) queueFull(ctx, res, endpoint, tags); // classify: a rejected 503 is QUEUE_FULL
+  }
   const checks = {};
   checks[`${endpoint} ${expected.join('|')}`] = () => kind === 'ok';
   check(res, checks, { endpoint });
@@ -67,8 +90,9 @@ export function createJob(ctx, multipart) {
   const headers = { 'Content-Type': multipart.contentType, 'Idempotency-Key': `lt-${ctx.cfg.runId}-${uuid4()}` };
   const r = call(ctx, 'create', '/api/v1/jobs', 'POST', `${ctx.cfg.baseUrl}/api/v1/jobs`, multipart.body,
     { expected: [202], responseType: 'text', headers });
-  m.postMs.add(r.res.timings.duration, r.tags);
+  m.postMs.add(r.res.timings.duration, r.tags); // every POST sent, refused or not: the create latency
   if (r.kind !== 'ok') return { kind: r.kind, jobId: null };
+  m.createdCount.add(1, r.tags); // a 202: the server created the job (a 503 QUEUE_FULL or a failed POST did not)
   // load_bytesSent counts only bodies the server read in full (202). A refused, reset, timed-out or early-closed upload
   // (status 0, 5xx, a proxy 413) sent part of its body or none, and k6 has no per-request bytes-sent, so it is left out:
   // the per-stage upload Mbps stays a lower bound and a failing stage cannot fake a saturated uplink.

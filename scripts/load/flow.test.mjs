@@ -108,6 +108,111 @@ test('flow: an asset whose size differs from job.asset.bytes fails the flow', as
   assert.equal(samples('load_unexpectedCount')[0].tags.reason, 'asset_size');
 });
 
+// 503 QUEUE_FULL + Retry-After is the [계획] queue cap (agenda #21): the fake server answers it the way the draft does.
+const QUEUE_FULL = '{"error":{"code":"QUEUE_FULL","message":"x"}}';
+
+function isCreate(req) {
+  return req.method === 'POST' && new URL(req.url).pathname === '/api/v1/jobs';
+}
+
+function refuseCreates(retryAfter) {
+  const server = fakeServer({ completeAfterPolls: 1 });
+  return (req) => (isCreate(req) ? { status: 503, body: QUEUE_FULL, headers: retryAfter === undefined ? {} : { 'Retry-After': retryAfter } } : server(req));
+}
+
+function queueFullChecks() {
+  return state.checks.filter((c) => /QUEUE_FULL Retry-After$/.test(c.name)).map((c) => [c.name, c.ok]);
+}
+
+test('flow: a create refused with 503 QUEUE_FULL ends the flow as rejected and is not a created job', async () => {
+  // a 202 is a created job: load_createdCount +1, tagged like the request
+  const ok = await load('smoke.js', {}, { clock: 0 });
+  state.handler = fakeServer({ completeAfterPolls: 0 });
+  ok.flow();
+  assert.deepEqual(samples('load_createdCount').map((s) => [s.value, s.tags.endpoint]), [[1, 'create']]);
+  assert.deepEqual(samples('load_queueFullCount'), []);
+  assert.deepEqual(queueFullChecks(), []);
+
+  const mod = await load('smoke.js', {}, { clock: 0 });
+  state.handler = refuseCreates('165');
+  mod.flow();
+  assert.deepEqual(state.requests.map((r) => r.tags.endpoint), ['healthz', 'create']);
+  // the POST was sent (its latency stays in load_postMs) but no job was created and no body counts as accepted
+  assert.equal(samples('load_postMs').length, 1);
+  assert.deepEqual(samples('load_createdCount'), []);
+  assert.deepEqual(samples('load_bytesSent'), []);
+  // an intended refusal: rejected (not an error, not unexpected), one QUEUE_FULL on create, still a raw 5xx
+  assert.equal(samples('load_rejectedCount').length, 1);
+  assert.deepEqual(samples('load_queueFullCount').map((s) => [s.value, s.tags.endpoint]), [[1, 'create']]);
+  assert.ok(samples('load_errorRatio').every((s) => s.value === 0));
+  assert.deepEqual(samples('load_unexpectedCount'), []);
+  assert.deepEqual(samples('load_status5xxCount').map((s) => s.tags.status), ['503']);
+  // the flow: rejected, not ok, not a timeout
+  assert.equal(samples('load_flowMs')[0].tags.outcome, 'rejected');
+  assert.deepEqual(samples('load_flowOkRatio').map((s) => s.value), [0]);
+  assert.deepEqual(samples('load_flowTimeoutRatio').map((s) => s.value), [0]);
+  // the Retry-After check passed; the create 202 check failed as for any refusal
+  assert.deepEqual(queueFullChecks(), [['create QUEUE_FULL Retry-After', true]]);
+  assert.deepEqual(samples('load_retryAfterOkRatio').map((s) => [s.value, s.tags.endpoint]), [[1, 'create']]);
+  assert.deepEqual(state.checks.filter((c) => c.name === 'create 202').map((c) => c.ok), [false]);
+});
+
+test('flow: every 503 QUEUE_FULL has its Retry-After checked (whole seconds >= 1, = QUEUE_RETRY_AFTER when set)', async () => {
+  const f = await lib('flow.js');
+  assert.equal(f.retryAfterOk('165', null), true);
+  assert.equal(f.retryAfterOk('1', null), true);
+  assert.equal(f.retryAfterOk('165', 165), true);
+  assert.equal(f.retryAfterOk('60', 165), false);
+  // missing, empty, zero, negative, a fraction, padded, or an HTTP-date (RFC 9110 allows it, the draft contract does not)
+  [undefined, '', '0', '-5', '1.5', ' 165', '165s', 'Wed, 21 Oct 2026 07:28:00 GMT'].forEach((v) => {
+    assert.equal(f.retryAfterOk(v, null), false, String(v));
+  });
+
+  const cases = [['165', {}, true], [undefined, {}, false], ['0', {}, false], ['165', { QUEUE_RETRY_AFTER: '165' }, true],
+    ['60', { QUEUE_RETRY_AFTER: '165' }, false]];
+  for (const [header, env, want] of cases) {
+    const mod = await load('smoke.js', env, { clock: 0 });
+    state.handler = refuseCreates(header);
+    mod.flow();
+    assert.deepEqual(queueFullChecks(), [['create QUEUE_FULL Retry-After', want]], `${header} ${JSON.stringify(env)}`);
+    assert.deepEqual(samples('load_retryAfterOkRatio').map((s) => s.value), [want ? 1 : 0], `${header} ${JSON.stringify(env)}`);
+    assert.equal(samples('load_queueFullCount').length, 1);
+  }
+
+  // a refused retry is checked and counted on the retry endpoint (the job stays FAILED, the flow ends rejected)
+  const retried = await load('smoke.js', { FAIL_RATIO: '1' }, { clock: 0 });
+  const server = fakeServer({ completeAfterPolls: 0 });
+  state.handler = (req) => (/\/retry$/.test(new URL(req.url).pathname)
+    ? { status: 503, body: QUEUE_FULL, headers: { 'retry-after': '30' } } : server(req));
+  retried.flow();
+  assert.deepEqual(state.requests.map((r) => r.tags.endpoint), ['healthz', 'create', 'poll', 'retry']);
+  assert.deepEqual(samples('load_createdCount').map((s) => s.value), [1]);
+  assert.deepEqual(samples('load_queueFullCount').map((s) => s.tags.endpoint), ['retry']);
+  assert.deepEqual(queueFullChecks(), [['retry QUEUE_FULL Retry-After', true]]);
+  assert.equal(samples('load_flowMs')[0].tags.outcome, 'rejected');
+
+  // not QUEUE_FULL: a proxy 503 without the envelope is an error, 429 RATE_LIMITED a rejection; neither is checked
+  for (const answer of [{ status: 503, body: '' }, { status: 429, body: '{"error":{"code":"RATE_LIMITED","message":"x"}}' }]) {
+    const mod = await load('smoke.js', {}, { clock: 0 });
+    const other = fakeServer();
+    state.handler = (req) => (isCreate(req) ? answer : other(req));
+    mod.flow();
+    assert.deepEqual(samples('load_queueFullCount'), [], String(answer.status));
+    assert.deepEqual(samples('load_retryAfterOkRatio'), [], String(answer.status));
+    assert.deepEqual(queueFullChecks(), [], String(answer.status));
+  }
+});
+
+test('config: QUEUE_RETRY_AFTER is a whole number of seconds >= 1, null when not set', async () => {
+  const cfg = await lib('config.js');
+  assert.equal(cfg.parseConfig({}).queueRetryAfterS, null);
+  assert.equal(cfg.parseConfig({ QUEUE_RETRY_AFTER: '165' }).queueRetryAfterS, 165);
+  ['0', '2.5', '-1', 'abc'].forEach((v) => {
+    assert.throws(() => cfg.parseConfig({ QUEUE_RETRY_AFTER: v }), /QUEUE_RETRY_AFTER/, v);
+  });
+  await assert.rejects(load('smoke.js', { QUEUE_RETRY_AFTER: '0' }), /QUEUE_RETRY_AFTER must be a whole number of seconds >= 1/);
+});
+
 test('setup + handleSummary write the summary file entry and a text report', async () => {
   const mod = await load('smoke.js', {}, { clock: 0 });
   state.handler = fakeServer();

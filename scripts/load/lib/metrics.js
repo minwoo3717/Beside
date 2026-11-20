@@ -31,6 +31,14 @@ export const flowEnded = new Counter('load_flowEnded');
 
 export const unexpectedCount = new Counter('load_unexpectedCount');
 export const rejectedCount = new Counter('load_rejectedCount');
+// POST /api/v1/jobs answered 202, a job the server created (load_postMs counts every POST sent, refused or not), tagged
+// like the request. gpu_queue.js meta.measuredCreates.
+export const createdCount = new Counter('load_createdCount');
+// The [계획] queue cap (agenda #21): every 503 QUEUE_FULL (a part of load_rejectedCount), tagged like the request
+// (endpoint create or retry), and per 503 QUEUE_FULL 1 when its Retry-After is a whole number of seconds >= 1 (equal to
+// QUEUE_RETRY_AFTER when set), else 0 (lib/flow.js retryAfterOk). No threshold judges either.
+export const queueFullCount = new Counter('load_queueFullCount');
+export const retryAfterOkRatio = new Rate('load_retryAfterOkRatio');
 // Per response, by raw status class (lib/classify.js statusClass): load_status0Count (no response), load_status4xxCount,
 // load_status5xxCount, tagged like the request plus status=<code>; 2xx and 3xx are not counted. load_errorRatio says how
 // many requests failed, these say what came back. Every script keeps them in the summary overall and per judged stage

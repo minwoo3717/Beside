@@ -44,6 +44,12 @@ export function parseConfig(env) {
   const baseUrl = readStr(env, 'BASE_URL', 'http://localhost:18080').replace(/\/+$/, '');
   const runId = validRunId(readStr(env, 'RUN_ID', 'local'), failToken);
   const rttRaw = readStr(env, 'RTT_BASE_MS', '');
+  // The Retry-After the server is set to send with 503 QUEUE_FULL ([계획] queue cap, agenda #21); lib/flow.js checks
+  // every QUEUE_FULL against it. null: only "a whole number of seconds >= 1" is checked.
+  const retryAfterS = readNum(env, 'QUEUE_RETRY_AFTER', null);
+  if (retryAfterS !== null && !(retryAfterS >= 1 && Math.floor(retryAfterS) === retryAfterS)) {
+    throw new Error(`QUEUE_RETRY_AFTER must be a whole number of seconds >= 1 (got '${env.QUEUE_RETRY_AFTER}')`);
+  }
   return {
     baseUrl,
     runId,
@@ -55,6 +61,7 @@ export function parseConfig(env) {
     retryWaitS: readNum(env, 'RETRY_WAIT_S', 3),
     minAssetBytes: readNum(env, 'MIN_ASSET_BYTES', 0),
     healthzPerFlow: readNum(env, 'HEALTHZ_PER_FLOW', 1) > 0,
+    queueRetryAfterS: retryAfterS,
     summaryPath: readStr(env, 'SUMMARY_PATH', `scripts/load/out/k6-summary-${runId}.json`),
     uplinkMbps: readNum(env, 'UPLINK_MBPS', null),
     tier: readStr(env, 'TIER', ''),
