@@ -104,7 +104,7 @@ LOAD_ERROR_MAX = 200                    # characters of loadError
 # Anything with a slash or backslash (POSIX, Windows, relative paths) up to a space or quote: where files are stays in
 # the log, /healthz (open) says only what went wrong.
 _PATHISH = re.compile(r"""(?:[A-Za-z]:|[\w.~-]+)?[\\/][^\s'"]*""")
-MODEL_LOCK =threading.Lock()  # one GPU job at a time (Spring also limits to inference.max-concurrency=1)
+MODEL_LOCK = threading.Lock()  # one GPU job at a time (Spring also limits to inference.max-concurrency=1)
 
 log = logging.getLogger("beside.inference")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools"))   # convert_asset.py

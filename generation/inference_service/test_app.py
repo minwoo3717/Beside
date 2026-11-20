@@ -571,7 +571,7 @@ class HealthzLoadErrorTest(unittest.TestCase):
         self.assertEqual(self.healthz()["loadError"], "MemoryError")
 
 
-GLB_STUB =b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
+GLB_STUB = b"glTF\x02\x00\x00\x00\x0c\x00\x00\x00"
 TETRA_OBJ = """v 0 0 0
 v 1 0 0
 v 0 1 0
