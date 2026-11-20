@@ -20,6 +20,21 @@
 
 ## 다음 태그 전 추가 (태그 없음 — 계약 회의에서 확인)
 
+### 2026-11-21 — 안건 #1~#23 결정 (계약 회의 대신 Backend 담당 결정, 반영은 [계획])
+
+결정 전문은 [REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) '결정' 칸. 여기에는 계약을 바꾸거나 확정하는 것만 버전별로 적는다. 아래 항목은 모두 아직 openapi·코드에 반영하지 않았다 [계획].
+
+- **`api-v1.0` 태그에 넣을 것**
+  - 삭제: `AssetVariant` 의 `hair`(`GET /jobs/{jobId}/asset?variant=hair`) — 만드는 곳이 없음(#4).
+  - 변경(GLB 에셋 계약): GLB_SPEC 에 스킨(36 joints)·클립 5개를 선택 항목으로, 털 맵은 변환기가 base GLB 안 `extras.beside` 에 넣음(#14). 에셋 숫자 상한은 제안값 그대로, hair 100k 는 삭제(#3).
+  - 확인: 위 2026-11-04 대표 사진 검사 400 코드 7개(#19). prod 만 하는 사진 시그니처 검사 등 프로파일 차이를 openapi·ERROR_CODES 에 적음(#17·#19).
+  - 예약(구현 없음): 429 `RATE_LIMITED` + `Retry-After`(#22).
+  - 그대로 확정: #1·#2·#5·#8·#9·#10·#13·#15·#20.
+  - 내부 계약(openapi 밖): 추론 업로드 모드 확정(#6), `inference.timeout-ms` 600 s → 120 s(#7), `+rig` 는 그 작업에서 리깅이 성공했을 때만(#18). 측정 문서 표기 정리(#16).
+- **`api-v1.1`**: 작업 대기열 상한 — 생성·retry 에 503 `QUEUE_FULL` + `Retry-After`(N=19, 165 s), PR #19(#21).
+- **`api-v1.2`**: v1.1 검토 브랜치(`review/api-v1.1`)에서 고른 것 — 대기 정보·작업 취소·공유 링크·반려동물 보관함·관리 화면·품질 평가와 오류 코드 `CANCELED`·`JOB_NOT_PENDING`·`SHARE_NOT_FOUND`·`PET_NOT_FOUND`·`JOB_IN_PROGRESS`(#11·#12). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 그 브랜치의 'v1.1 (제안)' 절은 v1.2 로 바꾼다.
+- 보존 정책(#23, 응답 형태 변경 없음): 사진 7일·GLB 30일, 지운 작업은 404 `ASSET_NOT_FOUND`. 구현은 공개 베타 전.
+
 ### 2026-11-04 — 대표 사진 검사 오류 코드 (응답 형태 변경 없음)
 
 - 추가: `POST /api/v1/jobs` 의 400 코드 7개 — `UNREADABLE_IMAGE`, `IMAGE_TOO_SMALL`, `NO_ANIMAL_DETECTED`, `TOO_MANY_ANIMALS`, `ANIMAL_TOO_SMALL`, `IMAGE_TOO_DARK`, `IMAGE_TOO_BLURRY`. 첫 장(대표 사진)을 202 전에 검사해 처음 걸린 이유 하나를 돌려준다. 봉투·상태 코드(400)는 그대로이고, 모르는 코드를 일반 문구로 처리하는 앱은 깨지지 않는다.
