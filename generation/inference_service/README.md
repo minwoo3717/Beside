@@ -126,7 +126,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
   - 전송 시간은 Spring 쪽이 받기를 끝낸 시각에서 이 줄의 `at` + `end_ms` 를 빼서 구한다. 경로(tailscaled·tailnet·VM) 몫이다.
 - **클라이언트가 떠난 뒤 끝난 답**은 보통 줄처럼 찍힌다. uvicorn 이 보낼 곳 없는 답을 조용히 버리기 때문이다. 이때 uvicorn 의 접근 로그 줄은 없다.
 - **Pod 에서 켜기**: `start_pod.sh` 는 이미 떠 있는 서비스를 다시 띄우지 않는다.
-  1. 먼저 `kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다.
+  1. 먼저 `touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다. 2026-11-20 부터 `start_pod.sh` 의 감독 루프가 끝난 서비스를 5 s 뒤 예전 설정으로 다시 띄우므로, 표시 파일 없이 `kill` 만 하면 새 설정이 들어가지 않는다([deploy/README.md](../../deploy/README.md) Runpod 절 '서비스 자동 재시작'). 2번의 `start_pod.sh` 가 표시 파일을 지운다.
   2. `BESIDE_REQUEST_TIMING=1 bash /workspace/Beside/deploy/runpod/start_pod.sh` 로 다시 띄운다. 환경변수는 두 모드 모두 uvicorn 까지 이어진다.
   3. `curl -s http://127.0.0.1:8002/healthz` 한 번 뒤 `grep '^timing ' /workspace/beside-logs/inference.log` 에 줄이 나오는지 본다.
 - 쓰는 곳: 3차 부하 시험 4절의 가설을 가리는 4차 시험. 동시 작업에서 응답·내려받기가 길어지는 것이 이쪽이 늦게 답해서인지, 경로에서 늦어져서인지 본다.
