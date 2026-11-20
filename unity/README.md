@@ -58,6 +58,7 @@ unity/
 - **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식.
 - **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
 - **[미검증]** 2026-11-20 코드 리뷰 수정(다운로드 오류 응답 처리, 업로드 실패 재시도, 취소한 로드 버림, 이전 모델·확인 화면 썸네일 해제, 기본 UI "새로 만들기" 의 배치 모델 지우기)은 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다(오류 0, 경고는 main 과 같은 36개). 에디터 Play·기기 확인 전이다.
+- **[미검증]** 대기열 상한 초안(503 `QUEUE_FULL` + `Retry-After`, **[제안값] 안건 #21, 계약 회의 전** — [ERROR_CODES.md](../docs/api/ERROR_CODES.md) '대기열 상한') 대응: 문구, 다시 시도 대상, `Retry-After`(양의 정수 초) 동안 "다시 시도" 잠금과 남은 시간 표시, 자동 재전송 없음. 거절된 생성은 같은 사진·같은 `Idempotency-Key` 로, 거절된 `/retry` 는 `/retry` 로 다시 보낸다. Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다(오류 0, 경고는 같은 방법으로 컴파일한 main 과 같은 39줄, 줄 번호만 다름). 에디터 Play·기기 확인은 [계획](아래 "대기열 상한" 시나리오).
 - **[미검증]** 리깅 모델 털(셸 퍼 BakeMesh), Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
 - **[계획]** 리깅 다음 단계(아래 "리깅 GLB" 참고): 바닥 위 걷기, GLB_SPEC rigged 계약, 추론 → 리깅 연결, 실제 사진 E2E 측정, 자세 따라하기. 그 밖에 터치 상호작용, 분류 모델(Jev) 연동, 크래시 수집(Sentry/Crashlytics).
 
@@ -182,6 +183,29 @@ APK 만 만들려면 **Build** 로 `.apk` 를 저장해 `adb install -r 파일.a
 | 서버 종료 | 서버 끄고 요청 | `NETWORK_ERROR` 문구 + 다시 시도 |
 | AR 안내 | 카메라 권한 거부 / AR 화면에서 12초 이상 바닥 미인식 | 안내, 권한은 "설정 열기" |
 
+### 대기열 상한 (`QUEUE_FULL`) — [제안값] 안건 #21, 계약 회의 전
+
+서버 기본값은 상한 꺼짐(`admission.max-pending=0`)이라 지금 서버에서는 `QUEUE_FULL` 을 받지 않는다. 아래 시나리오는 모두 **[계획]** 이다(에디터 Play·기기에서 아직 하지 않았다). 로컬 서버를 mock 프로필, 상한 1, 작업마다 120초 PENDING 으로 띄운다:
+
+```powershell
+cd backend
+.\gradlew.bat bootRun --args="--spring.profiles.active=mock --admission.max-pending=1 --mock.worker.pending-ms=120000"
+# Retry-After 는 기본 165초다. 빨리 보려면 --admission.retry-after-seconds=30 을 더한다.
+```
+
+| 시나리오 | 방법 | 기대 결과 |
+|---|---|---|
+| 생성 거절 | 브라우저 Mock UI(`http://localhost:8080`)로 사진 1장을 올려 대기열을 채운 뒤(120초 동안 PENDING) 앱에서 생성 | 실패 화면 "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요." "다시 시도" 는 꺼져 있고 남은 시간을 보인다(기본 UI 버튼 "N초 뒤 다시 시도", 디자인 UI 버튼 "N초 뒤 다시 시도할 수 있어요" + '다시 시도' 칸 "HH:mm:ss 이후"). 서버 로그 `Queue full: refused op=create` 한 줄 |
+| 자동 재전송 없음 | 위 화면에서 `Retry-After` 가 지날 때까지 아무것도 누르지 않음 | 시간이 지나면 버튼만 켜진다. 서버 로그에 `Job created:`·`Queue full: refused` 줄이 늘지 않는다 |
+| 생성 다시 시도 | 버튼이 켜진 뒤(브라우저 작업이 끝나 대기열이 비었을 때) "다시 시도" | 같은 사진을 같은 `Idempotency-Key` 로 다시 올려 202 → 정상 흐름. 거절은 키를 남기지 않으므로 새 작업이다 |
+| retry 거절 | 앱 "실패 테스트"(약 2분 뒤 FAILED) → 브라우저로 대기열을 채움 → 120초 안에 앱 "다시 시도" | `QUEUE_FULL` 화면과 잠금, 서버 로그 `refused op=retry jobId=<그 작업>`, `GET /api/v1/jobs/{id}` 는 계속 FAILED |
+| retry 다시 시도 | 잠금이 풀린 뒤 "다시 시도" | `/retry` 202 → 다시 폴링(Mock 은 파일명이 `fail` 이라 다시 `INFERENCE_FAILED`) |
+
+알려진 한계:
+- **이미 깔린 옛 빌드**(이 변경 전)는 `QUEUE_FULL` 을 모르는 코드로 본다. 일반 문구 "문제가 생겼어요. 잠시 후 다시 시도해 주세요." 를 보이고, 기본 UI 는 "(다시 시도할 수 없어요. 새 사진으로 시작해 주세요.)" 와 "처음부터" 만, 디자인 UI 는 '다시 시도: 불가' 에 버튼을 숨긴다. 처음부터 다시 만들면 새 `Idempotency-Key` 로 사진 전체를 다시 올리고, 대기열이 차 있으면 또 거절된다. 거절된 `/retry` 의 FAILED 작업은 버려진다. 그래서 **운영 서버에서 상한을 켜기 전에 팀·시연 기기에 이 빌드를 깔고 빌드·커밋을 기록한다.**
+- `Retry-After` 는 메모리에만 둔다. 앱을 다시 켜면 잊는다: 거절된 생성은 사진도 메모리에만 있어 사라지고, 거절된 `/retry` 는 저장된 jobId 로 복원되어 바로 다시 시도할 수 있다(대기열이 아직 차 있으면 서버가 다시 503).
+- "처음부터" 로 새 사진을 고르면 기다리지 않고 보낸다. 대기열이 아직 차 있으면 서버가 다시 503 을 주고, 그 응답의 `Retry-After` 로 다시 잠근다.
+
 ## 리깅 GLB (SMAL 기반)
 
 AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입힌 GLB. 현재 샘플은 `backend/storage/results/sample-dog.glb` 로 Mock 서버가 내려준다.
@@ -214,6 +238,7 @@ real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GP
 - 폴링 2초 간격(`pollingIntervalSeconds`), 최대 대기 600초(`maxWaitSeconds`).
 - `COMPLETED` → `asset.url` 을 `baseUrl` 과 결합해 `DownloadHandlerFile` 로 `{jobId}-base.glb` 저장 → 매직 바이트 검증 → glTFast 로드. 같은 jobId 는 다시 받지 않는다.
 - `FAILED` → `ErrorMessages.ForCode(error.code)` 문구, 재시도 가능하면 `POST /retry`.
+- 503 `QUEUE_FULL`(**[제안값] 안건 #21, 계약 회의 전**): `Retry-After`(초) 전에는 다시 보내지 않는다(`JobManager.RetryAvailableAt`, 그 전의 `Retry()` 는 아무것도 하지 않는다). 자동 재전송은 없고 사용자가 "다시 시도" 를 누른다. 생성 거절은 같은 사진·같은 `Idempotency-Key`, `/retry` 거절은 `/retry` 로 다시 보낸다.
 - 모든 오류 응답은 `ErrorResponse` 봉투. 알 수 없는 `code`·`status` 는 일반 문구/`Unknown`.
 - 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털 지도 PNG 방식과 `variant=hair` 방식 중 어느 쪽으로 갈지는 계약 회의에서 정한다.
 

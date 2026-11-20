@@ -63,7 +63,8 @@ namespace Beside.UI.Designed
         // AR
         Text arPill, arInstruction, arModelName; Image arPillDot; RectTransform arBeforePlace, arAfterPlace; Text arToast; bool placed;
         // error
-        Text errorTitle, errorBody, errorCode, errorStage, errorRetry; Button errorRetryButton;
+        Text errorTitle, errorBody, errorCode, errorStage, errorRetry, errorRetryLabel; Button errorRetryButton;
+        const string RetryButtonText = "같은 사진으로 다시 시도";
         SpawnLimiter limiter;
         PlaneScanGate scanGate;
         RectTransform arInstructionCard;
@@ -133,6 +134,8 @@ namespace Beside.UI.Designed
                 int sec = Mathf.FloorToInt(jobManager.ElapsedSeconds);
                 steps[1].right.text = sec < 60 ? $"{sec}초" : $"{sec / 60}분 {sec % 60:00}초";
             }
+
+            if (error != null && error.gameObject.activeSelf) SyncRetryWait();
 
             if (arOverlay == null || !arOverlay.gameObject.activeSelf) return;
 
@@ -582,7 +585,8 @@ namespace Beside.UI.Designed
             errorRetry = InfoRow(card, "다시 시도");
 
             DesignKit.Spacer(col);
-            errorRetryButton = DesignKit.PrimaryButton("Retry", col, "같은 사진으로 다시 시도", () => jobManager.Retry());
+            errorRetryButton = DesignKit.PrimaryButton("Retry", col, RetryButtonText, () => jobManager.Retry());
+            errorRetryLabel = errorRetryButton.GetComponentInChildren<Text>();
             DesignKit.SecondaryButton("Other", col, "다른 사진 고르기", StartOver);
         }
 
@@ -664,6 +668,21 @@ namespace Beside.UI.Designed
             errorRetry.color = retryable ? DesignKit.Accent : DesignKit.Danger;
             errorRetryButton.gameObject.SetActive(retryable);
             Show(Screen.Error);
+            SyncRetryWait();   // first frame already locked; Update keeps it in step
+        }
+
+        /// <summary>QUEUE_FULL: the retry button stays non-interactable until RetryAvailableAt (Retry-After) and shows
+        /// the time left. Nothing is re-sent automatically.</summary>
+        void SyncRetryWait()
+        {
+            if (errorRetryButton == null || !errorRetryButton.gameObject.activeSelf) return;
+            float wait = jobManager.RetryWaitSeconds;
+            bool ready = wait <= 0f;
+            if (errorRetryButton.interactable != ready) errorRetryButton.interactable = ready;
+            string label = ready ? RetryButtonText : $"{Mathf.CeilToInt(wait)}초 뒤 다시 시도할 수 있어요";
+            if (errorRetryLabel != null && errorRetryLabel.text != label) errorRetryLabel.text = label;
+            string when = ready ? "가능" : jobManager.RetryAvailableAt.Value.ToLocalTime().ToString("HH:mm:ss") + " 이후";
+            if (errorRetry.text != when) { errorRetry.text = when; errorRetry.color = ready ? DesignKit.Accent : DesignKit.InkSoft; }
         }
 
         void OnModelReady(string jobId, string path, GameObject template)

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using Beside.Api;
 using Beside.AR;
@@ -31,6 +32,7 @@ namespace Beside.UI
         GameObject readyTemplate;
         bool placed;
         GameObject uiRoot;
+        Coroutine retryCountdown;   // this UI has no Update loop: the Retry-After wait re-renders through this
         SpawnLimiter limiter;
         UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner spawner;
 
@@ -162,6 +164,7 @@ namespace Beside.UI
             statusText.color = s == JobManager.State.Failed ? UiKit.Danger : Color.white;
             stepText.text = Steps(s);
 
+            if (retryCountdown != null) { StopCoroutine(retryCountdown); retryCountdown = null; }
             foreach (Transform c in actionsRow) Destroy(c.gameObject);
             switch (s)
             {
@@ -180,7 +183,12 @@ namespace Beside.UI
                     UiKit.Button("Cancel", actionsRow, "취소", UiKit.ButtonBg, () => { jobManager.CancelJob(); RenderState(JobManager.State.Idle, IdleText); });
                     break;
                 case JobManager.State.Failed:
-                    if (jobManager.LastErrorRetryable) UiKit.Button("Retry", actionsRow, "다시 시도", UiKit.Accent, jobManager.Retry);
+                    if (jobManager.LastErrorRetryable)
+                    {
+                        var retry = UiKit.Button("Retry", actionsRow, "다시 시도", UiKit.Accent, jobManager.Retry);
+                        // QUEUE_FULL: locked with a countdown until Retry-After, then rendered again (nothing is sent by itself)
+                        if (jobManager.RetryWaitSeconds > 0f) retryCountdown = StartCoroutine(RetryCountdown(retry));
+                    }
                     UiKit.Button("Reset", actionsRow, "처음부터", UiKit.ButtonBg, StartOver);
                     break;
                 case JobManager.State.Ready:
@@ -189,6 +197,22 @@ namespace Beside.UI
                     UiKit.Button("New", actionsRow, "새로 만들기", UiKit.Accent, StartOver);
                     break;
             }
+        }
+
+        /// <summary>Keeps the retry button non-interactable while Retry-After runs, counting down on its label,
+        /// then renders the failed state again so the button becomes usable at RetryAvailableAt.</summary>
+        IEnumerator RetryCountdown(Button retry)
+        {
+            retry.interactable = false;
+            var label = retry.GetComponentInChildren<Text>();
+            float wait = jobManager.RetryWaitSeconds;
+            do   // yields before re-rendering: StartCoroutine runs this part inside RenderState
+            {
+                if (label != null) label.text = $"{Mathf.CeilToInt(wait)}초 뒤 다시 시도";
+                yield return new WaitForSecondsRealtime(Mathf.Clamp(wait, 0.05f, 1f));
+            } while ((wait = jobManager.RetryWaitSeconds) > 0f);
+            retryCountdown = null;
+            if (jobManager.CurrentState == JobManager.State.Failed) RenderState(JobManager.State.Failed, "");   // empty text keeps the message
         }
 
         static string Steps(JobManager.State s)
