@@ -5,9 +5,12 @@
 # RESTART_MAX_DELAY_S (5 s -> 10 -> 20 -> 40 -> 60 -> 60 s; back to 5 s once a run lasted 300 s).
 # It restarts only a process that exited: a live but stuck service keeps its pid and is left alone. If GET /healthz
 # stops answering too (SIGSTOP), the backend's InferenceHealthMonitor reads DOWN after its 2 s timeout (and, with a
-# webhook set, posts the GPU message). If /healthz still answers while inference is stuck, nothing detects it:
-# /healthz reports only modelLoaded, so the backend reads UP and each job fails INFERENCE_TIMEOUT after
-# inference.timeout-ms (600 s).
+# webhook set, posts the GPU message). If /healthz still answers while inference is stuck, the backend still reads UP
+# and each job fails INFERENCE_TIMEOUT after inference.timeout-ms (600 s), but /healthz busyForMs (age of the model
+# predict or passthrough simulated generation still running) passes inference.stuck-alert-ms (120 s) and, with a
+# webhook set, the backend posts one stuck-run message (R6; tested in the backend and inference-service suites, not
+# yet seen on a real Pod). A hang in conversion or rigging is not in busyForMs: only the job timeout catches it.
+# Neither case restarts anything: kill -9 $(cat /var/run/beside/inference.pid) and this loop starts it again.
 #
 #   supervise_inference.sh COMMAND [ARG...]        (deploy/runpod/test_start_pod_supervisor.sh runs a fake COMMAND)
 #
