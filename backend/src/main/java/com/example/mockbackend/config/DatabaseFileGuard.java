@@ -17,8 +17,9 @@ import java.util.Locale;
  * false). Failure drill FD5 (2026-11-20): with its file gone, H2 quietly created an empty database, health stayed UP
  * and every existing job answered 404 until someone noticed. The same happens when the backend is started on the wrong
  * (new, empty) volume. Without the file a prod server now stops with a message that says how to restore it
- * (docs/ops/RUNBOOK.md 'DB 복구') or, on a new server, how to start it once with an empty database
- * (STORAGE_DB_CREATEIFMISSING=true). The VM watchdog then reports the backend as unhealthy.
+ * (docs/ops/RUNBOOK.md 'DB 복구') or, on a new server, how to start it once with an empty database (the container's
+ * STORAGE_DB_CREATEIFMISSING=true; on the VM compose sets it from the shell's STORAGE_DB_CREATE_IF_MISSING=true). The
+ * VM watchdog then reports the crash loop.
  * <p>
  * Runs before any bean is created (a bean factory post-processor), so before the data source opens the file. Only an
  * H2 file URL ({@code jdbc:h2:file:}) is checked: tests use in-memory databases.
@@ -55,8 +56,9 @@ public class DatabaseFileGuard implements BeanFactoryPostProcessor, EnvironmentA
         throw new IllegalStateException("H2 database file " + file.toAbsolutePath().normalize() + " does not exist and "
                 + CREATE_IF_MISSING + "=false (prod): not starting with an empty database (failure drill FD5). "
                 + "If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on "
-                + "the wrong storage volume, fix the mount. Only on a new server: start once with "
-                + "STORAGE_DB_CREATEIFMISSING=true (deploy/README.md 'VM 첫 설정').");
+                + "the wrong storage volume, fix the mount. Only on a new server: start once with " + CREATE_IF_MISSING
+                + "=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml "
+                + "STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').");
     }
 
     /**

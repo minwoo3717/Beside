@@ -52,7 +52,8 @@ class DatabaseFileGuardTest {
                     .hasMessageContaining("does not exist")
                     .hasMessageContaining("storage.db.create-if-missing=false")
                     .hasMessageContaining("RUNBOOK.md 'DB 복구'")
-                    .hasMessageContaining("STORAGE_DB_CREATEIFMISSING=true");
+                    .hasMessageContaining("STORAGE_DB_CREATEIFMISSING=true")
+                    .hasMessageContaining("STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up");
         });
         assertThat(dir.resolve("db").resolve("beside-real.mv.db")).as("H2 never opened the URL").doesNotExist();
     }
