@@ -3,7 +3,8 @@
 # and health come from files), curl (the Discord webhook, recorded), systemctl (the off-VM backup unit) and df on PATH;
 # the clock is WATCHDOG_NOW. Checks the decisions: 3 failures in a row -> one restart and one message; booting
 # containers are not judged; at most one restart per 10 min with one "still failing" message; recovery is reported
-# once; maintenance flags, stopped containers and stale failures never restart; disk warnings at most hourly; an
+# once; maintenance flags, stopped containers and stale failures never restart; a crash loop (Docker's RestartCount up
+# 3 since the last good check) is reported once an hour, its end once; disk warnings at most hourly; an
 # off-VM backup without a good run for 3 h (or failing since it was installed) is reported every 6 h, its recovery
 # once; the webhook URL is never on a command line or in the log.
 #   bash scripts/test_watchdog.sh
@@ -21,7 +22,8 @@ F="$FAKE/fake"
 case "$*" in
   "ps -aq --filter label=com.docker.compose.project=beside --filter label=com.docker.compose.service=backend")
     cat "$F/cid" 2>/dev/null || true ;;
-  "inspect -f {{.State.Status}} {{.State.StartedAt}} c0ffee") echo "$(cat "$F/status") $(cat "$F/started")" ;;
+  "inspect -f {{.State.Status}} {{.State.StartedAt}} {{.RestartCount}} c0ffee")
+    echo "$(cat "$F/status") $(cat "$F/started") $(cat "$F/restartcount" 2>/dev/null || echo 0)" ;;
   "exec c0ffee curl -fsS -m 5 -o /dev/null http://localhost:8081/actuator/health") [[ -f "$F/healthy" ]] ;;
   "restart -t 20 c0ffee")
     [[ -f "$F/restart-fails" ]] && exit 1
@@ -127,6 +129,40 @@ for t in 9420 9450 9480; do step "$t"; done
 [[ "$(restarts)" == 2 ]] || fail "restarted a stopped container"
 echo running > "$WORK/fake/status"
 
+# crash loop (FD5: prod without its H2 file exits at once; Docker restarts it, it never runs 90 s): RestartCount 3 above
+# the last good check -> one message, again only after an hour; good health again -> one message. Never restarted here.
+crash() { count '시작하자마자 계속 꺼져요'; }
+touch "$WORK/fake/healthy"
+echo 5 > "$WORK/fake/restartcount"
+step 9600 || fail "healthy run before the crash loop"   # base 5
+rm "$WORK/fake/healthy"
+echo restarting > "$WORK/fake/status"
+echo 6 > "$WORK/fake/restartcount"; step 9630
+echo 7 > "$WORK/fake/restartcount"; step 9660
+[[ "$(crash)" == 0 ]] || fail "crash loop alert after 2 Docker restarts"
+echo running > "$WORK/fake/status"
+date -u -d "@$((T0 + 9685))" +%Y-%m-%dT%H:%M:%S.000000001Z > "$WORK/fake/started"   # up again for a few seconds
+echo 8 > "$WORK/fake/restartcount"; step 9690
+[[ "$(crash)" == 1 ]] || fail "no crash loop alert after 3 Docker restarts"
+grep -q 'Docker 가 3번 다시 띄웠어요' "$WORK/fake/messages" || fail "no restart count in the crash loop alert"
+grep -q "RUNBOOK.md 'DB 복구'" "$WORK/fake/messages" || fail "no restore hint in the crash loop alert"
+echo restarting > "$WORK/fake/status"
+for n in 9 10 11; do echo "$n" > "$WORK/fake/restartcount"; step $((9690 + (n - 8) * 30)); done
+[[ "$(crash)" == 1 && "$(restarts)" == 2 ]] || fail "crash loop alerted again within the hour or the watchdog restarted"
+echo 30 > "$WORK/fake/restartcount"; step $((9690 + 3600))
+[[ "$(crash)" == 2 ]] || fail "no crash loop reminder after an hour"
+# the DB is restored: the backend runs and is healthy -> one recovery message, and the count starts over
+echo running > "$WORK/fake/status"
+date -u -d "@$((T0 + 13400))" +%Y-%m-%dT%H:%M:%S.000000001Z > "$WORK/fake/started"
+touch "$WORK/fake/healthy"
+step 13500; step 13530
+[[ "$(count '다시 정상으로 떴어요')" == 1 ]] || fail "crash loop end reported $(count '다시 정상으로 떴어요') times"
+# a recreated container (deploy) starts its count at 0 again: a new base, no alert
+echo 0 > "$WORK/fake/restartcount"; step 13560
+echo 2 > "$WORK/fake/restartcount"; rm "$WORK/fake/healthy"; echo restarting > "$WORK/fake/status"; step 13590
+[[ "$(crash)" == 2 ]] || fail "crash loop alert after a recreated container"
+echo running > "$WORK/fake/status"; echo 0 > "$WORK/fake/restartcount"
+
 # docker restart fails: exit 1 and a message
 touch "$WORK/fake/restart-fails"
 step 20000; step 20030
@@ -191,4 +227,4 @@ grep -qxF "url = \"$HOOK\"" "$WORK/fake/curl-config" || fail "webhook URL not pa
 python3 -I -c 'import json, sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]' "$WORK/fake/messages" \
   || fail "a message is not valid JSON"
 [[ "$(stat -c %a "$WORK/state")" == 700 ]] || fail "state folder is not 700"
-echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, disk, backup and webhook handling ok"
+echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, crash loop, disk, backup and webhook handling ok"

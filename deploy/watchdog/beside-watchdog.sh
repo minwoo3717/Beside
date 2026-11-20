@@ -7,6 +7,10 @@
 #     unhealthy and never restarts it, so a frozen backend (FD2) stayed down until someone looked. At most one restart
 #     per 10 min; a container that started less than 90 s ago is not judged (booting); a stopped or restarting
 #     container is left to Docker and the operator (compose stop for a backup must not be undone here).
+#   - Crash loop: a backend that exits right after starting (prod without its H2 file, failure drill FD5; a bad setting)
+#     is restarted by Docker's policy, never runs 90 s and so is never judged above. When Docker's RestartCount has gone
+#     up 3 times since the last good health check -> one Discord message (again hourly while it goes on), and one when
+#     health is good again. The watchdog's own `docker restart` does not count there.
 #   - Maintenance: while /etc/beside-maintenance or ~beside/fault/MAINTENANCE exists, no restarts (load tests, drills).
 #     A reminder goes out when such a flag is older than 12 h.
 #   - Disk: / at 80 % or more -> one Discord warning per hour.
@@ -28,6 +32,8 @@ MAINTENANCE_FILES="${BESIDE_MAINTENANCE_FILES:-/etc/beside-maintenance /home/bes
 STATE_DIR="${STATE_DIRECTORY:-/var/lib/beside-watchdog}"   # systemd StateDirectory= sets STATE_DIRECTORY
 HEALTH_URL="${HEALTH_URL:-http://localhost:8081/actuator/health}"
 FAILS_TO_RESTART="${FAILS_TO_RESTART:-3}"
+CRASH_LOOP_RESTARTS="${CRASH_LOOP_RESTARTS:-3}"
+CRASH_LOOP_EVERY_S="${CRASH_LOOP_ALERT_EVERY_S:-3600}"
 COOLDOWN_S="${RESTART_COOLDOWN_S:-600}"
 START_GRACE_S="${START_GRACE_S:-90}"
 STALE_S="${STALE_S:-300}"   # failures older than this (timer stopped meanwhile) do not count
@@ -131,7 +137,7 @@ check_backup() {
 }
 
 check_backend() {
-  local flag age cid status started started_s fails last_check last restarted
+  local flag age cid status started started_s fails last_check last restarted count base
   for flag in $MAINTENANCE_FILES; do
     [[ -e "$flag" ]] || continue
     put fails 0
@@ -152,8 +158,10 @@ check_backend() {
     put fails 0
     return 0
   fi
-  read -r status started < <(docker inspect -f '{{.State.Status}} {{.State.StartedAt}}' "$cid" 2>/dev/null)
+  read -r status started count < <(docker inspect -f '{{.State.Status}} {{.State.StartedAt}} {{.RestartCount}}' "$cid" 2>/dev/null)
+  [[ "${count:-}" =~ ^[0-9]+$ ]] || count=0
   if [[ "${status:-}" != running ]]; then
+    check_crash_loop "$cid" "$count"
     [[ "$(get fails 0)" == 0 ]] || log "backend is ${status:-unknown}: left to Docker's restart policy and the operator"
     put fails 0
     return 0
@@ -161,6 +169,7 @@ check_backend() {
   started_s="$(date -d "$started" +%s 2>/dev/null || echo 0)"
   if ((NOW - started_s < START_GRACE_S)); then
     put fails 0
+    check_crash_loop "$cid" "$count"
     return 0
   fi
 
@@ -168,6 +177,11 @@ check_backend() {
     fails="$(get fails 0)"
     ((fails == 0)) || log "health ok again after $fails failure(s)"
     put fails 0
+    put restarts.base "$count"
+    if [[ -n "$(get crashloop.alerted)" ]]; then
+      notify "✅ backend 가 다시 정상으로 떴어요 (VM 감시 · $HOST) — 시작하자마자 꺼지던 것이 멈췄어요"
+      del crashloop.alerted
+    fi
     restarted="$(get restarted.at)"
     if [[ -n "$restarted" ]]; then
       notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작 $((NOW - restarted))초 뒤 확인"
@@ -204,6 +218,23 @@ check_backend() {
     notify "🔴 backend 재시작 실패 (VM 감시 · $HOST) — docker restart 가 실패했어요. 손으로 확인해 주세요"
     return 1
   fi
+}
+
+# check_crash_loop <cid> <RestartCount>: Docker restarted the backend CRASH_LOOP_RESTARTS times or more since the last
+# good health check (the count at that check is restarts.base; a recreated container starts again from 0). Asked only
+# while the backend is not running or still booting: a healthy run resets the base instead.
+check_crash_loop() {
+  local cid="$1" count="$2" base last
+  base="$(get restarts.base)"
+  if [[ ! "$base" =~ ^[0-9]+$ ]] || ((count < base)); then
+    put restarts.base "$count"
+    return 0
+  fi
+  ((count - base >= CRASH_LOOP_RESTARTS)) || return 0
+  last="$(get crashloop.alerted 0)"
+  ((NOW - last >= CRASH_LOOP_EVERY_S)) || return 0
+  notify "🧱 backend 가 시작하자마자 계속 꺼져요 (VM 감시 · $HOST) — 마지막 정상 확인 뒤 Docker 가 $((count - base))번 다시 띄웠어요. docker logs --tail 50 ${cid:0:12} 로 원인을 확인해 주세요. 'H2 database file ... does not exist' 면 DB 를 잃은 것이니 docs/ops/RUNBOOK.md 'DB 복구' 로 되돌립니다"
+  put crashloop.alerted "$NOW"
 }
 
 rc=0

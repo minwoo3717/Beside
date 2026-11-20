@@ -315,7 +315,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | R1 VM 밖 백업 | DB·사진·GLB 가 VM 디스크에만 있다(FD5 DB 유실, FD6 VM 유실) | prod H2 백업 매시 5분·48개, [backup/offsite_backup.sh](backup/offsite_backup.sh) + `beside-backup.service`·`.timer`(매시 20분), [backup/block-metadata.sh](backup/block-metadata.sh) + `beside-block-metadata.service`, [gcp/backup_bucket.sh](gcp/backup_bucket.sh) | 파일 [구현됨] · 버킷 `beside-514511-backups`·계정·VM 에 붙이기·VM 설치(차단·타이머) [구현됨: 적용] 2026-11-20 · 매시 H2 백업의 VM 반영(1번) [구현됨: 적용] 2026-11-20 05:33 |
 | R2 스냅샷 일정 | VM·zone 통째 유실(FD6) | [gcp/snapshot_schedule.sh](gcp/snapshot_schedule.sh): 하루 1번 19:00 UTC(04:00 KST), 7일 보관, 서울 | 파일 [구현됨] · 일정 `beside-daily-snapshot` [구현됨: 적용] 2026-11-20 · 일정이 만든 첫 스냅샷 확인 [계획] |
 | R3 외부 가동 확인 | backend·Caddy·VM 이 죽어도 알림이 없다(FD1·FD2·FD3·FD6·FD7) | [gcp/uptime_check.sh](gcp/uptime_check.sh): `/api/v1/healthz` 1분 간격, `"status":"ok"`, 2개 지역 이상 2분 실패 → 메일 | 파일 [구현됨] · 적용 [계획] |
-| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다 | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [구현됨: 적용] 2026-11-20 05:34 · FD2 재현에서 멈춘 backend 를 112 s 뒤 재시작 **[실험 결과]** |
+| R4 VM 감시 | 멈춘 backend 가 다시 시작되지 않는다(FD2), 디스크가 차도 모른다(FD4), VM 밖 백업(R1)이 멈춰도 모른다, DB 파일이 없어 backend 가 시작하지 않는다(FD5, 2026-11-20 PR 뒤) | [watchdog/beside-watchdog.sh](watchdog/beside-watchdog.sh) + `.service`·`.timer`(30초마다) | 파일 [구현됨] · 적용 [구현됨: 적용] 2026-11-20 05:34 · FD2 재현에서 멈춘 backend 를 112 s 뒤 재시작 **[실험 결과]** |
 | R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [구현됨: 적용] 2026-11-20 05:33 |
 
 - **얼마나 잃는가 [계산]**: DB 는 매시 5분 백업이 20분에 올라가므로 VM 을 통째로 잃으면 최근 약 1시간(최악 약 75분)의 작업을 잃는다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다. 스냅샷은 최악 약 24시간 전 디스크다. 1번(매시 백업)을 배포한 2026-11-20 05:33 UTC 전에는 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이었다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
@@ -395,6 +395,7 @@ journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 
 - 판단: backend 컨테이너 안에서 관리 포트 `/actuator/health`(DB·ping. Spring 의 디스크 여유 검사는 prod 에서 끈다 — 재시작해도 디스크는 비지 않고 진행 중 작업만 끝나므로, 디스크는 아래 80 % 경고가 맡는다. `ProdProfileTest`)를 묻고, 연속 3번(약 1~1.5분) 실패하면 `docker restart` + 디스코드. 10분에 한 번까지, 시작 90초 안은 판단하지 않음, 멈춘(`compose stop`)·재시작 중인 컨테이너는 손대지 않음. `/` 사용률 80 % 이상이면 1시간에 한 번 알린다. VM 밖 백업(4번)의 마지막 성공이 3시간 넘었거나 한 번도 성공하지 못하고 failed 면 6시간에 한 번 알린다(백업이 아직 설치되지 않았거나 실행 중이면 보지 않는다).
 - **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
 - 재시작하면 그때 PENDING·PROCESSING 이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱은 retry). GPU·추론 서비스 상태는 보지 않는다(backend 의 GPU 알림이 맡는다).
+- 재시작 반복: backend 가 시작하자마자 꺼지면(prod 에 H2 DB 파일이 없을 때 — 장애 훈련 FD5, 또는 잘못된 설정) Docker 가 계속 다시 띄우지만 90초를 넘기지 못해 위 판단에 걸리지 않는다. 마지막 정상 확인 뒤 Docker 의 `RestartCount` 가 3 이상 늘면 🧱 를 보내고(1시간마다 다시), 정상이 되면 한 번 알린다. 감시 스크립트의 `docker restart` 는 이 수를 늘리지 않는다 [구현됨: 2026-11-20 PR, `scripts/test_watchdog.sh`]. VM 에는 병합 뒤 위 설치 명령으로 스크립트를 다시 설치해야 들어간다 [계획].
 
 ## Runpod Pod 쪽
 
