@@ -3,8 +3,11 @@
 # It runs COMMAND, and when that process exits (crash, out of memory, kill -9) runs it again with the same environment
 # and working directory after a delay: RESTART_DELAY_S, doubled after every run shorter than RESTART_STABLE_S, at most
 # RESTART_MAX_DELAY_S (5 s -> 10 -> 20 -> 40 -> 60 -> 60 s; back to 5 s once a run lasted 300 s).
-# It restarts only a process that exited: a service that hangs (SIGSTOP, a stuck model) keeps its pid and is left alone
-# (the backend's health monitor reports it).
+# It restarts only a process that exited: a live but stuck service keeps its pid and is left alone. If GET /healthz
+# stops answering too (SIGSTOP), the backend's InferenceHealthMonitor reads DOWN after its 2 s timeout (and, with a
+# webhook set, posts the GPU message). If /healthz still answers while inference is stuck, nothing detects it:
+# /healthz reports only modelLoaded, so the backend reads UP and each job fails INFERENCE_TIMEOUT after
+# inference.timeout-ms (600 s).
 #
 #   supervise_inference.sh COMMAND [ARG...]        (deploy/runpod/test_start_pod_supervisor.sh runs a fake COMMAND)
 #

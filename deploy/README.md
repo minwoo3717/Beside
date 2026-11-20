@@ -347,7 +347,9 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 
 - 서비스 프로세스가 끝나면(오류로 죽음, 메모리 부족으로 죽음, `kill -9`) 같은 환경변수·작업 폴더로 다시 띄운다. keep-alive·스레드·토큰·모드가 처음과 같다.
 - 다시 띄우기 전 기다리는 시간은 5 s 다. 연달아 죽으면 두 배씩 늘고 60 s 에서 멈춘다(5 → 10 → 20 → 40 → 60 s). 한 번 300 s 넘게 돌았으면 다시 5 s 부터다. 값은 `RESTART_DELAY_S`·`RESTART_MAX_DELAY_S`·`RESTART_STABLE_S` 로 바꾼다.
-- 프로세스가 끝났을 때만 다시 띄운다. 살아 있지만 멈춘 서비스(SIGSTOP, healthz 는 답하는데 추론만 멈춤)는 그대로 둔다. 그쪽은 backend 의 추론 감시가 맡는다.
+- 프로세스가 끝났을 때만 다시 띄운다. 살아 있지만 멈춘 서비스는 그대로 둔다. 멈춘 서비스를 누가 알아채는지는 `/healthz` 가 답하느냐에 달렸다.
+  - SIGSTOP 처럼 `/healthz` 도 답하지 못하면: backend 의 `InferenceHealthMonitor` 가 다음 검사(15 s 마다)에서 2 s 안에 답이 없어 DOWN 으로 읽는다. `NOTIFY_WEBHOOK_URL` 을 넣었으면 DOWN 이 45 s 이어진 뒤(`notify.down-grace-ms=45000`) 디스코드 GPU 알림이 간다. 코드를 읽어 정리한 것이고, 실제 Pod 에서 SIGSTOP 으로 확인하는 것은 **[계획]** 이다.
+  - `/healthz` 는 답하는데 추론만 멈추면: 아무것도 알아채지 못한다. `/healthz` 는 모델이 올라왔는지(`modelLoaded`)만 알려 주므로 backend 는 UP 으로 보고, 감독 루프도 프로세스가 살아 있어 그대로 둔다. 작업마다 `inference.timeout-ms`(600 s) 뒤 `INFERENCE_TIMEOUT` 으로 실패하고, 웹훅을 넣었으면 그 작업의 실패 알림만 간다. GPU 상태 알림은 없다. 이 경우를 잡는 장치는 없다.
 - 기록: `/workspace/beside-logs/supervisor.log` 에 시작·종료·재시작마다 UTC 시각을 붙인 한 줄(끝난 pid, 종료 상태, 돈 시간, 몇 번째 재시작, 기다릴 시간)이 남는다. `inference.log` 에도 `=== <시각> supervise_inference.sh restart N ===` 줄이 붙는다.
 - `/var/run/beside/inference.pid` 는 지금 떠 있는 uvicorn 프로세스다. model 모드의 `start_inference_wsl.sh` 는 uvicorn 을 `exec` 하므로 pid 가 같다. SIGSTOP·`kill` 은 이 pid 에 보낸다. 감독 루프의 pid 는 `/var/run/beside/supervisor.pid` 다.
 - 감독 루프는 한 번에 하나만 돈다(`/var/run/beside/supervisor.lock` 을 잡는다). 서비스는 내려가 있고 감독 루프가 재시작을 기다리는 중이면 `start_pod.sh` 는 그 pid 를 알리고 멈춘다.
