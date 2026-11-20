@@ -57,6 +57,8 @@ public class JobServiceImpl implements JobService {
     private final JobMetrics jobMetrics;
     /** First-photo check before the 202 (off unless preprocess.check.enabled). */
     private final UploadCheck uploadCheck;
+    /** Queue cap for v1 create and retry (REVIEW_CHECKLIST #21 proposal; off unless admission.max-pending > 0). */
+    private final AdmissionGate admissionGate;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -135,18 +137,24 @@ public class JobServiceImpl implements JobService {
                 return replay.get();
             }
         }
-        // The first photo is the one the 3D model is made from. Checked before anything is stored: a refused request
-        // leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
-        UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
-        if (check.isRefused()) {
-            throw ApiException.badRequest(ErrorCode.valueOf(check.refused().name()),
-                    "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
-        }
+        // Queue cap (ERROR_CODES.md "대기열 상한", REVIEW_CHECKLIST #21 proposal): after validation and the key replay,
+        // so a bad request stays 400 and a replay always gets its job, and before the photo check, so a full queue
+        // costs no check slot. The place is held until saveUploads has committed the PENDING row the gate counts, and
+        // given back on every way out (refused photo, failed copy or save). Key link and dispatch run after it.
         Job job;
-        try {
-            job = saveUploads(photos, check);
-        } catch (IOException e) {
-            throw new UncheckedIOException("Failed to store uploads", e);
+        try (AdmissionGate.Permit admitted = admissionGate.admit(AdmissionGate.Op.CREATE)) {
+            // The first photo is the one the 3D model is made from. Checked before anything is stored: a refused
+            // request leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
+            UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
+            if (check.isRefused()) {
+                throw ApiException.badRequest(ErrorCode.valueOf(check.refused().name()),
+                        "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
+            }
+            try {
+                job = saveUploads(photos, check);
+            } catch (IOException e) {
+                throw new UncheckedIOException("Failed to store uploads", e);
+            }
         }
         // The key is linked before the worker sees the job: the losing request of a same-key race is dropped unrun.
         if (keyed) {
@@ -178,11 +186,16 @@ public class JobServiceImpl implements JobService {
             throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
                     "Only FAILED jobs can be retried; current status is " + found.getStatus());
         }
-        // FAILED -> PENDING in one conditional update: when two retries of the same FAILED job overlap, both pass the
-        // check above but only one changes the row, so the attempt is dispatched once and the other gets 409.
-        if (jobRepository.startRetry(id, Instant.now(), JobStatus.FAILED, JobStatus.PENDING) == 0) {
-            throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                    "Only FAILED jobs can be retried; current status is " + getJobOrThrow(id).getStatus());
+        // Queue cap (REVIEW_CHECKLIST #21 proposal): after the 404 and 409 above, around the update below, whose commit
+        // makes the job one of the PENDING rows the gate counts. Refused, the job stays FAILED (503 naming it), unless
+        // another retry of the same job holds a place or already re-queued it: that one wins and this gets 409.
+        try (AdmissionGate.Permit admitted = admissionGate.admitRetry(id, () -> noLongerFailed(id))) {
+            // FAILED -> PENDING in one conditional update: when two retries of the same FAILED job overlap, both pass
+            // the check above but only one changes the row, so the attempt is dispatched once and the other gets 409.
+            if (jobRepository.startRetry(id, Instant.now(), JobStatus.FAILED, JobStatus.PENDING) == 0) {
+                throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
+                        "Only FAILED jobs can be retried; current status is " + getJobOrThrow(id).getStatus());
+            }
         }
         Job job = getJobOrThrow(id);
         try {
@@ -197,6 +210,19 @@ public class JobServiceImpl implements JobService {
         jobMetrics.jobRetried();
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
+    }
+
+    /** For a retry the full queue refused: the answer when its job is gone or no longer FAILED, else null (503). */
+    private ApiException noLongerFailed(String id) {
+        Optional<Job> now = jobRepository.findById(id);
+        if (now.isEmpty()) {
+            return ApiException.jobNotFound(id);
+        }
+        if (now.get().getStatus() != JobStatus.FAILED) {
+            return ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
+                    "Only FAILED jobs can be retried; current status is " + now.get().getStatus());
+        }
+        return null;
     }
 
     @Override
