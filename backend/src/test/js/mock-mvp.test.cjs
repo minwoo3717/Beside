@@ -74,9 +74,11 @@ function accepted(location = `/api/v1/jobs/${id}`) {
   return Response.json({ jobId: id }, { status: 202, headers: { Location: location } });
 }
 function job(status, jobId = id, extra = {}) { return Response.json({ id: jobId, status, ...extra }); }
-function apiError(status, code) {
-  return Response.json({ error: { code, message: "developer text", jobId: null } }, { status });
+function apiError(status, code, headers = {}) {
+  return Response.json({ error: { code, message: "developer text", jobId: null } }, { status, headers });
 }
+const QUEUE_FULL_COPY = "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요.";
+const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 test("multiple previews, multipart contract, polling and representative result", async () => {
   const states = ["PENDING", "PROCESSING", "COMPLETED"];
@@ -153,6 +155,67 @@ test("v1 error envelope shows the ERROR_CODES copy, not the developer message", 
     assert.equal(app.element("#status-badge").textContent, "FAILED");
     assert.equal(app.element("#error-message").textContent, "JPG, PNG, WEBP 사진만 사용할 수 있어요.");
   } finally { await app.clear(); }
+});
+
+// Queue cap draft (docs/api/ERROR_CODES.md QUEUE_FULL, [제안값] 안건 #21, 계약 회의 전): 503 + Retry-After seconds.
+test("QUEUE_FULL shows its copy and locks generating for Retry-After without sending again", async () => {
+  let posts = 0;
+  const app = setup(async (_url, options) => {
+    if (options.method === "POST") posts++;
+    return apiError(503, "QUEUE_FULL", { "Retry-After": "165" });
+  });
+  await app.select(); await app.submit(); await settle();
+  assert.equal(posts, 1);
+  assert.equal(app.element("#status-badge").textContent, "FAILED");
+  assert.equal(app.element("#error-message").textContent, QUEUE_FULL_COPY);
+  assert.match(app.element("#status-description").textContent, /165초 뒤\(\d{2}:\d{2}:\d{2} 이후\)/);
+  const generate = app.element("#generate-button");
+  assert.equal(generate.disabled, true);
+  assert.match(generate.querySelector("span").textContent, /^\d{2}:\d{2}:\d{2} 이후 생성 가능$/);
+  assert.equal(app.element("#photos").disabled, false);
+
+  await app.submit(); await settle();
+  assert.equal(posts, 1, "no second POST during the cooldown");
+
+  // The cooldown is not "busy": clearing and picking photos again still work, generating stays locked.
+  await app.clear();
+  assert.equal(app.element("#selection-count").textContent, "선택한 사진 0장");
+  assert.equal(app.element("#photo-previews").children.length, 0);
+  assert.equal(app.element("#error-message").hidden, true);
+  await app.select();
+  assert.equal(app.element("#photo-previews").children.length, 1);
+  assert.equal(generate.disabled, true);
+  await app.submit(); await settle();
+  assert.equal(posts, 1);
+  await app.clear();
+});
+
+test("the generate button comes back when Retry-After has passed, still without sending again", async () => {
+  let posts = 0;
+  // Retry-After 1 s: the test setTimeout runs waits of 1000 ms or less at once.
+  const app = setup(async (_url, options) => {
+    if (options.method === "POST") posts++;
+    return apiError(503, "QUEUE_FULL", { "Retry-After": "1" });
+  });
+  try {
+    await app.select(); await app.submit(); await settle();
+    assert.equal(app.element("#error-message").textContent, QUEUE_FULL_COPY);
+    assert.equal(app.element("#generate-button").disabled, false);
+    assert.equal(app.element("#generate-button").querySelector("span").textContent, "3D 모델 생성");
+    assert.equal(posts, 1);
+  } finally { await app.clear(); }
+});
+
+test("Retry-After that is not a positive integer of seconds is ignored", async () => {
+  for (const value of ["0", "-5", "1.5", "abc", "", "Wed, 21 Oct 2026 07:28:00 GMT", "99999999999999999999"]) {
+    const app = setup(async () => apiError(503, "QUEUE_FULL", { "Retry-After": value }));
+    try {
+      await app.select(); await app.submit(); await settle();
+      assert.equal(app.element("#error-message").textContent, QUEUE_FULL_COPY, value);
+      assert.equal(app.element("#generate-button").disabled, false, value);
+      assert.equal(app.element("#generate-button").querySelector("span").textContent, "3D 모델 생성", value);
+    } finally { await app.clear(); }
+  }
 });
 
 test("first-photo check rejections show their ERROR_CODES copy", async () => {

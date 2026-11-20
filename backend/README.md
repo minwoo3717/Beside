@@ -282,6 +282,6 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobMetricsTest` | `beside.jobs.finished` 태그(완료·실패 코드·패스스루), 작업 타이머 값과 버킷, processingMs 없음, 이상한 이벤트에도 예외 없음, 대기열 게이지 갱신과 실패 시 마지막 값 유지 (SimpleMeterRegistry) |
 | `OperationalMetricsFlowTest` | mock 흐름: created(재요청 제외)·retried·finished·타이머·게이지, 에셋 GET 409/404/200/404(hair) outcome, 폴링은 세지 않음 |
 | `AssetDownloadMetricsFilterTest` | outcome 판정: 전체·빈 GLB·짧은 본문·헤더 Content-Length·쓰는 중 끊김·flush 끊김·404/409/500/400·예외, 대상 아닌 요청 |
-| `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부 (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
+| `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부, 503 `QUEUE_FULL`(**[제안값] 안건 #21, 계약 회의 전**)의 문구와 `Retry-After` 초 동안 생성 버튼 잠금(다시 보내지 않음, 양의 정수만 인정) (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).

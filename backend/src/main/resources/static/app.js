@@ -34,12 +34,18 @@ const ERROR_MESSAGES = Object.freeze({
   INFERENCE_FAILED: "3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요.",
   INFERENCE_TIMEOUT: "생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요.",
   INFERENCE_UNAVAILABLE: "생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.",
-  CONVERSION_FAILED: "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요."
+  CONVERSION_FAILED: "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요.",
+  // Queue cap draft: [제안값] 안건 #21, 계약 회의 전. Sent as 503 with a Retry-After header (seconds).
+  QUEUE_FULL: "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요."
 });
 let selectedFiles = [];
 let previewUrls = [];
 let busy = false;
 let activeRequest = null;
+// Retry-After cooldown. Kept apart from busy so clearing and picking photos still work;
+// only generating waits. Nothing is re-sent automatically: the user presses the button again.
+let cooldownTimer = null;
+let cooldownUntil = "";
 
 function showError(message) {
   errorMessage.textContent = message;
@@ -48,12 +54,39 @@ function showError(message) {
 
 function setBusy(value) {
   busy = value;
+  const coolingDown = cooldownTimer !== null;
   photoInput.disabled = value;
   clearButton.disabled = value;
-  generateButton.disabled = value || selectedFiles.length === 0;
-  generateButton.querySelector("span").textContent = value ? "생성 진행 중…" : "3D 모델 생성";
+  generateButton.disabled = value || coolingDown || selectedFiles.length === 0;
+  generateButton.querySelector("span").textContent = value ? "생성 진행 중…"
+    : coolingDown ? `${cooldownUntil} 이후 생성 가능` : "3D 모델 생성";
   document.querySelector(".status-panel").setAttribute("aria-busy", String(value));
   progress.hidden = !value;
+}
+
+function clockAfter(seconds) {
+  const at = new Date(Date.now() + seconds * 1000);
+  return [at.getHours(), at.getMinutes(), at.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+// Locks the generate button for Retry-After seconds, then gives it back. It never sends a request itself.
+function startCooldown(seconds) {
+  if (cooldownTimer !== null) clearTimeout(cooldownTimer);
+  cooldownUntil = clockAfter(seconds);
+  // setTimeout fires at once above 2^31-1 ms (about 24.8 days), so very long waits are capped there.
+  cooldownTimer = setTimeout(() => {
+    cooldownTimer = null;
+    setBusy(busy);
+  }, Math.min(seconds * 1000, 2147483647));
+  setBusy(busy);
+}
+
+// Retry-After as delta-seconds: a positive integer only. HTTP dates and other values are ignored.
+function retryAfterSeconds(response) {
+  const value = response.headers.get("Retry-After");
+  if (!value || !/^[0-9]+$/.test(value)) return null;
+  const seconds = Number(value);
+  return Number.isSafeInteger(seconds) && seconds > 0 ? seconds : null;
 }
 
 function setStatus(status, description) {
@@ -125,7 +158,9 @@ photoInput.addEventListener("change", () => {
   });
   document.querySelector("#selection-count").textContent = `선택한 사진 ${files.length}장`;
   clearButton.hidden = false;
-  setStatus("WAITING", "사진이 준비됐어요. 생성 버튼을 눌러주세요.");
+  setStatus("WAITING", cooldownTimer !== null
+    ? `사진이 준비됐어요. ${cooldownUntil} 이후에 생성 버튼을 눌러주세요.`
+    : "사진이 준비됐어요. 생성 버튼을 눌러주세요.");
   setBusy(false);
 });
 
@@ -153,7 +188,10 @@ async function request(url, options = {}, timeoutMs = 15000) {
     const text = await response.text();
     if (!response.ok) {
       console.error("Backend request failed", response.status, text);
-      throw new Error(httpErrorMessage(response.status, text));
+      const failure = new Error(httpErrorMessage(response.status, text));
+      const retryAfter = retryAfterSeconds(response);
+      if (retryAfter !== null) failure.retryAfter = retryAfter;
+      throw failure;
     }
     return { response, text };
   } catch (error) {
@@ -199,7 +237,7 @@ async function pollJob(jobId) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (busy || selectedFiles.length === 0) return;
+  if (busy || cooldownTimer !== null || selectedFiles.length === 0) return;
   resetResult();
   showError("");
   setBusy(true);
@@ -218,7 +256,10 @@ form.addEventListener("submit", async (event) => {
     await pollJob(match[1]);
   } catch (error) {
     console.error("Beside Again Mock workflow failed", error);
-    setStatus("FAILED", "진행을 완료하지 못했어요. 오류 내용을 확인해 주세요.");
+    if (error.retryAfter) startCooldown(error.retryAfter);
+    setStatus("FAILED", error.retryAfter
+      ? `${error.retryAfter}초 뒤(${cooldownUntil} 이후)에 다시 생성할 수 있어요.`
+      : "진행을 완료하지 못했어요. 오류 내용을 확인해 주세요.");
     showError(error.message || "알 수 없는 오류가 발생했습니다.");
   } finally {
     setBusy(false);
