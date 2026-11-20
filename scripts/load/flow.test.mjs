@@ -157,6 +157,29 @@ test('flow: a create refused with 503 QUEUE_FULL ends the flow as rejected and i
   assert.deepEqual(state.checks.filter((c) => c.name === 'create 202').map((c) => c.ok), [false]);
 });
 
+test('flow: only a 202 is a created job; every other create answer is sent (load_postMs) but not created', async () => {
+  // docs/perf/load/TRAFFIC_MODEL.md §9: meta.measuredCreates (load_createdCount) leaves out every answer that is not a 202.
+  // The flow ends 'rejected' for 429 / 503 QUEUE_FULL and 'error' for the rest (an unexpected 4xx ends it as an error too).
+  const answers = [
+    ['503 QUEUE_FULL', { status: 503, body: QUEUE_FULL, headers: { 'Retry-After': '165' } }, 'rejected'],
+    ['429 RATE_LIMITED', { status: 429, body: '{"error":{"code":"RATE_LIMITED","message":"x"}}' }, 'rejected'],
+    ['400 photo check', { status: 400, body: '{"error":{"code":"NO_ANIMAL_DETECTED","message":"x"}}' }, 'error'],
+    ['413 from the proxy', { status: 413, body: '<html>413</html>' }, 'error'],
+    ['500', { status: 500, body: '{"error":{"code":"INTERNAL_ERROR","message":"x"}}' }, 'error'],
+    ['503 from the proxy', { status: 503, body: '' }, 'error'],
+    ['status 0', { status: 0, body: '' }, 'error'],
+  ];
+  for (const [name, answer, outcome] of answers) {
+    const mod = await load('smoke.js', {}, { clock: 0 });
+    const server = fakeServer({ completeAfterPolls: 0 });
+    state.handler = (req) => (isCreate(req) ? answer : server(req));
+    mod.flow();
+    assert.equal(samples('load_postMs').length, 1, `${name}: the POST is still timed`);
+    assert.deepEqual(samples('load_createdCount'), [], `${name}: no job was created`);
+    assert.equal(samples('load_flowMs')[0].tags.outcome, outcome, name);
+  }
+});
+
 test('flow: every 503 QUEUE_FULL has its Retry-After checked (whole seconds >= 1, = QUEUE_RETRY_AFTER when set)', async () => {
   const f = await lib('flow.js');
   assert.equal(f.retryAfterOk('165', null), true);

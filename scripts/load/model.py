@@ -77,7 +77,8 @@ def queue_prediction(rate_per_h: float, service_s: float, slots: int) -> dict:
     """G series prediction recomputed from a run's measured arrival rate and mean slot time (TRAFFIC_MODEL.md §4, §9).
 
     rate_per_h  the arrival rate the k6 run really had: jobs it created per hour (gpu_queue.js meta.measuredJobsPerHour,
-                load_postMs count / arrival window x 3600), not the requested meta.prediction.jobsPerHour, which a
+                load_createdCount count (creates answered 202) / arrival window x 3600), not the requested
+                meta.prediction.jobsPerHour, which a
                 finite Poisson run misses by about the square root of its job count
     service_s   the measured mean slot time: the mean of the server's processingMs / 1000 (upload to the inference
                 service, stub sleep, GLB download), not the stub delay T_SEC. It is a little short of the time a job

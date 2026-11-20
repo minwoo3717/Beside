@@ -69,7 +69,8 @@ export function isQueueRun(label) {
   return label.charAt(0) === 'G';
 }
 
-// Jobs per hour a run really created: `count` creates (load_postMs count) in `windowS` seconds of arrivals. Thinning
+// Jobs per hour a run really created: `count` creates (load_createdCount count = gpu_queue.js meta.measuredCreates, the
+// creates answered 202; load_postMs counts every POST sent) in `windowS` seconds of arrivals. Thinning
 // makes the count of a finite run differ from lambda x duration (Poisson, sd = sqrt(count)), so the recompute uses
 // this, not the requested rate (docs/perf/load/TRAFFIC_MODEL.md §9). null when the window is unknown or empty.
 export function realizedPerHour(count, windowS) {
