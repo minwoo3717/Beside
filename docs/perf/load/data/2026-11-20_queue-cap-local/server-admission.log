@@ -1,0 +1,4 @@
+2026-11-20T14:10:02.226+09:00 Queue admission: on, max-pending=3 retry-after-seconds=30 stale-after-ms=4200000
+2026-11-20T14:10:26.028+09:00 Queue full: refused op=create jobId=- pending=3 reserved=0 cap=3 retryAfter=30s
+2026-11-20T14:10:26.075+09:00 Queue full: refused op=create jobId=- pending=3 reserved=0 cap=3 retryAfter=30s
+2026-11-20T14:10:26.093+09:00 Queue full: refused op=retry jobId=f030ecc5-49bc-4e5c-a171-de7790c5055a pending=3 reserved=0 cap=3 retryAfter=30s

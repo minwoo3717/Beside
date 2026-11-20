@@ -1,0 +1,97 @@
+[
+ {
+  "check": "healthz",
+  "ok": true,
+  "detail": "status 200"
+ },
+ {
+  "check": "fail job created",
+  "ok": true,
+  "detail": "status 202 jobId f030ecc5-49bc-4e5c-a171-de7790c5055a"
+ },
+ {
+  "check": "fail job ends FAILED",
+  "ok": true,
+  "detail": "status FAILED error INFERENCE_FAILED"
+ },
+ {
+  "check": "create 1 of cap 3",
+  "ok": true,
+  "detail": "status 202"
+ },
+ {
+  "check": "create 2 of cap 3",
+  "ok": true,
+  "detail": "status 202"
+ },
+ {
+  "check": "create 3 of cap 3",
+  "ok": true,
+  "detail": "status 202"
+ },
+ {
+  "check": "create over cap -> 503",
+  "ok": true,
+  "detail": "status 503"
+ },
+ {
+  "check": "error.code QUEUE_FULL",
+  "ok": true,
+  "detail": "code QUEUE_FULL"
+ },
+ {
+  "check": "Retry-After = 30",
+  "ok": true,
+  "detail": "Retry-After '30'"
+ },
+ {
+  "check": "refused create has no jobId",
+  "ok": true,
+  "detail": "jobId ''"
+ },
+ {
+  "check": "same key again is still refused (key not stored)",
+  "ok": true,
+  "detail": "status 503"
+ },
+ {
+  "check": "retry while full -> 503 QUEUE_FULL",
+  "ok": true,
+  "detail": "status 503 code QUEUE_FULL jobId 'f030ecc5-49bc-4e5c-a171-de7790c5055a'"
+ },
+ {
+  "check": "retry 503 has Retry-After",
+  "ok": true,
+  "detail": "Retry-After '30'"
+ },
+ {
+  "check": "refused retry leaves the FAILED row unchanged",
+  "ok": true,
+  "detail": "status FAILED error INFERENCE_FAILED updatedAt 2026-11-20T05:10:25.460924Z (before 2026-11-20T05:10:25.460924Z)"
+ },
+ {
+  "check": "404 has no Retry-After",
+  "ok": true,
+  "detail": "status 404"
+ },
+ {
+  "check": "v0 POST /api/jobs not capped",
+  "ok": true,
+  "detail": "status 202"
+ },
+ {
+  "check": "first job left PENDING",
+  "ok": true,
+  "detail": "status PROCESSING"
+ },
+ {
+  "check": "create after the queue drains -> 202",
+  "ok": true,
+  "detail": "status 202"
+ },
+ {
+  "check": "retry after drain -> 202, job leaves FAILED",
+  "ok": true,
+  "detail": "status 202 job PENDING"
+ }
+]
