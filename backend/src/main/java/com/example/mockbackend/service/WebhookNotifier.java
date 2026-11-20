@@ -27,8 +27,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,12 +129,13 @@ public class WebhookNotifier {
     /** Failed sends in a row, and tries of the GPU message first in line. Guarded by outbox. */
     private int failures;
     private int headAttempts;
-    /** When the current run of failures began, else null. Guarded by outbox. */
-    private Instant failingSince;
-    /** Messages not sent (failed or overflowed) since the last summary. Guarded by outbox. */
+    /** The notes of the send in progress: an overflow never drops them (they may yet be delivered). Guarded by outbox. */
+    private final Set<Note> inFlight = Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Messages not sent (failed or overflowed) and not yet summed up, and when the first of them was lost. */
     private int lostCompleted;
     private int lostFailed;
     private int lostGpu;
+    private Instant lostSince;
 
     public WebhookNotifier(String webhookUrl, String publicBaseUrl, ObjectMapper objectMapper) {
         this(webhookUrl, publicBaseUrl, "", 0, objectMapper);
@@ -268,15 +272,15 @@ public class WebhookNotifier {
         queue(new Note(message, true, null, System.nanoTime(), Instant.now()));
     }
 
-    /** Adds to its queue (dropping the oldest when full) and starts a drain unless one is running or pausing. */
+    /**
+     * Adds to its queue and starts a drain unless one is running or pausing. When the queue already holds its limit of
+     * messages that are not being sent, the oldest of those is dropped and counted.
+     */
     private void queue(Note note) {
         synchronized (outbox) {
             Deque<Note> queue = note.urgent() ? urgentQueue : jobQueue;
-            if (queue.size() >= (note.urgent() ? MAX_URGENT : MAX_JOBS)) {
-                lose(queue.pollFirst());
-                if (note.urgent()) {
-                    headAttempts = 0;   // the GPU message first in line is another one now
-                }
+            if (waiting(queue) >= (note.urgent() ? MAX_URGENT : MAX_JOBS)) {
+                dropOldestWaiting(queue);
                 log.warn("webhook queue full: oldest {} message dropped", note.urgent() ? "GPU" : "job");
             }
             queue.addLast(note);
@@ -296,8 +300,42 @@ public class WebhookNotifier {
         }
     }
 
-    /** What one send carries: the text and its notes (none for the summary of lost messages). */
-    private record Batch(String text, List<Note> notes, boolean summary) {
+    /** Caller holds outbox. Messages in {@code queue} that are not being sent. */
+    private int waiting(Deque<Note> queue) {
+        int waiting = 0;
+        for (Note note : queue) {
+            if (!inFlight.contains(note)) {
+                waiting++;
+            }
+        }
+        return waiting;
+    }
+
+    /** Caller holds outbox. Drops and counts the oldest message of {@code queue} that is not being sent. */
+    private void dropOldestWaiting(Deque<Note> queue) {
+        boolean head = true;
+        for (Iterator<Note> it = queue.iterator(); it.hasNext(); head = false) {
+            Note note = it.next();
+            if (inFlight.contains(note)) {
+                continue;
+            }
+            it.remove();
+            lose(note);
+            if (head && note.urgent()) {
+                headAttempts = 0;   // the GPU message first in line is another one now, not yet tried
+            }
+            return;
+        }
+    }
+
+    /**
+     * What one send carries: the text and its notes; for the summary of lost messages, no notes and the counts it
+     * reports (completed, failed, GPU), so losses counted while it is on its way stay for the next one.
+     */
+    private record Batch(String text, List<Note> notes, int[] summed) {
+        boolean summary() {
+            return summed != null;
+        }
     }
 
     /** Sender thread: sends what is waiting, one message at a time, until the queues are empty or a send fails. */
@@ -325,26 +363,37 @@ public class WebhookNotifier {
 
     /** Caller holds outbox. GPU messages first, then the summary of lost messages, then job results (several as one). */
     private Batch next() {
+        Batch batch = choose();
+        inFlight.clear();
+        if (batch != null) {
+            inFlight.addAll(batch.notes());
+        }
+        return batch;
+    }
+
+    /** Caller holds outbox. */
+    private Batch choose() {
         Note head = urgentQueue.peekFirst();
         if (head != null) {
-            return new Batch(late(head), List.of(head), false);
+            return new Batch(late(head), List.of(head), null);
         }
         if (lostCompleted + lostFailed + lostGpu > 0) {
-            return new Batch(lostText(), List.of(), true);
+            return new Batch(lostText(), List.of(), new int[]{lostCompleted, lostFailed, lostGpu});
         }
         if (jobQueue.isEmpty()) {
             return null;
         }
         if (jobQueue.size() < BATCH_FROM) {
             Note job = jobQueue.peekFirst();
-            return new Batch(late(job), List.of(job), false);
+            return new Batch(late(job), List.of(job), null);
         }
         List<Note> jobs = new ArrayList<>(jobQueue);
-        return new Batch(batchText(jobs), jobs, false);
+        return new Batch(batchText(jobs), jobs, null);
     }
 
     /** Caller holds outbox. Updates the queues after a send; returns the pause before the next one, 0 to go on. */
     private long settle(Batch batch, Outcome outcome) {
+        inFlight.clear();
         if (outcome.sent()) {
             for (Note note : batch.notes()) {
                 (note.urgent() ? urgentQueue : jobQueue).remove(note);
@@ -353,16 +402,15 @@ public class WebhookNotifier {
                 }
             }
             if (batch.summary()) {
-                lostCompleted = 0;
-                lostFailed = 0;
-                lostGpu = 0;
+                lostCompleted -= batch.summed()[0];
+                lostFailed -= batch.summed()[1];
+                lostGpu -= batch.summed()[2];
+                if (lostCompleted + lostFailed + lostGpu == 0) {
+                    lostSince = null;
+                }
             }
             failures = 0;
-            failingSince = null;
             return 0;
-        }
-        if (failingSince == null) {
-            failingSince = Instant.now();
         }
         if (outcome.retryAfterMs() > 0) {   // 429: nothing is lost, only later
             log.warn("webhook rate limited (HTTP 429): next send in {} ms", outcome.retryAfterMs());
@@ -371,11 +419,13 @@ public class WebhookNotifier {
         failures++;
         for (Note note : batch.notes()) {
             if (!note.urgent()) {
-                jobQueue.remove(note);
-                lose(note);
+                if (jobQueue.remove(note)) {
+                    lose(note);
+                }
             } else if (++headAttempts >= MAX_ATTEMPTS) {
-                urgentQueue.remove(note);
-                lose(note);
+                if (urgentQueue.remove(note)) {
+                    lose(note);
+                }
                 headAttempts = 0;
             }
         }
@@ -387,8 +437,8 @@ public class WebhookNotifier {
 
     /** Caller holds outbox. */
     private void lose(Note note) {
-        if (note == null) {
-            return;
+        if (lostSince == null) {
+            lostSince = Instant.now();
         }
         if (note.urgent()) {
             lostGpu++;
@@ -402,8 +452,8 @@ public class WebhookNotifier {
     /** Caller holds outbox. */
     private String lostText() {
         StringBuilder text = new StringBuilder("📭 디스코드 알림을 보내지 못해 빠진 알림이 있어요");
-        if (failingSince != null) {
-            text.append(" (").append(clock(failingSince)).append("부터 실패)");
+        if (lostSince != null) {
+            text.append(" (").append(clock(lostSince)).append("부터 실패)");
         }
         List<String> parts = new ArrayList<>();
         if (lostCompleted > 0) {

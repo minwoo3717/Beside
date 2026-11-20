@@ -399,6 +399,57 @@ class WebhookNotifierTest {
         }
     }
 
+    /**
+     * A full queue drops the oldest message that is waiting, never the one being sent: it may yet be delivered (and
+     * then it must not be reported as lost too). Here 1 is on its way and 60 more come: 10 are dropped, not 11.
+     */
+    @Test
+    void anOverflowNeverDropsTheMessageBeingSent() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+            hook.holdNext.set(release);
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 100, JSON);
+            notifier.onJobFinished(job("fd9d0000", JobStatus.COMPLETED));
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.size() == 1);   // on its way, held
+            for (int i = 1; i <= 60; i++) {
+                notifier.onJobFinished(job(String.format("fd9d%04d", i), JobStatus.COMPLETED));
+            }
+            release.countDown();
+
+            await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 3);
+            assertThat(hook.delivered.get(0)).startsWith("✅ 3D 모델 완성 · 작업 `fd9d0000`");
+            assertThat(hook.delivered.get(1)).startsWith("📭").contains("— ✅ 완성 10건.");
+            assertThat(hook.delivered.get(2)).startsWith("📦 작업 알림 50건을 한 번에 보내요 (✅ 50 · ⚠️ 0)")
+                    .contains("`fd9d0011`").doesNotContain("`fd9d0010`").doesNotContain("`fd9d0000`");
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 3);
+        }
+    }
+
+    /** Losses counted while the summary is on its way are not erased by it: the next summary reports them. */
+    @Test
+    void lossesDuringTheSummaryAreReportedNextTime() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.answer.set(503);
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 300, JSON);
+            notifier.onJobFinished(job("fd9e0000", JobStatus.FAILED));   // fails: one lost
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.size() == 1);
+            java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+            hook.holdNext.set(release);
+            hook.answer.set(204);
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.size() == 2);   // the summary, held
+            for (int i = 1; i <= 52; i++) {   // 50 fit: 2 are dropped while the summary is on its way
+                notifier.onJobFinished(job(String.format("fd9e%04d", i), JobStatus.COMPLETED));
+            }
+            release.countDown();
+
+            await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 3);
+            assertThat(hook.delivered.get(0)).startsWith("📭").contains("— ⚠️ 실패 1건.").doesNotContain("완성");
+            assertThat(hook.delivered.get(1)).startsWith("📭").contains("— ✅ 완성 2건.").doesNotContain("⚠️ 실패");
+            assertThat(hook.delivered.get(2)).startsWith("📦 작업 알림 50건");
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 3);
+        }
+    }
+
     @Test
     void retryAfterIsReadInSecondsWithinLimits() {
         assertThat(WebhookNotifier.retryAfterMs("2")).isEqualTo(2_000);
@@ -418,6 +469,9 @@ class WebhookNotifierTest {
     private static final class FakeHook implements AutoCloseable {
         final AtomicInteger answer = new AtomicInteger(204);
         final java.util.concurrent.atomic.AtomicBoolean rateLimitOnce = new java.util.concurrent.atomic.AtomicBoolean();
+        /** When set, the next message is held (after it is recorded) until the latch opens: a send in progress. */
+        final java.util.concurrent.atomic.AtomicReference<java.util.concurrent.CountDownLatch> holdNext =
+                new java.util.concurrent.atomic.AtomicReference<>();
         /** Every message that arrived, and those answered with a 2xx. */
         final List<String> received = new CopyOnWriteArrayList<>();
         final List<String> delivered = new CopyOnWriteArrayList<>();
@@ -428,6 +482,14 @@ class WebhookNotifierTest {
             server.createContext("/hook", exchange -> {
                 String text = content(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
                 received.add(text);
+                java.util.concurrent.CountDownLatch hold = holdNext.getAndSet(null);
+                if (hold != null) {
+                    try {
+                        hold.await(4, java.util.concurrent.TimeUnit.SECONDS);   // under the notifier's 5 s timeout
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
                 int code = answer.get();
                 if (rateLimitOnce.getAndSet(false)) {
                     code = 429;
