@@ -162,10 +162,13 @@ BACKUP_DIR="$STORAGE_DIR/backup"
 last="$(cat "$STATE_DIR/db.last" 2>/dev/null || true)"
 sent=0
 if [[ -d "$BACKUP_DIR" ]]; then
-  find "$BACKUP_DIR" -maxdepth 1 -type f -name 'beside-*.zip' -mmin "+$MIN_AGE_MIN" -printf '%f\n' | sort > "$LIST"
+  # find exits 1 when a file vanishes under it (a zip pruned meanwhile): what it listed is still good.
+  { find "$BACKUP_DIR" -maxdepth 1 -type f -name 'beside-*.zip' -mmin "+$MIN_AGE_MIN" -printf '%f\n' || true; } | sort > "$LIST"
   while IFS= read -r name <&3; do
     [[ -z "$last" || "$name" > "$last" ]] || continue
-    if ! zip_ok "$BACKUP_DIR/$name"; then
+    if [[ ! -f "$BACKUP_DIR/$name" ]]; then
+      err "pruned before it was sent, skipped: $name (was the VM off for two days?)"
+    elif ! zip_ok "$BACKUP_DIR/$name"; then
       err "not a readable zip, skipped: $name"
       failed=1
     elif upload "$BACKUP_DIR/$name" "db/$name"; then
@@ -181,7 +184,7 @@ else
   err "no backup folder $BACKUP_DIR (storage.backup.enabled in the prod profile?)"
   failed=1
 fi
-log "db: $sent new backup(s) sent, newest in the bucket: ${last:-none}"
+log "db: $sent new backup(s) sent, newest handled: ${last:-none}"
 
 # ---- files/: photos and GLBs, once a day. files.done lists every relative path already sent (objects never change:
 # uploads/<job>_<name> and results/<job>/base.glb are written once per job).
@@ -196,13 +199,16 @@ if [[ "$FORCE_FILES" == 1 || "$(cat "$STATE_DIR/files.day" 2>/dev/null || true)"
   done
   : > "$LIST"
   if ((${#dirs[@]})); then
-    (cd "$STORAGE_DIR" && find "${dirs[@]}" -type f ! -name $'*\n*' -mmin "+$MIN_AGE_MIN" -print) | sort -u > "$LIST"
+    # a job deleted while find runs makes it exit 1; the files it did list are still to be sent
+    (cd "$STORAGE_DIR" && { find "${dirs[@]}" -type f ! -name $'*\n*' -mmin "+$MIN_AGE_MIN" -print || true; }) | sort -u > "$LIST"
   fi
   comm -13 "$manifest" "$LIST" > "$NEW"
   files_sent=0
   files_failed=0
   while IFS= read -r rel <&3; do
-    if upload "$STORAGE_DIR/$rel" "files/$rel"; then
+    if [[ ! -f "$STORAGE_DIR/$rel" ]]; then
+      log "deleted before it was sent, skipped: $rel"   # its job was deleted meanwhile; nothing to retry
+    elif upload "$STORAGE_DIR/$rel" "files/$rel"; then
       printf '%s\n' "$rel" >> "$manifest"
       files_sent=$((files_sent + 1))
     else
