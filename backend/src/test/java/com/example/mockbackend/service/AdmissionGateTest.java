@@ -316,6 +316,53 @@ class AdmissionGateTest {
         assertThat(gate.reserved()).isZero();
     }
 
+    /**
+     * A create whose Idempotency-Key another create is still being admitted with (a resend while the first is in the
+     * photo check) shares that request's turn: it gets a place even over the cap, because the key's link lets only one
+     * of them create a job and the other answers with it. It still holds its own place until it is done, so a request
+     * with another key or none waits for both.
+     */
+    @Test
+    void aCreateWithTheKeyOfACreateBeingAdmittedSharesItsTurnOverTheCap() {
+        AdmissionGate gate = gate(1);
+        AdmissionGate.Permit first = gate.admitCreate("key-1", () -> null);
+
+        AdmissionGate.Permit resend = gate.admitCreate("key-1", () -> {
+            throw new AssertionError("a resend of a key being admitted is not refused");
+        });
+        assertThat(gate.reserved()).isEqualTo(2);
+        assertThatThrownBy(() -> gate.admitCreate("key-2", () -> null)).isInstanceOfSatisfying(ApiException.class,
+                full -> assertThat(full.getCode()).isEqualTo(ErrorCode.QUEUE_FULL));
+        assertThatThrownBy(() -> gate.admit(AdmissionGate.Op.CREATE)).isInstanceOf(ApiException.class);
+
+        first.close(); // the resend is still being admitted with the key: another one shares its turn
+        gate.admitCreate("key-1", () -> null).close();
+        resend.close();
+        resend.close();
+        assertThat(gate.reserved()).isZero();
+
+        // Nobody is admitting key-1 any more: with the queue full it is refused like any other request.
+        addPending(1, clock.instant());
+        assertThatThrownBy(() -> gate.admitCreate("key-1", () -> null)).isInstanceOf(ApiException.class);
+        assertThat(refused).hasSize(3);
+    }
+
+    @Test
+    void aRefusedCreateLetsTheCallerAnswerFirst() {
+        AdmissionGate gate = gate(1);
+        addPending(1, clock.instant());
+        RuntimeException linkedMeanwhile = new RuntimeException("the job of a key linked meanwhile");
+
+        assertThatThrownBy(() -> gate.admitCreate("key-1", () -> linkedMeanwhile)).isSameAs(linkedMeanwhile);
+        assertThat(refused).as("only a 503 is counted").isEmpty();
+        assertThatThrownBy(() -> gate.admitCreate("key-1", () -> null)).isInstanceOfSatisfying(ApiException.class, e -> {
+            assertThat(e.getCode()).isEqualTo(ErrorCode.QUEUE_FULL);
+            assertThat(e.getJobId()).isNull();
+        });
+        assertThat(refused).containsExactly(AdmissionGate.Op.CREATE);
+        assertThat(gate.reserved()).isZero();
+    }
+
     @Test
     void aRefusedRetryLetsTheCallerAnswerFirstAndOtherwiseNamesItsJob() {
         AdmissionGate gate = gate(1);

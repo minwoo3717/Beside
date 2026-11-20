@@ -139,10 +139,20 @@ public class JobServiceImpl implements JobService {
         }
         // Queue cap (ERROR_CODES.md "대기열 상한", REVIEW_CHECKLIST #21 proposal): after validation and the key replay,
         // so a bad request stays 400 and a replay always gets its job, and before the photo check, so a full queue
-        // costs no check slot. The place is held until saveUploads has committed the PENDING row the gate counts, and
-        // given back on every way out (refused photo, failed copy or save). Key link and dispatch run after it.
+        // costs no check slot. The place is held until saveUploads has committed the PENDING row the gate counts and
+        // the key is linked, and given back on every way out (refused photo, failed copy or save). A same-key request
+        // that overlaps this one shares its turn, and a key linked while this one asked for a place answers with its
+        // job, so a resend is never refused for a job that was accepted. Dispatch runs after it.
+        AdmissionGate.Permit admitted;
+        try {
+            admitted = admissionGate.admitCreate(keyed ? idempotencyKey : null,
+                    () -> keyed ? findJobForKey(idempotencyKey).map(KeyReplay::new).orElse(null) : null);
+        } catch (KeyReplay replay) {
+            log.info("Idempotency-Key replay -> jobId={} (linked while this request asked for a place)", replay.job.getId());
+            return replay.job;
+        }
         Job job;
-        try (AdmissionGate.Permit admitted = admissionGate.admit(AdmissionGate.Op.CREATE)) {
+        try (admitted) {
             // The first photo is the one the 3D model is made from. Checked before anything is stored: a refused
             // request leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
             UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
@@ -155,12 +165,12 @@ public class JobServiceImpl implements JobService {
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to store uploads", e);
             }
-        }
-        // The key is linked before the worker sees the job: the losing request of a same-key race is dropped unrun.
-        if (keyed) {
-            Job linked = linkIdempotencyKey(idempotencyKey, job);
-            if (linked != job) {
-                return linked;
+            // The key is linked before the worker sees the job: the losing request of a same-key race is dropped unrun.
+            if (keyed) {
+                Job linked = linkIdempotencyKey(idempotencyKey, job);
+                if (linked != job) {
+                    return linked;
+                }
             }
         }
         try {
@@ -274,6 +284,16 @@ public class JobServiceImpl implements JobService {
             idempotencyKeys.deleteById(key);
         }
         return job;
+    }
+
+    /** Thrown through the queue cap's refusal when the request's key was linked meanwhile: answer with its job. */
+    private static final class KeyReplay extends RuntimeException {
+        private final transient Job job;
+
+        KeyReplay(Job job) {
+            super(null, null, false, false);
+            this.job = job;
+        }
     }
 
     /**

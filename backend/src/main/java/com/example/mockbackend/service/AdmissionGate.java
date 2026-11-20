@@ -19,8 +19,10 @@ import org.springframework.stereotype.Component;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -44,6 +46,8 @@ import java.util.function.Supplier;
  *       as the gauge beside.jobs.pending.stale and in one WARN line when there are any; requests never count them.</li>
  *   <li>Two retries of the same job: while one holds a permit the other gets 409 JOB_NOT_FAILED (it would lose the
  *       conditional update anyway), so a full queue never answers it 503 for a job another retry is re-queuing.</li>
+ *   <li>Two creates with the same Idempotency-Key: while one holds a permit the other gets a place too, even over the
+ *       cap (only one job comes out of a key), so a resend gets the job as it does without the cap.</li>
  *   <li>max-pending 0 (the default) admits everything without a query: behaviour stays as without the cap.</li>
  * </ul>
  * Every refusal answered 503 is counted (beside.jobs.refused{op}) and logged once here with the numbers it was
@@ -85,7 +89,10 @@ public class AdmissionGate implements MeterBinder {
 
     // Guarded by this.
     private int reserved;
+    /** Jobs whose retry holds a permit. */
     private final Set<String> retrying = new HashSet<>();
+    /** Idempotency-Keys of creates holding a permit, with how many hold one. */
+    private final Map<String, Integer> creating = new HashMap<>();
 
     /** PENDING rows the cap leaves out, as of the last check; NaN while the check fails. */
     private volatile double staleRows;
@@ -172,9 +179,21 @@ public class AdmissionGate implements MeterBinder {
         }
     }
 
-    /** A place for a v1 create, or 503 QUEUE_FULL (jobId null). Close the permit once the job row is committed. */
+    /** A place for a v1 create without an Idempotency-Key, or 503 QUEUE_FULL (jobId null). */
     public Permit admit(Op op) {
-        return admit(op, null, null);
+        return admit(op, null, null, null);
+    }
+
+    /**
+     * A place for a v1 create, or 503 QUEUE_FULL (jobId null). Close the permit once the job row is committed and its
+     * Idempotency-Key linked. While another create with the same key holds a permit (a resend during the first one's
+     * photo check), this one gets a place even over the cap: the key's insert-only link lets only one of the two create
+     * a job and the other answers with it, so the queue gains one job at most, and each holds its own place until it
+     * is done, so nothing is under-counted. When the queue is full, whatever {@code insteadOfQueueFull} returns is
+     * thrown instead of the 503 (read outside the lock: the job of a key linked meanwhile).
+     */
+    public Permit admitCreate(String idempotencyKey, Supplier<? extends RuntimeException> insteadOfQueueFull) {
+        return admit(Op.CREATE, null, idempotencyKey, insteadOfQueueFull);
     }
 
     /**
@@ -183,10 +202,10 @@ public class AdmissionGate implements MeterBinder {
      * another retry already re-queued), or 503 QUEUE_FULL naming the job when it returns null.
      */
     public Permit admitRetry(String jobId, Supplier<? extends RuntimeException> insteadOfQueueFull) {
-        return admit(Op.RETRY, jobId, insteadOfQueueFull);
+        return admit(Op.RETRY, jobId, null, insteadOfQueueFull);
     }
 
-    private Permit admit(Op op, String jobId, Supplier<? extends RuntimeException> insteadOfQueueFull) {
+    private Permit admit(Op op, String jobId, String key, Supplier<? extends RuntimeException> insteadOfQueueFull) {
         if (maxPending == 0) {
             return Permit.NONE;
         }
@@ -197,14 +216,15 @@ public class AdmissionGate implements MeterBinder {
                 throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, jobId,
                         "Only FAILED jobs can be retried; another retry of this job is being accepted");
             }
+            if (key != null && creating.containsKey(key)) {
+                log.info("Queue admission: a create with an Idempotency-Key another request is being accepted with"
+                        + " shares its turn (reserved={} cap={})", reserved + 1, maxPending);
+                return reserve(jobId, key);
+            }
             pending = counts.queuedAfter(clock.instant().minusMillis(staleAfterMs));
             inFlight = reserved;
             if (pending + inFlight < maxPending) {
-                reserved++;
-                if (jobId != null) {
-                    retrying.add(jobId);
-                }
-                return new Permit(this, jobId);
+                return reserve(jobId, key);
             }
         }
         RuntimeException instead = insteadOfQueueFull == null ? null : insteadOfQueueFull.get();
@@ -265,10 +285,25 @@ public class AdmissionGate implements MeterBinder {
         closing = true;
     }
 
-    private synchronized void release(String jobId) {
+    /** Holds the monitor. */
+    private Permit reserve(String jobId, String key) {
+        reserved++;
+        if (jobId != null) {
+            retrying.add(jobId);
+        }
+        if (key != null) {
+            creating.merge(key, 1, Integer::sum);
+        }
+        return new Permit(this, jobId, key);
+    }
+
+    private synchronized void release(String jobId, String key) {
         reserved--;
         if (jobId != null) {
             retrying.remove(jobId);
+        }
+        if (key != null) {
+            creating.computeIfPresent(key, (k, holders) -> holders > 1 ? holders - 1 : null);
         }
     }
 
@@ -308,21 +343,23 @@ public class AdmissionGate implements MeterBinder {
      * the place back once. The permit of a gate that is off holds nothing.
      */
     public static final class Permit implements AutoCloseable {
-        static final Permit NONE = new Permit(null, null);
+        static final Permit NONE = new Permit(null, null, null);
 
         private final AdmissionGate gate;
         private final String jobId;
+        private final String key;
         private final AtomicBoolean open = new AtomicBoolean(true);
 
-        private Permit(AdmissionGate gate, String jobId) {
+        private Permit(AdmissionGate gate, String jobId, String key) {
             this.gate = gate;
             this.jobId = jobId;
+            this.key = key;
         }
 
         @Override
         public void close() {
             if (gate != null && open.compareAndSet(true, false)) {
-                gate.release(jobId);
+                gate.release(jobId, key);
             }
         }
     }
