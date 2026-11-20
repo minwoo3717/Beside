@@ -128,6 +128,23 @@ class RealJobWorkerErrorHandlingTest {
         verify(jobFinisher, never()).complete(any(), any(), any(), any(), any());
     }
 
+    /**
+     * Which side a failed GLB copy is on: an error that names the service's file (path mode: it vanished from the shared
+     * volume between the check and the copy) is the service's (CONVERSION_FAILED); anything else is this server's disk.
+     */
+    @Test
+    void aCopyErrorAboutTheSourceIsTheServicesSide() {
+        Path source = results.resolve("from-gpu.glb");
+        assertThat(RealJobWorker.isAbout(new java.nio.file.NoSuchFileException(source.toString()), source)).isTrue();
+        assertThat(RealJobWorker.isAbout(new java.nio.file.FileSystemException(source.toString(), null, "gone"), source))
+                .isTrue();
+        assertThat(RealJobWorker.isAbout(new java.nio.file.FileSystemException(
+                results.resolve("results").resolve("job-1").resolve("base.glb").toString(), null, "No space left on device"),
+                source)).isFalse();
+        assertThat(RealJobWorker.isAbout(new java.io.IOException("No space left on device"), source)).isFalse();
+        assertThat(RealJobWorker.isAbout(new java.nio.file.NoSuchFileException(null), source)).isFalse();
+    }
+
     private static Job job(JobStatus status) {
         Job job = new Job();
         job.setId(ID);

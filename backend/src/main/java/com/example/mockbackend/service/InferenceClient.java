@@ -504,8 +504,10 @@ public class InferenceClient {
             throw new InferenceFailure(ErrorCode.INFERENCE_TIMEOUT,
                     "No answer from the inference service within inference.timeout-ms=" + timeout.toMillis(), call + ": " + cause);
         }
-        if (cause instanceof RuntimeException unexpected) {
-            throw unexpected;   // as http.send threw it: the worker ends the run INTERNAL_ERROR
+        // What JDK 17's http.send did with the same cause: these two it threw as they were (the worker then ends the
+        // run INTERNAL_ERROR), every other one it wrapped in an IOException (INFERENCE_UNAVAILABLE below).
+        if (cause instanceof IllegalArgumentException || cause instanceof SecurityException) {
+            throw (RuntimeException) cause;
         }
         if (cause instanceof Error error) {
             throw error;

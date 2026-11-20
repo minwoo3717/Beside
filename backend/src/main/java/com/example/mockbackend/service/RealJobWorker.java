@@ -19,7 +19,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -282,9 +284,30 @@ public class RealJobWorker implements JobWorker {
             }
             return new StoredGlb(target, Files.size(target));
         } catch (IOException e) {
+            if (isAbout(e, glb)) {
+                // Reading the service's file failed after all (path mode: it vanished from the shared volume, e.g. the
+                // service's work sweep, between the header check and the copy): the service's side, as above.
+                throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                        "Could not read the GLB from the inference service (" + e.getClass().getSimpleName() + ")",
+                        "glbPath=" + glb + ": " + e);
+            }
             throw new InferenceFailure(ErrorCode.INTERNAL_ERROR,
                     "Could not store the GLB on this server (" + e.getClass().getSimpleName() + ")",
                     "glbPath=" + glb + " -> " + resultDir + ": " + e);
+        }
+    }
+
+    /** True when {@code e} names {@code file} (a FileSystemException such as NoSuchFileException carries the path). */
+    static boolean isAbout(IOException e, Path file) {
+        return e instanceof FileSystemException named && named.getFile() != null
+                && (named.getFile().equals(file.toString()) || pathOf(named.getFile()).equals(file));
+    }
+
+    private static Path pathOf(String name) {
+        try {
+            return Path.of(name);
+        } catch (InvalidPathException e) {
+            return Path.of("");
         }
     }
 
