@@ -33,8 +33,21 @@ public interface JobRepository extends JpaRepository<Job, String> {
     /** Jobs in any of the given states (startup recovery of jobs interrupted by a restart). */
     List<Job> findByStatusIn(Collection<JobStatus> statuses);
 
-    /** How many jobs are in the given state (JobQueueGauge, every few seconds — not per request). */
+    /**
+     * How many jobs are in the given state (JobQueueGauge, every few seconds). Per request only the queue cap counts,
+     * with {@link #countByStatusAndQueuedAtAfter}.
+     */
     long countByStatus(JobStatus status);
+
+    /**
+     * Jobs in the given state queued after the cutoff: AdmissionGate's count, once per v1 create and retry while the
+     * queue cap is on (REVIEW_CHECKLIST #21, proposal before the contract meeting). One range of
+     * idx_jobs_status_queued_at_id, so its cost does not grow with the finished jobs the table keeps (no retention, #23).
+     */
+    long countByStatusAndQueuedAtAfter(JobStatus status, Instant cutoff);
+
+    /** Jobs in the given state queued at or before the cutoff: AdmissionGate's stale-row warning, at most once a minute. */
+    long countByStatusAndQueuedAtLessThanEqual(JobStatus status, Instant cutoff);
 
     /**
      * Retry as one conditional update: a {@code failed} job becomes {@code pending} with the next attempt and without

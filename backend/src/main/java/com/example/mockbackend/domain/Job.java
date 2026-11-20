@@ -20,10 +20,15 @@ import java.util.List;
  * fill result metadata and switch {@code status} in the same save, so readers never see COMPLETED without its asset.
  * Never serialized directly; see LegacyJobResponse (v0) and JobResponseMapper (v1).
  * New fields must be nullable (boxed) types: ddl-auto=update cannot add a NOT NULL column to a table that has rows.
- * idx_jobs_created_at_id serves the newest-first list (keyset paging); ddl-auto=update adds it to existing files.
+ * idx_jobs_created_at_id serves the newest-first list (keyset paging), idx_jobs_status_queued_at_id the queue cap's
+ * count of PENDING jobs per create and retry (AdmissionGate, REVIEW_CHECKLIST #21; the same index review/api-v1.1
+ * defines for its queue position); ddl-auto=update adds them to existing files.
  */
 @Entity
-@Table(name = "jobs", indexes = @Index(name = "idx_jobs_created_at_id", columnList = "createdAt desc, id desc"))
+@Table(name = "jobs", indexes = {
+        @Index(name = "idx_jobs_created_at_id", columnList = "createdAt desc, id desc"),
+        @Index(name = "idx_jobs_status_queued_at_id", columnList = "status, queuedAt, id")
+})
 @Getter
 @Setter
 @NoArgsConstructor
