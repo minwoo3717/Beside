@@ -97,7 +97,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔, 기준값은 제안값이다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`: 코드·테스트). VM 에서의 시간·메모리는 **[계획]**.
 
-대기열 상한(`QUEUE_FULL`)은 계약 회의 전 초안이다(**[제안값] 안건 #21**). 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 재요청은 상한과 상관없이 기존 작업을 받는다. 거절된 retry 의 작업은 FAILED 그대로다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
+대기열 상한(`QUEUE_FULL`)은 계약 회의 전 초안이다(**[제안값] 안건 #21**). 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 의 요청은 상한과 상관없이 그 키의 작업을 받는다(첫 요청이 아직 접수 중이어도). 거절된 retry 의 작업은 FAILED 그대로다. 서버 설정 `admission.stale-after-ms`(기본은 정상 작업의 가장 긴 대기)보다 오래된 PENDING 은 세지 않는다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
 

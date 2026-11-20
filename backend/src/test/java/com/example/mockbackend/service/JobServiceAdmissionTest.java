@@ -33,13 +33,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
  * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting) at cap 1 with a worker that runs nothing:
  * a dispatch the executor rejects (shutdown) gives its place back, and simultaneous retries of one FAILED job still end
- * as one 202 and 409s, never a 503 for a job another retry is re-queuing (the cap-on twin of JobServiceRetryRaceTest).
+ * as one 202 and 409s, never a 503 for a job another retry is re-queuing (the cap-on twin of JobServiceRetryRaceTest),
+ * while with the queue already full they all get 503 and the job stays FAILED.
  * Its own class because @MockBean replaces the worker for the whole context.
  */
 @SpringBootTest(properties = {"admission.max-pending=1", "admission.retry-after-seconds=45"})
@@ -149,6 +151,62 @@ class JobServiceAdmissionTest {
             assertThat(full.getJobId()).isEqualTo(other.getId());
         });
         assertThat(jobRepository.findById(other.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
+    }
+
+    /**
+     * The other half of the retry rule in ERROR_CODES.md '대기열 상한': with the queue full, simultaneous retries of one
+     * FAILED job get no 202 and no 409, all 503 naming the job, and the job stays FAILED (no retry holds a place, so
+     * none re-queues it).
+     */
+    @Test
+    void simultaneousRetriesOfOneFailedJobWhenTheQueueIsFullAreAll503() throws Exception {
+        jobRepository.save(pendingJob()); // the only place
+        Job failed = savedFailedJob();
+        double refusedRetries = registry.get("beside.jobs.refused").tag("op", "retry").counter().count();
+        ExecutorService pool = Executors.newFixedThreadPool(REQUESTS);
+        CountDownLatch go = new CountDownLatch(1);
+        try {
+            List<Future<ApiException>> answers = new ArrayList<>();
+            for (int i = 0; i < REQUESTS; i++) {
+                answers.add(pool.submit(() -> {
+                    go.await();
+                    try {
+                        jobService.retry(failed.getId());
+                        return null;
+                    } catch (ApiException refused) {
+                        return refused;
+                    }
+                }));
+            }
+            go.countDown();
+            for (Future<ApiException> answer : answers) {
+                assertThat(answer.get(30, TimeUnit.SECONDS)).isNotNull().satisfies(refused -> {
+                    assertThat(refused.getCode()).isEqualTo(ErrorCode.QUEUE_FULL);
+                    assertThat(refused.getJobId()).isEqualTo(failed.getId());
+                });
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        Job unchanged = jobRepository.findById(failed.getId()).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(unchanged.getAttempt()).isEqualTo(1);
+        verify(jobWorker, never()).dispatch(failed.getId());
+        assertThat(registry.get("beside.jobs.refused").tag("op", "retry").counter().count())
+                .isEqualTo(refusedRetries + REQUESTS);
+    }
+
+    private static Job pendingJob() {
+        Instant now = Instant.now();
+        Job job = new Job();
+        job.setId(UUID.randomUUID().toString());
+        job.setStatus(JobStatus.PENDING);
+        job.setCreatedAt(now);
+        job.setUpdatedAt(now);
+        job.setQueuedAt(now);
+        job.setProgress(0.0);
+        job.setAttempt(1);
+        return job;
     }
 
     private static MockMultipartFile photo() {

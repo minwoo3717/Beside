@@ -24,7 +24,7 @@
 | `JOB_NOT_COMPLETED` | 409 | /asset | PENDING·PROCESSING·FAILED 상태에서 에셋 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. | 폴링 계속 |
 | `JOB_NOT_FAILED` | 409 | /retry | FAILED 가 아닌 작업에 재시도 요청 | 실패한 작업만 다시 시도할 수 있어요. | 무의미 |
 | `INTERNAL_ERROR` | 500 | 모든 엔드포인트 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
-| `QUEUE_FULL` | 503 | POST /jobs, /retry | 대기 작업(PENDING)과 지금 접수 중인 요청을 더한 수가 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이르러 작업을 만들지도, 다시 대기열에 넣지도 않음. `Retry-After` 헤더(초, 1 이상)가 붙는다. **[제안값] 안건 #21 — 계약 회의 전** | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. | `Retry-After` 초 뒤 |
+| `QUEUE_FULL` | 503 | POST /jobs, /retry | 대기 작업(PENDING)과 지금 접수 중인 요청을 더한 수가 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이르러 작업을 만들지도, 다시 대기열에 넣지도 않음(세는 규칙은 아래 '대기열 상한'). `Retry-After` 헤더(초, 1 이상)가 붙는다. **[제안값] 안건 #21 — 계약 회의 전** | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. | `Retry-After` 초 뒤 |
 
 ### 대표 사진 검사 (`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)
 
@@ -38,8 +38,10 @@
 
 - 이 절과 위 표의 `QUEUE_FULL` 행은 계약 회의 전 초안이다. 상태 코드 503 을 기존 엔드포인트에 더하는 것이라 회의([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #21)가 정한 뒤에만 main 에 들어간다. 값·문구·순서는 회의 자료 [docs/perf/load/2026-11-20_queue-cap.md](../perf/load/2026-11-20_queue-cap.md) 의 D1~D11 로 정한다.
 - 서버 설정 `admission.max-pending`(N)이 0 이면(기본) 상한이 없고 지금과 똑같다. N > 0 이면 PENDING 작업 수에 지금 접수 중인 요청 수를 더한 값이 N 이상일 때 거절한다. 거절은 사진·작업·`Idempotency-Key` 를 남기지 않는다.
+- 안전망: `queuedAt` 이 서버 설정 `admission.stale-after-ms` 보다 오래된 PENDING 은 세지 않는다. 돌릴 워커가 없는 작업이 재시작 전까지 자리를 막지 않게 하려는 것이다. 기본값은 정상 작업이 PENDING 으로 기다릴 수 있는 가장 긴 시간 ⌈(N + c) / T⌉ × `inference.offline-wait-ms` + 2 × ⌈N / c⌉ × `inference.timeout-ms` + 10분이다(c 추론 슬롯 수 `inference.max-concurrency`, T 작업 스레드 수 기본 8, 2배는 업로드 모드의 업로드와 GLB 받기). prod·N 19·c 1 이면 8시간이다. GPU 가 꺼졌거나 `/infer` 가 멈춰 기다리는 작업은 이 시간 안이라 계속 센다. 세지 않는 행 수는 지표 `beside_jobs_pending_stale` 와 서버 WARN 로그로 보인다.
 - `POST /jobs` 의 검사 순서: 입력 검사(400) → 같은 `Idempotency-Key` 재요청(상한과 상관없이 기존 작업 202) → 상한(503) → 대표 사진 검사(400). 그래서 상한이 차 있으면 사진 문제(400)보다 503 을 먼저 받는다(D6).
-- `POST /retry`: 없는 작업 404 와 FAILED 가 아닌 작업 409 를 먼저 본다. 거절된 retry 의 작업은 FAILED 그대로이고, 같은 작업의 retry 가 동시에 들어오면 하나만 202 이고 나머지는 409 `JOB_NOT_FAILED` 다.
+- 같은 `Idempotency-Key` 의 요청은 상한이 차 있어도 503 을 받지 않는다. 그 키의 작업이 이미 있으면 그 작업을 받고, 같은 키의 요청이 아직 접수 중(202 전)이면 그 요청과 함께 접수해 작업은 많아야 하나만 생기고 둘 다 그 작업을 받는다.
+- `POST /retry`: 없는 작업 404 와 FAILED 가 아닌 작업 409 를 먼저 본다. 거절된 retry 의 작업은 FAILED 그대로다. 같은 작업의 retry 가 동시에 들어오면 202 는 많아야 하나다. 자리가 있으면 나머지는 409 `JOB_NOT_FAILED` 이고, 대기열이 차 있으면 모두 503 `QUEUE_FULL` 이다.
 - `Retry-After` 는 서버 설정 `admission.retry-after-seconds`(초)다. 앱은 그 시간 전에는 다시 보내지 않는다.
 
 ## Job 실패 코드 (`JobResponse.error.code`, `status=FAILED` 일 때)
