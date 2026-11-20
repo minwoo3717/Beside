@@ -8,6 +8,8 @@
 #  - 웹훅: 어디에도 닿지 않는 주소(TEST-NET-1, RFC 5737)로 둔다. 알림이 팀 채널로 가지 않으면서도 backend 가 보내려고
 #    한 시각이 "webhook not sent" 로그로 남는다(FD9, 그리고 다른 시나리오의 알림 시각).
 #  - H2 백업: FD5(DB 유실 → 백업 복구)에서만 켠다. 2분마다(Spring 6필드 cron).
+#  - DB 파일이 없을 때: 부하 덮어쓰기처럼 빈 DB 로 시작한다. FD5 를 다시 재현할 때는 DRILL_DB_CREATE_IF_MISSING=false 로
+#    운영과 같게 두고, DB 파일을 지운 뒤 backend 가 시작을 거부하는지 본다(2026-11-20 뒤의 동작).
 services:
   backend:
     environment:
@@ -15,3 +17,4 @@ services:
       STORAGE_BACKUP_ENABLED: ${DRILL_BACKUP_ENABLED:-false}
       STORAGE_BACKUP_CRON: ${DRILL_BACKUP_CRON:-0 */2 * * * *}
       STORAGE_BACKUP_KEEP: ${DRILL_BACKUP_KEEP:-20}
+      STORAGE_DB_CREATEIFMISSING: ${DRILL_DB_CREATE_IF_MISSING:-true}

@@ -164,6 +164,8 @@ jobs:
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
+          # prod does not start on a missing H2 file (failure drill FD5); only a new server overrides it from the shell
+          assert mon["services"]["backend"]["environment"]["STORAGE_DB_CREATEIFMISSING"] == "false"
 
           def mem_bytes(value):
               # compose prints mem_limit as bytes; accept a unit suffix too, in case a version keeps "2g"
@@ -201,6 +203,7 @@ jobs:
               "SPRING_PROFILES_ACTIVE": "mock,prod",
               "METRICS_ENV": "loadtest",
               "STORAGE_BACKUP_ENABLED": "false",
+              "STORAGE_DB_CREATEIFMISSING": "true",
               "MOCK_WORKER_PENDINGMS": "0",
               "MOCK_WORKER_PROCESSINGMS": "60000",
               "SPRING_TASK_EXECUTION_POOL_CORESIZE": "400",
