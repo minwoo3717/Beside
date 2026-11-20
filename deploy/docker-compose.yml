@@ -48,8 +48,12 @@ services:
       ADMISSION_RETRYAFTERSECONDS: ${ADMISSION_RETRY_AFTER_SECONDS:-165}
       # ONNX Runtime 스레드마다 glibc arena 가 늘어 RSS 가 커지는 것을 막는다.
       MALLOC_ARENA_MAX: "2"
+      # H2 DB 파일(beside-storage 의 db/beside-real.mv.db)이 없으면 시작하지 않는다(prod 기본, 장애 훈련 FD5: 빈 DB 를
+      # 조용히 만들어 기존 작업이 모두 404 였다). 새 서버의 첫 시작만 셸에서 STORAGE_DB_CREATE_IF_MISSING=true 를 붙인다
+      # (README 'VM 첫 설정' 6번). 잃은 DB 는 백업으로 되돌린다(docs/ops/RUNBOOK.md 'DB 복구').
+      STORAGE_DB_CREATEIFMISSING: ${STORAGE_DB_CREATE_IF_MISSING:-false}
     volumes:
-      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매일 H2 백업). 컨테이너를 지워도 남는다.
+      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매시 H2 백업, 최신 48개). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
       # 전처리 모델(약 210 MB, scripts/fetch_models.sh 가 받는다). 이미지에 넣지 않고 읽기 전용으로 붙인다.
       - ${BESIDE_MODELS_DIR:-../backend/models}:/app/models:ro
@@ -99,16 +103,25 @@ services:
       BACKEND_UPSTREAM: ${BACKEND_UPSTREAM:-backend:8080}
       # /grafana* 의 대상. monitoring 프로필을 안 띄웠으면 인증 뒤 502 가 난다(다른 경로에는 영향 없음).
       GRAFANA_UPSTREAM: ${GRAFANA_UPSTREAM:-grafana:3000}
+      # Go GC 의 메모리 목표(mem_limit 의 약 80 %). 이 값에 가까워지면 GC 가 더 자주 돌아 한도 전에 쓰레기를 치운다.
+      GOMEMLIMIT: 1638MiB
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # 인증서·ACME 계정. 지우면 인증서를 다시 받는다(Let's Encrypt 발급 횟수 제한 주의).
       - caddy_data:/data
       - caddy_config:/config
+    # 2026-11-18 부하 시험 A1(한도 없음): 1,800명 451 MiB, 3,600명 880 MiB, 5,400명 1,292 MiB, 7,200명 1,730 MiB,
+    # 9,000명 2,170 MiB(드레인 중 2,246 MiB). 한도는 Caddy 가 늘어나 backend(3g)·OS 몫을 먹지 못하게 하려는 것이다:
+    # 8GB VM 에서 한도 합(backend 3g + caddy 2g + monitoring 640m)은 약 5.6GB. 1g 였다면 한도 없이 1 GiB 를 넘은
+    # 5,400명(평상시의 3배)부터 OOM 으로 컨테이너가 죽고 모든 연결이 끊길 수 있다[가설]. 9,000명이 GOMEMLIMIT 아래에서
+    # 2g 안에 드는지는 다시 잰다[계획].
+    mem_limit: 2g
     logging: *default-logging
 
   # ---- 모니터링 (선택): docker compose ... --profile monitoring up -d ----
-  # 메모리 예산: backend 3g + prometheus 384m + grafana 256m + caddy·OS ≈ 4.2GB — 4GB VM 이면 한도 합이 RAM 을 넘으므로
-  # monitoring 프로필에는 swap 2GB 가 꼭 필요하다(README '메모리'). backend 3g 는 전처리 모델(ONNX Runtime) 때문이다.
+  # 메모리 예산(한도 합): backend 3g + caddy 2g + prometheus 384m + grafana 256m ≈ 5.6GB + OS. 지금 GCP VM(8GB)에는
+  # 들어간다. 4GB VM 이면 한도 합이 RAM 을 넘으므로 swap 2GB 가 꼭 필요하다(README '메모리'). backend 3g 는 전처리
+  # 모델(ONNX Runtime) 때문이다.
 
   prometheus:
     image: prom/prometheus:v2.54.1

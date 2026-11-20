@@ -10,10 +10,13 @@ import com.example.mockbackend.service.preprocess.PreparedPhoto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -66,7 +69,7 @@ class RealJobWorkerErrorHandlingTest {
         // The copy read again, not the one whose save failed half way (it says PROCESSING in memory only).
         verify(jobFinisher).fail(same(reread), eq(ErrorCode.INTERNAL_ERROR),
                 eq("Real worker error (IllegalStateException)"), eq("real"), any(RunDetails.class));
-        verify(inferenceClient, never()).infer(anyString(), anyList(), anyList());
+        verify(inferenceClient, never()).infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class));
     }
 
     @Test
@@ -87,7 +90,7 @@ class RealJobWorkerErrorHandlingTest {
         when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued),
                 Optional.of(job(JobStatus.FAILED)));
         when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
-        when(inferenceClient.infer(anyString(), anyList(), anyList())).thenThrow(new IllegalStateException("bug"));
+        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenThrow(new IllegalStateException("bug"));
         // run() records INTERNAL_ERROR itself; something after its save throws.
         doThrow(new IllegalStateException("after the save")).when(jobFinisher)
                 .fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(), any(RunDetails.class));
@@ -97,6 +100,49 @@ class RealJobWorkerErrorHandlingTest {
         verify(jobFinisher, times(1)).fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(),
                 any(RunDetails.class));
         verify(inferenceClient).cleanup(ID);
+    }
+
+    /**
+     * FD4: the service sent a good GLB but this server cannot store it (disk full, here a file where the result folder
+     * should be): INTERNAL_ERROR, not CONVERSION_FAILED, and the message names no server path.
+     */
+    @Test
+    void aGlbThisServerCannotStoreIsInternalError() throws Exception {
+        Path notAFolder = Files.write(results.resolve("results-is-a-file"), new byte[]{0});
+        RealJobWorker full = new RealJobWorker(jobRepository, jobFinisher, inferenceClient, healthMonitor, cutoutStage,
+                notAFolder.toString(), 1, 0, 10);
+        Path glb = Files.write(results.resolve("from-gpu.glb"), new byte[]{'g', 'l', 'T', 'F', 2, 0, 0, 0, 12, 0, 0, 0});
+        Job queued = job(JobStatus.PENDING);
+        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued));
+        when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
+        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class)))
+                .thenReturn(new InferenceClient.Result(glb, null, false, null));
+
+        full.dispatch(ID);
+
+        ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
+        verify(jobFinisher).fail(same(queued), eq(ErrorCode.INTERNAL_ERROR), message.capture(), eq("real"),
+                any(RunDetails.class));
+        assertThat(message.getValue()).startsWith("Could not store the GLB on this server (")
+                .doesNotContain(results.toString());
+        verify(jobFinisher, never()).complete(any(), any(), any(), any(), any());
+    }
+
+    /**
+     * Whose a failed GLB copy is. A copy that runs out of disk half way names both files in its exception
+     * (FileSystemException(source, target, "No space left on device")), so the exception cannot tell: only a service's
+     * file that is gone afterwards, in path mode, is the service's side (CONVERSION_FAILED); a full disk, and anything in
+     * upload mode (the source is this server's own temporary file), is this server's (INTERNAL_ERROR, FD4).
+     */
+    @Test
+    void aFailedCopyIsTheServicesOnlyWhenItsFileIsGoneInPathMode() throws Exception {
+        Path there = Files.write(results.resolve("from-gpu.glb"), new byte[]{1});
+        Path gone = results.resolve("swept.glb");
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.PATH, gone)).isEqualTo(ErrorCode.CONVERSION_FAILED);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.PATH, there)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, there)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(null, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
     }
 
     private static Job job(JobStatus status) {

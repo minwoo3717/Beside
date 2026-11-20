@@ -1,6 +1,8 @@
 package com.example.mockbackend;
 
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.service.InferenceHealthMonitor.Alert;
+import com.example.mockbackend.service.InferenceHealthMonitor.AlertChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.State;
 import com.example.mockbackend.service.InferenceHealthMonitor.StateChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.Status;
@@ -69,6 +71,8 @@ class WebhookNotifierTest {
         registry.add("storage.result.sample", () -> storage.resolve("sample-dog.glb").toString());
         registry.add("mock.worker.pending-ms", () -> "50");
         registry.add("mock.worker.processing-ms", () -> "50");
+        // A failing-webhook test leaves the context's notifier pausing: keep that pause short for the tests after it.
+        registry.add("notify.retry-base-ms", () -> "200");
     }
 
     @AfterAll
@@ -225,6 +229,352 @@ class WebhookNotifierTest {
         assertThat(gpuMessages().get(1)).startsWith("🟢 GPU 추론 서버 연결됨");
     }
 
+    @Test
+    void alertMessagesSayWhatIsWrongAndWhatToCheck() {
+        Instant now = Instant.now();
+        Status up = new Status(State.UP, "cuda", now, now, "ok", false, 125_000L);
+        Status fine = new Status(State.UP, "cuda", now, now, "ok", true, 0L);
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, true, up, 120_000), "Runpod A40"))
+                .isEqualTo("🔑 GPU 추론 서버(Runpod A40)가 백엔드의 추론 토큰을 받지 않아요 — 새 작업이 모두 바로 실패합니다"
+                        + " (INFERENCE_UNAVAILABLE). 양쪽 INFERENCE_TOKEN 을 확인해 주세요");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, false, fine, 120_000), ""))
+                .isEqualTo("🔑 GPU 추론 서버가 추론 토큰을 다시 받아요");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.STUCK, true, up, 120_000), "Runpod A40"))
+                .isEqualTo("🐢 GPU 추론 서버(Runpod A40)의 작업 하나가 2분 5초째 끝나지 않아요 (기준 2분 0초)"
+                        + " — 추론이 멈췄을 수 있어요. 그동안 다른 작업은 기다리거나 시간 초과로 실패합니다");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.STUCK, false, fine, 120_000), ""))
+                .isEqualTo("🟢 GPU 추론 서버의 오래 걸리던 작업이 끝났어요");
+        // Nothing in them names the token, a host or a path.
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.TOKEN_REJECTED, true, up, 120_000), ""))
+                .doesNotContain("http").doesNotContain("/");
+    }
+
+    /** One message per change, at once (the DOWN grace time is for the relay's missed checks, not for these). */
+    @Test
+    void tokenAndStuckAlertsArePostedOncePerChange() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "Runpod A40", 45_000, JSON);
+        Instant now = Instant.now();
+        Status rejected = new Status(State.UP, "cuda", now, now, "ok", false, 0L);
+        Status stuck = new Status(State.UP, "cuda", now, now, "ok", true, 130_000L);
+        Status fine = new Status(State.UP, "cuda", now, now, "ok", true, 0L);
+
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));           // never announced: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true, rejected, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true, rejected, 120_000)); // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, true, stuck, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, true, stuck, 120_000));             // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, false, fine, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.STUCK, false, fine, 120_000));            // a repeat: silent
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 4);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 4);
+        assertThat(alertMessages().get(0)).startsWith("🔑 GPU 추론 서버(Runpod A40)가 백엔드의 추론 토큰을 받지 않아요");
+        assertThat(alertMessages().get(1)).startsWith("🐢 GPU 추론 서버(Runpod A40)의 작업 하나가 2분 10초째");
+        assertThat(alertMessages().get(2)).isEqualTo("🔑 GPU 추론 서버(Runpod A40)가 추론 토큰을 다시 받아요");
+        assertThat(alertMessages().get(3)).isEqualTo("🟢 GPU 추론 서버(Runpod A40)의 오래 걸리던 작업이 끝났어요");
+    }
+
+    /** FD18: the message names the exception type only, never the service's text (paths). */
+    @Test
+    void modelLoadMessagesNameTheErrorTypeOnly() {
+        Instant now = Instant.now();
+        Status failed = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, true,
+                "FileNotFoundError: [Errno 2] No such file or directory: '/workspace/AnimalLift/ckpt/wrong.pt'");
+        Status loading = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, false, null);
+        String alert = WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000),
+                "Runpod A40");
+        assertThat(alert).isEqualTo("🧩 GPU 추론 서버(Runpod A40)가 모델을 불러오지 못했어요 (FileNotFoundError)"
+                + " — 고쳐서 다시 띄우기 전에는 새 작업이 처리되지 않아요. 추론 서비스 로그를 확인해 주세요");
+        assertThat(alert).doesNotContain("/").doesNotContain("workspace").doesNotContain("Errno");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000), ""))
+                .isEqualTo("🧩 GPU 추론 서버의 모델 불러오기 오류가 풀렸어요");
+        // A text that does not start with a type name, or none at all: a plain word instead.
+        for (String odd : new String[]{"<b>bold</b>: x", "no colon here at all", "", null}) {
+            Status reading = new Status(State.LOADING, null, now, now, "no model loaded", null, null, true, odd);
+            assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, reading, 120_000), ""))
+                    .startsWith("🧩 GPU 추론 서버가 모델을 불러오지 못했어요 (알 수 없는 오류) — ");
+        }
+        Status bare = new Status(State.LOADING, null, now, now, "no model loaded", null, null, true, "MemoryError");
+        assertThat(WebhookNotifier.alertMessage(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, bare, 120_000), ""))
+                .contains("(MemoryError)");
+    }
+
+    @Test
+    void modelLoadAlertIsPostedOncePerChange() {
+        WebhookNotifier notifier = new WebhookNotifier(hookUrl(), "", "", 45_000, JSON);
+        Instant now = Instant.now();
+        Status failed = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, true,
+                "FileNotFoundError: [Errno 2] No such file or directory: '<path>'");
+        Status loading = new Status(State.LOADING, "cuda", now, now, "no model loaded", true, 0L, false, null);
+
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));   // never announced
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, true, failed, 120_000));    // a repeat: silent
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));
+        notifier.onInferenceAlert(new AlertChanged(Alert.MODEL_LOAD_FAILED, false, loading, 120_000));  // a repeat: silent
+
+        await().atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 2);
+        await().during(Duration.ofMillis(600)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().size() == 2);
+        assertThat(alertMessages().get(0)).startsWith("🧩 GPU 추론 서버가 모델을 불러오지 못했어요 (FileNotFoundError)");
+        assertThat(alertMessages().get(1)).isEqualTo("🧩 GPU 추론 서버의 모델 불러오기 오류가 풀렸어요");
+    }
+
+    @Test
+    void alertsAreOffWithoutAWebhook() {
+        WebhookNotifier notifier = new WebhookNotifier("", "", JSON);
+        Instant now = Instant.now();
+        notifier.onInferenceAlert(new AlertChanged(Alert.TOKEN_REJECTED, true,
+                new Status(State.UP, "cuda", now, now, "ok", false, 0L), 120_000));
+        await().during(Duration.ofMillis(400)).atMost(Duration.ofSeconds(5)).until(() -> alertMessages().isEmpty());
+    }
+
+    // ---------------------------------------------------------------- sending when the webhook fails (FD9)
+
+    /**
+     * FD9: with the webhook failing, messages no longer each wait out a timeout. The GPU message is tried once per
+     * pause (doubling) and job results are not tried behind it; once the webhook works, the GPU message goes first and
+     * the job results that waited go out together as one message, nothing lost.
+     */
+    @Test
+    void aFailingWebhookIsTriedOncePerPauseAndGpuMessagesGoFirstWhenItWorks() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.answer.set(500);
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "FD9", 0, 300, JSON);
+            Instant now = Instant.now();
+            Status up = new Status(State.UP, "cuda", now, now, "ok");
+            Status down = new Status(State.DOWN, null, now, now, "ConnectException");
+            notifier.onInferenceStateChanged(new StateChanged(up, down));
+            for (int i = 1; i <= 4; i++) {
+                notifier.onJobFinished(job("fd9a000" + i, i % 2 == 0 ? JobStatus.FAILED : JobStatus.COMPLETED));
+            }
+
+            // Tries at about 0, 0.3, 0.9 s: three in the first second, all of them the GPU message.
+            await().during(Duration.ofMillis(1100)).atMost(Duration.ofSeconds(5)).until(() -> hook.received.size() <= 3);
+            assertThat(hook.received).isNotEmpty().allSatisfy(text -> assertThat(text).startsWith("🔴 GPU 추론 서버(FD9)"));
+
+            hook.answer.set(204);
+            await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 2);
+            assertThat(hook.delivered.get(0)).startsWith("🔴 GPU 추론 서버(FD9)에 연결할 수 없어요");
+            assertThat(hook.delivered.get(1)).startsWith("📦 작업 알림 4건을 한 번에 보내요 (✅ 2 · ⚠️ 2)")
+                    .contains("`fd9a0001`").contains("`fd9a0002`").contains("`fd9a0003`").contains("`fd9a0004`");
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 2);
+        }
+    }
+
+    /** Job results that fail are dropped, counted, and summed up in the first message that gets through afterwards. */
+    @Test
+    void jobResultsThatCouldNotBeSentAreSummedUpOnceTheWebhookWorks() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.answerFor = text -> text.contains("fd9b0001") ? 503 : 204;   // only that result fails
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 300, JSON);
+            notifier.onJobFinished(job("fd9b0001", JobStatus.FAILED));
+            await().atMost(Duration.ofSeconds(5)).until(() -> !hook.received.isEmpty());   // tried, failed: dropped
+
+            notifier.onJobFinished(job("fd9b0002", JobStatus.COMPLETED));
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 2);
+            assertThat(hook.delivered.get(0)).startsWith("📭 디스코드 알림을 보내지 못해 빠진 알림이 있어요 (")
+                    .contains("부터 실패) — ⚠️ 실패 1건. 작업 결과는 관리 페이지에서 확인해 주세요");
+            assertThat(hook.delivered.get(1)).startsWith("✅ 3D 모델 완성 · 작업 `fd9b0002`");
+            assertThat(hook.received).noneMatch(text -> text.contains("fd9b0001") && hook.delivered.contains(text));
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 2);
+        }
+    }
+
+    /** Discord's rate limit (429 + Retry-After): the same message again after that wait, nothing dropped or summed up. */
+    @Test
+    void aRateLimitedMessageIsSentAgainAfterRetryAfter() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.rateLimitOnce.set(true);
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 60_000, JSON);
+            long started = System.nanoTime();
+            notifier.onJobFinished(job("fd9c0001", JobStatus.COMPLETED));
+
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 1);
+            assertThat((System.nanoTime() - started) / 1_000_000).as("Retry-After 0.4 s, not the 60 s pause")
+                    .isBetween(350L, 4_000L);
+            assertThat(hook.received).hasSize(2).allSatisfy(text -> assertThat(text).contains("fd9c0001"));
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 1);
+        }
+    }
+
+    /**
+     * A full queue drops the oldest message that is waiting, never the one being sent: it may yet be delivered (and
+     * then it must not be reported as lost too). Here 1 is on its way and 60 more come: 10 are dropped, not 11.
+     */
+    @Test
+    void anOverflowNeverDropsTheMessageBeingSent() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.holdIf.set(text -> text.contains("fd9d0000"));
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 100, JSON);
+            notifier.onJobFinished(job("fd9d0000", JobStatus.COMPLETED));
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.size() == 1);   // on its way, held
+            for (int i = 1; i <= 60; i++) {
+                notifier.onJobFinished(job(String.format("fd9d%04d", i), JobStatus.COMPLETED));
+            }
+            hook.release.countDown();
+
+            await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 3);
+            assertThat(hook.delivered.get(0)).startsWith("✅ 3D 모델 완성 · 작업 `fd9d0000`");
+            assertThat(hook.delivered.get(1)).startsWith("📭").contains("— ✅ 완성 10건.");
+            assertThat(hook.delivered.get(2)).startsWith("📦 작업 알림 50건을 한 번에 보내요 (✅ 50 · ⚠️ 0)")
+                    .contains("`fd9d0011`").doesNotContain("`fd9d0010`").doesNotContain("`fd9d0000`");
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 3);
+        }
+    }
+
+    /** Losses counted while the summary is on its way are not erased by it: the next summary reports them. */
+    @Test
+    void lossesDuringTheSummaryAreReportedNextTime() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            hook.answerFor = text -> text.contains("fd9e0000") ? 503 : 204;   // only that result fails
+            hook.holdIf.set(text -> text.startsWith("📭"));                   // the first summary is held on its way
+            SettableClock clock = new SettableClock(Instant.parse("2026-11-20T01:00:00Z"));   // 10:00 KST
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 300, JSON, clock);
+            notifier.onJobFinished(job("fd9e0000", JobStatus.FAILED));   // fails: one lost
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.received.stream().anyMatch(t -> t.startsWith("📭")));
+            clock.set(Instant.parse("2026-11-20T01:30:00Z"));                  // 10:30 KST
+            for (int i = 1; i <= 52; i++) {   // 50 fit: 2 are dropped while the summary is on its way
+                notifier.onJobFinished(job(String.format("fd9e%04d", i), JobStatus.COMPLETED));
+            }
+            hook.release.countDown();
+
+            await().atMost(Duration.ofSeconds(10)).until(() -> hook.delivered.size() >= 3);
+            assertThat(hook.delivered.get(0)).startsWith("📭").contains("(10:00부터 실패)")
+                    .contains("— ⚠️ 실패 1건.").doesNotContain("완성");
+            // The second summary is about the 2 dropped at 10:30, not the loss the first one already reported.
+            assertThat(hook.delivered.get(1)).startsWith("📭").contains("(10:30부터 실패)")
+                    .contains("— ✅ 완성 2건.").doesNotContain("⚠️ 실패");
+            assertThat(hook.delivered.get(2)).startsWith("📦 작업 알림 50건");
+            await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 3);
+        }
+    }
+
+    /**
+     * An Error while sending one message (say an OutOfMemoryError building the request) counts as a failed send: the
+     * notifier pauses and goes on, instead of never sending again.
+     */
+    @Test
+    void anErrorDuringASendDoesNotStopTheNotifier() throws IOException {
+        try (FakeHook hook = new FakeHook()) {
+            java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+            ObjectMapper firstCallFails = new ObjectMapper() {
+                @Override
+                public String writeValueAsString(Object value) throws com.fasterxml.jackson.core.JsonProcessingException {
+                    if (calls.incrementAndGet() == 1) {
+                        throw new OutOfMemoryError("test: no heap for the request body");
+                    }
+                    return super.writeValueAsString(value);
+                }
+            };
+            WebhookNotifier notifier = new WebhookNotifier(hook.url(), "", "", 0, 100, firstCallFails);
+            Instant now = Instant.now();
+            notifier.onInferenceStateChanged(new StateChanged(new Status(State.UP, "cuda", now, now, "ok"),
+                    new Status(State.DOWN, null, now, now, "ConnectException")));
+
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 1);
+            assertThat(hook.delivered.get(0)).startsWith("🔴 GPU 추론 서버에 연결할 수 없어요");
+            notifier.onJobFinished(job("fd9f0001", JobStatus.COMPLETED));
+            await().atMost(Duration.ofSeconds(5)).until(() -> hook.delivered.size() == 2);
+            assertThat(hook.delivered.get(1)).startsWith("✅ 3D 모델 완성 · 작업 `fd9f0001`");
+        }
+    }
+
+    @Test
+    void retryAfterIsReadInSecondsWithinLimits() {
+        assertThat(WebhookNotifier.retryAfterMs("2")).isEqualTo(2_000);
+        assertThat(WebhookNotifier.retryAfterMs("0.35")).isEqualTo(350);
+        assertThat(WebhookNotifier.retryAfterMs("0")).isEqualTo(100);
+        assertThat(WebhookNotifier.retryAfterMs("86400")).isEqualTo(300_000);
+        assertThat(WebhookNotifier.retryAfterMs("Wed, 21 Oct 2026 07:28:00 GMT")).isEqualTo(1_000);
+        assertThat(WebhookNotifier.retryAfterMs(null)).isEqualTo(1_000);
+    }
+
+    private static JobFinishedEvent job(String jobId, JobStatus status) {
+        return new JobFinishedEvent(jobId, 1, status, status == JobStatus.FAILED ? "INFERENCE_UNAVAILABLE" : null,
+                9_000L, "real", null, false);
+    }
+
+    /** A clock the test moves by hand, for the times the messages show. */
+    private static final class SettableClock extends java.time.Clock {
+        private volatile Instant now;
+
+        SettableClock(Instant now) {
+            this.now = now;
+        }
+
+        void set(Instant now) {
+            this.now = now;
+        }
+
+        @Override
+        public java.time.ZoneId getZone() {
+            return java.time.ZoneOffset.UTC;
+        }
+
+        @Override
+        public java.time.Clock withZone(java.time.ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
+    }
+
+    /** A webhook of its own per test (the shared one also gets the Spring context's messages). */
+    private static final class FakeHook implements AutoCloseable {
+        final AtomicInteger answer = new AtomicInteger(204);
+        final java.util.concurrent.atomic.AtomicBoolean rateLimitOnce = new java.util.concurrent.atomic.AtomicBoolean();
+        /** When set, the first message it matches is held (after it is recorded) until release opens: a send in progress. */
+        final java.util.concurrent.atomic.AtomicReference<java.util.function.Predicate<String>> holdIf =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        /** When set, the status for each message (instead of answer): no test depends on when it switches. */
+        volatile java.util.function.ToIntFunction<String> answerFor;
+        /** Every message that arrived, and those answered with a 2xx. */
+        final List<String> received = new CopyOnWriteArrayList<>();
+        final List<String> delivered = new CopyOnWriteArrayList<>();
+        private final HttpServer server;
+
+        FakeHook() throws IOException {
+            server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+            server.createContext("/hook", exchange -> {
+                String text = content(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                received.add(text);
+                java.util.function.Predicate<String> hold = holdIf.get();
+                if (hold != null && hold.test(text) && holdIf.compareAndSet(hold, null)) {
+                    try {
+                        release.await(4, java.util.concurrent.TimeUnit.SECONDS);   // under the notifier's 5 s timeout
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                java.util.function.ToIntFunction<String> per = answerFor;
+                int code = per != null ? per.applyAsInt(text) : answer.get();
+                if (rateLimitOnce.getAndSet(false)) {
+                    code = 429;
+                    exchange.getResponseHeaders().add("Retry-After", "0.4");
+                } else if (code / 100 == 2) {
+                    delivered.add(text);
+                }
+                exchange.sendResponseHeaders(code, -1);
+                exchange.close();
+            });
+            server.start();
+        }
+
+        String url() {
+            return "http://127.0.0.1:" + server.getAddress().getPort() + "/hook";
+        }
+
+        @Override
+        public void close() {
+            server.stop(0);
+        }
+    }
+
     private static String hookUrl() {
         return "http://127.0.0.1:" + webhook.getAddress().getPort() + "/hook";
     }
@@ -232,6 +582,12 @@ class WebhookNotifierTest {
     /** GPU messages only: job messages from the other tests' uploads may still arrive. */
     private static List<String> gpuMessages() {
         return received.stream().map(WebhookNotifierTest::content).filter(text -> text.contains("GPU 추론 서버")).toList();
+    }
+
+    /** The token, stuck-run and model-load alerts among the GPU messages. */
+    private static List<String> alertMessages() {
+        return gpuMessages().stream().filter(text -> text.startsWith("🔑") || text.startsWith("🐢")
+                || text.contains("오래 걸리던 작업") || text.startsWith("🧩")).toList();
     }
 
     private String upload(String filename) throws Exception {

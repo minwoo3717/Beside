@@ -2,6 +2,7 @@
 #   docker build -t beside-backend backend
 #   docker run --rm -p 8080:8080 -v beside-storage:/app/storage beside-backend            # profile mock (default)
 #   docker run --rm -p 8080:8080 -e SPRING_PROFILES_ACTIVE=real,prod -e INFERENCE_BASEURL=http://100.x.y.z:8001 ... beside-backend
+#     (prod does not start without its H2 file: add -e STORAGE_DB_CREATEIFMISSING=true on a new, empty volume only)
 # Storage paths are relative to the working directory (storage/uploads, storage/results, ./storage/db/...), so
 # WORKDIR is /app and everything the server writes lives in the /app/storage volume.
 

@@ -40,10 +40,13 @@ import java.util.concurrent.Semaphore;
  *       of it, so N queued jobs do not wait N times as long). 0 (default) keeps the old behaviour: no wait, a missing
  *       service fails the run at once.</li>
  *   <li>PROCESSING with progress null (the service reports none), then POST /infer (inference.transfer=path) or
- *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}.</li>
+ *       POST /infer/upload + GET glbUrl (upload) through {@link InferenceClient}. With the wait above on, a request
+ *       still in flight when /healthz names another service process is given up (failure drill FD16b, see
+ *       {@link #restartWatch}).</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
- *       asset endpoint serves. The run ends through JobFinisher (status, then the job_runs row and the events.jsonl
- *       line, carrying the /infer metrics, the passthrough flag, the model version and the GLB size).</li>
+ *       asset endpoint serves (a copy that fails is this server's disk: INTERNAL_ERROR). The run ends through
+ *       JobFinisher (status, then the job_runs row and the events.jsonl line, carrying the /infer metrics, the
+ *       passthrough flag, the model version and the GLB size).</li>
  *   <li>Upload mode, success or failure: InferenceClient.cleanup deletes the temporary GLB and sends
  *       DELETE /artifacts/{jobId}; a failed cleanup is only logged.</li>
  * </ol>
@@ -56,6 +59,9 @@ import java.util.concurrent.Semaphore;
 @Profile("real")
 public class RealJobWorker implements JobWorker {
     private static final byte[] GLB_MAGIC = {'g', 'l', 'T', 'F'};
+    /** What the run starts from when inference.offline-wait-ms is 0: no reading, so no instance to watch. */
+    private static final InferenceHealthMonitor.Status NOT_CHECKED = new InferenceHealthMonitor.Status(
+            InferenceHealthMonitor.State.UNKNOWN, null, null, Instant.EPOCH, "not checked (offline wait off)");
 
     private final JobRepository jobRepository;
     private final JobFinisher jobFinisher;
@@ -135,7 +141,8 @@ public class RealJobWorker implements JobWorker {
             log.warn("jobId={} not found for real worker", jobId);
             return;
         }
-        if (!awaitInferenceService(jobId, offlineDeadline)) {
+        InferenceHealthMonitor.Status ready = awaitInferenceService(jobId, offlineDeadline);
+        if (ready == null) {
             InferenceHealthMonitor.Status status = healthMonitor.current();
             jobFinisher.fail(job, ErrorCode.INFERENCE_UNAVAILABLE, "The inference service was not ready within "
                     + offlineWaitMs / 1000 + " s (last check: " + status.state() + ")", type(),
@@ -154,7 +161,7 @@ public class RealJobWorker implements JobWorker {
 
         try {
             InferenceClient.Result result = inferenceClient.infer(jobId, photo.paths(imagePaths(job)),
-                    photo.names(filenames(job)));
+                    photo.names(filenames(job)), restartWatch(ready));
             StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
             jobFinisher.complete(job, stored.path().toString(), start, type(),
                     photo.apply(result.details(stored.bytes())));
@@ -180,14 +187,14 @@ public class RealJobWorker implements JobWorker {
     }
 
     /**
-     * True when the inference service reads UP, at once or before {@code deadline} (System.nanoTime(): dispatch plus
+     * The fresh UP reading the run starts from, at once or before {@code deadline} (System.nanoTime(): dispatch plus
      * inference.offline-wait-ms, so time spent queued for the slot counts); the job stays PENDING while this waits.
-     * A job whose deadline passed while it queued gets one fresh reading. Always true when the wait is off (0): the
-     * run then finds out from /infer itself.
+     * Null when the service was not UP by then. A job whose deadline passed while it queued gets one fresh reading.
+     * When the wait is off (0) there is no reading: {@link #NOT_CHECKED}, and the run finds out from /infer itself.
      */
-    private boolean awaitInferenceService(String jobId, long deadline) throws InterruptedException {
+    private InferenceHealthMonitor.Status awaitInferenceService(String jobId, long deadline) throws InterruptedException {
         if (offlineWaitMs == 0) {
-            return true;
+            return NOT_CHECKED;
         }
         // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
         boolean logged = false;
@@ -197,11 +204,11 @@ public class RealJobWorker implements JobWorker {
                 if (logged) {
                     log.info("jobId={} inference service is UP again, starting", jobId);
                 }
-                return true;
+                return status;
             }
             long leftMs = (deadline - System.nanoTime()) / 1_000_000;
             if (leftMs <= 0) {
-                return false;
+                return null;
             }
             if (!logged) {
                 log.info("jobId={} waits as PENDING: inference service {} ({}), up to {} s", jobId, status.state(),
@@ -210,6 +217,26 @@ public class RealJobWorker implements JobWorker {
             }
             Thread.sleep(Math.min(offlinePollMs, leftMs));
         }
+    }
+
+    /**
+     * FD16b: once a /healthz reading (the monitor's, every inference.health-poll-ms) names another service process
+     * than the one that was UP when the run started, the request in flight went to a process that is gone (a stopped
+     * and restarted Pod, a killed service brought back by R7) and will never be answered: InferenceClient cancels it
+     * and the slot goes to the next job, instead of waiting out inference.timeout-ms. Nothing without a fresh UP
+     * reading that names its process (wait off, an older service): then only the timeouts apply. A reading with no
+     * instance (DOWN) changes nothing: a path cut for a while (FD10) keeps the same process and the request survives.
+     */
+    private InferenceClient.Watch restartWatch(InferenceHealthMonitor.Status ready) {
+        String started = ready.instanceId();
+        if (started == null) {
+            return InferenceClient.Watch.NONE;
+        }
+        return () -> {
+            String now = healthMonitor.current().instanceId();
+            return now != null && !now.equals(started)
+                    ? "inference service restarted (instance " + started + " -> " + now + ")" : null;
+        };
     }
 
     private static List<Path> imagePaths(Job job) {
@@ -225,7 +252,12 @@ public class RealJobWorker implements JobWorker {
     private record StoredGlb(Path path, long bytes) {
     }
 
-    /** GLB_SPEC section 6: the asset endpoint serves {storage.result.dir}/{jobId}/base.glb. */
+    /**
+     * GLB_SPEC section 6: the asset endpoint serves {storage.result.dir}/{jobId}/base.glb. A GLB that is missing or
+     * not glTF 2.0 is the service's failure (CONVERSION_FAILED); one this server cannot copy into its result directory
+     * is its own (INTERNAL_ERROR: the disk is full or not writable, failure drill FD4 — it used to say CONVERSION_FAILED,
+     * which sent people looking at the converter).
+     */
     private StoredGlb storeBaseGlb(String jobId, Path glb) throws InferenceFailure {
         try {
             if (!Files.isRegularFile(glb)) {
@@ -236,6 +268,12 @@ public class RealJobWorker implements JobWorker {
                 throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
                         "The GLB from the inference service is not a glTF 2.0 binary", "glbPath=" + glb);
             }
+        } catch (IOException e) {
+            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                    "Could not read the GLB from the inference service (" + e.getClass().getSimpleName() + ")",
+                    "glbPath=" + glb + ": " + e);
+        }
+        try {
             Path target = resultDir.resolve(jobId).resolve("base.glb");
             Files.createDirectories(target.getParent());
             // The service may already have written straight into the result directory (shared volume).
@@ -244,9 +282,27 @@ public class RealJobWorker implements JobWorker {
             }
             return new StoredGlb(target, Files.size(target));
         } catch (IOException e) {
-            throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                    "Could not store the GLB (" + e.getClass().getSimpleName() + ")", "glbPath=" + glb + ": " + e);
+            if (copyFailureCode(inferenceClient.transfer(), glb) == ErrorCode.CONVERSION_FAILED) {
+                throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
+                        "The GLB from the inference service was gone before it was stored (" + e.getClass().getSimpleName() + ")",
+                        "glbPath=" + glb + ": " + e);
+            }
+            throw new InferenceFailure(ErrorCode.INTERNAL_ERROR,
+                    "Could not store the GLB on this server (" + e.getClass().getSimpleName() + ")",
+                    "glbPath=" + glb + " -> " + resultDir + ": " + e);
         }
+    }
+
+    /**
+     * Whose failure a GLB copy that failed is. Only in path mode, and only when the service's file is gone afterwards
+     * (it vanished from the shared volume between the header check and the copy, e.g. the service's work sweep), is it
+     * the service's (CONVERSION_FAILED). Everything else is this server's (INTERNAL_ERROR): the exception cannot tell,
+     * since a copy that runs out of disk half way reports both files (FileSystemException(source, target, "No space
+     * left on device")), and in upload mode the source is this server's own temporary file.
+     */
+    static ErrorCode copyFailureCode(InferenceClient.Transfer transfer, Path source) {
+        return transfer == InferenceClient.Transfer.PATH && !Files.exists(source)
+                ? ErrorCode.CONVERSION_FAILED : ErrorCode.INTERNAL_ERROR;
     }
 
     /** glTF 2.0 binary header: magic "glTF", then version 2 as a little-endian uint32. Full validation is the converter's job. */

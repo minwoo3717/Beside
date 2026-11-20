@@ -68,6 +68,8 @@ class InferenceClientTest {
     private volatile boolean artifactDrop;
     /** Headers and a few bytes of a long body, then silence (a GPU PC that vanished from the tailnet mid-transfer). */
     private volatile boolean artifactStall;
+    /** No answer at all to the GET, not even headers (a Pod stopped between the POST answer and the download). */
+    private volatile boolean artifactSilent;
     private volatile int deleteStatus = 204;
 
     @BeforeEach
@@ -100,6 +102,13 @@ class InferenceClientTest {
                     exchange.sendResponseHeaders(deleteStatus, -1);
                 } else if (artifactDrop) {
                     return; // close without an answer
+                } else if (artifactSilent) {
+                    try {
+                        Thread.sleep(60_000); // never answers; @AfterEach interrupts it
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return;
                 } else if (artifactStall) {
                     exchange.sendResponseHeaders(200, 100_000);
                     exchange.getResponseBody().write("glTF-partial".getBytes(StandardCharsets.US_ASCII));
@@ -416,6 +425,153 @@ class InferenceClientTest {
         assertThat(failure.code()).isEqualTo(ErrorCode.CONVERSION_FAILED);
         assertThat(failure.getMessage()).contains("did not finish").doesNotContain("127.0.0.1");
         assertThat(tookMs).as("the whole download is bounded, not only the wait for headers").isLessThan(10_000);
+    }
+
+    /**
+     * FD16b: a GLB download that stops getting data (body after the headers, or no headers at all) is cut off after
+     * inference.download-idle-ms, long before inference.timeout-ms; the partial file is gone.
+     */
+    @ParameterizedTest(name = "{0}: cut off after the idle limit")
+    @ValueSource(strings = {"stall after the headers", "no headers"})
+    void glbDownloadWithoutDataForTheIdleLimitIsCutOffEarly(String how) throws IOException {
+        answerUploadOk("job-u7");
+        if (how.equals("no headers")) {
+            artifactSilent = true;
+        } else {
+            artifactStall = true;
+        }
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = new InferenceClient(baseUrl(), 60_000, "upload", "", dir.resolve("tmp").toString(), 600, JSON);
+
+        long started = System.nanoTime();
+        InferenceFailure failure = catchThrowableOfType(() -> client.infer("job-u7", List.of(photo)), InferenceFailure.class);
+        long tookMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(failure.code()).isEqualTo(ErrorCode.CONVERSION_FAILED);
+        assertThat(failure.getMessage()).contains("stalled").contains("download-idle-ms=600").doesNotContain("127.0.0.1");
+        assertThat(tookMs).as("the idle limit (0.6 s), not the 60 s timeout").isBetween(500L, 10_000L);
+        assertThat(dir.resolve("tmp").resolve("job-u7").resolve("base.glb")).doesNotExist();
+    }
+
+    /** A large GLB that keeps coming, slowly, is not cut off: only a gap with no data counts. */
+    @Test
+    void aSlowDownloadThatKeepsGettingDataIsNotCutOff() throws Exception {
+        answerUploadOk("job-u8");
+        artifactBytes = new byte[64 * 1024];
+        artifactBytes[0] = 'g';
+        server.removeContext("/artifacts/");
+        server.createContext("/artifacts/", exchange -> {
+            try {
+                calls.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+                if (!exchange.getRequestMethod().equals("GET")) {
+                    exchange.sendResponseHeaders(204, -1);
+                    return;
+                }
+                exchange.sendResponseHeaders(200, artifactBytes.length);
+                for (int at = 0; at < artifactBytes.length; at += 8 * 1024) {   // 8 parts, 200 ms apart: 1.4 s in all
+                    exchange.getResponseBody().write(artifactBytes, at, 8 * 1024);
+                    exchange.getResponseBody().flush();
+                    Thread.sleep(200);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = new InferenceClient(baseUrl(), 60_000, "upload", "", dir.resolve("tmp").toString(), 600, JSON);
+
+        InferenceClient.Result result = client.infer("job-u8", List.of(photo));
+
+        assertThat(result.glbPath()).hasBinaryContent(artifactBytes);
+    }
+
+    /**
+     * FD16b: the caller's Watch says the request went to a process that is gone (the worker: /healthz names another
+     * instance). A POST is given up as INFERENCE_UNAVAILABLE in both modes, without waiting for the timeout.
+     */
+    @ParameterizedTest(name = "{0} mode: lost POST -> INFERENCE_UNAVAILABLE")
+    @ValueSource(strings = {"path", "upload"})
+    void aPostTheWatchCallsLostIsInferenceUnavailableAtOnce(String transfer) throws IOException {
+        answerUploadOk("job-w1");
+        delayMs = 20_000;   // the service never gets to answer
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = new InferenceClient(baseUrl(), 60_000, transfer, "", dir.resolve("tmp").toString(), JSON);
+        long started = System.nanoTime();
+        InferenceClient.Watch watch = () -> System.nanoTime() - started > 400_000_000L ? "instance aaa -> bbb" : null;
+
+        InferenceFailure failure = catchThrowableOfType(
+                () -> client.infer("job-w1", List.of(photo), List.of("dog.jpg"), watch), InferenceFailure.class);
+        long tookMs = (System.nanoTime() - started) / 1_000_000;
+
+        assertThat(failure.code()).isEqualTo(ErrorCode.INFERENCE_UNAVAILABLE);
+        assertThat(failure.getMessage()).contains("restarted while this run was in flight");
+        assertThat(failure.logDetail()).contains("instance aaa -> bbb");
+        assertThat(tookMs).as("the watch, not the 60 s timeout").isLessThan(5_000);
+        assertThat(calls).as("no download after a lost POST").noneMatch(call -> call.startsWith("GET"));
+    }
+
+    @Test
+    void aDownloadTheWatchCallsLostIsConversionFailedAtOnce() throws IOException {
+        answerUploadOk("job-w2");
+        artifactStall = true;
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        // Idle limit off: only the watch can end it early.
+        InferenceClient client = new InferenceClient(baseUrl(), 60_000, "upload", "", dir.resolve("tmp").toString(), 0, JSON);
+        long started = System.nanoTime();
+        InferenceClient.Watch watch = () -> calls.stream().anyMatch(call -> call.startsWith("GET"))
+                && System.nanoTime() - started > 400_000_000L ? "instance aaa -> bbb" : null;
+
+        InferenceFailure failure = catchThrowableOfType(
+                () -> client.infer("job-w2", List.of(photo), List.of("dog.jpg"), watch), InferenceFailure.class);
+
+        assertThat(failure.code()).isEqualTo(ErrorCode.CONVERSION_FAILED);
+        assertThat(failure.getMessage()).contains("restarted during the GLB download");
+        assertThat((System.nanoTime() - started) / 1_000_000).isLessThan(5_000);
+        assertThat(dir.resolve("tmp").resolve("job-w2").resolve("base.glb")).doesNotExist();
+    }
+
+    /** A watch that says nothing, or fails, never ends a run the service still answers. */
+    @Test
+    void aQuietOrBrokenWatchChangesNothing() throws Exception {
+        answerUploadOk("job-w3");
+        delayMs = 600;   // a few watch looks while the POST waits
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = uploadClient("");
+
+        InferenceClient.Watch broken = () -> {
+            throw new IllegalStateException("monitor bug");
+        };
+        assertThat(client.infer("job-w3", List.of(photo), List.of("dog.jpg"), broken).glbPath()).hasBinaryContent(artifactBytes);
+        assertThat(client.infer("job-w3", List.of(photo), List.of("dog.jpg"), InferenceClient.Watch.NONE).glbPath())
+                .hasBinaryContent(artifactBytes);
+        assertThat(client.infer("job-w3", List.of(photo), List.of("dog.jpg"), null).glbPath()).hasBinaryContent(artifactBytes);
+    }
+
+    /**
+     * FD4: a GLB this server cannot write (its own disk full or not writable) is INTERNAL_ERROR, not CONVERSION_FAILED:
+     * the model and the converter did their part. Here the target is a folder (cannot be opened as a file), and the
+     * temporary folder cannot be made (a file in its place).
+     */
+    @ParameterizedTest(name = "{0} -> INTERNAL_ERROR")
+    @ValueSource(strings = {"cannot open the file", "cannot make the folder"})
+    void aGlbThisServerCannotWriteIsInternalError(String how) throws IOException {
+        answerUploadOk("job-d1");
+        Path tmp = dir.resolve("tmp");
+        if (how.equals("cannot open the file")) {
+            Files.createDirectories(tmp.resolve("job-d1").resolve("base.glb"));
+        } else {
+            Files.write(tmp.getParent().resolve("tmp"), new byte[]{0});   // a file where the folder should be
+        }
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+
+        InferenceFailure failure = catchThrowableOfType(
+                () -> uploadClient("").infer("job-d1", List.of(photo)), InferenceFailure.class);
+
+        assertThat(failure.code()).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(failure.getMessage()).contains("on this server").doesNotContain(dir.toString());
+        assertThat(failure.logDetail()).contains("base.glb");
     }
 
     @ParameterizedTest(name = "{0} mode: HTTP {1} -> INFERENCE_UNAVAILABLE")

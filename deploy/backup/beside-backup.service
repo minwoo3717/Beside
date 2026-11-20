@@ -1,0 +1,21 @@
+# Copies new H2 backups (every run) and photos/GLBs (once a day) from the beside-storage volume to the backup bucket.
+# Install: deploy/README.md '운영 대응 설치' (copies deploy/backup/offsite_backup.sh to /usr/local/sbin/beside-offsite-backup).
+# Config: /etc/beside-backup.env (BUCKET=...). Logs: journalctl -u beside-backup. Run now: sudo systemctl start beside-backup
+[Unit]
+Description=Beside offsite backup (H2 zips hourly, photos and GLBs daily) to the backup bucket
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/beside-offsite-backup
+# /var/lib/beside-backup: what was already sent (db.last, files.done, files.day). Passed as STATE_DIRECTORY.
+StateDirectory=beside-backup
+StateDirectoryMode=0700
+SyslogIdentifier=beside-backup
+# The first files run sends every photo and GLB at once; later runs send one zip.
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=yes
+NoNewPrivileges=yes

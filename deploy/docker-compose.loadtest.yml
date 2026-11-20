@@ -21,8 +21,10 @@ services:
       METRICS_ENV: loadtest
       # 웹훅 끔(notify.webhook-url 이 비면 알림을 보내지 않는다). 수천 건의 완성·실패 알림이 팀 채널로 가지 않게.
       NOTIFY_WEBHOOKURL: ""
-      # prod 의 매일 04:30 H2 온라인 백업(DatabaseBackup, @ConditionalOnProperty storage.backup.enabled=true) 끔.
+      # prod 의 매시 5분 H2 온라인 백업(DatabaseBackup, @ConditionalOnProperty storage.backup.enabled=true) 끔.
       STORAGE_BACKUP_ENABLED: "false"
+      # 부하 볼륨은 실행 사이에 지우고 새로 만든다: prod 의 "DB 파일이 없으면 시작 거부"(FD5)를 끄고 빈 DB 로 시작한다.
+      STORAGE_DB_CREATEIFMISSING: "true"
       # 대표 사진 검사·크롭 끔(기본 compose 는 켬). k6 사진(scripts/load/make_fixtures.py)은 동물이 없는 잡음 PNG 라
       # 검사를 켜면 업로드가 모두 400 NO_ANIMAL_DETECTED 가 된다. 전처리 비용까지 재려면 실제 동물 사진 픽스처와 함께
       # 셸에서 LOADTEST_PREPROCESS_CHECK_ENABLED=true · LOADTEST_PREPROCESS_CUTOUT_ENABLED=true 로 켠다([계획]).

@@ -28,6 +28,8 @@ class ServerArgsTest(unittest.TestCase):
         self.assertIn("--preprocess.cutout.enabled=false", cmd)
         storage = (Path(tmp) / "storage").resolve().as_posix()
         self.assertIn(f"--storage.preprocessed.dir={storage}/preprocessed", cmd)
+        # a fresh folder per run: prod (real_upload_prod) must create its H2 file instead of refusing to start (FD5)
+        self.assertIn("--storage.db.create-if-missing=true", cmd)
 
 
 class RunThreadsTest(unittest.TestCase):

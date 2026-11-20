@@ -1,0 +1,12 @@
+# Every 30 s, starting 2 min after boot (Docker brings the containers back first; the script also skips a backend that
+# started less than 90 s ago). Three failed passes in a row = about 1 to 1.5 min of a backend that does not answer.
+[Unit]
+Description=Beside backend watchdog every 30 s
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
