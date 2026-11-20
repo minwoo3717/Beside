@@ -46,7 +46,10 @@ public interface JobRepository extends JpaRepository<Job, String> {
      */
     long countByStatusAndQueuedAtAfter(JobStatus status, Instant cutoff);
 
-    /** Jobs in the given state queued at or before the cutoff: AdmissionGate's stale-row warning, at most once a minute. */
+    /**
+     * Jobs in the given state queued at or before the cutoff: AdmissionGate's stale-row check (gauge
+     * beside.jobs.pending.stale and a WARN line), once a minute while the queue cap is on, never per request.
+     */
     long countByStatusAndQueuedAtLessThanEqual(JobStatus status, Instant cutoff);
 
     /**
