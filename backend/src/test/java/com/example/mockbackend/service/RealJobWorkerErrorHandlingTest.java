@@ -129,20 +129,20 @@ class RealJobWorkerErrorHandlingTest {
     }
 
     /**
-     * Which side a failed GLB copy is on: an error that names the service's file (path mode: it vanished from the shared
-     * volume between the check and the copy) is the service's (CONVERSION_FAILED); anything else is this server's disk.
+     * Whose a failed GLB copy is. A copy that runs out of disk half way names both files in its exception
+     * (FileSystemException(source, target, "No space left on device")), so the exception cannot tell: only a service's
+     * file that is gone afterwards, in path mode, is the service's side (CONVERSION_FAILED); a full disk, and anything in
+     * upload mode (the source is this server's own temporary file), is this server's (INTERNAL_ERROR, FD4).
      */
     @Test
-    void aCopyErrorAboutTheSourceIsTheServicesSide() {
-        Path source = results.resolve("from-gpu.glb");
-        assertThat(RealJobWorker.isAbout(new java.nio.file.NoSuchFileException(source.toString()), source)).isTrue();
-        assertThat(RealJobWorker.isAbout(new java.nio.file.FileSystemException(source.toString(), null, "gone"), source))
-                .isTrue();
-        assertThat(RealJobWorker.isAbout(new java.nio.file.FileSystemException(
-                results.resolve("results").resolve("job-1").resolve("base.glb").toString(), null, "No space left on device"),
-                source)).isFalse();
-        assertThat(RealJobWorker.isAbout(new java.io.IOException("No space left on device"), source)).isFalse();
-        assertThat(RealJobWorker.isAbout(new java.nio.file.NoSuchFileException(null), source)).isFalse();
+    void aFailedCopyIsTheServicesOnlyWhenItsFileIsGoneInPathMode() throws Exception {
+        Path there = Files.write(results.resolve("from-gpu.glb"), new byte[]{1});
+        Path gone = results.resolve("swept.glb");
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.PATH, gone)).isEqualTo(ErrorCode.CONVERSION_FAILED);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.PATH, there)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, there)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+        assertThat(RealJobWorker.copyFailureCode(null, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
     }
 
     private static Job job(JobStatus status) {

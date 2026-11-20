@@ -19,9 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.file.FileSystemException;
 import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
@@ -284,11 +282,9 @@ public class RealJobWorker implements JobWorker {
             }
             return new StoredGlb(target, Files.size(target));
         } catch (IOException e) {
-            if (isAbout(e, glb)) {
-                // Reading the service's file failed after all (path mode: it vanished from the shared volume, e.g. the
-                // service's work sweep, between the header check and the copy): the service's side, as above.
+            if (copyFailureCode(inferenceClient.transfer(), glb) == ErrorCode.CONVERSION_FAILED) {
                 throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
-                        "Could not read the GLB from the inference service (" + e.getClass().getSimpleName() + ")",
+                        "The GLB from the inference service was gone before it was stored (" + e.getClass().getSimpleName() + ")",
                         "glbPath=" + glb + ": " + e);
             }
             throw new InferenceFailure(ErrorCode.INTERNAL_ERROR,
@@ -297,18 +293,16 @@ public class RealJobWorker implements JobWorker {
         }
     }
 
-    /** True when {@code e} names {@code file} (a FileSystemException such as NoSuchFileException carries the path). */
-    static boolean isAbout(IOException e, Path file) {
-        return e instanceof FileSystemException named && named.getFile() != null
-                && (named.getFile().equals(file.toString()) || pathOf(named.getFile()).equals(file));
-    }
-
-    private static Path pathOf(String name) {
-        try {
-            return Path.of(name);
-        } catch (InvalidPathException e) {
-            return Path.of("");
-        }
+    /**
+     * Whose failure a GLB copy that failed is. Only in path mode, and only when the service's file is gone afterwards
+     * (it vanished from the shared volume between the header check and the copy, e.g. the service's work sweep), is it
+     * the service's (CONVERSION_FAILED). Everything else is this server's (INTERNAL_ERROR): the exception cannot tell,
+     * since a copy that runs out of disk half way reports both files (FileSystemException(source, target, "No space
+     * left on device")), and in upload mode the source is this server's own temporary file.
+     */
+    static ErrorCode copyFailureCode(InferenceClient.Transfer transfer, Path source) {
+        return transfer == InferenceClient.Transfer.PATH && !Files.exists(source)
+                ? ErrorCode.CONVERSION_FAILED : ErrorCode.INTERNAL_ERROR;
     }
 
     /** glTF 2.0 binary header: magic "glTF", then version 2 as a little-endian uint32. Full validation is the converter's job. */
