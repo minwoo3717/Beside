@@ -58,7 +58,7 @@ def queries(env: str) -> list:
     s = lambda extra="": selector(env, extra)  # noqa: E731
     req_count = f"http_server_requests_seconds_count{s()}"
     status_5xx = s('status=~"5.."')  # no backslashes inside f-string braces: Python 3.10 on the VM
-    # http_5xx_ratio leaves out the intended 503 QUEUE_FULL refusals (#21 [제안값], meeting decision D9), as lib/guard.js
+    # http_5xx_ratio leaves out the intended 503 QUEUE_FULL refusals (#21 [제안값], meeting item D9, undecided), as lib/guard.js
     # does: "or vector(0)" when the server has no refusal counter (no cap code), so runs without a cap read as before;
     # clamp_min(.., 0) because a refusal is counted just before its 503 is recorded. The raw 503s stay in
     # http_rps_by_status, the refusals per op in jobs_refused_rate.

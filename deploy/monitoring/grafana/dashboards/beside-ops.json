@@ -835,6 +835,17 @@
           "legendFormat": "{{state}}",
           "instant": false,
           "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "max(beside_jobs_pending_stale{env=\"$env\"})",
+          "legendFormat": "상한이 세지 않는 오래된 PENDING",
+          "instant": false,
+          "range": true
         }
       ]
     },
@@ -1475,7 +1486,7 @@
       "id": 20,
       "type": "timeseries",
       "title": "5xx · 4xx 비율",
-      "description": "전체 요청 중 상태 5xx·4xx 비율. 합격 기준 제안: 5xx < 0.5 %. 의도한 4xx(검증 실패·404)는 4xx 로 따로 본다. 5xx 는 큐 상한이 일부러 낸 503 QUEUE_FULL(beside_jobs_refused_total)을 뺀 값이다(안건 #21 [제안값], 회의 결정 D9, 계약 회의 전). 상한이 꺼져 있거나 상한 코드가 없는 서버는 뺄 것이 없어 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수는 '작업 생성 · 재시도' 패널, 503 원래 수는 상태별 요청률로 본다.",
+      "description": "전체 요청 중 상태 5xx·4xx 비율. 합격 기준 제안: 5xx < 0.5 %. 의도한 4xx(검증 실패·404)는 4xx 로 따로 본다. 5xx 는 큐 상한이 일부러 낸 503 QUEUE_FULL(beside_jobs_refused_total)을 뺀 값이다(안건 #21 [제안값], 회의 안건 D9(결정 전), 계약 회의 전). 상한이 꺼져 있거나 상한 코드가 없는 서버는 뺄 것이 없어 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수는 '작업 생성 · 재시도' 패널, 503 원래 수는 상태별 요청률로 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
