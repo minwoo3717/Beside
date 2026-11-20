@@ -194,6 +194,7 @@
 | 무엇 | 어디 | 처리 |
 |---|---|---|
 | 추론 수치·앱 `metrics.csv`·변환기가 "[계획]/리포에 없음"으로 적혀 있지만 코드는 있음 | `METRICS.md:5,57-59,72`, `CONTRACT.md:104,132-133`, `GLB_SPEC.md:5` | 계약 파일 → 회의 안건(#16) |
+| `INTERNAL_ERROR` 의 예기치 못한 오류를 "real 워커"만 적음 ↔ mock 워커도 예기치 못한 오류를 `INTERNAL_ERROR`("Mock worker error (…)")로 끝냄(2026-11-20) | `ERROR_CODES.md:44`, `CONTRACT.md:107` | 계약 파일 → 회의 안건(#16 과 함께). 설명 문구만 고치고 코드 값·상태 코드·앱 문구는 그대로 |
 | GLB_SPEC "스킨·애니메이션 없음" ↔ 실제 리깅 출력 | `GLB_SPEC.md:35` | 안건 #14 |
 | `sample-dog.glb` 가 문서마다 "0바이트" / "리깅 GLB 로 교체해 씀" | 루트·backend README, `unity/README.md`, `unity/CLAUDE.md` | 교체 결정 후 한 번에 |
 | #6 업로드 모드를 PLAN 은 "결정", 체크리스트는 "제안"으로 적음. (b) 를 "GLB 바이너리 응답"이라 적었지만 구현은 JSON `glbUrl` + `GET/DELETE /artifacts` | `PLAN.md`, `REVIEW_CHECKLIST.md:12` | 회의에서 결정 기록. PLAN 위험 표는 이번에 구현에 맞춤 |
