@@ -150,7 +150,7 @@ nano deploy/.env
 | `BASIC_AUTH_HASH` | `caddy hash-password` 출력. **작은따옴표로 감싼다**: `BASIC_AUTH_HASH='$2a$14$...'` |
 | `INFERENCE_BASE_URL` | `http://<Runpod Pod 의 Tailscale IP>:8002`(`start_pod.sh` 가 마지막에 출력), GPU PC 면 `http://<그 PC 의 Tailscale IP>:8001` |
 | `INFERENCE_TOKEN` | 긴 무작위 문자열(`openssl rand -hex 32`). GPU 쪽 `BESIDE_INFERENCE_TOKEN` 과 같게 |
-| `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김을 팀 채널에 알린다. 비우면 끔 |
+| `NOTIFY_WEBHOOK_URL` | (선택) Discord 웹훅 URL. 작업 완성·실패와 GPU 서버 연결/끊김, 추론 토큰 불일치(🔑)·멈춘 듯한 작업(🐢, 아래 '문제 해결')을 팀 채널에 알린다. 비우면 끔 |
 | `NOTIFY_INFERENCE_LABEL` | (선택) GPU 알림에 붙는 서버 이름(예: `Runpod A40` → "🟢 GPU 추론 서버(Runpod A40) 연결됨"). 비우면 이름 없이. prod 는 끊김(🔴)을 45초(`notify.down-grace-ms`) 넘게 이어질 때만 알린다. 그 안에 바로 다시 연결되면 🔴·🟢 둘 다 보내지 않고, 서비스가 다시 시작돼 모델을 불러오는 중(🟡)을 거쳐 돌아오면 🟡·🟢 만 보낸다. `#` 는 쓰지 않는다(따옴표 없는 값에서 compose 가 ` #` 뒤를 주석으로 자른다) |
 | `GRAFANA_ADMIN_USER` · `GRAFANA_ADMIN_PASSWORD` | (monitoring 프로필을 쓸 때만) Grafana 관리자 계정. 비밀번호는 `openssl rand -base64 24`. 견본에는 일부러 비어 있고, 비어 있으면 grafana 컨테이너가 뜨지 않는다(아래 '모니터링') |
 
@@ -402,6 +402,8 @@ VM 에서 `curl http://<GPU PC 100.x>:8001/healthz` 와 `docker compose -f deplo
 | 업로드 413 | 응답 본문이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)면 Spring(장당 5MB·요청 20MB), 본문이 비었으면 Caddy(25MB) | 사진을 줄인다. 상한을 바꾸려면 Spring 설정과 Caddyfile 을 함께(계약 회의) |
 | 502 Bad Gateway | `... ps` 에서 backend 상태, `... logs backend` | 기동 중(첫 30~60초)이면 기다린다. 종료됐으면 로그의 원인(DB 잠김·메모리) |
 | 작업이 `INFERENCE_UNAVAILABLE` | Pod(또는 GPU PC)가 켜져 있는지, Pod 를 다시 켠 뒤 `start_pod.sh` 를 실행했는지, `tailscale status`, VM 호스트와 backend 컨테이너에서 각각 `curl http://<GPU 쪽 100.x>:<8002 또는 8001>/healthz`, Pod 의 `/workspace/beside-logs/` | prod 는 GPU 가 응답하지 않으면 30분 동안 PENDING 으로 기다린 뒤 이 코드로 끝난다(`inference.offline-wait-ms`). 호스트에서는 되는데 컨테이너에서만 안 되면 `docker-compose.yml` 의 backend 주석대로 호스트 네트워크로 옮긴다 |
+| Discord 🔑 "백엔드의 추론 토큰을 받지 않아요" (healthz `tokenOk=false`) | backend 컨테이너 안에서 `sh -c 'curl -sS -H "X-Inference-Token: $INFERENCE_TOKEN" http://<GPU 쪽 100.x>:<포트>/healthz'` 의 `tokenOk`(토큰은 출력되지 않는다). VM `deploy/.env` 의 `INFERENCE_TOKEN` 과 Pod `/workspace/beside-token` 중 어느 쪽이 바뀌었는지 | 이 동안 새 작업은 기다리지 않고 바로 `INFERENCE_UNAVAILABLE`(401)로 끝난다. 틀린 쪽을 고친다: Pod 는 위 '처음 한 번' 4번의 토큰 줄로 다시 쓰고 `kill $(cat /var/run/beside/inference.pid)` 뒤 4번의 마지막 두 줄, VM 은 `up -d backend`. Pod 쪽을 고치면 약 15초(`inference.health-poll-ms`) 안에 🔑 "다시 받아요" 가 온다. backend 를 다시 띄운 경우 새 backend 는 앞 알림을 모르므로 회복 메시지 없이 🔑 가 다시 오지 않는 것으로 확인한다. 실패한 작업은 앱에서 다시 시도 |
+| Discord 🐢 "작업 하나가 …째 끝나지 않아요" (healthz `busyForMs` > `inference.stuck-alert-ms`, 기본 120000) | Pod `/workspace/beside-logs/inference.log` 의 마지막 `job …` 줄, `nvidia-smi`, `curl -sS http://<GPU 쪽 100.x>:<포트>/healthz` 의 `busyForMs` 가 계속 느는지 | 그 작업은 `inference.timeout-ms`(600초) 뒤 `INFERENCE_TIMEOUT` 이 되고, 뒤 작업도 GPU 잠금을 기다리다 차례로 시간 초과된다. `predict` 는 DELETE 로도 멈추지 않으므로 몇 분 더 늘면 Pod 의 서비스를 `kill $(cat /var/run/beside/inference.pid)` 뒤 4번의 마지막 두 줄로 다시 띄운다(모델을 다시 불러오는 동안 🟡). 🟢 "오래 걸리던 작업이 끝났어요" 가 오면 풀린 것이다 |
 | `permission denied ... docker.sock` | `groups` 에 docker 가 있는지 | `sudo usermod -aG docker $USER` 뒤 다시 로그인 |
 | `required variable ... is missing` | `deploy/.env` 에 그 변수 | 견본(`.env.example`)의 모든 변수를 채운다. `--env-file deploy/.env` 를 빠뜨리지 않는다 |
 | grafana 가 계속 재시작, 로그에 `GRAFANA_ADMIN_PASSWORD 를 넣는다` | `deploy/.env` 의 `GRAFANA_ADMIN_PASSWORD` | 값을 넣고 `$M up -d grafana` |

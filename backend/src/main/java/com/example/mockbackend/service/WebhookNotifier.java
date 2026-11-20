@@ -1,6 +1,8 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.service.InferenceHealthMonitor.Alert;
+import com.example.mockbackend.service.InferenceHealthMonitor.AlertChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.State;
 import com.example.mockbackend.service.InferenceHealthMonitor.StateChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.Status;
@@ -20,7 +22,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.EnumSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +42,11 @@ import java.util.concurrent.TimeUnit;
  * heard about is not announced either: the VM reaches a Runpod Pod over a Tailscale relay that can miss one /healthz
  * check (seen 2026-11-17, back 15 s later), which would otherwise post a false "unreachable" and "connected" pair.
  * A LOADING after a short DOWN (the service restarted and loads its model) is still news and is announced.
+ * <p>
+ * Two alerts come from readings the service did answer (InferenceHealthMonitor.AlertChanged, 2026-11-20): the service
+ * rejects the backend's token (tokenOk=false, every job fails at once) and one run has held the GPU longer than
+ * inference.stuck-alert-ms (busyForMs, healthz UP but inference stuck). Each posts once when it starts and once when
+ * it ends, with no grace time.
  */
 @Component
 public class WebhookNotifier {
@@ -67,6 +76,8 @@ public class WebhookNotifier {
     /** The DOWN waiting out its grace time, else null, and when it began (System.nanoTime). Guarded by this. */
     private Status pendingDown;
     private long pendingDownSince;
+    /** The alerts the channel last heard as started (and not yet as ended). Guarded by this. */
+    private final Set<Alert> alertsAnnounced = EnumSet.noneOf(Alert.class);
 
     public WebhookNotifier(String webhookUrl, String publicBaseUrl, ObjectMapper objectMapper) {
         this(webhookUrl, publicBaseUrl, "", 0, objectMapper);
@@ -113,6 +124,30 @@ public class WebhookNotifier {
         if (enabled()) {
             stateChanged(event);
         }
+    }
+
+    /**
+     * Token mismatch and stuck-run alerts (InferenceHealthMonitor publishes them only when they start or end). Posted
+     * at once, without the DOWN grace time: they come from readings the service did answer. A repeat of what the
+     * channel already heard, or the end of an alert it never heard, posts nothing.
+     */
+    @EventListener
+    public void onInferenceAlert(AlertChanged event) {
+        if (enabled()) {
+            alertChanged(event);
+        }
+    }
+
+    private synchronized void alertChanged(AlertChanged event) {
+        if (event.active() == alertsAnnounced.contains(event.alert())) {
+            return;
+        }
+        if (event.active()) {
+            alertsAnnounced.add(event.alert());
+        } else {
+            alertsAnnounced.remove(event.alert());
+        }
+        post(alertText(event, inferenceLabel));
     }
 
     /**
@@ -234,9 +269,39 @@ public class WebhookNotifier {
         return stateText(event.current(), cleanLabel(label));
     }
 
+    /** The message for an alert that starts or ends, naming the server with {@code label} when it is not blank. */
+    public static String alertMessage(AlertChanged event, String label) {
+        return alertText(event, cleanLabel(label));
+    }
+
+    /** {@code label} is already cleaned. Never names the token, a host or a path. */
+    static String alertText(AlertChanged event, String label) {
+        String server = serverName(label);
+        return switch (event.alert()) {
+            case TOKEN_REJECTED -> event.active()
+                    ? "🔑 " + server + "가 백엔드의 추론 토큰을 받지 않아요 — 새 작업이 모두 바로 실패합니다"
+                            + " (INFERENCE_UNAVAILABLE). 양쪽 INFERENCE_TOKEN 을 확인해 주세요"
+                    : "🔑 " + server + "가 추론 토큰을 다시 받아요";
+            case STUCK -> event.active()
+                    ? "🐢 " + server + "의 작업 하나가 " + duration(busyForMs(event)) + "째 끝나지 않아요 (기준 "
+                            + duration(event.stuckAlertMs()) + ") — 추론이 멈췄을 수 있어요."
+                            + " 그동안 다른 작업은 기다리거나 시간 초과로 실패합니다"
+                    : "🟢 " + server + "의 오래 걸리던 작업이 끝났어요";
+        };
+    }
+
+    private static long busyForMs(AlertChanged event) {
+        Long busy = event.current() == null ? null : event.current().busyForMs();
+        return busy == null ? event.stuckAlertMs() : busy;
+    }
+
+    private static String serverName(String label) {
+        return label.isEmpty() ? "GPU 추론 서버" : "GPU 추론 서버(" + label + ")";
+    }
+
     /** {@code label} is already cleaned; null for UNKNOWN. */
     static String stateText(Status current, String label) {
-        String server = label.isEmpty() ? "GPU 추론 서버" : "GPU 추론 서버(" + label + ")";
+        String server = serverName(label);
         return switch (current.state()) {
             case UP -> "🟢 " + server + " 연결됨" + (current.device() == null ? "" : " (" + current.device() + ")")
                     + " — 기다리던 작업을 이어서 처리합니다";

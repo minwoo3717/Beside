@@ -252,8 +252,15 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false }
+{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0 }
 ```
+
+토큰 없이 열려 있고, 서비스가 응답하는 한 늘 200 이다. `tokenOk`·`busyForMs` 는 2026-11-20 에 더한 필드다 **[구현됨]**(`test_app.py` 의 `HealthzTokenTest`·`BusyClockTest`·`HealthzBusyModelTest`, `PassthroughKnobTest` 의 busy 시험). 모르는 필드를 무시하는 옛 Spring 에는 영향이 없다.
+
+- `tokenOk`: 요청에 `X-Inference-Token` 헤더가 있을 때만 `true`/`false` 다. `/infer` 가 그 값을 받아들일지를 말한다(위 '인증' 과 같은 상수 시간 비교. 서비스에 `BESIDE_INFERENCE_TOKEN` 이 없으면 검사하지 않으므로 `true`). 헤더가 없으면 `null`. `false` 여도 `/healthz` 는 401 이 아니라 200 이다. 토큰 값은 응답·로그에 남기지 않는다.
+- `busyForMs`: 아직 돌고 있는 `MODEL.predict` 호출 또는 패스스루 모의 생성(`BESIDE_PASSTHROUGH_*` 의 잠자기) 가운데 가장 오래된 것이 시작한 뒤 지난 ms. 돌고 있는 것이 없으면 0. `MODEL_LOCK`·패스스루 슬롯을 기다리는 시간, 사진 저장·변환·리깅은 넣지 않는다. Spring 이 포기한(DELETE 로 취소된) 실행도 `predict` 가 끝날 때까지는 GPU 를 쥐고 있으므로 센다.
+
+Spring 의 `InferenceHealthMonitor` 는 `inference.token` 이 있으면 이 헤더를 붙여 15초마다(`inference.health-poll-ms`) 부른다. `tokenOk=false`(장애 FD17: 모든 작업이 바로 `INFERENCE_UNAVAILABLE`)와 `busyForMs` 가 `inference.stuck-alert-ms`(기본 120000)를 넘는 것(FD13: healthz 는 UP 인데 추론만 멈춤)을 Discord 로 시작할 때 한 번, 풀릴 때 한 번 알린다 **[구현됨]**(`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`). 필드가 없거나(옛 서비스) 응답이 없으면 모름으로 보고 알리지 않는다. 작업을 보낼지 정하는 UP/LOADING/DOWN 판정은 이 두 필드를 보지 않는다. VM·Pod 에서 실제로 받아 본 것은 아직 없다 **[계획]**. 운영 대응은 [deploy/README.md](../../deploy/README.md) '문제 해결'.
 
 ## 가정과 열린 결정 (계약 회의 안건)
 
