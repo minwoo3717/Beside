@@ -167,7 +167,16 @@ public class JobServiceImpl implements JobService {
             }
             // The key is linked before the worker sees the job: the losing request of a same-key race is dropped unrun.
             if (keyed) {
-                Job linked = linkIdempotencyKey(idempotencyKey, job);
+                Job linked;
+                try {
+                    linked = linkIdempotencyKey(idempotencyKey, job);
+                } catch (RuntimeException linkFailed) {
+                    // Not a same-key race (that one is answered above): the row is committed, but no key names it and no
+                    // worker will run it. With the queue cap on it would hold a place until it is old enough to be
+                    // ignored, so it goes like a lost race. The client gets 500 and its resend is a new job.
+                    discardAfter(linkFailed, job);
+                    throw linkFailed;
+                }
                 if (linked != job) {
                     return linked;
                 }
@@ -207,7 +216,15 @@ public class JobServiceImpl implements JobService {
                         "Only FAILED jobs can be retried; current status is " + getJobOrThrow(id).getStatus());
             }
         }
-        Job job = getJobOrThrow(id);
+        Job job;
+        try {
+            job = getJobOrThrow(id);
+        } catch (RuntimeException readFailed) {
+            // The update is committed but nothing will dispatch the attempt: back to the FAILED attempt this request
+            // found, as when dispatch is refused below. Left PENDING, the job would hold a queue place with no worker.
+            restoreAfter(readFailed, found);
+            throw readFailed;
+        }
         try {
             jobWorker.dispatch(id);
         } catch (TaskRejectedException shuttingDown) {
@@ -391,6 +408,32 @@ public class JobServiceImpl implements JobService {
         }
         jobMetrics.jobCreated();
         log.info("Job created: {} status={} worker={}", job.getId(), job.getStatus(), jobWorker.type());
+    }
+
+    /**
+     * {@link #discard} after a failure between the job's write and its dispatch, keeping that failure as the one thrown.
+     * When the database cannot drop the row either, the row stays PENDING until InterruptedJobRecovery fails it at the
+     * next startup (with the queue cap on, until admission.stale-after-ms also stops counting it).
+     */
+    private void discardAfter(RuntimeException failure, Job job) {
+        try {
+            discard(job);
+        } catch (RuntimeException notDropped) {
+            failure.addSuppressed(notDropped);
+            log.error("jobId={} could not be dropped after a failed write ({}); it stays PENDING until the next startup",
+                    job.getId(), notDropped.toString());
+        }
+    }
+
+    /** Puts back the FAILED attempt a retry found, after a failure that leaves its new attempt undispatched. */
+    private void restoreAfter(RuntimeException failure, Job found) {
+        try {
+            jobRepository.save(found);
+        } catch (RuntimeException notRestored) {
+            failure.addSuppressed(notRestored);
+            log.error("jobId={} could not go back to FAILED after a failed retry ({}); it stays PENDING until the next"
+                    + " startup", found.getId(), notRestored.toString());
+        }
     }
 
     /** A job that never reached a worker: its row and its stored photos go. */
