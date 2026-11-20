@@ -1,0 +1,61 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-20T05:47:16.787Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-20T05:47:16.799Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-20T05:47:19.226Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-20T05:47:19.349Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 114 ms. Found 3 JPA repository interfaces.
+2026-11-20T05:47:20.801Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-11-20T05:47:21.305Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-20T05:47:21.305Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-20T05:47:21.423Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-11-20T05:47:21.425Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 4440 ms
+2026-11-20T05:47:22.001Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-11-20T05:47:22.070Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+2026-11-20T05:47:22.115Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-11-20T05:47:22.418Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-11-20T05:47:22.449Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-20T05:47:22.736Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:file:./storage/db/beside-real user=SA
+2026-11-20T05:47:22.739Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-20T05:47:24.076Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-11-20T05:47:24.144Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-11-20T05:47:24.879Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-11-20T05:47:26.246Z  INFO 1 --- [           main] c.e.mockbackend.service.InferenceClient  : inference transfer=upload url=http://100.83.86.62:8002/infer/upload token=set
+[0;93m2026-11-20 05:47:27.150814946 [W:onnxruntime:beside, telemetry_1ds.cc:600 operator()] Failed to persist telemetry device ID; using an in-memory identifier[m
+2026-11-20T05:47:27.911Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: yolox_s#c5c2d13e loaded and warmed up in 1604 ms (2 threads)
+2026-11-20T05:47:30.340Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: u2net#8d10d2f3 loaded and warmed up in 2429 ms (1 threads)
+2026-11-20T05:47:30.341Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: check on, cutout on (background remove), detector yolox_s#c5c2d13e, segmenter u2net#8d10d2f3
+2026-11-20T05:47:30.734Z  INFO 1 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-11-20T05:47:31.938Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2026-11-20T05:47:32.075Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+2026-11-20T05:47:32.076Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-20T05:47:32.077Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-20T05:47:32.084Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+2026-11-20T05:47:32.085Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 141 ms
+2026-11-20T05:47:32.108Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+2026-11-20T05:47:32.161Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path ''
+2026-11-20T05:47:32.188Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 16.287 seconds (process running for 17.354)
+2026-11-20T05:47:32.457Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-11-20T05:47:32.457Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-11-20T05:47:32.459Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+2026-11-20T05:47:33.749Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> LOADING (no model loaded)
+2026-11-20T05:48:04.324Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)
+2026-11-20T05:48:35.156Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (ConnectException)
+2026-11-20T05:48:51.049Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+2026-11-20T05:49:06.327Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)
+2026-11-20T05:49:09.658Z  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServletRegistration'
+2026-11-20T05:49:09.659Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServletRegistration'
+2026-11-20T05:49:09.659Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+2026-11-20T05:50:09.164Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (HttpTimeoutException)
+2026-11-20T05:50:24.711Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+2026-11-20T05:50:24.712Z  WARN 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service could not load its model (healthz loadError: FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>): it stays LOADING, so jobs wait PENDING up to inference.offline-wait-ms until it is fixed and restarted
+2026-11-20T05:51:12.271Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> DOWN (HttpTimeoutException)
+2026-11-20T05:51:27.843Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+2026-11-20T05:51:27.844Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service no longer reports a model load error (healthz loadError=null)
+2026-11-20T05:51:43.124Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)

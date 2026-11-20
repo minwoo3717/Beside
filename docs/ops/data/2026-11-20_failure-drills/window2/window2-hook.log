@@ -1,0 +1,16 @@
+2026-11-20T05:37:18.454Z {"content":"test"}
+/hook.py:10: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(datetime.datetime.utcnow().isoformat(timespec="milliseconds") + "Z " + body, flush=True)
+2026-11-20T05:38:44.605Z {"content":"🔑 GPU 추론 서버(Runpod A40)가 백엔드의 추론 토큰을 받지 않아요 — 새 작업이 모두 바로 실패합니다 (INFERENCE_UNAVAILABLE). 양쪽 INFERENCE_TOKEN 을 확인해 주세요"}
+2026-11-20T05:39:29.622Z {"content":"🔑 GPU 추론 서버(Runpod A40)가 추론 토큰을 다시 받아요"}
+2026-11-20T05:42:55.561Z {"content":"🐢 GPU 추론 서버(Runpod A40)의 작업 하나가 2분 14초째 끝나지 않아요 (기준 2분 0초) — 추론이 멈췄을 수 있어요. 그동안 다른 작업은 기다리거나 시간 초과로 실패합니다"}
+2026-11-20T05:43:31.177Z {"content":"⚠️ 3D 생성 실패 · 작업 `7e7d6072` · INFERENCE_UNAVAILABLE · 2분 50초"}
+2026-11-20T05:43:40.577Z {"content":"🟢 GPU 추론 서버(Runpod A40)의 오래 걸리던 작업이 끝났어요"}
+2026-11-20T05:47:33.794Z {"content":"🟡 GPU 추론 서버(Runpod A40)는 켜졌지만 모델이 아직 준비되지 않았어요"}
+2026-11-20T05:48:04.332Z {"content":"🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda) — 기다리던 작업을 이어서 처리합니다"}
+2026-11-20T05:48:51.053Z {"content":"🟡 GPU 추론 서버(Runpod A40)는 켜졌지만 모델이 아직 준비되지 않았어요"}
+2026-11-20T05:49:06.332Z {"content":"🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda) — 기다리던 작업을 이어서 처리합니다"}
+2026-11-20T05:50:24.719Z {"content":"🟡 GPU 추론 서버(Runpod A40)는 켜졌지만 모델이 아직 준비되지 않았어요"}
+2026-11-20T05:50:24.724Z {"content":"🧩 GPU 추론 서버(Runpod A40)가 모델을 불러오지 못했어요 (FileNotFoundError) — 고쳐서 다시 띄우기 전에는 새 작업이 처리되지 않아요. 추론 서비스 로그를 확인해 주세요"}
+2026-11-20T05:51:27.851Z {"content":"🧩 GPU 추론 서버(Runpod A40)의 모델 불러오기 오류가 풀렸어요"}
+2026-11-20T05:51:43.129Z {"content":"🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda) — 기다리던 작업을 이어서 처리합니다"}

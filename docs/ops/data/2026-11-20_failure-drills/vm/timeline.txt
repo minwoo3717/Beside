@@ -55,3 +55,20 @@
 2026-11-20T04:18:41.085Z FD16b after timeout
 2026-11-20T04:24:07.002Z BLOCK2 end; restore start
 2026-11-20T04:28:08.587Z WINDOW end: notice sent
+2026-11-20T05:37:39.317Z WINDOW2 start: notice sent
+2026-11-20T05:38:00.456Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T05:38:14.828Z up stub DRILL_WEBHOOK_URL=http://drill-hook:8080/ healthz 200
+2026-11-20T05:38:34.837Z FD17b stub token changed (backend keeps its token)
+2026-11-20T05:39:25.302Z FD17b stub token restored
+2026-11-20T05:40:25.690Z stub-drill up DELAY_MS=600000 SLOTS=1
+2026-11-20T05:40:40.644Z up stub DRILL_WEBHOOK_URL=http://drill-hook:8080/ LOADTEST_INFERENCE_TIMEOUT_MS=300000 healthz 200
+2026-11-20T05:40:41.017Z FD13b job 7e7d6072-a731-4816-8419-f5ae84ace3cf submitted (stub hangs 600 s)
+2026-11-20T05:43:31.027Z FD13b restart stub normal
+2026-11-20T05:43:32.959Z stub-drill up DELAY_MS=4000 SLOTS=1
+2026-11-20T05:44:36.453Z FD2b SIGSTOP backend pid 11349 (watchdog on, SIGCONT armed 300 s)
+2026-11-20T05:46:29.966Z FD2b backend restarted (StartedAt 2026-11-20T05:46:28.89143879Z)
+2026-11-20T05:46:45.009Z up stub DRILL_WEBHOOK_URL=http://drill-hook:8080/ healthz 200
+2026-11-20T05:46:45.086Z FD2b healthz 200
+2026-11-20T05:47:32.587Z up pod DRILL_WEBHOOK_URL=http://drill-hook:8080/ healthz 200
+2026-11-20T05:52:35.466Z WINDOW2 restore start
+2026-11-20T05:53:08.510Z WINDOW2 end: notice sent
