@@ -51,6 +51,11 @@ jobs:
           python3 -I -m unittest discover -s scripts/load -p "test_*.py"
           node --test scripts/load/*.test.mjs
 
+      - name: Runpod Pod scripts (start_pod.sh under its restart supervisor; fake service and Tailscale, no network)
+        run: |
+          for f in deploy/runpod/*.sh; do bash -n "$f"; done
+          bash deploy/runpod/test_start_pod_supervisor.sh
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
