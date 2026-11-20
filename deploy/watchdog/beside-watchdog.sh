@@ -161,7 +161,8 @@ check_backend() {
   read -r status started count < <(docker inspect -f '{{.State.Status}} {{.State.StartedAt}} {{.RestartCount}}' "$cid" 2>/dev/null)
   [[ "${count:-}" =~ ^[0-9]+$ ]] || count=0
   if [[ "${status:-}" != running ]]; then
-    check_crash_loop "$cid" "$count"
+    # Only while Docker keeps restarting it: an exited container was stopped on purpose (DB restore, backup).
+    [[ "${status:-}" != restarting ]] || check_crash_loop "$cid" "$count"
     [[ "$(get fails 0)" == 0 ]] || log "backend is ${status:-unknown}: left to Docker's restart policy and the operator"
     put fails 0
     return 0
@@ -222,7 +223,8 @@ check_backend() {
 
 # check_crash_loop <cid> <RestartCount>: Docker restarted the backend CRASH_LOOP_RESTARTS times or more since the last
 # good health check (the count at that check is restarts.base; a recreated container starts again from 0). Asked only
-# while the backend is not running or still booting: a healthy run resets the base instead.
+# while Docker is restarting it or it is still booting: a healthy run resets the base instead, and a container the
+# operator stopped (exited) gets no reminders.
 check_crash_loop() {
   local cid="$1" count="$2" base last
   base="$(get restarts.base)"

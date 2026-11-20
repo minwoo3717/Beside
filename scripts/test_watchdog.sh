@@ -157,11 +157,28 @@ date -u -d "@$((T0 + 13400))" +%Y-%m-%dT%H:%M:%S.000000001Z > "$WORK/fake/starte
 touch "$WORK/fake/healthy"
 step 13500; step 13530
 [[ "$(count '다시 정상으로 떴어요')" == 1 ]] || fail "crash loop end reported $(count '다시 정상으로 떴어요') times"
-# a recreated container (deploy) starts its count at 0 again: a new base, no alert
-echo 0 > "$WORK/fake/restartcount"; step 13560
-echo 2 > "$WORK/fake/restartcount"; rm "$WORK/fake/healthy"; echo restarting > "$WORK/fake/status"; step 13590
-[[ "$(crash)" == 2 ]] || fail "crash loop alert after a recreated container"
+# a stopped backend (the operator follows RUNBOOK 'DB 복구' step 1) gets no reminders, however long it stays stopped
+echo 31 > "$WORK/fake/restartcount"; rm "$WORK/fake/healthy"; echo restarting > "$WORK/fake/status"
+step 13600; step 13630; step 13660   # 31 is only 1 above the base 30 from the healthy runs: no alert yet
+echo 34 > "$WORK/fake/restartcount"; step 13690
+[[ "$(crash)" == 3 ]] || fail "no crash loop alert after 4 more Docker restarts"
+echo exited > "$WORK/fake/status"
+step $((13690 + 3700))
+[[ "$(crash)" == 3 ]] || fail "crash loop reminder for a container the operator stopped"
+# a deploy recreates the container on a lost DB: its count starts at 0 below the old base (34) and it never gets a good
+# health check, so the base must follow it down for the next 3 restarts to alert (not only at 37)
+echo restarting > "$WORK/fake/status"
+for n in 0 1 2; do echo "$n" > "$WORK/fake/restartcount"; step $((17500 + n * 30)); done
+[[ "$(crash)" == 3 ]] || fail "crash loop alert before 3 restarts of the recreated container"
+echo 3 > "$WORK/fake/restartcount"; step 17590
+[[ "$(crash)" == 4 ]] || fail "no crash loop alert for the recreated container at 3 restarts"
+tail -n1 "$WORK/fake/messages" | grep -q 'Docker 가 3번 다시 띄웠어요' || fail "wrong count for the recreated container"
+# restored: healthy again (reported once more), then failing health for the next part
 echo running > "$WORK/fake/status"; echo 0 > "$WORK/fake/restartcount"
+date -u -d "@$((T0 + 17600))" +%Y-%m-%dT%H:%M:%S.000000001Z > "$WORK/fake/started"
+touch "$WORK/fake/healthy"; step 17700
+[[ "$(count '다시 정상으로 떴어요')" == 2 ]] || fail "second crash loop end not reported"
+rm "$WORK/fake/healthy"
 
 # docker restart fails: exit 1 and a message
 touch "$WORK/fake/restart-fails"
