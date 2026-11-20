@@ -117,7 +117,8 @@ class ObservabilityEndpointTest {
                 .contains("beside_jobs_queue{env=\"local\",state=\"processing\",}")
                 // Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting): 0 while it is off.
                 .contains("beside_jobs_refused_total{env=\"local\",op=\"create\",} 0.0")
-                .contains("beside_jobs_refused_total{env=\"local\",op=\"retry\",} 0.0");
+                .contains("beside_jobs_refused_total{env=\"local\",op=\"retry\",} 0.0")
+                .contains("beside_jobs_pending_stale{env=\"local\",} 0.0");
     }
 
     @Test

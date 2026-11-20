@@ -4,10 +4,16 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.exception.ApiException;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.ContextClosedEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -34,7 +40,8 @@ import java.util.function.Supplier;
  *   <li>PENDING rows queued longer ago than admission.stale-after-ms are not counted: a row whose worker was lost would
  *       otherwise hold a place until the next restart. Unset (or empty), it is {@link #defaultStaleAfterMs}, the longest
  *       a job can legitimately wait as PENDING while the cap holds, so the safety net never drops a job that is only
- *       waiting (a GPU outage, hung /infer calls). They are reported with one WARN line at most once a minute.</li>
+ *       waiting (a GPU outage, hung /infer calls). A check of their own, once a minute while the cap is on, shows them
+ *       as the gauge beside.jobs.pending.stale and in one WARN line when there are any; requests never count them.</li>
  *   <li>Two retries of the same job: while one holds a permit the other gets 409 JOB_NOT_FAILED (it would lose the
  *       conditional update anyway), so a full queue never answers it 503 for a job another retry is re-queuing.</li>
  *   <li>max-pending 0 (the default) admits everything without a query: behaviour stays as without the cap.</li>
@@ -43,9 +50,9 @@ import java.util.function.Supplier;
  * decided on, so a load test can check pending + reserved ≥ cap for each refusal.
  */
 @Component
-public class AdmissionGate {
-    /** How often the stale PENDING rows are counted for the WARN line (only while the cap is on). */
-    static final Duration STALE_CHECK_INTERVAL = Duration.ofMinutes(1);
+public class AdmissionGate implements MeterBinder {
+    /** How often the stale PENDING rows are counted for the gauge and the WARN line (only while the cap is on). */
+    static final long STALE_CHECK_MS = 60_000;
     /** The margin in {@link #defaultStaleAfterMs} (cutout, transfers, cleanup, scheduling). */
     static final long STALE_SLACK_MS = Duration.ofMinutes(10).toMillis();
 
@@ -79,7 +86,10 @@ public class AdmissionGate {
     // Guarded by this.
     private int reserved;
     private final Set<String> retrying = new HashSet<>();
-    private Instant nextStaleCheck = Instant.MIN;
+
+    /** PENDING rows the cap leaves out, as of the last check; NaN while the check fails. */
+    private volatile double staleRows;
+    private volatile boolean closing;
 
     /**
      * admission.stale-after-ms is read as text so that an empty value (a compose variable left unset) means the
@@ -187,10 +197,7 @@ public class AdmissionGate {
                 throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, jobId,
                         "Only FAILED jobs can be retried; another retry of this job is being accepted");
             }
-            Instant now = clock.instant();
-            Instant cutoff = now.minusMillis(staleAfterMs);
-            reportStaleRows(now, cutoff);
-            pending = counts.queuedAfter(cutoff);
+            pending = counts.queuedAfter(clock.instant().minusMillis(staleAfterMs));
             inFlight = reserved;
             if (pending + inFlight < maxPending) {
                 reserved++;
@@ -210,19 +217,52 @@ public class AdmissionGate {
         throw ApiException.queueFull(jobId, retryAfterSeconds);
     }
 
-    /** Holds the monitor. Counts the stale rows at most once per STALE_CHECK_INTERVAL and warns when there are any. */
-    private void reportStaleRows(Instant now, Instant cutoff) {
-        if (now.isBefore(nextStaleCheck)) {
+    /** Gauge beside.jobs.pending.stale (docs/METRICS.md §5.1): 0 while the cap is off, NaN while the count fails. */
+    @Override
+    public void bindTo(MeterRegistry registry) {
+        Gauge.builder("beside.jobs.pending.stale", this, gate -> gate.staleRows)
+                .description("PENDING jobs older than admission.stale-after-ms, which the queue cap does not count;"
+                        + " counted once a minute while the cap is on")
+                .strongReference(true)
+                .register(registry);
+    }
+
+    /**
+     * Once a minute while the cap is on, also with no traffic: counts the PENDING rows the cap leaves out for the gauge
+     * and warns when there are any. A failed count reads NaN until one succeeds, warns once per streak, and is only
+     * DEBUG while the context closes (the database closes before the scheduler stops).
+     */
+    @Scheduled(fixedDelay = STALE_CHECK_MS, initialDelay = STALE_CHECK_MS)
+    public void checkStaleRows() {
+        if (maxPending == 0) {
             return;
         }
-        nextStaleCheck = now.plus(STALE_CHECK_INTERVAL);
-        long stale = counts.queuedUpTo(cutoff);
+        Instant cutoff = clock.instant().minusMillis(staleAfterMs);
+        long stale;
+        try {
+            stale = counts.queuedUpTo(cutoff);
+        } catch (RuntimeException e) {
+            if (closing || Double.isNaN(staleRows)) {
+                log.debug("Queue admission: stale PENDING rows not counted: {}", e.toString());
+            } else {
+                log.warn("Queue admission: stale PENDING rows not counted, beside_jobs_pending_stale reads NaN until a"
+                        + " count succeeds: {}", e.toString());
+            }
+            staleRows = Double.NaN;
+            return;
+        }
+        staleRows = stale;
         if (stale > 0) {
             log.warn("Queue admission: {} PENDING job(s) queued before {} have waited longer than"
                     + " admission.stale-after-ms={} and are not counted toward the cap: a job no worker runs, or a"
                     + " wait longer than the setting allows (InterruptedJobRecovery ends PENDING jobs at the next restart)",
                     stale, cutoff, staleAfterMs);
         }
+    }
+
+    @EventListener(ContextClosedEvent.class)
+    public void contextClosing() {
+        closing = true;
     }
 
     private synchronized void release(String jobId) {

@@ -27,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -51,6 +52,8 @@ class AdmissionGateTest {
     private final List<Instant> pending = new CopyOnWriteArrayList<>();
     private final AtomicInteger countQueries = new AtomicInteger();
     private final AtomicInteger staleQueries = new AtomicInteger();
+    /** Makes the stale count fail (the database is closing or unreachable). */
+    private final AtomicBoolean failCounts = new AtomicBoolean();
     private final List<AdmissionGate.Op> refused = new CopyOnWriteArrayList<>();
 
     private final AdmissionGate.PendingCounts counts = new AdmissionGate.PendingCounts() {
@@ -63,6 +66,9 @@ class AdmissionGateTest {
         @Override
         public long queuedUpTo(Instant cutoff) {
             staleQueries.incrementAndGet();
+            if (failCounts.get()) {
+                throw new IllegalStateException("database closed");
+            }
             return pending.stream().filter(queuedAt -> !queuedAt.isAfter(cutoff)).count();
         }
     };
@@ -227,32 +233,69 @@ class AdmissionGateTest {
     }
 
     @Test
-    void stalePendingRowsAreNotCountedAndAreReportedAtMostOncePerMinute() {
+    void stalePendingRowsAreNotCounted() {
         AdmissionGate gate = gate(2);
         // Three rows a lost worker left PENDING 20 minutes ago (stale-after 10 min) and one waiting now.
         addPending(3, clock.instant().minus(Duration.ofMinutes(20)));
         addPending(1, clock.instant());
 
         gate.admit(AdmissionGate.Op.CREATE).close(); // 1 counted < 2
-        assertThat(lines(Level.WARN)).singleElement().asString()
-                .startsWith("Queue admission: 3 PENDING job(s) queued before 2026-11-20T02:50:00Z")
-                .contains("admission.stale-after-ms=600000");
-
-        clock.advance(Duration.ofSeconds(59));
-        gate.admit(AdmissionGate.Op.CREATE).close();
-        assertThat(staleQueries).hasValue(1);
-        assertThat(lines(Level.WARN)).hasSize(1);
-
-        clock.advance(Duration.ofSeconds(1));
-        gate.admit(AdmissionGate.Op.CREATE).close();
-        assertThat(staleQueries).hasValue(2);
-        assertThat(lines(Level.WARN)).hasSize(2);
 
         // A row turns stale with time: the one queued at the start is counted until 10 minutes have passed.
         addPending(1, clock.instant());
         assertThatThrownBy(() -> gate.admit(AdmissionGate.Op.CREATE)).isInstanceOf(ApiException.class);
         clock.advance(Duration.ofMinutes(10));
         assertThatCode(() -> gate.admit(AdmissionGate.Op.CREATE).close()).doesNotThrowAnyException();
+        assertThat(staleQueries).as("a request never counts the stale rows").hasValue(0);
+        assertThat(lines(Level.WARN)).isEmpty();
+    }
+
+    /**
+     * The rows the cap leaves out are counted on their own schedule (once a minute, also with no traffic), shown as
+     * the gauge beside.jobs.pending.stale and reported with one WARN line per check that finds any (plan: "WARN 로그와
+     * 지표"). A failed count reads NaN, not an old number, and warns once per streak.
+     */
+    @Test
+    void theStaleRowsAreCountedOnTheirOwnScheduleAsAGaugeAndAWarning() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        AdmissionGate gate = gate(2);
+        gate.bindTo(registry);
+        assertThat(stale(registry)).isZero();
+
+        addPending(3, clock.instant().minus(Duration.ofMinutes(20)));
+        addPending(1, clock.instant());
+        gate.checkStaleRows();
+        assertThat(stale(registry)).isEqualTo(3);
+        assertThat(lines(Level.WARN)).singleElement().asString()
+                .startsWith("Queue admission: 3 PENDING job(s) queued before 2026-11-20T02:50:00Z")
+                .contains("admission.stale-after-ms=600000")
+                .doesNotContain("lost them");
+
+        pending.clear(); // e.g. a restart ended them
+        gate.checkStaleRows();
+        assertThat(stale(registry)).isZero();
+        assertThat(lines(Level.WARN)).hasSize(1);
+
+        failCounts.set(true);
+        gate.checkStaleRows();
+        gate.checkStaleRows();
+        assertThat(stale(registry)).isNaN();
+        assertThat(lines(Level.WARN)).hasSize(2).last().asString().contains("beside_jobs_pending_stale reads NaN");
+        failCounts.set(false);
+        gate.checkStaleRows();
+        assertThat(stale(registry)).isZero();
+        assertThat(staleQueries).hasValue(5);
+    }
+
+    @Test
+    void theStaleCheckOfAGateThatIsOffQueriesNothingAndReadsZero() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        AdmissionGate gate = gate(0);
+        gate.bindTo(registry);
+        addPending(3, clock.instant().minus(Duration.ofDays(1)));
+        gate.checkStaleRows();
+        assertThat(stale(registry)).isZero();
+        assertThat(staleQueries).hasValue(0);
     }
 
     @Test
@@ -391,6 +434,10 @@ class AdmissionGateTest {
         for (int i = 0; i < rows; i++) {
             pending.add(queuedAt);
         }
+    }
+
+    private static double stale(SimpleMeterRegistry registry) {
+        return registry.get("beside.jobs.pending.stale").gauge().value();
     }
 
     private List<String> lines(Level level) {
