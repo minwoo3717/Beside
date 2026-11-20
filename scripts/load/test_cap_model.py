@@ -15,7 +15,10 @@ from pathlib import Path
 import cap_model
 
 HERE = Path(__file__).resolve().parent
-G3C1 = HERE.parent.parent / "docs" / "perf" / "load" / "data" / "2026-11-20_0256-g3c1"
+DATA = HERE.parent.parent / "docs" / "perf" / "load" / "data"
+G3C1 = DATA / "2026-11-20_0256-g3c1"
+G3R165 = DATA / "2026-11-18_2033-g3r165"
+OUTPUT = DATA / "2026-11-20_queue-cap" / "cap_model-output.txt"
 S_BUSY = 8.67
 MU = 415.0
 
@@ -190,6 +193,22 @@ class G3c1Test(unittest.TestCase):
     def test_cap_above_the_peak_refuses_nothing(self):
         peak = cap_model.replay(self.trace, cap=0)["peak_seen"]
         self.assertEqual(cap_model.replay(self.trace, cap=peak + 1)["refused"], 0)
+
+
+@unittest.skipUnless(G3C1.is_dir() and G3R165.is_dir(), "load-test run folders not in this checkout")
+class CommittedOutputTest(unittest.TestCase):
+    """docs/perf/load/2026-11-20_queue-cap.md quotes cap_model-output.txt. Its sections without random draws (1 rule,
+    2 fill time, 3-4 replays) must be what the script prints now, so a change to the script cannot leave the meeting
+    handout's numbers behind. The Monte Carlo sections (5, 6) are left out: they go through math.log."""
+
+    def test_deterministic_sections_match_the_committed_output(self):
+        text = OUTPUT.read_text(encoding="utf-8")
+        parts = {"1": cap_model.formula_text(section="1"), "2": cap_model.fill_text(section="2"),
+                 "3": cap_model.replay_text(cap_model.load_run(G3C1), section="3"),
+                 "4": cap_model.replay_text(cap_model.load_run(G3R165), section="4")}
+        for section, part in parts.items():
+            with self.subTest(section=section):
+                self.assertIn(part, text)
 
 
 class MonteCarloTest(unittest.TestCase):
