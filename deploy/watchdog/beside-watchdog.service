@@ -1,0 +1,16 @@
+# One watchdog pass: backend health on the management port (restart after 3 failures, at most every 10 min), disk use.
+# Install: deploy/README.md '운영 대응 설치' (copies deploy/watchdog/beside-watchdog.sh to /usr/local/sbin/beside-watchdog).
+# Logs (changes only): journalctl -u beside-watchdog. Pause restarts: sudo touch /etc/beside-maintenance (rm to resume).
+[Unit]
+Description=Beside backend watchdog (health, restart, disk warning)
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/beside-watchdog
+# /var/lib/beside-watchdog: failure count, last restart, last warnings. Passed as STATE_DIRECTORY.
+StateDirectory=beside-watchdog
+StateDirectoryMode=0700
+SyslogIdentifier=beside-watchdog
+# docker restart waits up to 20 s for a clean stop, then kills; the script gives it 120 s.
+TimeoutStartSec=180
