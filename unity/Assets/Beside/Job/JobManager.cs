@@ -34,10 +34,12 @@ namespace Beside.Job
         public string CurrentJobId { get; private set; }
         public string LastErrorCode { get; private set; }
         public bool LastErrorRetryable { get; private set; }
-        /// <summary>UTC time before which Retry() sends nothing: set by a failure that carried Retry-After (QUEUE_FULL),
-        /// null otherwise. Nothing is re-sent automatically; the UI enables "다시 시도" from this time.</summary>
+        /// <summary>UTC time before which neither Retry() nor StartJob() sends anything: set by a failure that carried
+        /// Retry-After (QUEUE_FULL), null otherwise. It outlives ClearSavedJob ("처음부터"), so new photos wait too, like the
+        /// web Mock UI; a server switch clears it. Nothing is re-sent automatically; the UI enables its send buttons from
+        /// this time.</summary>
         public DateTime? RetryAvailableAt { get; private set; }
-        /// <summary>Seconds left until RetryAvailableAt (0 when Retry can send now).</summary>
+        /// <summary>Seconds left until RetryAvailableAt (0 when Retry or StartJob can send now).</summary>
         public float RetryWaitSeconds => RetryAvailableAt.HasValue
             ? Mathf.Max(0f, (float)(RetryAvailableAt.Value - DateTime.UtcNow).TotalSeconds)
             : 0f;
@@ -115,6 +117,11 @@ namespace Beside.Job
         public void StartJob(IList<Photo> photos)
         {
             if (IsBusy) return;
+            if (RetryWaitSeconds > 0f)   // QUEUE_FULL: a new upload also waits for Retry-After (checked before Fail clears it)
+            {
+                Debug.Log($"[JobManager] upload ignored: Retry-After has {RetryWaitSeconds:0} s left");
+                return;
+            }
             if (photos == null || photos.Count == 0) { Fail("NO_PHOTOS"); return; }
             if (photos.Count > ApiV1Routes.MaxPhotos) { Fail("TOO_MANY_PHOTOS"); return; }
             long total = 0;
@@ -175,9 +182,9 @@ namespace Beside.Job
             PlayerPrefs.Save();
             CurrentJobId = null;
             LastErrorCode = null;
-            RetryAvailableAt = null;
             lastPhotos = null;
             uploadKey = null;
+            // RetryAvailableAt stays: the server's queue is still full for new photos ("처음부터", "다른 사진 고르기")
         }
 
         public void CheckHealth(Action<HealthResponse> onOk, Action<ApiError> onError) => StartCoroutine(api.Health(onOk, onError));
@@ -199,6 +206,7 @@ namespace Beside.Job
             baseUrl = n;
             api = new BesideApiClient(baseUrl);
             ClearSavedJob();
+            RetryAvailableAt = null;   // Retry-After came from the old server
             Debug.Log($"[JobManager] server -> {baseUrl}");
         }
 

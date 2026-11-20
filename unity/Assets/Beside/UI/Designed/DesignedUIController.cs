@@ -55,6 +55,8 @@ namespace Beside.UI.Designed
         InputField urlInput; Text settingsStatus, homeServerText;
         // confirm
         RectTransform thumbGrid; Text confirmCount; List<Photo> pendingPhotos = new List<Photo>();
+        Button confirmGoButton; Text confirmGoLabel;
+        const string GoButtonText = "이 사진으로 만들기";
         readonly List<Texture2D> thumbTextures = new List<Texture2D>();   // destroyed with the thumbnails (not freed by Destroy(gameObject))
         // progress
         Text progressTitle, progressBody, progressJob; (RectTransform row, Image circle, Text label, Text right)[] steps;
@@ -136,6 +138,7 @@ namespace Beside.UI.Designed
             }
 
             if (error != null && error.gameObject.activeSelf) SyncRetryWait();
+            if (confirm != null && confirm.gameObject.activeSelf) SyncGoWait();
 
             if (arOverlay == null || !arOverlay.gameObject.activeSelf) return;
 
@@ -329,7 +332,8 @@ namespace Beside.UI.Designed
 
             DesignKit.Spacer(col);
             DesignKit.Label("Limits", col, "JPG · PNG · WEBP, 장당 5MB 이하", 32, DesignKit.InkSoft, 40, TextAnchor.MiddleCenter);
-            DesignKit.PrimaryButton("Go", col, "이 사진으로 만들기", () => { if (pendingPhotos.Count > 0) jobManager.StartJob(pendingPhotos); });
+            confirmGoButton = DesignKit.PrimaryButton("Go", col, GoButtonText, () => { if (pendingPhotos.Count > 0) jobManager.StartJob(pendingPhotos); });
+            confirmGoLabel = confirmGoButton.GetComponentInChildren<Text>();
             DesignKit.GhostButton("Again", col, "다시 고르기", PickFromGallery);
         }
 
@@ -676,13 +680,27 @@ namespace Beside.UI.Designed
         void SyncRetryWait()
         {
             if (errorRetryButton == null || !errorRetryButton.gameObject.activeSelf) return;
-            float wait = jobManager.RetryWaitSeconds;
-            bool ready = wait <= 0f;
-            if (errorRetryButton.interactable != ready) errorRetryButton.interactable = ready;
-            string label = ready ? RetryButtonText : $"{Mathf.CeilToInt(wait)}초 뒤 다시 시도할 수 있어요";
-            if (errorRetryLabel != null && errorRetryLabel.text != label) errorRetryLabel.text = label;
+            bool ready = SyncSendButton(errorRetryButton, errorRetryLabel, RetryButtonText, "다시 시도할 수 있어요");
             string when = ready ? "가능" : jobManager.RetryAvailableAt.Value.ToLocalTime().ToString("HH:mm:ss") + " 이후";
             if (errorRetry.text != when) { errorRetry.text = when; errorRetry.color = ready ? DesignKit.Accent : DesignKit.InkSoft; }
+        }
+
+        /// <summary>QUEUE_FULL wait kept across "다른 사진 고르기": photos can still be picked, but "이 사진으로 만들기" stays
+        /// non-interactable until RetryAvailableAt (JobManager.StartJob also refuses before then), like the web Mock UI.</summary>
+        void SyncGoWait()
+        {
+            if (confirmGoButton != null) SyncSendButton(confirmGoButton, confirmGoLabel, GoButtonText, "만들 수 있어요");
+        }
+
+        /// <summary>Locks a button that sends until RetryAvailableAt and counts down on its label. True when it may send.</summary>
+        bool SyncSendButton(Button button, Text label, string readyText, string waitingText)
+        {
+            float wait = jobManager.RetryWaitSeconds;
+            bool ready = wait <= 0f;
+            if (button.interactable != ready) button.interactable = ready;
+            string text = ready ? readyText : $"{Mathf.CeilToInt(wait)}초 뒤 {waitingText}";
+            if (label != null && label.text != text) label.text = text;
+            return ready;
         }
 
         void OnModelReady(string jobId, string path, GameObject template)
@@ -768,6 +786,7 @@ namespace Beside.UI.Designed
             }
             confirmCount.text = $"선택한 사진 {photos.Count}장 · 최대 {ApiV1Routes.MaxPhotos}장";
             Show(Screen.Confirm);
+            SyncGoWait();   // first frame already locked; Update keeps it in step
         }
 
         /// <summary>Removes the confirm thumbnails and their decoded photo textures.</summary>
