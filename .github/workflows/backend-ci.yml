@@ -163,6 +163,8 @@ jobs:
               "INFERENCE_TRANSFER": "upload",
               "PREPROCESS_CHECK_ENABLED": "false",
               "PREPROCESS_CUTOUT_ENABLED": "false",
+              # queue cap off whatever deploy/.env says: A2 seeds 1,000 PENDING jobs (#21 proposal, before the meeting)
+              "ADMISSION_MAXPENDING": "0",
           }
           for key, value in want.items():
               assert env.get(key) == value, f"{key}={env.get(key)!r}, want {value!r}"

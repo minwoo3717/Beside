@@ -44,6 +44,11 @@ services:
       INFERENCE_OFFLINEWAITMS: ${LOADTEST_INFERENCE_OFFLINE_WAIT_MS:-300000}
       # 동시에 보내는 /infer 수(G2 의 c = 1, 2, 4). 스텁의 BESIDE_PASSTHROUGH_SLOTS 와 같게 둔다.
       INFERENCE_MAXCONCURRENCY: ${LOADTEST_INFERENCE_MAX_CONCURRENCY:-1}
+      # 대기열 상한(안건 #21 [제안값], 계약 회의 전 — 상한 코드는 검토 브랜치에만)은 기본 0 = 꺼짐으로 고정한다. 운영 .env 의
+      # ADMISSION_MAX_PENDING 은 읽지 않는다: A2 는 PENDING 작업 1,000건을 시드하므로 상한이 켜져 있으면 시드가 503 이 된다.
+      # 상한을 켠 G3 만 셸에서 LOADTEST_ADMISSION_MAX_PENDING=<N> 과 Retry-After 를 준다(deploy/loadtest/README.md '상한을 켠 G3').
+      ADMISSION_MAXPENDING: ${LOADTEST_ADMISSION_MAX_PENDING:-0}
+      ADMISSION_RETRYAFTERSECONDS: ${LOADTEST_ADMISSION_RETRY_AFTER_SECONDS:-165}
     volumes:
       # 운영 볼륨 beside-storage 대신(같은 /app/storage 로 덮어쓴다). 부하 작업·업로드·events.jsonl 은 여기에만 쌓인다.
       - beside-loadtest-storage:/app/storage
