@@ -2,6 +2,21 @@
 
 형식: `## vX.Y — YYYY-MM-DD (git tag api-vX.Y)` 아래에 `추가 / 변경 / 삭제` 로 나눠 적는다. "변경·삭제"는 주 1회 계약 회의에서 결정된 것만 올린다. 필드 "추가"는 PR 에 한 줄 기록하면 되지만, 다음 태그를 올릴 때 여기에 모아 적는다.
 
+## v1.2 — (git tag api-v1.2, 병합 뒤)
+
+review/api-v1.1 병합 직후의 초안(검토 브랜치의 'v1.1 (제안)' 절 그대로). 2026-11-21 결정(#11·#12)대로 고른 것만 남기는 정리는 다음 커밋들에서 한다.
+
+- 응답 필드 추가 `JobResponse`: `queue {ahead, reason}`(PENDING 만), `estimate {remainingMs, basedOnRuns}`(PENDING·PROCESSING, 근거 없으면 null), `petId`, `thumbnailUrl`. 앱은 모르는 필드를 무시한다.
+- 요청 추가: `POST /jobs` 의 선택 multipart 텍스트 파트 `petId`.
+- 엔드포인트 추가 — 작업: `POST /jobs/{id}/cancel`(PENDING 만, 결과는 FAILED + `CANCELED`), `DELETE /jobs/{id}`, `PUT /jobs/{id}/pet`, `GET /jobs/{id}/thumbnail`, `GET /jobs/{id}/photos/{index}`, `GET /jobs/{id}/ratings`, `PUT /jobs/{id}/ratings/{rater}`.
+- 엔드포인트 추가 — 공유: `POST /jobs/{id}/shares`, `GET /shares/{token}`, `GET /shares/{token}/asset`, `DELETE /shares/{token}` (+ 웹 페이지 `/s/{token}`, API 아님).
+- 엔드포인트 추가 — 보관함: `POST·GET /pets`, `GET·PATCH·DELETE /pets/{petId}`. 새 enum `species`: `DOG | CAT | OTHER`(모르는 값은 UNKNOWN 처리).
+- 엔드포인트 추가 — 관리(팀 전용, 배포에서는 Basic 인증): `GET /admin/overview`, `GET /admin/runs`(json·csv), `GET /admin/stats`, `GET /admin/jobs`, `GET /admin/jobs/{id}`, `GET /admin/ratings`, `GET /admin/ratings/summary`, `GET·POST /admin/client-metrics`, `GET /admin/e2e`.
+- 오류 코드 추가: HTTP `JOB_NOT_PENDING`(409), `JOB_IN_PROGRESS`(409), `SHARE_NOT_FOUND`(404), `PET_NOT_FOUND`(404). Job 실패 코드 `CANCELED`(retry 가능). 앱은 모르는 코드를 일반 문구로 보여 준다(`INTERNAL_ERROR` 추가 선례).
+- 동작 변경(코드·형태 그대로): v1 에서 본문이 없거나 JSON 이 아닌 요청이 500 대신 400 `INVALID_REQUEST`. prod 프로파일에서는 사진 내용이 JPEG/PNG/WEBP 시그니처가 아니어도 `UNSUPPORTED_IMAGE_TYPE`(main 에 이미 있음, 여기서 문서화). prod 에서 GPU 추론 서비스가 응답하지 않으면 real 작업이 최대 30분 PENDING 으로 기다린 뒤 `INFERENCE_UNAVAILABLE`(main 에 이미 있음).
+- 측정(METRICS): 측정표 내보내기를 관리 API 로(§1.1, 이름 그대로), 취소 실행은 실패율에서 뺀다, 앱 측정 가져오기·e2e 결합표 열(§3.1, 서버 uploadMs 는 `serverUploadMs`), 품질 평가 저장·CSV 열(§4.1).
+- 내부(계약 밖): `/infer` 업로드 전송 모드(REVIEW_CHECKLIST #6 (b), main 에 있음), `queuedAt` 은 서버 안에서 항상 증가(QueueClock).
+
 ## v1.1 — 2026-11-21 (git tag api-v1.1)
 
 v1.0 에 작업 대기열 상한을 더한 것이다. 2026-11-21 안건 #21 결정(계약 회의 대신 Backend 담당, [REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #21 결정 칸, 근거와 D1~D12 는 [perf/load/2026-11-20_queue-cap.md](../perf/load/2026-11-20_queue-cap.md) 9절). D11 대로 `api-v1.0` 태그 뒤의 다음 버전이다. 반영은 PR #19(`review/queue-cap-2`), [openapi.yaml](openapi.yaml) `info.version` 1.1.0.

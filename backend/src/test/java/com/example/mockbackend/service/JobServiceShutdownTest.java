@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 
@@ -58,14 +59,14 @@ class JobServiceShutdownTest {
 
     @BeforeEach
     void executorIsShuttingDown() {
-        doThrow(new TaskRejectedException("executor shut down")).when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).when(jobWorker).dispatch(anyString(), anyInt());
     }
 
     @Test
     void aNewJobIsRemovedWithItsPhotosAndKey() throws IOException {
         long before = jobRepository.count();
         MockMultipartFile photo = new MockMultipartFile("photos", "late.png", "image/png", new byte[]{1, 2, 3});
-        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo), "late-key"))
+        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo), "late-key", null))
                 .isInstanceOf(TaskRejectedException.class);
         assertThat(jobRepository.count()).isEqualTo(before);
         assertThat(idempotencyKeys.findById("late-key")).isEmpty();

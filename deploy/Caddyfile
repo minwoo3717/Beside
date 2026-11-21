@@ -34,10 +34,12 @@
 	# 2) Basic 인증(팀 계정 하나).
 	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지,
 	#    Grafana(/grafana, monitoring 프로필 — 이 인증 다음에 Grafana 자체 로그인이 한 번 더 있다).
-	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet).
+	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet),
+	#    작업의 원본 사진·썸네일·품질 평가(웹 작업 상세·보관함만 쓴다, 사진은 개인정보, 평가는 팀 평가자 이름·의견).
+	#    가운데 * 는 한 조각만 맞으므로 평가는 /ratings* 와 /ratings/* 둘로 적는다(PUT 은 아래 @jobWrite 도 막는다).
 	#    파일 이름에도 끝에 * 를 붙인다: Caddy 는 // 와 . 조각은 정리하지만 끝의 / 는 남기므로 /index.html/ 은 /index.html 과
 	#    맞지 않는데, Spring 은 그것을 index.html 파일로 내준다(2026-11-13 감사에서 /index.html/ · /app.js/ 가 인증 없이 200).
-	@web path / /index.html* /app.js* /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet*
+	@web path / /index.html* /app.js* /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet* /api/v1/jobs/*/photos/* /api/v1/jobs/*/thumbnail* /api/v1/jobs/*/ratings* /api/v1/jobs/*/ratings/*
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
@@ -53,7 +55,9 @@
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
-	#    작업 하나에 대한 쓰기(삭제 등). 공개는 조회(GET·HEAD /api/v1/jobs/{id}, /asset)와 다시 시도(POST /retry)뿐이다.
+	#    작업 하나에 대한 쓰기(삭제·평가 저장 등). 공개는 조회(GET·HEAD /api/v1/jobs/{id}, /asset)와 앱의 POST 셋
+	#    (다시 시도 /retry, 대기 취소 /cancel, 공유 링크 만들기 /shares)뿐이다. 셋 다 작업 UUID 를 아는 쪽만 부를 수 있다:
+	#    UUID 는 그 작업을 만든 앱만 받고(202), 목록(@jobList)은 인증 뒤, 공유 링크 응답에는 jobId 가 없다.
 	@jobWrite {
 		path /api/v1/jobs/*
 		not method GET HEAD POST
@@ -62,8 +66,18 @@
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}
 
-	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry), /api/v1/healthz,
-	#    공유 링크(/s/*, /share.*, /api/v1/shares/*), styles.css 같은 정적 파일.
+	#    공유 링크 취소(DELETE). 링크를 받은 사람이 끊지 못하게, 보는 쪽(GET·HEAD)만 공개다. @jobList 와 같은 이유로
+	#    "DELETE 면 인증" 이 아니라 "GET·HEAD 가 아니면 인증" 으로 쓴다(method 비교는 대소문자를 가린다).
+	@shareRevoke {
+		path /api/v1/shares/*
+		not method GET HEAD
+	}
+	basic_auth @shareRevoke {
+		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+	}
+
+	# 3) 그 밖은 공개: 앱 API(POST /api/v1/jobs, GET /api/v1/jobs/{id} · asset, POST retry · cancel · shares), /api/v1/healthz,
+	#    공유 링크 보기(/s/*, /share.*, GET /api/v1/shares/* — Scene Viewer 가 인증 없이 GLB 를 받는다), styles.css 같은 정적 파일.
 	#    X-Forwarded-For/-Proto/-Host 는 Caddy 가 손님 값을 버리고 새로 붙인다(prod 프로파일의 forward-headers 가 읽는다).
 	#    Spring 의 ForwardedHeaderFilter 는 그 밖에 Forwarded(RFC 7239, X-Forwarded-* 보다 먼저 읽음)와 X-Forwarded-Prefix·
 	#    -Port·-Ssl 도 읽는데 Caddy 는 이것들을 그대로 넘긴다 → 손님이 Spring 이 보는 요청 URI·호스트를 바꿀 수 있다

@@ -52,7 +52,8 @@ class RealJobWorkerErrorHandlingTest {
     @BeforeEach
     void worker() throws InterruptedException {
         // offline-wait-ms 0: no health check, the run goes straight to the PROCESSING save.
-        worker = new RealJobWorker(jobRepository, jobFinisher, inferenceClient, healthMonitor, cutoutStage,
+        worker = new RealJobWorker(jobRepository, new JobTransitions(jobRepository, jobFinisher), jobFinisher, inferenceClient,
+                healthMonitor, cutoutStage,
                 results.toString(), 1, 0, 10);
         when(cutoutStage.prepare(any(Job.class))).thenReturn(PreparedPhoto.off());
     }
@@ -64,7 +65,7 @@ class RealJobWorkerErrorHandlingTest {
         when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued), Optional.of(reread));
         when(jobRepository.save(any(Job.class))).thenThrow(new IllegalStateException("could not save"));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         // The copy read again, not the one whose save failed half way (it says PROCESSING in memory only).
         verify(jobFinisher).fail(same(reread), eq(ErrorCode.INTERNAL_ERROR),
@@ -76,7 +77,7 @@ class RealJobWorkerErrorHandlingTest {
     void whenTheDatabaseIsDownTheWorkerLogsOnceAndDoesNotThrow() {
         when(jobRepository.findById(ID)).thenThrow(new IllegalStateException("database closed"));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         // Once for the cutout, once to record the failure; then it gives up (InterruptedJobRecovery at the next start).
         verify(jobRepository, times(2)).findById(ID);
@@ -95,7 +96,7 @@ class RealJobWorkerErrorHandlingTest {
         doThrow(new IllegalStateException("after the save")).when(jobFinisher)
                 .fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(), any(RunDetails.class));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         verify(jobFinisher, times(1)).fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(),
                 any(RunDetails.class));
@@ -109,7 +110,8 @@ class RealJobWorkerErrorHandlingTest {
     @Test
     void aGlbThisServerCannotStoreIsInternalError() throws Exception {
         Path notAFolder = Files.write(results.resolve("results-is-a-file"), new byte[]{0});
-        RealJobWorker full = new RealJobWorker(jobRepository, jobFinisher, inferenceClient, healthMonitor, cutoutStage,
+        RealJobWorker full = new RealJobWorker(jobRepository, new JobTransitions(jobRepository, jobFinisher), jobFinisher, inferenceClient,
+                healthMonitor, cutoutStage,
                 notAFolder.toString(), 1, 0, 10);
         Path glb = Files.write(results.resolve("from-gpu.glb"), new byte[]{'g', 'l', 'T', 'F', 2, 0, 0, 0, 12, 0, 0, 0});
         Job queued = job(JobStatus.PENDING);
@@ -118,7 +120,7 @@ class RealJobWorkerErrorHandlingTest {
         when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class)))
                 .thenReturn(new InferenceClient.Result(glb, null, false, null));
 
-        full.dispatch(ID);
+        full.dispatch(ID, 1);
 
         ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
         verify(jobFinisher).fail(same(queued), eq(ErrorCode.INTERNAL_ERROR), message.capture(), eq("real"),

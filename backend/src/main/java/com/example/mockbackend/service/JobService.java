@@ -16,13 +16,27 @@ public interface JobService {
     // --- v1 (docs/api/openapi.yaml) ---
 
     /** Validates per contract (1~10 photos, jpeg/png/webp, non-empty), honours Idempotency-Key, stores and dispatches. */
-    Job submitJobV1(List<MultipartFile> photos, String idempotencyKey);
+    default Job submitJobV1(List<MultipartFile> photos, String idempotencyKey) {
+        return submitJobV1(photos, idempotencyKey, null);
+    }
+
+    /**
+     * Same, into the library pet {@code petId} (null or blank = unassigned). An Idempotency-Key replay answers with the
+     * first job and ignores petId. @throws ApiException 400 INVALID_REQUEST for an unknown pet (no job is made)
+     */
+    Job submitJobV1(List<MultipartFile> photos, String idempotencyKey, String petId);
 
     /** @throws com.example.mockbackend.exception.ApiException 404 JOB_NOT_FOUND */
     Job getJobOrThrow(String id);
 
     /** FAILED → PENDING and dispatch again. @throws ApiException 409 JOB_NOT_FAILED otherwise */
     Job retry(String id);
+
+    /**
+     * PENDING → FAILED (CANCELED); the worker then never starts it. A started GPU run cannot be stopped, so PROCESSING
+     * is refused like every other state. @throws ApiException 404 JOB_NOT_FOUND, 409 JOB_NOT_PENDING
+     */
+    Job cancel(String id);
 
     /** Newest first. limit 1~100 (default 20), cursor = id of the last item of the previous page. */
     JobPage listJobs(Integer limit, String cursor);

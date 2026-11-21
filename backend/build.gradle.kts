@@ -24,7 +24,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     // 대표 사진 검사·전처리(preprocess): ImageIO 가 WEBP 사진도 읽도록 하는 플러그인 (ImageIO 서비스로 자동 등록).
-    // 검토 브랜치 review/api-v1.1 의 썸네일과 같은 버전.
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.3")
     // 대표 사진 검사·전처리: YOLOX(개·고양이 감지)와 U2Net(배경 제거)을 CPU 로 실행. jar 에 모든 플랫폼 네이티브가 들어 있다.
     // 모델 파일은 리포 밖(scripts/fetch_models.*, backend/models/README.md).

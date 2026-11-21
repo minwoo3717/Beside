@@ -4,7 +4,7 @@
 
 상태(2026-11-21 갱신, 안건 #16 결정대로 실제에 맞춤):
 
-- **[구현됨]**: `JobResponse.timings`(queuedMs, processingMs, totalMs)와 서버 `events.jsonl`(2026-10-04), 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장(2026-10-06). 추론 서비스가 §2 수치를 채우는 것(#1, 2026-10-14: `animallift_runner.py`·`convert_asset.py`·`app.py`). 앱 `metrics.csv` 기록 코드(#1: `unity/Assets/Beside/Metrics/MetricsRecorder.cs`, `JobManager.cs` 가 단계마다 채움 — 실기기에서 돌린 증빙은 리포에 없다). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합).
+- **[구현됨]**: `JobResponse.timings`(queuedMs, processingMs, totalMs)와 서버 `events.jsonl`(2026-10-04), 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장(2026-10-06). 추론 서비스가 §2 수치를 채우는 것(#1, 2026-10-14: `animallift_runner.py`·`convert_asset.py`·`app.py`). 앱 `metrics.csv` 기록 코드(#1: `unity/Assets/Beside/Metrics/MetricsRecorder.cs`, `JobManager.cs` 가 단계마다 채움 — 실기기에서 돌린 증빙은 리포에 없다). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합). 앱 `metrics.csv` 를 서버로 가져와 서버 측정과 합치는 관리 API(§3.1)와 품질 평가 저장·내보내기(§4.1, 검토 브랜치 2026-10-30 → API v1.2) — 테스트로 확인했고 실제 폰에서 뽑은 파일·실제 평가로는 아직 돌려 보지 않았다.
 - **[실험 결과]**: 추론 수치는 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(2026-11-17 Runpod A40, 4건)과 VM 부하 시험 2~4차(2026-11-18~19, VM + Runpod A40, 같은 사진 반복, [perf/load/](perf/load/) — 2차 539건은 exp-01 6절에 정리). 서버 §1 값도 같은 실행들의 `vm/events.jsonl` 에 있다. 대표 사진 검사·전처리는 개발 PC([preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md))와 VM 2차 부하 시험(`checkMs`·`preprocessMs`, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)).
 - **[계획]**: 앱 `metrics.csv` 측정값(기기 FPS·`memMB` 포함, 0건), 3D 품질 점수(§4, 0건), 사진 10장 이상의 서버·추론 측정, 리깅을 켠 실행의 `convertMs`(지금까지의 기록은 모두 리깅 없음).
 
@@ -27,7 +27,7 @@
 | `inferMs`, `gpuPeakMB`, `modelParams`, `outputVertices`, `outputTriangles`, `convertMs` | int \| null | §2 의 수치를 `/infer` 응답에서 그대로 복사. real COMPLETED 에만 있고 mock·FAILED 는 null. 숫자가 아닌 값은 null | 종료 시 |
 | `glbBytes` | int \| null | 서버가 저장한 base GLB 의 크기(= `asset.bytes`). mock·FAILED 는 null | 종료 시 |
 | `passthrough` | bool \| null | true 면 추론 서비스가 모델 대신 샘플을 돌려준 것 → 측정에서 **제외**. `/infer` 응답이 없으면(mock·FAILED) null | 종료 시 |
-| `modelVersion` | string \| null | `/infer` 선택 필드. 베이스라인과 개선안을 구분하는 모델·가중치 이름(예 `animallift-baseline@3f2a1c9`) | 종료 시 |
+| `modelVersion` | string \| null | `/infer` 선택 필드. 베이스라인과 개선안을 구분하는 모델·가중치 이름(예 `animallift-baseline@3f2a1c9`). 리깅이 성공한 실행만 끝에 `+rig` 가 붙는다(2026-11-21 #18). real 의 FAILED 행 중 모델이 돌다 실패한 것(추론 서비스가 직접 답한 실패·결과 형식 오류·시간 초과)은 그때 추론 서비스 `/healthz` 가 알린 로드된 모델이고 `+rig` 는 붙지 않는다(모르면 null) — 실패도 그 모델의 성공률에 들어가게(API v1.2, 검토 브랜치에서). 연결·토큰·모델 미준비처럼 모델이 돌지 않은 실패는 null | 종료 시 |
 | `checkMs` | int \| null | 대표 사진 검사(202 전): 동시 검사 대기 + 디코딩 + 개·고양이 감지 + 밝기·선명도. `uploadMs` 와 겹치지 않는다. 검사가 꺼져 있거나 v0·HTTP 밖이면 null. retry 해도 처음 값. 거절된 업로드는 작업이 없어 남지 않는다(서버 로그만) | 접수 처리 중 |
 | `checkResult` | string \| null | `PASSED` \| `SKIPPED:BUSY`(동시 검사 대기 초과) \| `SKIPPED:ERROR`(모델 오류) — 서버 사정으로 검사하지 못하고 받은 사진을 셀 수 있게. 거절은 400 이라 여기 오지 않는다. 꺼져 있으면 null | 접수 처리 중 |
 | `preprocessMs` | int \| null | 전처리(다시 감지 → 크롭 → 배경 제거 → PNG 저장) 시간, 전처리 대기는 뺀다. 추론 슬롯을 잡기 전(PENDING)에 하므로 `queuedMs` 안에 들어간다 | 실행 중 |
@@ -48,7 +48,16 @@
 
 같은 내용이 H2 파일 DB 의 테이블 `job_runs` 에도 실행마다 한 행씩 남는다(PK `{jobId}:{attempt}`, 삽입 전용). 컬럼은 위 줄의 필드를 snake_case 로 쓴 것(`job_id, attempt, finished_at, upload_bytes, upload_ms, queued_ms, processing_ms, total_ms, worker_type, infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms, glb_bytes, passthrough, model_version, check_ms, check_result, preprocess_ms, preprocess_result, preprocess_version`)에 `status`(COMPLETED|FAILED)와 `error_code` 를 더한 것이다. `result` 는 `status`+`error_code` 로 대신한다. 서버 경로는 없다. 프로파일마다 DB 파일이 다르므로(`beside-mock.mv.db`, `beside-real.mv.db`) 측정표는 real 파일에서 뽑는다.
 
-5단계 측정표는 이 테이블에서 SQL 로 뽑는다. 서버가 켜진 상태에서 `http://localhost:8080/h2-console`(real 프로파일도 켜져 있음, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행하면 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
+**측정표 내보내기** — 5단계 측정표는 관리 API 로 뽑는다 **[구현됨]**(2026-10-30, `AdminApiTest`). `GET /api/v1/admin/runs?format=csv` 가 헤더 행이 있는 CSV(`job_runs.csv`)를 돌려준다. 열 이름과 순서는 아래 SQL 의 별칭과 같다: `jobId, attempt, finishedAt, workerType, status, errorCode, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion`. 기본으로 패스스루 행을 빼고(`includePassthrough=true` 로 포함), `workerType`, `modelVersion`(`(none)` = 값 없음), `from`/`to`(finishedAt, ISO 8601 instant, `to` 는 제외)로 거른다. FAILED 행은 들어 있으므로 시간 통계는 `status = COMPLETED` 행으로 낸다. `GET /api/v1/admin/stats` 가 그렇게 계산한 modelVersion × workerType 별 성공률과 p50/p95(nearest-rank)를 준다. `format=json` 은 같은 이름의 객체 배열이다. 브라우저에서는 관리 페이지 `/admin` 의 "측정표 CSV 받기" 버튼을 쓴다. 배포 서버에서는 `/admin*`·`/api/v1/admin/*` 가 Caddy Basic 인증 뒤에 있다.
+
+```powershell
+curl.exe -o job_runs.csv "http://localhost:8080/api/v1/admin/runs?format=csv&workerType=real"                  # 개발·GPU PC
+curl.exe -u <사용자> -o job_runs.csv "https://<도메인>/api/v1/admin/runs?format=csv&workerType=real&from=2026-11-06T00:00:00Z"   # 배포 VM
+```
+
+CSV 값 형식: null 은 빈 칸, `finishedAt` 은 ISO 8601 UTC(`2026-11-06T09:47:46.553329Z`), `passthrough` 는 `true|false`, 쉼표·따옴표가 든 값만 큰따옴표로 감싼다(RFC 4180, 줄 끝 CRLF).
+
+개발 PC 대안 — h2-console. 배포 서버의 `prod` 프로파일(PLAN S1)은 콘솔을 끄므로 거기서는 위 API 를 쓴다. 개발 PC 에서 서버가 켜진 상태라면 `http://localhost:8080/h2-console`(mock·real 프로파일, localhost 전용; JDBC URL `jdbc:h2:file:./storage/db/beside-real`, 사용자 `sa`, 비밀번호 빈칸)에 들어가 아래를 실행해도 헤더가 이 문서의 이름과 같은 CSV 가 나온다. 이때는 H2 가 모든 값을 따옴표로 감싸고 시각을 H2 형식으로 쓴다. 경로는 서버 작업 폴더(`backend/`) 기준이다. 모든 열에 따옴표 별칭을 붙인다 — 별칭이 없는 열은 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다(2026-10-06 확인).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
@@ -63,7 +72,7 @@ CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
   ORDER BY finished_at');
 ```
 
-제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 전처리 비교(3D 품질 실험)는 `preprocess_result = 'OFF'`(원본)와 `preprocess_version` 의 `bg=keep`·`bg=remove` 로 나누고, `FALLBACK:*` 행은 원본이 들어간 것이므로 개선안 쪽에서 뺀다. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
+제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 사용자가 대기 중에 취소한 실행(`error_code = CANCELED`)은 실패율에도 넣지 않는다(관리 API stats 의 `canceled`). 전처리 비교(3D 품질 실험)는 `preprocess_result = 'OFF'`(원본)와 `preprocess_version` 의 `bg=keep`·`bg=remove` 로 나누고, `FALLBACK:*` 행은 원본이 들어간 것이므로 개선안 쪽에서 뺀다. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
 
 ## 2. 추론 서비스 (3D Generation, 수치 채우기 [구현됨], 값 [실험 결과])
 
@@ -108,6 +117,23 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 - `avgFps`·`minFps`·`memMB`·`device`: 배치 뒤 30초(`fpsSampleSeconds`)를 잰 다음 줄을 쓴다. 그 전에 앱이 종료되면 줄이 남지 않는다.
 - 이어서 기다리기(앱 재시작 뒤 저장된 jobId)와 retry 실행은 업로드가 없어 `uploadMs` 0 인 줄을 하나 더 쓴다('작업당 한 줄'과 다름, [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고').
 
+### 3.1 서버로 가져오기와 e2e 결합표 (Backend, [구현됨] 2026-10-30, `ClientMetricsApiTest`)
+
+앱은 바꾸지 않는다. 팀원이 `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` 로 받은 파일을 관리 페이지 `/admin` 의 "앱 metrics.csv 올리기" 로 올린다(API `POST /api/v1/admin/client-metrics`, multipart 파트 `file`).
+
+- 첫 줄이 위 헤더와 **정확히** 같아야 한다. 아니면 아무것도 저장하지 않고 400. 데이터 줄은 줄마다 검사해 잘못된 줄만 결과의 `errors[{line, reason}]` 에 담고(줄 번호는 헤더 = 1) 나머지는 저장한다: 칸 10개, `uploadMs, waitMs, downloadMs, loadMs, e2eMs, memMB` 는 0 이상 정수, `avgFps, minFps` 는 0 이상 소수(`.`), `device` 는 빈 칸 허용.
+- `(jobId, device, e2eMs)` 가 이미 저장된 행(또는 같은 파일의 앞 줄)과 같으면 중복으로 건너뛴다(`skipped`). 같은 파일을 여러 번 올려도 한 번만 들어간다. 폰마다 파일이 따로이므로 폰 여러 대의 파일을 차례로 올리면 된다.
+- 저장 위치: H2 테이블 `client_metrics`(컬럼 `job_id, upload_ms, wait_ms, download_ms, load_ms, e2e_ms, avg_fps, min_fps, mem_mb, device` + `id, imported_at`). jobId 가 이 서버에 없는 작업이어도 저장한다.
+- 내보내기: `GET /api/v1/admin/client-metrics?format=csv` → `client_metrics.csv`, 열은 위 헤더 그대로(다시 올려도 전부 중복으로 건너뛴다).
+
+**e2e 결합표** — `GET /api/v1/admin/e2e?format=csv` → `e2e.csv`. 앱 측정 한 행마다 그 jobId 의 마지막 COMPLETED 실행(`job_runs`, §1.1)의 서버·추론 열을 붙인 표다. 열 이름은 이 문서의 이름 그대로이고 **겹치는 `uploadMs` 만 서버 것을 `serverUploadMs`** 로 쓴다(서버 `uploadMs` 는 §1 의 요청 도착 → 사진 저장, 앱 `uploadMs` 는 §3 의 POST 시작 → 202 수신으로 다른 값이다). 열 순서:
+
+```csv
+jobId,modelVersion,workerType,passthrough,attempt,finishedAt,uploadBytes,serverUploadMs,queuedMs,processingMs,totalMs,inferMs,gpuPeakMB,modelParams,outputVertices,outputTriangles,convertMs,glbBytes,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
+```
+
+COMPLETED 실행이 없으면(다른 서버·프로파일의 작업, 실패한 작업) 서버·추론 열은 빈 칸이다. 기본으로 패스스루 실행의 행을 뺀다(`includePassthrough=true` 로 포함). CSV 형식(RFC 4180, null 빈 칸, CRLF)은 §1.1 과 같다.
+
 ## 4. 3D 품질 체크리스트 (사람 평가, 1~5점)
 
 평가자 2명 이상이 독립 채점하고 평균을 쓴다. 기준 사진(입력)과 렌더(정면·측면·위) 를 나란히 놓고 채점한다. 1 = 전혀 다름, 3 = 종을 알아볼 수 있음, 5 = 그 개체로 알아볼 수 있음.
@@ -127,6 +153,21 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 |---|---|---|---|---|---|---|---|---|---|
 | baseline | | | | | | | | | |
 | 개선안 A | | | | | | | | | |
+
+### 4.1 평가 저장과 내보내기 (Backend, [구현됨] 2026-10-30, `RatingApiTest`)
+
+평가자는 작업 상세 웹 페이지 `/job/?id={jobId}` 에서 입력 사진과 3D 모델을 나란히 보고 6항목을 채점한다(평가자 이름은 브라우저 localStorage 에 기억). 저장은 API `PUT /api/v1/jobs/{jobId}/ratings/{rater}`(본문 = 위 6개 이름, 각 1~5 정수 + 선택 `comment` ≤ 500자), COMPLETED 작업만 받는다. **같은 작업·같은 평가자는 덮어쓴다** — 평가자 한 명당 작업마다 한 행이므로 "평가자 2명 이상"은 서로 다른 이름 2개 이상이다.
+
+- 저장 위치: H2 테이블 `job_ratings`(컬럼 `job_id, rater, face_shape, ears, body_proportion, fur_color, pattern, texture_artifacts, comment, created_at, updated_at` + `id`, `(job_id, rater)` 유일).
+- 작업별 평균: `GET /api/v1/jobs/{jobId}/ratings` → `items`(평가자 이름순) + `average`(6항목 평균과 `raters`). 평가가 없으면 `average = null`.
+- 측정표: `GET /api/v1/admin/ratings?format=csv` → `job_ratings.csv`. 평가 한 건 = 한 행, 그 작업의 마지막 실행(§1.1 `job_runs`)의 `modelVersion`·`workerType`·`passthrough` 를 붙인다. 열 순서:
+
+```csv
+jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureArtifacts,comment,updatedAt,workerType,passthrough
+```
+
+- 보고서 표(베이스라인 vs 개선안): `GET /api/v1/admin/ratings/summary` → modelVersion 별(`(none)` = 값 없음, §1.1 stats 와 같은 이름) 6항목 평균, `ratings`(평가 행 수), `raters`(서로 다른 평가자 수), `jobs`(평가된 작업 수). 평균은 **평가 행 전체의 산술 평균**이다(작업별 평균의 평균이 아님). 관리 페이지 `/admin` 의 "품질 평가 요약" 표가 이 값을 보여 준다.
+- 제외 규칙: 기본으로 패스스루 실행(§1 `passthrough = TRUE`)의 평가는 측정표·요약에서 뺀다(`includePassthrough=true` 로 포함). `from`/`to` 는 평가의 `updatedAt` 기준(ISO 8601 instant, `to` 는 제외).
 
 ## 5. 운영 지표 (Micrometer/Prometheus, Backend, [구현됨] 2026-11-01)
 

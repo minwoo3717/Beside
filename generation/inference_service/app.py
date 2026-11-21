@@ -361,6 +361,13 @@ class HealthResponse(BaseModel):
         description="Random id of this service process, new at every start (12 hex characters). A request Spring sent "
         "to an earlier instance will never be answered: Spring then gives up on it instead of waiting out its timeout.",
     )
+    # Addition of API v1.2 (review/api-v1.1 merged 2026-11-21): which model a failed run belongs to.
+    modelVersion: Optional[str] = Field(
+        default=None,
+        description="Version of the loaded model, as /infer reports it for a run whose rigging did not succeed: never "
+        "+rig, which /infer adds only when that job's rigging succeeded (REVIEW_CHECKLIST #18). None while no model is "
+        "loaded. Spring records it on failed runs so job_runs can tell which model a failure belongs to.",
+    )
 
 
 # --------------------------------------------------------------------------- helpers
@@ -841,6 +848,8 @@ def healthz(request: Request) -> HealthResponse:
         busyForMs=_busy_for_ms(),
         loadError=None if MODEL is not None else MODEL_LOAD_ERROR,
         instanceId=INSTANCE_ID,
+        # No +rig: /infer adds it only when that job's rigging succeeded (REVIEW_CHECKLIST #18), which a failed run never did.
+        modelVersion=MODEL.version[:128] if MODEL is not None else None,
     )
 
 

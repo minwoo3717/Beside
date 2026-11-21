@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f0">
+  <meta name="robots" content="noindex">
+  <title>Beside 보관함</title>
+  <link rel="icon" href="data:,">
+  <!-- Absolute paths: this page is also served at /library and /library/ (LibraryPageConfig). -->
+  <link rel="stylesheet" href="/library/library.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js" integrity="sha256-iSNznIwbSgLdnIz2baXCpEgjXLXknkOd17u6lEuk++E=" crossorigin="anonymous"></script>
+  <script src="/library/library-core.js" defer></script>
+  <script src="/library/library.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/library/" aria-label="Beside 보관함 처음으로"><span class="brand-mark" aria-hidden="true">b.</span> Beside 보관함</a>
+    <nav class="header-links" aria-label="다른 페이지"><a href="/admin/">운영 대시보드</a></nav>
+  </header>
+
+  <main>
+    <p id="global-message" class="banner" role="alert" hidden></p>
+
+    <!-- 처음 화면: 펫 목록 + 미분류 작업 -->
+    <section id="home-view" aria-labelledby="home-title">
+      <div class="intro">
+        <p class="eyebrow">LIBRARY</p>
+        <h1 id="home-title">반려동물 보관함</h1>
+        <p class="lead">반려동물별로 만든 3D 모델을 모아 보고, 앱에서 만든 모델을 정리해요.</p>
+      </div>
+
+      <section class="panel" aria-labelledby="pets-title">
+        <div class="panel-heading">
+          <h2 id="pets-title">반려동물</h2>
+          <button id="add-pet-toggle" class="primary-button" type="button" aria-expanded="false" aria-controls="add-pet-form">펫 추가</button>
+        </div>
+        <form id="add-pet-form" class="pet-form" hidden novalidate>
+          <label>이름 <input name="name" type="text" maxlength="40" required autocomplete="off" placeholder="예: 초코"></label>
+          <label>종
+            <select name="species">
+              <option value="DOG">강아지</option>
+              <option value="CAT">고양이</option>
+              <option value="OTHER">기타</option>
+            </select>
+          </label>
+          <label class="wide">메모 <textarea name="note" maxlength="500" rows="2" placeholder="선택 · 500자까지"></textarea></label>
+          <p class="form-error" role="alert" hidden></p>
+          <div class="form-actions">
+            <button class="primary-button" type="submit">추가</button>
+            <button class="ghost-button" type="button" data-action="close">닫기</button>
+          </div>
+        </form>
+        <ul id="pet-grid" class="pet-grid" aria-label="반려동물 목록"></ul>
+        <p id="pets-empty" class="empty" hidden>아직 반려동물이 없어요. ‘펫 추가’로 시작해 보세요.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="unassigned-title">
+        <div class="panel-heading">
+          <h2 id="unassigned-title">미분류 작업</h2>
+          <span class="hint">앱에서 만든 모델은 펫 없이 들어와요. 펫을 골라 넣어 주세요.</span>
+        </div>
+        <ul id="unassigned-list" class="job-list" aria-label="미분류 작업"></ul>
+        <p id="unassigned-empty" class="empty" hidden>미분류 작업이 없어요.</p>
+        <p id="unassigned-more" class="hint" hidden></p>
+      </section>
+    </section>
+
+    <!-- 펫 상세: 정보 · 3D 보기 · 새 모델 만들기 · 생성 기록 -->
+    <section id="pet-view" aria-labelledby="pet-name" hidden>
+      <a class="back-link" href="#/">← 보관함</a>
+      <div class="pet-header">
+        <div id="pet-cover" class="cover" aria-hidden="true"></div>
+        <div class="pet-heading">
+          <p id="pet-species" class="eyebrow"></p>
+          <h1 id="pet-name"></h1>
+          <p id="pet-note" class="pet-note"></p>
+          <p id="pet-meta" class="hint"></p>
+        </div>
+        <div class="pet-actions">
+          <button id="edit-pet-toggle" class="ghost-button" type="button" aria-expanded="false" aria-controls="edit-pet-form">편집</button>
+          <button id="delete-pet-button" class="danger-button" type="button">펫 삭제</button>
+        </div>
+      </div>
+      <form id="edit-pet-form" class="pet-form panel" hidden novalidate>
+        <label>이름 <input name="name" type="text" maxlength="40" required autocomplete="off"></label>
+        <label>종
+          <select name="species">
+            <option value="DOG">강아지</option>
+            <option value="CAT">고양이</option>
+            <option value="OTHER">기타</option>
+          </select>
+        </label>
+        <label class="wide">메모 <textarea name="note" maxlength="500" rows="2"></textarea></label>
+        <p class="form-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="primary-button" type="submit">저장</button>
+          <button class="ghost-button" type="button" data-action="close">닫기</button>
+        </div>
+      </form>
+
+      <div class="pet-layout">
+        <section class="panel viewer-panel" aria-labelledby="viewer-title">
+          <div class="panel-heading">
+            <h2 id="viewer-title">3D 보기</h2>
+            <span id="viewer-caption" class="hint"></span>
+          </div>
+          <model-viewer id="viewer" camera-controls autoplay shadow-intensity="1" alt="반려동물 3D 모델" hidden></model-viewer>
+          <div id="animation-chips" class="chips" role="group" aria-label="동작 고르기" hidden></div>
+          <p id="viewer-message" class="note" role="status" hidden></p>
+          <p id="viewer-empty" class="empty">완성된 모델이 아직 없어요.</p>
+        </section>
+
+        <section class="panel create-panel" aria-labelledby="create-title">
+          <h2 id="create-title">새 모델 만들기</h2>
+          <form id="create-form" novalidate>
+            <label class="file-button">
+              <span>사진 선택</span>
+              <input id="create-photos" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+            </label>
+            <p id="create-selection" class="hint">JPG·PNG·WEBP, 장당 5MB, 최대 10장(합계 18MB). 첫 사진이 썸네일이 돼요.</p>
+            <button id="create-button" class="primary-button" type="submit" disabled>이 펫으로 만들기</button>
+          </form>
+          <div id="create-progress" class="progress" hidden>
+            <p class="progress-line"><span id="create-badge" class="badge" data-status="PENDING">대기</span> <span id="create-wait" role="status" aria-live="polite"></span></p>
+            <div class="bar" aria-hidden="true"><span></span></div>
+            <button id="create-cancel" class="ghost-button" type="button">취소</button>
+          </div>
+          <p id="create-error" class="form-error" role="alert" hidden></p>
+          <p class="hint">끝나면 이 탭에 알림을 보내요(브라우저 알림을 허용했을 때).</p>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="history-title">
+        <div class="panel-heading">
+          <h2 id="history-title">생성 기록</h2>
+          <span id="history-count" class="hint"></span>
+        </div>
+        <ul id="history-list" class="job-list" aria-label="생성 기록"></ul>
+        <p id="history-empty" class="empty" hidden>아직 만든 모델이 없어요.</p>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <label id="confirm-option" class="check" hidden><input id="confirm-with-jobs" type="checkbox"> 생성 기록(사진·모델 파일)도 함께 삭제</label>
+      <div class="form-actions">
+        <button class="ghost-button" value="cancel">취소</button>
+        <button id="confirm-ok" class="danger-button" value="ok">삭제</button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer>
+    <span>Beside · 보관함</span>
+    <span>팀 내부 테스트용 · 개별 작업의 평가·공유는 작업 상세에서</span>
+  </footer>
+</body>
+</html>

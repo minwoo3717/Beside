@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f0">
+  <meta name="robots" content="noindex">
+  <title>Beside 운영 대시보드</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/admin/admin-format.js" defer></script>
+  <script src="/admin/admin-measurement.js" defer></script>
+  <script src="/admin/admin.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/admin/" aria-label="Beside 운영 대시보드"><span class="brand-mark" aria-hidden="true">b.</span> Beside Again</a>
+    <a class="version-label" href="/library/" style="margin-left: auto; color: inherit;">보관함 →</a>
+    <span class="version-label"><span id="live-dot" class="live-dot" aria-hidden="true"></span> ADMIN / <span id="server-profile">—</span></span>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow">OPERATIONS</p>
+      <h1>운영 대시보드</h1>
+      <p id="refresh-status" class="refresh-status" role="status" aria-live="polite">불러오는 중…</p>
+    </section>
+
+    <section class="cards" aria-label="현황">
+      <article class="card" aria-labelledby="queue-title">
+        <h2 id="queue-title" class="card-title">대기열</h2>
+        <p class="big"><span id="queue-pending">—</span><small>건 대기</small></p>
+        <p class="sub">생성 중 <strong id="queue-processing">—</strong>건</p>
+        <dl class="facts">
+          <div><dt>가장 오래 기다린 작업</dt><dd id="queue-oldest-pending">—</dd></div>
+          <div><dt>가장 오래 생성 중인 작업</dt><dd id="queue-oldest-processing">—</dd></div>
+        </dl>
+      </article>
+
+      <article class="card" aria-labelledby="gpu-title">
+        <h2 id="gpu-title" class="card-title">GPU</h2>
+        <p id="gpu-label" class="gpu-label" data-state="UNKNOWN">GPU 상태: 정보 없음</p>
+        <ul id="gpu-details" class="details" aria-label="GPU 세부 정보"></ul>
+        <p id="gpu-note" class="sub">추론 서비스 상태 감시가 연결되면 여기에 표시됩니다.</p>
+      </article>
+
+      <article class="card" aria-labelledby="disk-title">
+        <h2 id="disk-title" class="card-title">디스크</h2>
+        <p class="big"><span id="disk-used">—</span><small>사용</small></p>
+        <div class="meter" aria-hidden="true"><span id="disk-meter" data-level="ok"></span></div>
+        <p id="disk-label" class="sub">—</p>
+        <dl class="facts">
+          <div><dt>storage 폴더</dt><dd id="disk-storage">—</dd></div>
+        </dl>
+      </article>
+
+      <article class="card" aria-labelledby="status-title">
+        <h2 id="status-title" class="card-title">상태별 작업</h2>
+        <dl class="status-counts">
+          <div data-status="PENDING"><dt>대기</dt><dd id="count-PENDING">—</dd></div>
+          <div data-status="PROCESSING"><dt>생성 중</dt><dd id="count-PROCESSING">—</dd></div>
+          <div data-status="COMPLETED"><dt>완료</dt><dd id="count-COMPLETED">—</dd></div>
+          <div data-status="FAILED"><dt>실패</dt><dd id="count-FAILED">—</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="panel" aria-labelledby="jobs-title">
+      <div class="panel-heading">
+        <h2 id="jobs-title">최근 작업</h2>
+        <span class="hint">최신 20건 · 진행 중인 작업의 시간은 지금까지 · 작업 id 를 누르면 사진·모델·평가 페이지</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">작업</th>
+              <th scope="col">상태</th>
+              <th scope="col">접수</th>
+              <th scope="col" class="num">시도</th>
+              <th scope="col" class="num">대기</th>
+              <th scope="col" class="num">생성</th>
+              <th scope="col" class="num">전체</th>
+              <th scope="col">오류</th>
+              <th scope="col">모델 버전</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-body"></tbody>
+        </table>
+      </div>
+      <p id="jobs-empty" class="empty" hidden>아직 작업이 없어요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="stats-title">
+      <div class="panel-heading">
+        <h2 id="stats-title">모델 버전별 통계</h2>
+        <div class="toolbar">
+          <label class="check"><input id="include-passthrough" type="checkbox"> 패스스루 포함</label>
+          <a id="csv-link" class="primary-button" href="/api/v1/admin/runs?format=csv" download="job_runs.csv"><span>측정표 CSV 받기</span><span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+      <p class="hint">시간은 p50 / p95 (nearest-rank, 완료된 실행만). 성공률 = 완료 / 실행. 패스스루(모델 대신 샘플을 돌려준 실행)는 기본으로 뺍니다. CSV 열은 docs/METRICS.md §1.1 순서입니다.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">모델 버전</th>
+              <th scope="col">워커</th>
+              <th scope="col" class="num">실행</th>
+              <th scope="col" class="num">성공률</th>
+              <th scope="col" class="num">대기</th>
+              <th scope="col" class="num">생성</th>
+              <th scope="col" class="num">전체</th>
+              <th scope="col" class="num">추론</th>
+              <th scope="col" class="num">평균 GLB</th>
+              <th scope="col" class="num">평균 GPU 피크</th>
+            </tr>
+          </thead>
+          <tbody id="stats-body"></tbody>
+        </table>
+      </div>
+      <p id="stats-empty" class="empty" hidden>아직 끝난 실행이 없어요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="ratings-title">
+      <div class="panel-heading">
+        <h2 id="ratings-title">품질 평가 요약</h2>
+        <div class="toolbar">
+          <a id="ratings-csv-link" class="primary-button" href="/api/v1/admin/ratings?format=csv" download="job_ratings.csv"><span>평가 CSV 받기</span><span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+      <p class="hint">작업 상세 페이지(최근 작업의 작업 id)에서 매긴 6항목 점수의 모델 버전별 평균(평가 행 전체의 평균). 보고서에는 평가자 2명 이상이 필요해요. 위 "패스스루 포함"을 따릅니다. 열은 docs/METRICS.md §4.1.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">모델 버전</th>
+              <th scope="col" class="num">작업</th>
+              <th scope="col" class="num">평가</th>
+              <th scope="col" class="num">평가자</th>
+              <th scope="col" class="num">얼굴</th>
+              <th scope="col" class="num">귀</th>
+              <th scope="col" class="num">체형</th>
+              <th scope="col" class="num">털색</th>
+              <th scope="col" class="num">무늬</th>
+              <th scope="col" class="num">텍스처</th>
+            </tr>
+          </thead>
+          <tbody id="ratings-body"></tbody>
+        </table>
+      </div>
+      <p id="ratings-empty" class="empty" hidden>아직 평가가 없어요.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="client-title">
+      <div class="panel-heading">
+        <h2 id="client-title">앱 측정 (metrics.csv)</h2>
+        <div class="toolbar">
+          <a id="client-csv-link" class="secondary-link" href="/api/v1/admin/client-metrics?format=csv" download="client_metrics.csv">앱 측정 CSV</a>
+          <a id="e2e-csv-link" class="primary-button" href="/api/v1/admin/e2e?format=csv" download="e2e.csv"><span>e2e 결합표 CSV 받기</span><span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+      <p class="hint">폰에서 <code>adb pull /sdcard/Android/data/&lt;패키지명&gt;/files/metrics/metrics.csv .</code> 로 받은 파일을 올리면 줄마다 저장하고, 같은 작업·기기·e2eMs 줄은 한 번만 넣어요. e2e 결합표는 앱 측정과 그 작업의 서버·추론 측정을 한 줄로 합친 표입니다(서버 uploadMs 는 serverUploadMs, docs/METRICS.md §3.1).</p>
+      <form id="client-form" class="upload-form">
+        <input id="client-file" type="file" accept=".csv,text/csv" aria-label="앱 metrics.csv 파일">
+        <button id="client-submit" class="primary-button" type="submit">앱 metrics.csv 올리기</button>
+      </form>
+      <p id="client-result" class="upload-result" role="status" aria-live="polite"></p>
+      <ul id="client-errors" class="upload-errors" aria-label="저장하지 않은 줄"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <span>Beside Again · 운영</span>
+    <span>5초마다 갱신 · 탭을 숨기면 멈춤</span>
+  </footer>
+</body>
+</html>

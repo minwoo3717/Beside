@@ -15,11 +15,13 @@
 - 측정 필드를 추가하는 순서: `RunDetails` → `JobRun` 컬럼(박싱 타입, 필요하면 `@Column(name=...)`) → `EventLog` 의 줄 **끝**에 추가(앞 필드 순서 유지) → [docs/METRICS.md](../docs/METRICS.md) §1·§1.1 과 [docs/CONTRACT.md](../docs/CONTRACT.md) §5 → `JobEventsTest` 의 `containsExactly`. 이름은 METRICS 의 이름을 그대로 쓴다(이름 변경은 계약 회의).
 - 워커는 `service/JobWorker` 인터페이스로만 호출한다. `MockJobWorker`는 profile `mock`, `RealJobWorker`는 profile `real`. 기본 profile은 `mock`(`spring.profiles.default`).
 - real 워커의 추론 서비스 전송은 `InferenceClient` 한 곳이다. `inference.transfer=path`(기본, 공유 파일시스템 가정: 절대 경로를 보내고 GLB 경로를 받는다) 또는 `upload`(디스크 공유 없음, REVIEW_CHECKLIST #6 (b): `POST /infer/upload` 로 사진 파일을 올리고 응답의 `glbUrl` 을 `storage.tmp.dir/{jobId}/base.glb` 로 받는다). 업로드 모드는 실행이 끝나면(성공·실패 모두) `RealJobWorker` 가 `InferenceClient.cleanup` 으로 임시 파일 삭제 + `DELETE /artifacts/{jobId}` 를 부른다(응답 없는 연결 오류는 한 번 더 보낸다, `CLEANUP_ATTEMPTS`. 시간 초과는 다시 보내지 않는다) — 실패해도 로그만 남기고 작업 결과는 바꾸지 않는다. `inference.token` 이 비어 있지 않으면 두 모드 모두 `X-Inference-Token` 헤더를 보내고, 토큰은 로그·`error.message` 에 남기지 않는다. 끝나지 않는 요청은 일찍 포기한다(장애 훈련 FD16b): GLB 내려받기는 `inference.download-idle-ms` 동안 데이터가 없으면, prod 는 healthz `instanceId` 가 요청을 보낼 때와 달라지면(`RealJobWorker.restartWatch`). 이 서버 디스크 때문에 GLB 를 쓰거나 복사하지 못하면 `INTERNAL_ERROR` 다(FD4). 응답 → Job 실패 코드 매핑은 이 클래스 Javadoc 과 [generation/inference_service/README.md](../generation/inference_service/README.md) 의 오류 표('전송 모드' 의 추가 표 포함)가 같아야 한다(`InferenceClientTest`, 워커 흐름은 `RealJobWorkerTest`·`RealJobWorkerUploadTest`). `/infer` 는 `inference.max-concurrency`(기본 1)건만 동시에 부르고 나머지 작업은 PENDING 으로 기다린다.
-- Job 상태 전이는 `PENDING → PROCESSING → COMPLETED | FAILED`, `FAILED → (retry) → PENDING`뿐이다. 결과 메타데이터와 `status` 는 한 번의 save 로 함께 바꾼다(저장소 호출마다 짧은 트랜잭션, 읽는 쪽은 COMPLETED 와 asset 을 함께 본다).
+- Job 상태 전이는 `PENDING → PROCESSING → COMPLETED | FAILED`, `FAILED → (retry) → PENDING`, `PENDING → (cancel) → FAILED(CANCELED)`뿐이다. 결과 메타데이터와 `status` 는 한 번의 save 로 함께 바꾼다(저장소 호출마다 짧은 트랜잭션, 읽는 쪽은 COMPLETED 와 asset 을 함께 본다). PENDING 을 떠나는 전이(워커의 시작, cancel, 오프라인 대기 시간 초과·종료 중단·예기치 못한 오류)와 retry 는 `JobTransitions` 의 한 잠금 안에서 DB 를 다시 읽고 "같은 attempt 의 PENDING" 일 때만 한다. 워커는 `dispatch(jobId, attempt)` 로 받은 attempt 로 확인하므로, 취소된 작업은 시작하지 않고 취소 뒤 retry 한 새 attempt 에도 손대지 않는다. retry 는 그 잠금 안에서 조건부 update(`JobRepository.startRetry`, FAILED 일 때만)로 바꾸고, 큐 상한(`AdmissionGate.admitRetry`)이 그 바깥을 감싼다. 대기 순번·예상 시간(`JobResponse.queue`·`estimate`)은 `QueueEstimator` 이고, 큐 상한이 켜져 있으면 `ahead` 는 상한이 세는 것과 같은 PENDING(오래된 `admission.stale-after-ms` 밖의 행은 빼고)만 센다.
 - 저장소는 H2 파일 DB(`storage/db/beside-{mock|real}.mv.db`, Spring Data JPA)다. 스키마는 `ddl-auto=update`라서 테이블·컬럼 추가만 자동이고 이름 변경·삭제는 반영되지 않는다. 엔티티에 필드를 추가할 때는 박싱 타입(nullable)으로 한다. enum 컬럼은 `@Enumerated` 대신 변환기(`JobStatusColumnConverter`)를 쓴다: Hibernate 가 붙이는 CHECK 제약을 update 가 고치지 못한다.
 - DB 파일 하나는 서버 하나만 연다(AUTO_SERVER 없음). 다른 인스턴스를 띄울 때는 `--storage.db.path=...` 로 다른 파일을 쓴다.
 - prod 는 H2 DB 파일이 없으면 시작하지 않는다(`config/DatabaseFileGuard`, `storage.db.create-if-missing=false`, 장애 훈련 FD5). 새 서버의 첫 시작과 부하·훈련 덮어쓰기만 true 로 둔다. 테스트는 인메모리 URL 이라 검사하지 않는다.
 - 서버가 시작될 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다(`InterruptedJobRecovery`). 워커 스레드는 재시작을 넘지 못하기 때문이다.
+- 작업 삭제(`DELETE /api/v1/jobs/{id}`, 펫과 함께 삭제)는 `JobDeletionService` 한 곳이다. 끝난 작업(COMPLETED/FAILED)만 지우고, 사진·`storage.result.dir/{jobId}`·썸네일·공유 링크(취소)·Idempotency-Key 를 정리하지만 **`job_runs`·`events.jsonl`·`job_ratings`(품질 평가)·`client_metrics`(앱 측정)는 측정이라 남긴다**(평가 CSV 의 modelVersion 은 남은 `job_runs` 에서 온다, 지운 작업의 `GET …/ratings` 는 404). 작업에 딸린 테이블을 새로 만들면 측정인지 아닌지 정해 여기서 함께 정리한다.
+- `Job.petId`(보관함)는 `@Column(updatable = false)` 다. 워커가 몇 분 전에 읽은 Job 사본을 저장해도 사용자가 그동안 옮긴 펫을 되돌리지 않도록, 바꿀 때는 `JobRepository.updatePetId/unassignPet`(JPQL update)만 쓴다.
 - 테스트는 `src/test/resources/config/application.properties` 덕분에 컨텍스트마다 인메모리 H2 를 쓴다. `spring.datasource.url` 을 프로파일 파일(application-mock.properties)에 두지 않는다: 프로파일 파일이 이 오버라이드를 이긴다.
 
 - 대표 사진 검사·전처리(2026-11): 코어는 `preprocess/`(JDK 와 ONNX Runtime 만, Spring import 금지 — `CorePurityTest`), Spring 연결은 `service/preprocess/`. 폴더 도구(`tool/PreprocessBatch`)가 코어와 설정을 그대로 쓴다.
@@ -40,7 +42,9 @@ cd backend
 - Swagger UI: http://localhost:8080/swagger-ui/index.html · 생성 스펙: http://localhost:8080/v3/api-docs
 - Mock 실패 재현: 업로드 파일명에 `fail`이 들어가면 FAILED(`error.code=INFERENCE_FAILED`). 토큰은 `mock.worker.fail-when-filename-contains`, 빈 값이면 비활성.
 - Mock 지연: `mock.worker.pending-ms`(기본 2000), `mock.worker.processing-ms`(기본 3000).
-- DB 보기: http://localhost:8080/h2-console (mock·real, 이 PC 에서 직접 연 요청만. 터널·프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `job_runs` 에서 `CALL CSVWRITE(...)` 로 뽑는다([README.md](README.md) '측정 내보내기').
+- DB 보기: http://localhost:8080/h2-console (mock·real, 이 PC 에서 직접 연 요청만. 터널·프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `GET /api/v1/admin/runs?format=csv`(관리 페이지 `/admin` 의 버튼, 헤더 = METRICS §1.1)로 뽑는다. 개발 PC 에서는 `job_runs` 에서 `CALL CSVWRITE(...)` 도 된다([README.md](README.md) '측정 내보내기').
+- 관리 API `/api/v1/admin/*` 와 `/admin` 페이지에는 Spring 인증 코드가 없다. 배포에서는 Caddy Basic 인증이 막는다. 작업 상태를 바꾸지 않는다(쓰기는 앱 `metrics.csv` 가져오기 `POST /api/v1/admin/client-metrics` 뿐, `client_metrics` 테이블).
+- 작업 상세 페이지 `/job/?id=` 와 그 API(태그 quality: `GET /api/v1/jobs/{id}/photos/{index}`, `GET·PUT /api/v1/jobs/{id}/ratings[/{rater}]`)도 인증 코드가 없고 배포에서는 Caddy Basic 인증 뒤다(앱은 쓰지 않는다). 사진은 저장 파일명 확장자가 jpg·jpeg·png·webp 일 때만 이미지 타입으로 내준다(그 밖 octet-stream + nosniff). 평가 6항목·앱 측정 열 이름은 [docs/METRICS.md](../docs/METRICS.md) §3·§4 그대로, CSV 열 순서는 §3.1·§4.1(이름 변경은 계약 회의).
 - GPU 없이 real 시험: 추론 서비스를 패스스루(`BESIDE_SAMPLE_GLB`)로 띄우고 real 로 bootRun → `e2e_mock.ps1`. 절차는 [README.md](README.md) '프로파일 real'. 업로드 모드는 같은 절차에 `--inference.transfer=upload`(+ 양쪽 같은 토큰), [README.md](README.md) '업로드 모드'.
 
 ## 테스트
@@ -50,6 +54,10 @@ cd backend
 .\gradlew.bat test                                               # Java 전체: v0 통합, v1 API, 계약, 영속화(재시작·job_runs), events.jsonl, 예외 핸들러, real 워커(가짜 /infer)
 .\gradlew.bat test --tests "com.example.mockbackend.JobV1ContractTest"
 node --test src/test/js/mock-mvp.test.cjs                        # 브라우저 Mock UI(v1) JS 흐름
+node --test src/test/js/admin-format.test.cjs                    # 관리 페이지 포맷 함수(ms·바이트·퍼센트·GPU 카드 문구)
+node --test src/test/js/admin-measurement.test.cjs               # 관리 페이지 보고서 패널(평가 요약·metrics.csv 결과 문구·CSV 주소)
+node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs   # 작업 상세 페이지 규칙(평가자 이름·점수 본문)과 QR 인코더(다시 읽어 확인)
+node --test src/test/js/library-core.test.cjs                    # 보관함 페이지 순수 함수(경로·라벨·대기 문구·사진 검사)
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL

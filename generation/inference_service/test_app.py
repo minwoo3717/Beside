@@ -1132,6 +1132,12 @@ class RiggedResultTest(_RiggedCase):
         self.assertEqual(metrics["convertMs"], answer.json()["metrics"]["convertMs"])
         self.assertFalse((self.job_dir / "base.rigged.glb").exists())
 
+    def test_healthz_model_version_never_carries_rig(self):
+        """REVIEW_CHECKLIST #18: +rig means that job's rigging succeeded. /healthz names the loaded model for runs that
+        failed (Spring records it on them), so a configured rig template must not add +rig there."""
+        self.assertEqual(self.upload().json()["modelVersion"], "fake@test:ckpt+rig")
+        self.assertEqual(self.client.get("/healthz").json()["modelVersion"], "fake@test:ckpt")
+
 
 @unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
 class OversizeRiggedResultTest(_RiggedCase):

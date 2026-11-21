@@ -31,7 +31,9 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -81,7 +83,7 @@ class JobServiceAdmissionTest {
 
     @Test
     void aCreateWhoseDispatchIsRejectedGivesItsPlaceBack() {
-        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString(), anyInt());
 
         assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo()), "late-key"))
                 .isInstanceOf(TaskRejectedException.class);
@@ -96,7 +98,7 @@ class JobServiceAdmissionTest {
     @Test
     void aRetryWhoseDispatchIsRejectedGivesItsPlaceBack() {
         Job failed = savedFailedJob();
-        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString(), anyInt());
 
         assertThatThrownBy(() -> jobService.retry(failed.getId())).isInstanceOf(TaskRejectedException.class);
         assertThat(jobRepository.findById(failed.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
@@ -137,7 +139,7 @@ class JobServiceAdmissionTest {
         } finally {
             pool.shutdownNow();
         }
-        verify(jobWorker, times(1)).dispatch(failed.getId());
+        verify(jobWorker, times(1)).dispatch(eq(failed.getId()), anyInt());
         Job retried = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(retried.getStatus()).isEqualTo(JobStatus.PENDING);
         assertThat(retried.getAttempt()).isEqualTo(2);
@@ -191,7 +193,7 @@ class JobServiceAdmissionTest {
         Job unchanged = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(unchanged.getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(unchanged.getAttempt()).isEqualTo(1);
-        verify(jobWorker, never()).dispatch(failed.getId());
+        verify(jobWorker, never()).dispatch(eq(failed.getId()), anyInt());
         assertThat(registry.get("beside.jobs.refused").tag("op", "retry").counter().count())
                 .isEqualTo(refusedRetries + REQUESTS);
     }

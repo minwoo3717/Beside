@@ -2,7 +2,7 @@
 
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
-- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인), 운영 지표(Actuator·Prometheus, 관리 포트 8081 전용 — 2026-11-01, 아래 '운영 지표').
+- **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 대기 순번·예상 시간(`JobResponse.queue`·`estimate`)과 PENDING 취소(`POST /cancel` → `CANCELED`), 공유 링크·보관함·관리 화면·품질 평가(API v1.2, 아래 표), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인), 운영 지표(Actuator·Prometheus, 관리 포트 8081 전용 — 2026-11-01, 아래 '운영 지표').
 - **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
@@ -26,6 +26,8 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | http://localhost:8080/api/v1/healthz | `{ "status": "ok", "profile": "mock", "workerType": "mock" }` |
 | http://localhost:8081/actuator/prometheus | 운영 지표(관리 포트 전용, 아래 '운영 지표'). `/actuator/health` 도 같은 포트 |
 | http://localhost:8080/h2-console | DB 보기 (mock·real 모두, 이 PC 에서 직접 연 요청만 — 폰용 터널(cloudflared·ngrok)이나 프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 측정표 내보내기는 아래 '측정 내보내기' |
+| http://localhost:8080/admin | 운영 대시보드: 상태별 작업 수·대기열·GPU·디스크 카드, 최근 작업(작업 id → 작업 상세), 모델 버전별 통계, 측정표 CSV 받기, 품질 평가 요약·평가 CSV, 앱 `metrics.csv` 올리기·e2e 결합표 CSV. 5초마다 갱신(탭을 숨기면 멈춤). 디스크 카드는 `storage.root.dir`(기본 `storage`)가 있는 파일시스템. 배포에서는 Caddy Basic 인증 뒤 |
+| http://localhost:8080/job/?id=<jobId> | 작업 상세: 상태·타이밍·시도·modelVersion, 입력 사진과 3D 모델(model-viewer)을 나란히, 품질 6항목 평가(평가자 이름은 브라우저 localStorage), 공유 링크 만들기·복사·QR. 실패 작업은 `error.code`·문구·개발자 message. 배포에서는 Caddy Basic 인증 뒤 |
 
 기존 서버가 실행 중이면 해당 터미널에서 `Ctrl+C` 로 종료한 뒤 다시 실행한다. `bootRun` 이 EXECUTING 상태로 유지되는 것은 서버가 실행 중이라는 뜻이다.
 
@@ -37,8 +39,30 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 | `GET /api/v1/jobs/{id}` | 200 `JobResponse` | 404 `JOB_NOT_FOUND` |
 | `GET /api/v1/jobs/{id}/asset?variant=base` | 200 `model/gltf-binary`, `Content-Disposition: attachment` | 409 `JOB_NOT_COMPLETED`, 404 `ASSET_NOT_FOUND`(GLB 파일 없음), 400 `INVALID_REQUEST`(base 가 아닌 variant. `hair` 는 2026-11-21 에 계약에서 뺐고 작업 상태와 상관없이 400) |
 | `POST /api/v1/jobs/{id}/retry` | 202 + `{ jobId }` | FAILED 만, 그 외 409 `JOB_NOT_FAILED` |
+| `POST /api/v1/jobs/{id}/cancel` | 200 `JobResponse`(FAILED, `error.code=CANCELED`) | PENDING 만, 그 외(PROCESSING 포함) 409 `JOB_NOT_PENDING` |
 | `GET /api/v1/jobs?limit=&cursor=` | 200 `{ items, nextCursor }` | 개발·디버그용, 최신순 |
 | `GET /api/v1/healthz` | 200 `{ status, profile, workerType }` | `profile` 은 활성 프로파일을 쉼표로 이은 값(공개 서버는 `real,prod`) |
+| `GET /api/v1/admin/overview` | 200 `AdminOverview` (상태별 수, 대기열, 디스크, `inference` — real 은 GPU 상태, mock 은 null) | 관리용, 앱은 쓰지 않음. 배포에서는 Caddy Basic 인증 |
+| `GET /api/v1/admin/runs?format=json\|csv&from=&to=&modelVersion=&includePassthrough=&workerType=` | 200 `AdminRun[]` 또는 `text/csv`(`job_runs.csv`) | 측정표(METRICS §1.1). 400 `INVALID_REQUEST` |
+| `GET /api/v1/admin/stats?from=&to=&includePassthrough=` | 200 `AdminStats` (modelVersion × workerType, p50/p95 nearest-rank) | 400 `INVALID_REQUEST` |
+| `GET /api/v1/admin/jobs?limit=` | 200 `AdminJobList` (최신순, 마지막 실행의 modelVersion) | 400 `INVALID_REQUEST` |
+| `GET /api/v1/admin/jobs/{id}` | 200 `AdminJobSummary` (작업 하나, 작업 상세 페이지용) | 404 `JOB_NOT_FOUND` |
+| `GET /api/v1/jobs/{id}/photos/{index}` | 200 올린 사진 바이트(확장자로 image/jpeg·png·webp, 그 밖 octet-stream, `nosniff`) | 작업 상세 페이지용. 404 `JOB_NOT_FOUND`/`NOT_FOUND`(index 범위 밖). 배포에서는 Caddy Basic 인증 |
+| `GET /api/v1/jobs/{id}/ratings` | 200 `JobRatingList` (평가자 이름순 + 6항목 평균, 없으면 `average: null`) | 404 `JOB_NOT_FOUND`. 배포에서는 Caddy Basic 인증 |
+| `PUT /api/v1/jobs/{id}/ratings/{rater}` (JSON: METRICS §4 6항목 각 1~5 정수, `comment` ≤500자) | 200 `JobRating` | 같은 평가자는 덮어쓰기. 400 `INVALID_REQUEST`, 404, 409 `JOB_NOT_COMPLETED` |
+| `GET /api/v1/admin/ratings?format=json\|csv&from=&to=&includePassthrough=` | 200 `AdminRating[]` 또는 `text/csv`(`job_ratings.csv`) | 평가 측정표(METRICS §4.1), 마지막 실행의 modelVersion 포함 |
+| `GET /api/v1/admin/ratings/summary?from=&to=&includePassthrough=` | 200 `AdminRatingSummary` (modelVersion 별 6항목 평균·평가·평가자·작업 수) | 400 `INVALID_REQUEST` |
+| `POST /api/v1/admin/client-metrics` (multipart `file` = 앱 `metrics.csv`) | 200 `{ imported, skipped, errors[{line, reason}] }` | 헤더가 METRICS §3 과 다르면 400. (jobId, device, e2eMs) 중복은 건너뜀 |
+| `GET /api/v1/admin/client-metrics?format=json\|csv` | 200 `AdminClientMetric[]` 또는 `text/csv`(`client_metrics.csv`) | 열 = 앱 metrics.csv 헤더 |
+| `GET /api/v1/admin/e2e?format=json\|csv&includePassthrough=` | 200 `AdminE2eRow[]` 또는 `text/csv`(`e2e.csv`) | 앱 측정 + 그 작업의 마지막 COMPLETED 실행(서버 uploadMs 는 `serverUploadMs`, METRICS §3.1) |
+| `POST /api/v1/pets` `{ name, species?, note? }` | 201 + `Location` + `PetResponse` | 보관함(tag pets, 웹 전용). name 1~40자·species `DOG\|CAT\|OTHER`(기본 DOG)·note ≤500자, 어기면 400 `INVALID_REQUEST` |
+| `GET /api/v1/pets` | 200 `{ items: PetResponse[] }` (추가한 순서, `jobCount`·`coverJobId`·`coverThumbnailUrl`·`latestJobAt`) | |
+| `GET /api/v1/pets/{petId}` | 200 `PetDetailResponse` (+ `jobs` 최신순 JobResponse, `modelVersions`) | 404 `PET_NOT_FOUND` |
+| `PATCH /api/v1/pets/{petId}` `{ name?, species?, note?, coverJobId? }` | 200 `PetResponse` (보낸 필드만, null 은 note·coverJobId 지우기) | coverJobId 는 이 펫의 COMPLETED 작업만, 아니면 400 |
+| `DELETE /api/v1/pets/{petId}?withJobs=` | 204 (기본: 작업은 미분류로, `withJobs=true`: 작업도 삭제) | 409 `JOB_IN_PROGRESS`(진행 중 작업이 있으면 아무것도 지우지 않음) |
+| `PUT /api/v1/jobs/{id}/pet` `{ petId \| null }` | 200 `JobResponse` | 없는 펫·petId 필드 없음 400, 없는 작업 404 |
+| `DELETE /api/v1/jobs/{id}` | 204 (사진·결과 폴더·썸네일 삭제, 공유 링크 취소, Idempotency-Key 삭제, `job_runs` 는 남김) | PENDING·PROCESSING 409 `JOB_IN_PROGRESS` |
+| `GET /api/v1/jobs/{id}/thumbnail` | 200 `image/jpeg` (첫 사진, 긴 변 256px, `Cache-Control: private, max-age=86400`) | 썸네일 없음 404 `ASSET_NOT_FOUND` |
 
 오류는 `{ "error": { "code", "message", "jobId?" } }` 봉투, 코드와 앱 표시 문구는 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md). `JobResponse` 는 서버 경로를 노출하지 않는다(`asset.url` 은 `/api/v1/jobs/{id}/asset?variant=base` 상대 경로).
 
@@ -47,6 +71,7 @@ curl.exe -i -F "photos=@C:\photos\dog1.jpg" -F "photos=@C:\photos\dog2.jpg" http
 curl.exe -i http://localhost:8080/api/v1/jobs/<jobId>
 curl.exe -i -o model.glb "http://localhost:8080/api/v1/jobs/<jobId>/asset?variant=base"
 curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
+curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/cancel
 ..\scripts\e2e_mock.ps1        # 위 흐름을 한 번에
 ```
 
@@ -159,7 +184,16 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 
 ### 측정 내보내기 (`job_runs`)
 
-실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1). 5단계 측정표는 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해 뽑는다. 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다(모든 열에 따옴표 별칭 — 별칭이 없으면 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다).
+실행(attempt)이 끝날 때마다 `JobFinisher` 가 `job_runs` 에 한 행을 넣는다: 서버 타이밍(`upload_ms, queued_ms, processing_ms, total_ms`) + `/infer` 가 돌려준 수치(`infer_ms, gpu_peak_mb, model_params, output_vertices, output_triangles, convert_ms`) + `glb_bytes, passthrough, model_version` + `status, error_code`. 같은 객체로 `events.jsonl` 줄도 쓴다(필드 정의 [docs/METRICS.md](../docs/METRICS.md) §1·§1.1).
+
+5단계 측정표는 관리 API 로 뽑는다(2026-10-30). 헤더가 METRICS §1.1 이름·순서와 같은 CSV 이고, 기본으로 패스스루 행을 뺀다. 브라우저에서는 `/admin` 의 "측정표 CSV 받기".
+
+```powershell
+curl.exe -o job_runs.csv "http://localhost:8080/api/v1/admin/runs?format=csv&workerType=real"
+curl.exe "http://localhost:8080/api/v1/admin/stats"        # modelVersion × workerType 별 성공률, p50/p95 (완료된 실행만)
+```
+
+개발 PC 대안: 서버가 켜진 상태에서 `/h2-console`(JDBC URL `jdbc:h2:file:./storage/db/beside-real`)에 들어가 다음을 실행해도 된다(배포의 prod 프로파일에서는 콘솔이 꺼진다). 경로는 `backend/` 기준, 헤더는 METRICS 이름과 같다(모든 열에 따옴표 별칭 — 별칭이 없으면 H2 가 `ATTEMPT` 처럼 대문자로 내보낸다).
 
 ```sql
 CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
@@ -195,6 +229,20 @@ curl.exe -i http://localhost:8080/actuator/prometheus                           
 
 8081 을 이미 다른 프로그램이 쓰고 있으면 `--management.server.port=18081` 처럼 바꿔 띄운다. 서버 두 개를 한 PC 에 띄울 때(벤치마크 등)도 관리 포트를 서로 다르게(또는 `0` = 빈 포트, `-1` = 끔) 준다. 테스트는 `management.server.port=0` 이라 8081 을 잡지 않는다.
 
+### 품질 평가와 앱 측정 (`job_ratings`, `client_metrics`)
+
+5단계 측정표의 나머지 두 가지(2026-10-30). 정의와 열 순서는 [docs/METRICS.md](../docs/METRICS.md) §3.1·§4.1.
+
+- **품질 평가**: 평가자가 `/job/?id=<jobId>` 에서 입력 사진과 모델을 나란히 보고 6항목(1~5)을 저장한다. 평가자당 작업 한 행이고 다시 저장하면 덮어쓴다. 평가 측정표는 그 작업의 마지막 실행의 `modelVersion` 을 붙여 내보낸다.
+- **앱 측정**: 폰에서 `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` 로 받은 파일을 `/admin` 의 "앱 metrics.csv 올리기" 로 올린다(앱은 바꾸지 않는다). 헤더가 METRICS §3 과 정확히 같아야 하고, 잘못된 줄만 결과에 줄 번호와 함께 남는다.
+
+```powershell
+curl.exe -o job_ratings.csv "http://localhost:8080/api/v1/admin/ratings?format=csv"
+curl.exe "http://localhost:8080/api/v1/admin/ratings/summary"                         # modelVersion 별 6항목 평균 (베이스라인 vs 개선안)
+curl.exe -F "file=@metrics.csv" http://localhost:8080/api/v1/admin/client-metrics      # 앱 측정 올리기
+curl.exe -o e2e.csv "http://localhost:8080/api/v1/admin/e2e?format=csv"                # 서버·추론·앱 한 줄 결합표
+```
+
 ## 구조
 
 ```text
@@ -203,10 +251,30 @@ src/main/
 │  ├─ api/v1/JobV1Controller.java        # v1 엔드포인트 (operationId = 메서드명, @ApiResponses = 계약 상태 코드)
 │  ├─ api/v1/JobResponseMapper.java      # Job → JobResponse (timings 계산, asset.url)
 │  ├─ api/v1/ApiV1Paths.java             # 경로 상수
+│  ├─ api/v1/AdminV1Controller.java      # 관리 API /api/v1/admin/* (overview·runs·stats·jobs), 인증은 Caddy 몫
 │  ├─ api/v1/dto/                        # JobResponse, Timings, AssetInfo, JobError, UploadedFile, JobCreatedResponse,
-│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse (= openapi.yaml 스키마 이름)
+│  │                                     # JobListResponse, ErrorResponse, ErrorDetail, HealthResponse, JobQueue, JobEstimate, Admin*
+│  │                                     # (= openapi.yaml 스키마 이름)
+│  ├─ service/AdminService.java          # 측정표 CSV·통계(nearest-rank)·현황·최근 작업 (읽기 전용)
+│  ├─ api/v1/QualityV1Controller.java    # 작업 상세 페이지 API: 사진 photos/{index}, 품질 평가 ratings (태그 quality)
+│  ├─ api/v1/AdminMeasurementV1Controller.java  # 관리: 평가 측정표·요약, 앱 metrics.csv 가져오기, e2e 결합표
+│  ├─ service/RatingService.java         # 평가 저장(덮어쓰기)·평균·측정표·요약. ClientMetricService = metrics.csv 가져오기·e2e
+│  ├─ service/JobPhotoService.java       # 올린 사진 → 확장자로 Content-Type (서버 경로는 로그에만)
+│  ├─ service/Csv.java                   # RFC 4180 쓰기·읽기 (TimeRange = from/to 검사)
+│  ├─ domain/JobRating.java              # job_ratings 행 (jobId+rater 유일), ClientMetric = client_metrics 행
+│  ├─ config/JobPageConfig.java          # /job, /job/ → static/job/index.html
+│  ├─ service/InferenceStatusSource.java # overview.inference 를 채우는 인터페이스 (real: InferenceHealthMonitor, mock: 없음 → null)
+│  ├─ config/AdminPageConfig.java        # /admin, /admin/ → static/admin/index.html
+│  ├─ api/v1/PetV1Controller.java        # 보관함 API(tag pets): 펫 CRUD, 작업 넣기(PUT /jobs/{id}/pet), 작업 삭제, 썸네일
+│  ├─ api/v1/PetResponseMapper.java      # 펫 + 작업 → PetResponse(대표 규칙)·PetDetailResponse(작업별 modelVersion)
+│  ├─ service/PetService.java            # 펫 검사(이름·종·메모), 작업 이동, 대표 지정 규칙, 펫 삭제 두 방식
+│  ├─ service/JobDeletionService.java    # 끝난 작업 삭제: 공유 링크 취소·Idempotency-Key·파일 삭제, job_runs 는 남김
+│  ├─ service/ThumbnailService.java      # 첫 사진 → storage.thumb.dir/{jobId}.jpg (256px, EXIF 방향, WEBP 는 TwelveMonkeys)
+│  ├─ config/LibraryPageConfig.java      # /library, /library/ → static/library/index.html
 │  ├─ controller/JobController.java      # v0 /api/jobs (동결) + LegacyJobResponse
-│  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, 목록, 에셋 경로
+│  ├─ service/JobServiceImpl.java        # 검증, 저장, Idempotency-Key, retry, cancel, 목록, 에셋 경로
+│  ├─ service/JobTransitions.java        # PENDING 을 떠나는 전이(워커 시작·cancel·대기 포기)를 한 잠금 안에서, 같은 attempt 일 때만
+│  ├─ service/QueueEstimator.java        # JobResponse.queue(앞선 작업 수·INFERENCE_OFFLINE)·estimate(최근 20건 processingMs 중앙값, 60초 캐시)
 │  ├─ service/JobWorker.java             # 워커 인터페이스 — MockJobWorker(@Profile mock) / RealJobWorker(@Profile real)
 │  ├─ service/RealJobWorker.java         # real: 추론 슬롯 대기 → PROCESSING → /infer → GLB 헤더 확인·복사 → JobFinisher
 │  ├─ service/InferenceClient.java       # 추론 서비스 전송(path: /infer, upload: /infer/upload + glbUrl 다운로드 + cleanup)과 응답 → Job 실패 코드 매핑,
@@ -231,11 +299,12 @@ src/main/
    ├─ application.properties             # 공통 (spring.profiles.default=mock, H2 데이터소스, multipart 제한, springdoc, 관리 포트 8081·지표)
    ├─ application-mock.properties        # Mock 지연·실패 토큰·샘플 GLB 경로, DB 파일 beside-mock, h2-console
    ├─ application-real.properties        # inference.base-url·transfer·token·timeout-ms·max-concurrency, storage.result.dir·tmp.dir, DB 파일 beside-real, h2-console
-   └─ static/                            # 브라우저 Mock UI (v1)
+   └─ static/                            # 브라우저 Mock UI (v1), admin/ = 운영 대시보드, job/ = 작업 상세,
+                                         # library/ = 반려동물 보관함 (순수 함수 파일은 node:test 로 확인)
 ```
 
 - Controller 가 요청을 받고 Service 가 파일과 Job 을 저장한다. 별도 Spring Bean 인 워커의 `@Async` 메서드가 백그라운드 작업을 수행한다.
-- 저장소는 H2 파일 DB 다. 테이블은 `jobs`(작업), `idempotency_keys`, `job_runs`(실행별 측정) 세 개. 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다. 스키마는 `ddl-auto=update` 가 기동 때 맞춘다(테이블·컬럼 추가만). `job_runs` 가 생기기 전에 끝난 실행은 행이 없다.
+- 저장소는 H2 파일 DB 다. 테이블은 `jobs`(작업, 보관함의 `pet_id` 포함), `idempotency_keys`, `job_runs`(실행별 측정), `share_links`(공유 링크), `job_ratings`(품질 평가), `client_metrics`(앱 측정), `pets`(보관함). 프로파일마다 파일이 따로 있다: `storage/db/beside-mock.mv.db`, `storage/db/beside-real.mv.db` (gitignore). 위치는 `--storage.db.path=...` 로 바꾼다. 스키마는 `ddl-auto=update` 가 기동 때 맞춘다(테이블·컬럼 추가만). `job_runs` 가 생기기 전에 끝난 실행은 행이 없다.
 - 서버를 재시작해도 작업과 Idempotency-Key 는 남는다. 다만 처리 중이던 워커 스레드는 사라지므로, 시작할 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 되고 앱이 retry 로 다시 실행한다.
 - DB 파일 하나는 서버 하나만 연다. 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 개발 DB 를 비우려면 서버를 끄고 `storage/db/` 를 지운다.
 - 서버 업로드 제한은 파일당 5MB, 요청 전체 20MB (v0·v1 공통, 초과 시 413).
@@ -246,6 +315,15 @@ src/main/
 서비스 흐름을 눈으로 확인하는 개발용 화면이다(제품의 웹 버전이 아니다). 2026-10-04 부터 v1 을 쓴다: `POST /api/v1/jobs` → `Location` 이 `/api/v1/jobs/{uuid}` 인지 확인 → 1초 간격 폴링(최대 60초, 요청당 15초 제한) → 완료 시 대표 사진으로 Mock 결과 표시. 오류와 실패는 `error.code` 로 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md) 문구를 보여 주고, 서버의 개발자용 `message` 는 보여 주지 않는다.
 
 테스트 순서: 홈에서 **사진 선택** → JPG/PNG/WEBP (장당 5MB, 최대 10장, 합계 18MB) → **3D 모델 생성** → `WAITING → PROCESSING → COMPLETED` (API 의 `PENDING` 을 `WAITING` 으로 표시) → Mock 결과 확인 → **다른 사진으로 다시 만들기**. 파일명에 `fail` 이 들어간 사진을 고르면 실패 문구까지 확인할 수 있다.
+
+## 반려동물 보관함 (`/library`, 웹 전용)
+
+팀 내부 테스트용 화면이다. 앱은 바꾸지 않았고(마지막 작업 1개만 기억), 웹에서 반려동물별로 생성 기록을 모은다. 배포에서는 Caddy Basic 인증 뒤이고 Spring 에는 인증 코드가 없다. 관리 대시보드(`/admin`) 머리에 링크가 있다.
+
+- **첫 화면**: 펫 목록(대표 썸네일·이름·종·모델 수) + **펫 추가**. 아래 **미분류 작업**은 `GET /api/v1/jobs` 에서 `petId` 가 없는 작업(앱에서 만든 작업)이다 — 펫을 골라 **넣기**(`PUT /jobs/{id}/pet`). 최근 500건까지만 살펴본다.
+- **펫 화면**(`/library/#/pets/{petId}`): 이름·종·메모 편집, 3D 보기(model-viewer 3.5.0, 동작 칩은 공유 뷰어와 같은 라벨), 생성 기록(썸네일·날짜·상태·modelVersion). 기록마다 3D 보기·대표로·상세(`/job/?id=` — 품질 평가·공유 링크·QR 은 작업 상세 페이지)·미분류로·삭제(끝난 작업만, 확인 대화). 펫 삭제는 기본으로 작업을 미분류로 돌리고, 확인 대화에서 고르면 작업도 지운다.
+- **새 모델 만들기**: 사진 1~10장(JPG·PNG·WEBP, 장당 5MB, 합계 18MB — Mock UI 와 같은 사전 검사) → `POST /api/v1/jobs` 에 `petId` 파트 → 2초 폴링(최대 20분)으로 "앞에 N명 · 약 M분"(`queue.ahead`·`estimate.remainingMs`), 대기 중이면 **취소**(`POST /cancel`). 끝나면 브라우저 알림(허용했을 때)을 보내고 기록을 새로 읽는다.
+- 썸네일은 작업을 접수할 때 첫 사진으로 만든다(`storage.thumb.dir`, 기본 `storage/thumbs/{jobId}.jpg`). 202 응답은 기다리지 않고 백그라운드 스레드 하나가 차례로 만든다(12MP 사진 디코드가 수백 ms라 업로드 응답에서 뺐다). 그 사이와 읽지 못하는 사진이면 `thumbnailUrl` 이 null 이다. 작업 삭제는 사진·`storage.result.dir/{jobId}`·썸네일을 지우지만 Mock 의 공용 샘플 GLB 와 `job_runs`(측정)는 남긴다.
 
 ## v0 `/api/jobs` (동결)
 
@@ -262,6 +340,7 @@ src/main/
 .\gradlew.bat test                                               # Java 전체
 .\gradlew.bat test --tests "com.example.mockbackend.JobV1ContractTest"
 node --test src/test/js/mock-mvp.test.cjs                        # Node.js 20 이상, npm 설치 불필요
+node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs src/test/js/admin-measurement.test.cjs   # 작업 상세·QR·관리 보고서 패널
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 app.js 흐름 검증
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL
@@ -274,6 +353,9 @@ Remove-Item Env:BESIDE_MVP_URL
 | `ProfileContractSettingsTest` | 계약 문서가 적은 프로파일 차이를 설정 파일에서 확인: 파일 시그니처 검사는 prod 만(`upload.verify-magic`), 대표 사진 검사는 real 켬·mock 끔·prod 는 물려받음, `inference.timeout-ms` 는 real 120000·prod 는 물려받음 |
 | `JobServiceRetryRaceTest` | 같은 FAILED 작업에 retry 8건을 동시에: 202 한 건·409 `JOB_NOT_FAILED` 일곱 건, dispatch 한 번, attempt 2 의 PENDING 으로 필드 정리 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
+| `RatingApiTest` | 품질 평가: 완료 전 409, 1~5 밖·3.5·"3"·잘못된 이름·JSON 아님 400, 같은 평가자 덮어쓰기, 평균, 관리 CSV 열 순서·마지막 실행의 modelVersion·패스스루 제외, modelVersion 별 요약, adminJob |
+| `ClientMetricsApiTest` | 앱 metrics.csv: Unity 형식 그대로 가져오기, BOM·CRLF, 중복 건너뜀, 헤더 불일치 400, 잘못된 줄만 errors(줄 번호), e2e 결합(마지막 COMPLETED 실행, serverUploadMs) |
+| `JobPhotoApiTest` | 사진: index 별 바이트·확장자 Content-Type·nosniff·범위 밖 404·서버 경로 미노출, /job 페이지와 관리 페이지 스크립트 |
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry. `job_runs`: 삽입 전용, 모든 컬럼 보존, 같은 attempt 두 번 종료해도 첫 행 유지·예외 없음, attempt 1·2 두 행 |
 | `InferenceClientTest` | `/infer` 요청 형태(jobId, 절대 경로, hair=false), 응답 12종 → Job 실패 코드, 타임아웃·끊김·연결 거부, 응답 메시지에 경로·내부 주소 없음, `modelVersion`·숫자 아닌 metric → null·선택 필드 기본값. 업로드 모드: multipart 파트·파일명(한글·따옴표)·바이트·토큰 헤더, 응답 12종 같은 매핑, `glbUrl` 없음·절대 URL·다운로드 404/500/503/끊김 → `CONVERSION_FAILED`, 401·403 → `INFERENCE_UNAVAILABLE`(두 모드), cleanup 의 삭제·DELETE·실패 무시, 응답 없는 연결 오류에 DELETE 한 번 더(두 번째도 끊기면 포기)·시간 초과는 다시 보내지 않음(2026-11-19) (가짜 추론 서버) |
@@ -285,5 +367,13 @@ Remove-Item Env:BESIDE_MVP_URL
 | `OperationalMetricsFlowTest` | mock 흐름: created(재요청 제외)·retried·finished·타이머·게이지, 에셋 GET 409/404/200/400(`variant=hair` → error) outcome, 폴링은 세지 않음 |
 | `AssetDownloadMetricsFilterTest` | outcome 판정: 전체·빈 GLB·짧은 본문·헤더 Content-Length·쓰는 중 끊김·flush 끊김·404/409/500/400·예외, 대상 아닌 요청 |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부, 503 `QUEUE_FULL`(안건 #21, 2026-11-21 결정, `api-v1.1`)의 문구와 `Retry-After` 초 동안 생성 버튼 잠금(다시 보내지 않음, 양의 정수만 인정) (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
+| `RealJobWorkerOfflineTest` | profile real + `inference.offline-wait-ms`: GPU 가 꺼져 있으면 PENDING 으로 기다렸다 돌아오면 시작, 시간 초과면 `INFERENCE_UNAVAILABLE`, 대기 중 `queue.reason=INFERENCE_OFFLINE`, 대기 중 취소하면 `/healthz` 확인을 멈추고 `/infer` 없이 `CANCELED` 유지 (가짜 추론 서버) |
+| `JobV1CancelTest` | mock: PENDING 취소 → 200 FAILED `CANCELED`, 워커가 시작하지 않음, `job_runs` 행 `FAILED:CANCELED`, COMPLETED·이미 취소한 작업 409 `JOB_NOT_PENDING`, 없는 작업 404, 취소 → retry → COMPLETED(앞 attempt 의 워커가 새 attempt 를 건드리지 않음) |
+| `RealJobQueueTest` | profile real, GPU 슬롯 1개: 처리 중 1건 + 대기 2건의 `queue.ahead` 1·2, 완료 실행이 없으면 `estimate=null`, 생긴 뒤 `remainingMs`·`basedOnRuns`, PROCESSING 취소 409, 대기 중 취소하면 순번이 줄고 `/infer` 가 그 작업으로 불리지 않음 (가짜 추론 서버) |
+| `QueueEstimatorTest` | JPA 슬라이스: 최근 20건 중앙값(짝수는 가운데 둘의 평균), 실패·패스스루·다른 워커 제외, 근거 없음 → null, 같은 queuedAt 은 id 순, 처리 중 작업의 경과는 중앙값까지만 뺌, PROCESSING 은 0 이상, 60초 캐시와 완료 시 무효화 |
+| `PetApiTest` | 보관함: 펫 CRUD·검사(이름 공백·41자, 모르는 종, 메모 501자, JSON 아님 → 400), PATCH 는 보낸 필드만, `petId` 파트 업로드(없는 펫 400, 작업 안 만듦), 작업 이동·미분류, 워커가 옛 사본을 저장해도 `petId` 유지, 대표 규칙(고른 COMPLETED → 아니면 최신 COMPLETED), 작업별 modelVersion, 펫 삭제 두 방식(진행 중이면 409 로 아무것도 안 지움), `/library` 페이지 |
+| `JobDeleteTest` | 작업 삭제: 사진·결과 폴더·썸네일 삭제, Mock 공용 샘플 GLB 는 남김, 공유 링크 취소, Idempotency-Key 삭제(같은 키로 새 작업), `job_runs` 유지, PENDING 409 `JOB_IN_PROGRESS` → 취소 후 삭제, FAILED 삭제 |
+| `JobThumbnailTest` | 썸네일: 업로드 응답이 썸네일을 기다리지 않음(12MP), JPEG·PNG(투명 → 흰 배경)·WEBP 에서 긴 변 256px JPEG, 작은 사진은 그대로, EXIF 방향 6·8, 읽지 못하는 사진은 작업은 만들고 썸네일만 없음(404 `ASSET_NOT_FOUND`) |
+| `library-core.test.cjs` | 보관함 페이지 순수 함수: 경로(`#/pets/{id}`), 종·상태 라벨(모르는 값), 오류 코드 문구, "앞에 N명 · 약 M분", 사진 선택 규칙, 펫 폼 검사, 미분류 거르기, 3D 첫 모델, 애니메이션 칩이 share.js 와 같은지 |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).
