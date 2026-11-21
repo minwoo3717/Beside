@@ -93,6 +93,9 @@ public class ShellFurRenderer : MonoBehaviour
     void OnDestroy()
     {
         if (bakedMesh != null) { if (Application.isPlaying) Destroy(bakedMesh); else DestroyImmediate(bakedMesh); }
+        // the pose bake now lives in FurPose: free it with this renderer instead of waiting for FurPose to prune
+        // (> 16 entries). Play mode only: Release uses Object.Destroy and this class also runs in the editor.
+        if (Application.isPlaying && skinned != null) Beside.FurLab.FurPose.Release(skinned);
     }
 
     void OnEnable()
