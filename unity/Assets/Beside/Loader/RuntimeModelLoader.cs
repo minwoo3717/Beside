@@ -72,6 +72,9 @@ public class RuntimeModelLoader : MonoBehaviour
     /// <summary>Called when a model has been loaded and registered. Argument: the template object.</summary>
     public event Action<GameObject> ModelReady;
 
+    /// <summary>Name of the template child that holds the GLB scene (the ShadowCatcher quad is its sibling).</summary>
+    public const string ModelRootName = "LoadedModel";
+
     Transform templateRoot;                               // inactive holder: templates never run or render
     readonly List<GltfImport> imports = new List<GltfImport>(); // keep alive: spawned copies share their meshes/textures
 
@@ -206,7 +209,7 @@ public class RuntimeModelLoader : MonoBehaviour
         GameObject template = Instantiate(shellPrefab, templateRoot);
         template.name = "Runtime_" + name;
 
-        var modelRoot = new GameObject("LoadedModel").transform;
+        var modelRoot = new GameObject(ModelRootName).transform;
         modelRoot.SetParent(template.transform, false);
 
         if (!await gltf.InstantiateMainSceneAsync(modelRoot))
