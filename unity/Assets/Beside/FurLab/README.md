@@ -15,6 +15,8 @@
 
 ## Unity 설정
 
+> 이 리포(`unity/`)에서는 이미 되어 있습니다(2026-11-21 main 에 옮길 때): 네 머티리얼(`FurShellV1_Mat`·`FurStrand_Mat`·`FurFin_Mat`, Shell Material = `Dog_Fur_Mat`)이 있고 `SampleScene` 의 FurBenchmark 칸이 연결돼 있으며, Player 의 Frame Timing Stats 와 Graphics API(OpenGLES3 맨 위, Vulkan 아래)도 설정돼 있습니다. 아래 순서는 새 프로젝트에 FurLab 을 옮겨 설치할 때만 씁니다. 이 리포에서 따라 하면 같은 이름의 머티리얼이 새 GUID 로 하나 더 생길 수 있습니다.
+
 1. `Assets/Beside/FurLab` 폴더를 덮어씁니다(`ShellFurV1.shader`가 새로 추가됨).
 2. 머티리얼을 준비합니다.
    - `FurStrand_Mat`: `Custom/StrandFur`

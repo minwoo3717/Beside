@@ -85,7 +85,7 @@ unity/
 | Scripting Define Symbols | `BESIDE_NATIVEGALLERY` — NativeGallery 가 설치된 경우에만. 없으면 갤러리 코드가 꺼진 채 컴파일되고 화면 캡처가 사진을 대신한다. `BESIDE_NATIVESHARE` — FurLab 결과 공유(NativeShare 플러그인, 선택, 지금은 정의 안 됨) |
 | Android | Minimum API Level 24 이상(템플릿 기본값), Scripting Backend IL2CPP, ARM64 |
 | Graphics API | Auto 끔, **OpenGLES3 를 맨 위, Vulkan 을 그 아래**(2026-11-21 브랜치 `Unity` 값으로 바꿈, 전에는 OpenGLES3 만). Vulkan 만 두면 SM-S947N 에서 AR 카메라 화면이 검게 나온다(2026-11-02 확인) |
-| 렌더링 | URP 에셋(`Assets/Settings/URP-Performant.asset`) **MSAA 4x**(전에는 꺼짐), QualitySettings Balanced 안티에일리어싱 4x — 쉘 털 v2 는 alpha-to-coverage 라 MSAA 를 끄면 털 대부분이 사라진다(2x 이상 유지, 2x 는 4x 보다 32% 싸다 [실험 결과]). Player 의 **Frame Timing Stats** 켬(FurLab·FpsOverlay GPU 시간) |
+| 렌더링 | URP 에셋(`Assets/Settings/URP-Performant.asset`) **MSAA 4x**(전에는 꺼짐), QualitySettings Balanced 안티에일리어싱 4x — 쉘 털 v2 는 alpha-to-coverage 라 MSAA 를 끄면 털 대부분이 사라진다(2x 이상 유지. 2x 는 4x 보다 가까이(화면 87%, 쉘 16겹)에서 32%, 멀리(22%)에서 23% 싸다 [실험 결과], 멀리는 라운드마다 흔들림). Player 의 **Frame Timing Stats** 켬(FurLab·FpsOverlay GPU 시간) |
 | 권한 | `INTERNET`, `CAMERA`(AR Foundation), 사진 접근은 NativeGallery |
 | 개발용 HTTP | Player Settings → Other Settings → **Allow downloads over HTTP: Always allowed** (같은 Wi-Fi·USB 의 `http://` 서버용. 터널(https)만 쓰면 `Not allowed` 로 되돌려도 된다. 릴리스 전 `Not allowed`) |
 | 외부 접속 (선택) | `cloudflared` (`winget install --id Cloudflare.cloudflared --source winget`) |

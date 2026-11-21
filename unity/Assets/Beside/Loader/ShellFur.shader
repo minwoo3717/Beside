@@ -3,8 +3,10 @@
 // The base model keeps its normal URP/Lit material; this shader only draws the fur layers.
 //
 // v2 (vs v1):
-//  * hair lies down along the per-dog flow map (AnimalLift comb direction, needs mesh TANGENT — the server adds it)
-//    instead of standing up along the normal ("carpet" look)
+//  * hair lies down along the per-dog flow map (AnimalLift comb direction) instead of standing up along the normal
+//    ("carpet" look). This needs mesh TANGENT: main's converter (convert_asset.py / rig_transfer.py) writes none, so on
+//    server GLBs comb is off (hasTangent) and hair stands along the normal (the flow map then has no effect), until
+//    the TANGENT / flow G-sign decision
 //  * strands come from a mip-mapped noise texture (FurNoise.cs) instead of a hash grid: no knitted pattern,
 //    no shimmer at a distance; soft strand edges with alpha-to-coverage when MSAA is on
 //  * Kajiya-Kay highlight along the hair direction + depth darkening + soft rim: reads as hair, not felt
