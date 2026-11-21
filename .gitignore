@@ -23,6 +23,12 @@ unity/UserSettings/
 unity/*.csproj
 unity/*.sln
 unity/.vs/
+unity/MemoryCaptures/
+unity/.utmp/
+unity/.vsconfig
+unity/UpgradeLog*.htm
+unity/*.apk
+unity/*.aab
 
 # Python (generation/)
 __pycache__/
@@ -56,3 +62,12 @@ backend/storage/results/*.glb
 *.onnx.part
 # 전처리 결과(크롭·배경 제거 PNG)
 backend/storage/preprocessed/
+
+# 털 측정 분석 출력 (scripts/analyze_fur_bench.py·make_rating_set.py 를 리포 루트에서 돌릴 때의 기본 폴더, 정리본은 unity/experiments/ 에 둔다)
+/fur_report/
+/rating/
+/fur_bench/
+
+# SMAL 파생 데이터 (학술 라이선스, 커밋 금지)
+*.pkl
+**/template-rigged.glb
