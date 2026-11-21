@@ -19,5 +19,6 @@ AnimalLift 베이스라인 재현부터 품질·속도 개선까지 모든 실�
 
 - 시간·메모리 정의가 [METRICS](../../docs/METRICS.md) 와 다르다. 1장당 생성 시간은 기울기 방식(모델 로딩 제외)이라 `inferMs` 가 아니고, VRAM 은 nvidia-smi 최대 − 직전(캐시 포함)이라 `gpuPeakMB`(torch 최대 할당)가 아니다. 그래서 exp-01 의 A40 값과 직접 비교하지 않는다.
 - robustness 3차·consistency 의 원본 / 크롭패딩 / 배경 제거 비교는 모양·색 지표로 먼저 잰 것이다. exp-03 의 사람 채점 비교는 여전히 [계획]이다.
+- 위 규칙의 환경 항목 중 GPU 드라이버와 커밋(AnimalLift·비교 모델·측정 스크립트)을 적지 않았고, [TEMPLATE.md](TEMPLATE.md) 순서(실패 사례 → 원인 가설 → 개선 → 비교 실험 → 결론)도 따르지 않은 조사 기록이다. 그래서 같은 조건으로 다시 돌릴 수 없고, 수치는 같은 기록 안의 비교(같은 GPU·같은 사진에서 모델끼리, 조건끼리)로만 인용한다. 드라이버·커밋을 알면 각 기록의 환경 표에 더한다.
 
 Unity 쪽 측정(털 렌더링 성능)은 [unity/experiments](../../unity/experiments/README.md)에 있다.
