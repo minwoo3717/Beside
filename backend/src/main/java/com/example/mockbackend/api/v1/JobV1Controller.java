@@ -60,7 +60,9 @@ public class JobV1Controller {
 
     @Operation(operationId = "createJob", summary = "사진을 업로드해 3D 생성 작업을 만든다",
             description = "multipart/form-data 의 photos 파트로 1~10장 (image/jpeg|png|webp, 장당 ≤5MB, 전체 ≤20MB). 접수 즉시 202, 처리는 비동기."
-                    + " 설정으로 켠 경우(real·prod 기본) 첫 장(대표 사진)을 접수 전에 검사해 400 으로 거절할 수 있다."
+                    + " prod 는 사진마다 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 검사한다(upload.verify-magic, 아니면 400"
+                    + " UNSUPPORTED_IMAGE_TYPE). 다른 프로파일은 선언된 Content-Type 만 본다."
+                    + " real·prod 는 첫 장(대표 사진)을 접수 전에 검사해 400 으로 거절할 수 있다(mock 은 끔)."
                     + " 대기열 상한을 켠 경우(기본 꺼짐, 안건 #21 제안값) 503 QUEUE_FULL + Retry-After 로 거절할 수 있다.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "작업 접수",
@@ -117,16 +119,17 @@ public class JobV1Controller {
     }
 
     @Operation(operationId = "downloadAsset", summary = "생성된 GLB 다운로드",
-            description = "COMPLETED 인 작업의 GLB. variant 생략 시 base. 파일 계약은 docs/asset/GLB_SPEC.md.")
+            description = "COMPLETED 인 작업의 GLB. variant 는 base 뿐이고 생략 시 base. 그 밖의 값(hair 포함)은 작업 상태와"
+                    + " 상관없이 400 INVALID_REQUEST. 파일 계약은 docs/asset/GLB_SPEC.md.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "GLB 바이너리",
                     headers = {
                             @Header(name = "Content-Disposition", description = "attachment; filename=\"{jobId}-{variant}.glb\"", schema = @Schema(type = "string")),
                             @Header(name = "Content-Length", description = "파일 크기", schema = @Schema(type = "integer", format = "int64"))},
                     content = @Content(mediaType = GLB, schema = @Schema(type = "string", format = "binary"))),
-            @ApiResponse(responseCode = "400", description = "잘못된 variant (INVALID_REQUEST)",
+            @ApiResponse(responseCode = "400", description = "base 가 아닌 variant (INVALID_REQUEST)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "없는 작업 또는 없는 variant (JOB_NOT_FOUND, ASSET_NOT_FOUND)",
+            @ApiResponse(responseCode = "404", description = "없는 작업 또는 GLB 파일 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "아직 완료되지 않음 (JOB_NOT_COMPLETED)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
@@ -135,7 +138,7 @@ public class JobV1Controller {
     @GetMapping("/jobs/{jobId}/asset")
     public ResponseEntity<Resource> downloadAsset(
             @PathVariable("jobId") String jobId,
-            @Parameter(description = "base | hair, 기본 base") @RequestParam(value = "variant", required = false, defaultValue = "base") AssetVariant variant) {
+            @Parameter(description = "base 뿐, 기본 base") @RequestParam(value = "variant", required = false, defaultValue = "base") AssetVariant variant) {
         Path file = jobService.resolveAsset(jobId, variant);
         // No contentLength here: Spring sets it from the resource for 200 and from the range for a single-range 206.
         // A fixed whole-file length would also go out on a multi-range 206 (multipart/byteranges), whose body is

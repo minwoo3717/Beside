@@ -220,28 +220,28 @@ AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입
 | 텍스처 | 1장(`pet_body`), 기존 OBJ 와 같은 UV 라 털 지도 공용 |
 
 - **SMAL 은 학술용 라이선스**라 리깅 GLB 도 파생물로 취급해 공개 레포에 커밋하지 않는다. `sample-dog.glb` 는 이미 추적 중인 파일이므로 `.gitignore` 만으로는 부족하다: 로컬은 `git update-index --assume-unchanged backend/storage/results/sample-dog.glb`, 레포에서 빼려면 백엔드 담당과 `git rm --cached` 후 `.gitignore`.
-- 서버는 아직 털 지도를 내려주지 않는다. 리깅 모델 털은 `ModelLoader` 의 Test Glb Url + Test Hair Length/Flow Url(로컬 파일)로만 확인할 수 있다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다).
-- 다음 단계: ① 리깅 모델 털 확인 ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
+- 털 지도 전달(2026-11-21 안건 #4·#14 결정): 서버 GLB 하나(`base.glb`) 안 `extras.beside` 에 털 맵 두 장과 `furLength` 가 들어간다([GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md)). 변환기·리깅 쪽은 PR #25 로 **[구현됨]**(브랜치 `feat/contract-v1.0` 에 합침, main 병합(2026-11-21)·Pod 반영 전 — Pod 반영 전까지 서버 모델에는 털 맵이 없다. 병합 뒤에는 Pod 를 다시 켜기만 해도 반영될 수 있다: [GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md) '알려진 점'). 앱은 이 맵을 **작업 흐름(`JobManager` 가 내려받은 GLB 바이트)에서만** 읽는다(`RuntimeModelLoader.TryReadEmbeddedHair`). `ModelLoader` 의 Test Glb Url(URL·로컬 경로)로 연 GLB 는 안의 털 맵을 읽지 않으므로, 그 경로로 털을 보려면 지금처럼 Test Hair Length/Flow Url(로컬 PNG)을 함께 준다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다). 서버 모델의 털을 기기에서 본 기록은 없다 **[계획]**.
+- 다음 단계: ① 리깅 모델 털 확인 ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ ~~GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달)~~ — 2026-11-21 GLB_SPEC §3·§3.1(리깅은 선택 항목, 클립 이름 다섯 개)·§4.1(털 맵) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
 
 ## 폰 ↔ GPU PC real 서버 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
 
 real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GPU PC)** 에서 돈다(결정 2026-10-05). 그 PC 에서 `.\scripts\run_real.ps1` 로 두 서버를 띄운다([backend/README.md](../backend/README.md) 'GPU PC 에 real 배치'). 앱 쪽에서 Mock 때와 달라지는 것:
 
 1. `JobManager.baseUrl` = `http://<GPU PC IP>:8080`. 폰 브라우저에서 `/api/v1/healthz` 가 `"profile":"real","workerType":"real"` 을 보이면 연결된 것이다. 방화벽 8080 허용은 Mock 과 같다.
-2. 수 분이 걸린다. `maxWaitSeconds` 를 600 으로 올린다(REVIEW_CHECKLIST #7 제안값). 앱의 대기는 서버 큐 대기(PENDING)도 포함한다: 서버는 `/infer` 를 한 번에 1건만 부르므로 두 사람이 동시에 올리면 뒤 작업은 앞 작업이 끝날 때까지 PENDING 이다.
+2. 수 분이 걸릴 수 있다. `maxWaitSeconds` 는 600 이다(코드·씬 기본값, 2026-11-21 REVIEW_CHECKLIST #7 로 그대로 확정). 서버가 추론 요청 하나를 기다리는 시간(`inference.timeout-ms`)은 이와 별개로 120 s 다(같은 날 600 s 에서 줄임). 앱의 대기는 서버 큐 대기(PENDING)도 포함한다: 서버는 `/infer` 를 한 번에 1건만 부르므로 두 사람이 동시에 올리면 뒤 작업은 앞 작업이 끝날 때까지 PENDING 이다.
 3. `progress` 는 PROCESSING 동안 `null` 이다(추론 서비스가 진행률을 주지 않는다). 퍼센트 대신 `timings.queuedMs`/`processingMs` 로 경과 시간을 보여 준다.
 4. 패스스루(`-SampleGlb`)로 띄운 서버는 어떤 사진을 올려도 같은 모델을 돌려준다 — 연동 확인용이지 결과가 아니다. 실제 모델이 돌 때만 `metrics.csv` 를 측정값으로 기록한다.
 
 ## API 사용 규칙 (v1)
 
-- 업로드: `UnityWebRequest.Post(url, List<IMultipartFormSection>)` + `MultipartFormFileSection("photos", bytes, fileName, mime)`. 서버는 **파트의 Content-Type** 으로 jpeg/png/webp 를 검사한다. 1~10장, 장당 ≤5MB, 전체 ≤20MB — `PhotoPicker` 가 갤러리 사진을 긴 변 1600px JPEG 로 재인코딩해 제한을 맞춘다.
+- 업로드: `UnityWebRequest.Post(url, List<IMultipartFormSection>)` + `MultipartFormFileSection("photos", bytes, fileName, mime)`. 서버는 **파트의 Content-Type** 으로 jpeg/png/webp 를 검사하고, 공개 서버(prod, healthz `profile` 이 `real,prod`)는 사진마다 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 본다(#17). real·prod 는 첫 장으로 대표 사진 검사도 해 400 코드 7개로 거절할 수 있다(#19) — 그래서 mock 에서 통과한 사진이 공개 서버에서 400 일 수 있다([ERROR_CODES.md](../docs/api/ERROR_CODES.md) '프로파일 차이'). 1~10장, 장당 ≤5MB, 전체 ≤20MB — `PhotoPicker` 가 갤러리 사진을 긴 변 1600px JPEG 로 재인코딩해 제한을 맞춘다.
 - 202 응답의 `JobCreatedResponse.jobId` 를 쓴다(없으면 `Location` 헤더).
 - 폴링 2초 간격(`pollingIntervalSeconds`), 최대 대기 600초(`maxWaitSeconds`).
 - `COMPLETED` → `asset.url` 을 `baseUrl` 과 결합해 `DownloadHandlerFile` 로 `{jobId}-base.glb` 저장 → 매직 바이트 검증 → glTFast 로드. 같은 jobId 는 다시 받지 않는다.
 - `FAILED` → `ErrorMessages.ForCode(error.code)` 문구, 재시도 가능하면 `POST /retry`.
 - 503 `QUEUE_FULL`(**[제안값] 안건 #21, 계약 회의 전**): `Retry-After`(초) 전에는 다시 보내지 않는다(`JobManager.RetryAvailableAt`, 그 전의 `Retry()`·`StartJob()` 은 아무것도 하지 않는다. "처음부터"(`ClearSavedJob`)는 이 시각을 남기고, 서버 주소를 바꾸면 지운다). 자동 재전송은 없고 사용자가 "다시 시도" 를 누른다. 생성 거절은 같은 사진·같은 `Idempotency-Key`, `/retry` 거절은 `/retry` 로 다시 보낸다.
 - 모든 오류 응답은 `ErrorResponse` 봉투. 알 수 없는 `code`·`status` 는 일반 문구/`Unknown`.
-- 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털 지도 PNG 방식과 `variant=hair` 방식 중 어느 쪽으로 갈지는 계약 회의에서 정한다.
+- 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털은 `base.glb` 안 털 맵(`extras.beside`, GLB_SPEC §4.1)으로 받는다 — 2026-11-21 결정(#4·#14)으로 `variant=hair` 는 계약에서 빠졌고 서버는 `hair` 를 400 `INVALID_REQUEST` 로 거절한다. 앱 코드의 `AssetVariant.Hair` 는 남아 있지만 쓰지 않는다.
 
 ## metrics.csv
 
@@ -257,5 +257,5 @@ real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GP
 - 리깅 모델 털 확인, 바닥 위 걷기 (위 "리깅 GLB" 다음 단계).
 - 실패 시나리오·기기 `metrics.csv` 회수 검증 (PLAN 3·4단계). Wi-Fi 와 터널의 업로드·다운로드 시간 비교.
 - 디자인 UI 마감: Noto Sans KR TTF 넣고 `Font` 연결, 홈 Hero Image 준비.
-- 계약 회의: GLB_SPEC rigged, 털 지도 전달 방식, 서버 인증(터널 공개 대비), `sample-dog.glb` 레포 처리.
+- 계약 회의: ~~GLB_SPEC rigged, 털 지도 전달 방식~~(2026-11-21 결정: 리깅은 선택 항목, 털 맵은 `base.glb` 안 — GLB_SPEC §3.1·§4.1), 서버 인증(터널 공개 대비), `sample-dog.glb` 레포 처리.
 - 크래시 수집(Sentry 또는 Firebase Crashlytics) 연결, 측정값 서버 전송 방식.

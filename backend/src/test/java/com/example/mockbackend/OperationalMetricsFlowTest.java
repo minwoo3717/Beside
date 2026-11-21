@@ -108,6 +108,7 @@ class OperationalMetricsFlowTest {
         double ok = downloads("ok");
         double notCompleted = downloads("not_completed");
         double notFound = downloads("not_found");
+        double error = downloads("error");
         double all = allDownloads();
 
         String jobId = create("dog.jpg", null);
@@ -117,11 +118,13 @@ class OperationalMetricsFlowTest {
         byte[] glb = mvc.perform(get("/api/v1/jobs/{id}/asset", jobId)).andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsByteArray();
         assertThat(glb).hasSize(2048);
-        mvc.perform(get("/api/v1/jobs/{id}/asset", jobId).param("variant", "hair")).andExpect(status().isNotFound());
+        // The hair variant left API v1 (REVIEW_CHECKLIST #4): a 400 bad variant, counted as error, no longer not_found.
+        mvc.perform(get("/api/v1/jobs/{id}/asset", jobId).param("variant", "hair")).andExpect(status().isBadRequest());
         mvc.perform(get("/api/v1/jobs/{id}", jobId)).andExpect(status().isOk()); // polling is not a download
 
         assertThat(downloads("not_completed") - notCompleted).isEqualTo(1.0);
-        assertThat(downloads("not_found") - notFound).as("unknown job and missing hair variant").isEqualTo(2.0);
+        assertThat(downloads("not_found") - notFound).as("unknown job").isEqualTo(1.0);
+        assertThat(downloads("error") - error).as("bad variant").isEqualTo(1.0);
         assertThat(downloads("ok") - ok).isEqualTo(1.0);
         assertThat(allDownloads() - all).isEqualTo(4.0);
         assertThat(registry.get("beside.asset.download").tag("outcome", "ok").timer().count()).isGreaterThanOrEqualTo(1);

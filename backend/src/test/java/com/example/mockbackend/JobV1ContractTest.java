@@ -2,6 +2,7 @@ package com.example.mockbackend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.MissingNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Contract test: the document of record (docs/api/openapi.yaml) versus what springdoc generates from the
  * running code (/v3/api-docs). Compared structurally, not byte for byte:
  * paths x methods, operationIds, response status codes, component schema names, JobResponse properties,
- * the status / variant enums and the ErrorResponse envelope.
+ * the status / variant enums (AssetInfo.variant and the ?variant= parameter) and the ErrorResponse envelope.
  * If this fails, fix the document first (contract meeting rules in CLAUDE.md), then the code.
  */
 @SpringBootTest
@@ -80,6 +81,13 @@ class JobV1ContractTest {
                 .as("AssetInfo.variant enum")
                 .containsExactlyInAnyOrderElementsOf(
                         enumValues(contract, contract.at("/components/schemas/AssetInfo/properties/variant")));
+        // The request side of the same enum: GET .../asset?variant= (hair left both on 2026-11-21, REVIEW_CHECKLIST #4).
+        String download = "GET /api/v1/jobs/{jobId}/asset";
+        assertThat(enumValues(generated, parameter(generated, generatedOps.get(download), "variant").path("schema")))
+                .as("%s ?variant= enum", download)
+                .isNotEmpty()
+                .containsExactlyInAnyOrderElementsOf(
+                        enumValues(contract, parameter(contract, contractOps.get(download), "variant").path("schema")));
 
         // 6. Error envelope.
         assertThat(names(generated.at("/components/schemas/ErrorResponse/properties"))).containsExactly("error");
@@ -114,6 +122,17 @@ class JobV1ContractTest {
             current = document.at(current.get("$ref").asText().substring(1));
         }
         return current;
+    }
+
+    /** The operation's parameter called {@code name}, following a $ref to components/parameters; missing if none. */
+    private static JsonNode parameter(JsonNode document, JsonNode operation, String name) {
+        for (JsonNode candidate : operation.path("parameters")) {
+            JsonNode resolved = resolve(document, candidate);
+            if (name.equals(resolved.path("name").asText())) {
+                return resolved;
+            }
+        }
+        return MissingNode.getInstance();
     }
 
     private static List<String> enumValues(JsonNode document, JsonNode node) {

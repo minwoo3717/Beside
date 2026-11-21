@@ -43,7 +43,7 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | `LOADTEST_INFERENCE_BASE_URL` | `INFERENCE_BASEURL` → `inference.base-url` | `http://127.0.0.1:9` | G 시리즈만. 스텁 주소(`http://<스텁 Tailscale IP>:8001`). 실제 GPU 실행은 Runpod Pod `http://100.83.86.62:8002` |
 | `LOADTEST_INFERENCE_TOKEN` | `INFERENCE_TOKEN` → `inference.token` | 빈 값 | 스텁의 `BESIDE_INFERENCE_TOKEN` 과 같게(운영 토큰과 다른 값). 실제 GPU 실행만 운영 토큰(위 '지키는 것' 의 예외 조건) |
 | (고정) | `INFERENCE_TRANSFER` → `inference.transfer` | `upload` | VM ↔ 스텁은 디스크를 공유하지 않는다 |
-| `LOADTEST_INFERENCE_TIMEOUT_MS` | `INFERENCE_TIMEOUTMS` → `inference.timeout-ms` | `120000` | 운영 600000 보다 짧게. F1b 는 `20000` |
+| `LOADTEST_INFERENCE_TIMEOUT_MS` | `INFERENCE_TIMEOUTMS` → `inference.timeout-ms` | `120000` | 운영 기본값(`application-real.properties`, 2026-11-21 #7 로 600000 에서 줄임)과 같다. F1b 는 `20000` |
 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS` | `INFERENCE_OFFLINEWAITMS` → `inference.offline-wait-ms` | `300000` | 운영 1800000 보다 짧게. F2 는 운영과 같은 `1800000` |
 | `LOADTEST_INFERENCE_MAX_CONCURRENCY` | `INFERENCE_MAXCONCURRENCY` → `inference.max-concurrency` | `1` | G2 의 c(1·2·4). 스텁 `BESIDE_PASSTHROUGH_SLOTS` 와 같게 |
 | `LOADTEST_ADMISSION_MAX_PENDING` | `ADMISSION_MAXPENDING` → `admission.max-pending` | `0` | 대기열 상한(안건 #21 **[제안값]**, 계약 회의 전 — 상한 코드는 검토 브랜치에만) 끔. 운영 `deploy/.env` 의 `ADMISSION_MAX_PENDING` 은 읽지 않는다. A2 는 PENDING 1,000건을 시드하므로 켜면 시드가 503 이 된다. 아래 '상한을 켠 G3' 만 준다 |

@@ -281,7 +281,8 @@ public class JobServiceImpl implements JobService {
             throw ApiException.conflict(ErrorCode.JOB_NOT_COMPLETED, id,
                     "Asset is available only when status is COMPLETED; current status is " + job.getStatus());
         }
-        String path = variant == AssetVariant.hair ? job.getHairResultPath() : job.getResultPath();
+        // base is the only variant (REVIEW_CHECKLIST #4, 2026-11-21); other values never reach here (400 on conversion).
+        String path = job.getResultPath();
         if (path == null || !Files.isRegularFile(Path.of(path))) {
             throw ApiException.assetNotFound(id, variant.name());
         }

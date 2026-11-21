@@ -76,7 +76,8 @@ up)
         tok="$(sed -n 's/^INFERENCE_TOKEN=//p' deploy/.env | tr -d '\r')"
         [[ -n "$tok" ]] || { echo "no INFERENCE_TOKEN in deploy/.env"; exit 2; }
         export LOADTEST_INFERENCE_BASE_URL="http://$POD_IP:8002" LOADTEST_INFERENCE_TOKEN="$tok"
-        export LOADTEST_INFERENCE_TIMEOUT_MS=600000 LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000
+        # production values: application-real.properties (timeout 120 s since 2026-11-21, REVIEW_CHECKLIST #7; was 600 s)
+        export LOADTEST_INFERENCE_TIMEOUT_MS=120000 LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000
         export LOADTEST_PREPROCESS_CHECK_ENABLED=true LOADTEST_PREPROCESS_CUTOUT_ENABLED=true
         unset tok ;;
       *) echo "unknown variant $variant"; exit 2 ;;

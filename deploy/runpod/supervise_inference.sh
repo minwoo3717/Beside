@@ -6,7 +6,7 @@
 # It restarts only a process that exited: a live but stuck service keeps its pid and is left alone. If GET /healthz
 # stops answering too (SIGSTOP), the backend's InferenceHealthMonitor reads DOWN after its 2 s timeout (and, with a
 # webhook set, posts the GPU message). If /healthz still answers while inference is stuck, the backend still reads UP
-# and each job fails INFERENCE_TIMEOUT after inference.timeout-ms (600 s), but /healthz busyForMs (age of the model
+# and each job fails INFERENCE_TIMEOUT after inference.timeout-ms (120 s; 600 s before 2026-11-21), but /healthz busyForMs (age of the model
 # predict or passthrough simulated generation still running) passes inference.stuck-alert-ms (120 s) and, with a
 # webhook set, the backend posts one stuck-run message (R6; tested in the backend and inference-service suites, not
 # yet seen on a real Pod). A hang in conversion or rigging is not in busyForMs: only the job timeout catches it.

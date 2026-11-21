@@ -34,21 +34,36 @@ paths:
       operationId: createJob
       summary: 사진을 업로드해 3D 생성 작업을 만든다
       description: |
-        multipart/form-data 의 `photos` 파트로 사진 1~10장을 보낸다. 장당 5 MB 이하, 요청 전체 20 MB 이하,
-        Content-Type 은 image/jpeg · image/png · image/webp 만 허용한다(검사는 파트에 선언된 Content-Type 기준).
+        multipart/form-data 의 `photos` 파트로 사진 1~10장을 보낸다. 장당 5 MB 이하, 요청 전체 20 MB 이하
+        (2026-11-21 확정). Content-Type 은 image/jpeg · image/png · image/webp 만 허용한다.
         접수 즉시 202 를 돌려주고 처리는 비동기로 진행된다. `Idempotency-Key` 헤더를 보내면 같은 키의 재요청에
         같은 jobId 를 돌려준다(서버 DB 에 저장되어 재시작 후에도 유지).
 
-        대표 사진 검사: 서버 설정으로 켠 경우(real·prod 기본, mock 은 끔) 첫 장(대표 사진)을 접수 전에 검사한다 —
-        이미지로 읽히는지, 해상도, 개·고양이가 정확히 한 마리인지, 동물 크기, 밝기, 선명도. 처음 걸린 이유 하나로
-        400 을 돌려주고(코드는 ERROR_CODES.md 의 '대표 사진 검사'), 거절된 요청은 아무것도 남기지 않는다.
-        기준값은 제안값이다.
+        프로파일에 따라 검사가 다르다. 그래서 같은 요청이 mock 에서는 202, 공개 서버(real,prod)에서는 400 일 수 있다.
+
+        | 검사 | mock | real | prod (공개 서버는 real,prod) |
+        |---|---|---|---|
+        | 파트에 선언된 Content-Type | 함 | 함 | 함 |
+        | 파일 시그니처(사진마다 앞 바이트) | 안 함 | 안 함 | 함 |
+        | 대표 사진 검사(첫 장) | 안 함 | 함 | 함 (real 에서 물려받음) |
+
+        - 선언된 Content-Type 이 셋 중 하나가 아니면 400 `UNSUPPORTED_IMAGE_TYPE`. mock·real 은 이것만 보고 파일 내용은 보지 않는다.
+        - 파일 시그니처(서버 설정 `upload.verify-magic`, prod 만 켬): 모든 사진이 JPEG(`FF D8 FF`)·PNG(`89 50 4E 47 0D 0A 1A 0A`)·
+          WEBP(`RIFF` … `WEBP`) 시그니처로 시작해야 한다. 아니면 400 `UNSUPPORTED_IMAGE_TYPE`. 셋 중 어느 것이든 통과하며
+          선언된 Content-Type 과 같은 형식인지는 보지 않는다.
+        - 대표 사진 검사(서버 설정 `preprocess.check.enabled`): 첫 장(대표 사진)을 접수 전에 검사한다 —
+          이미지로 읽히는지, 해상도, 개·고양이가 정확히 한 마리인지, 동물 크기, 밝기, 선명도. 처음 걸린 이유 하나로
+          400 을 돌려주고(코드 7개는 ERROR_CODES.md 의 '대표 사진 검사'), 거절된 요청은 아무것도 남기지 않는다.
+          검사 기준값은 제안값이다(장수·용량 상한과 달리 아직 확정하지 않음).
+        - 검사 순서: 용량(413) → 개수 → 사진마다 (빈 파일 → Content-Type → 시그니처) → `Idempotency-Key` 길이 →
+          같은 키의 재요청이면 그 작업(202) → 대기열 상한(켠 경우 503, 아래) → 대표 사진 검사. 그래서 시그니처가
+          없는 첫 장은 prod 에서 `UNSUPPORTED_IMAGE_TYPE`, real 에서는 대표 사진 검사의 `UNREADABLE_IMAGE` 다.
 
         대기열 상한 [제안값, 안건 #21, 계약 회의 전]: 서버 설정 `admission.max-pending` 으로 켠 경우(기본 꺼짐)
         PENDING 작업과 지금 접수 중인 요청을 더한 수가 서버 상한에 이르면 작업을 만들지 않고 503(QUEUE_FULL)과
         `Retry-After`(초)로 거절한다(`admission.stale-after-ms` 보다 오래된 PENDING 은 세지 않는다,
         ERROR_CODES.md '대기열 상한'). 거절된 요청은 사진·작업·`Idempotency-Key` 를 남기지 않는다.
-        검사 순서는 입력 검사(400) → 같은 `Idempotency-Key` 재요청 → 상한(503) → 대표 사진 검사(400) 다.
+        상한은 대표 사진 검사보다 먼저라, 상한이 차 있으면 사진 문제(400)보다 503 을 먼저 받는다.
         같은 키의 요청은 상한과 상관없이 그 키의 작업을 202 로 돌려준다. 같은 키의 요청이 아직 접수 중이면
         함께 접수해 작업은 많아야 하나만 생긴다.
       parameters:
@@ -139,8 +154,10 @@ paths:
       summary: 생성된 GLB 다운로드
       description: |
         status=COMPLETED 인 작업의 GLB 파일을 돌려준다. 파일 계약은 docs/asset/GLB_SPEC.md.
-        `variant` 를 생략하면 base. 잘못된 variant 값은 400, 작업은 완료됐지만 해당 variant 파일이 없으면 404,
-        작업이 아직 완료되지 않았거나 실패했으면 409 를 돌려준다.
+        `variant` 는 base 하나뿐이고 생략하면 base 다. 그 밖의 값은 작업을 찾기 전에 400 `INVALID_REQUEST` 로 거절한다 —
+        2026-11-21 에 계약에서 뺀 `hair` 도 마찬가지이고, 작업의 상태나 존재 여부와 상관없이 400 이다(jobId 없음).
+        작업은 완료됐지만 GLB 파일이 서버에 없으면 404 `ASSET_NOT_FOUND`, 작업이 아직 완료되지 않았거나 실패했으면
+        409 `JOB_NOT_COMPLETED` 를 돌려준다.
       parameters:
         - $ref: '#/components/parameters/JobId'
         - $ref: '#/components/parameters/Variant'
@@ -245,10 +262,10 @@ components:
       name: variant
       in: query
       required: false
-      description: 에셋 종류. 생략 시 base. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+      description: 에셋 종류. base 뿐이고 생략 시 base. 그 밖의 값(2026-11-21 에 뺀 hair 포함)은 400 INVALID_REQUEST.
       schema:
         type: string
-        enum: [base, hair]
+        enum: [base]
         default: base
     Limit:
       name: limit
@@ -407,8 +424,8 @@ components:
           description: 파일 크기(바이트). Mock 샘플이 0바이트이면 0 이 올 수 있다.
         variant:
           type: string
-          description: 에셋 종류. base = 몸체 메시, hair = 털 메시 포함. 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
-          enum: [base, hair]
+          description: 에셋 종류. 지금은 base(생성된 GLB) 하나뿐이다(hair 는 2026-11-21 에 계약에서 뺐다). 클라이언트는 알 수 없는 값을 받으면 크래시 대신 UNKNOWN 으로 처리한다.
+          enum: [base]
         contentType:
           type: string
           description: 항상 model/gltf-binary
@@ -485,7 +502,10 @@ components:
           example: ok
         profile:
           type: string
-          description: 활성 Spring profile (mock | real)
+          description: |
+            활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음). 예 `mock`, `real`. 공개 서버(prod)는
+            `real,prod` 를 돌려준다. 활성 프로파일이 없으면 기본 프로파일(`mock`). 앱은 값을 그대로 표시하거나 로그에 남기고,
+            `mock` | `real` 과 같다고 가정하지 않는다(워커 종류는 workerType).
           example: mock
         workerType:
           type: string

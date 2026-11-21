@@ -48,7 +48,7 @@ import java.util.stream.Stream;
  * <ul>
  *   <li>{@code path} (default): POST {inference.base-url}/infer with absolute photo paths, answered with the path of
  *       the base GLB. Spring and Python share a filesystem (same PC or shared volume, scripts/run_real.ps1).</li>
- *   <li>{@code upload} (REVIEW_CHECKLIST #6 (b), 2026-10-30): no shared disk (Spring on a VM, the service on the GPU
+ *   <li>{@code upload} (REVIEW_CHECKLIST #6 (b), 2026-10-30, settled 2026-11-21): no shared disk (Spring on a VM, the service on the GPU
  *       PC over Tailscale). POST /infer/upload with a {@code request} JSON part and the photo files, then GET the
  *       answer's {@code glbUrl} (relative to the base URL) into {storage.tmp.dir}/{jobId}/base.glb.
  *       {@link #cleanup(String)} afterwards deletes that file and sends DELETE /artifacts/{jobId}.</li>
@@ -66,7 +66,8 @@ import java.util.stream.Stream;
  * The worker checks the GLB header and copies it either way (RealJobWorker).
  * <p>
  * A request that cannot be answered any more is given up early (failure drill FD16b: a Pod stopped during a run left
- * the only inference slot taken until inference.timeout-ms, 600 s, although the GPU was back after 3 min). Neither
+ * the only inference slot taken until inference.timeout-ms, then 600 s, although the GPU was back after 3 min; 120 s
+ * since 2026-11-21, REVIEW_CHECKLIST #7). Neither
  * side sends anything while the VM waits for an answer, so a peer that vanished without closing the connection is
  * never noticed by TCP. Two checks, both in addition to inference.timeout-ms:
  * <ul>
@@ -151,7 +152,7 @@ public class InferenceClient {
 
     @Autowired
     public InferenceClient(@Value("${inference.base-url:http://localhost:8001}") String baseUrl,
-                           @Value("${inference.timeout-ms:600000}") long timeoutMs,
+                           @Value("${inference.timeout-ms:120000}") long timeoutMs,
                            @Value("${inference.transfer:path}") String transfer,
                            @Value("${inference.token:}") String token,
                            @Value("${storage.tmp.dir:storage/tmp}") String tmpDir,
@@ -308,7 +309,7 @@ public class InferenceClient {
         ObjectNode body = objectMapper.createObjectNode().put("jobId", jobId);
         ArrayNode imagePaths = body.putArray("imagePaths");
         images.forEach(image -> imagePaths.add(image.toAbsolutePath().normalize().toString()));
-        // The hair variant's place in v1.0 is a contract meeting topic (REVIEW_CHECKLIST #4); base only until then.
+        // Internal /infer contract field, always false: the hair variant left API v1 (REVIEW_CHECKLIST #4, 2026-11-21).
         body.putObject("options").put("hair", false);
         return body.toString();
     }
@@ -350,7 +351,7 @@ public class InferenceClient {
     private HttpRequest.BodyPublisher multipartBody(String boundary, String jobId, List<Path> images, List<String> filenames)
             throws InferenceFailure {
         ObjectNode request = objectMapper.createObjectNode().put("jobId", jobId);
-        request.putObject("options").put("hair", false); // as in path mode (REVIEW_CHECKLIST #4)
+        request.putObject("options").put("hair", false); // always false, as in path mode (REVIEW_CHECKLIST #4)
         List<HttpRequest.BodyPublisher> parts = new ArrayList<>();
         parts.add(text("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"request\"\r\n"

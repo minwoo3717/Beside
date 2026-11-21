@@ -1,6 +1,6 @@
 # Beside 계약서 v1.0 (통합본)
 
-세 트랙(Backend · Unity · 3D Generation)이 지켜야 할 경계면을 한 파일에 모았다. 기계가 읽는 원본은 [api/openapi.yaml](api/openapi.yaml)이며 backend 계약 테스트(`JobV1ContractTest`)가 서버와 비교한다. 이 문서와 원본이 다르면 원본이 우선이고, 이 문서를 고친다. 상태 표기: **[구현됨]** / **[계획]**. "제안값"은 계약 회의에서 확정 전까지 임시값이다.
+세 트랙(Backend · Unity · 3D Generation)이 지켜야 할 경계면을 한 파일에 모았다. 기계가 읽는 원본은 [api/openapi.yaml](api/openapi.yaml)이며 backend 계약 테스트(`JobV1ContractTest`)가 서버와 비교한다. 이 문서와 원본이 다르면 원본이 우선이고, 이 문서를 고친다. 상태 표기: **[구현됨]** / **[실험 결과]** / **[계획]**. "제안값"은 확정 전까지 임시값이다(2026-11-21 에 정한 것은 §7).
 
 ---
 
@@ -21,12 +21,12 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 메서드·경로 | 요청 | 성공 | 오류 |
 |---|---|---|---|
-| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB, `image/jpeg \| image/png \| image/webp`. 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`, 413 `PAYLOAD_TOO_LARGE`, 500, 503 `QUEUE_FULL` + `Retry-After`(대기열 상한, 기본 꺼짐. **[제안값] 안건 #21, 계약 회의 전**) |
+| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB(#3 확정), `image/jpeg \| image/png \| image/webp`. prod 는 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 보고, 다른 프로파일은 선언된 Content-Type 만 본다(`upload.verify-magic`, #17). 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`, 대표 사진 검사 400 7개(real·prod, §3), 413 `PAYLOAD_TOO_LARGE`, 500, 503 `QUEUE_FULL` + `Retry-After`(대기열 상한, 기본 꺼짐. **[제안값] 안건 #21, 계약 회의 전**) |
 | `GET /api/v1/jobs/{jobId}` | 1~2초 간격 폴링 | **200** `JobResponse` | 404 `JOB_NOT_FOUND`, 500 |
-| `GET /api/v1/jobs/{jobId}/asset?variant=base\|hair` | `variant` 생략 시 `base` | **200** `model/gltf-binary`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`, `Content-Length` | 409 `JOB_NOT_COMPLETED`(미완료·실패), 404 `ASSET_NOT_FOUND`(없는 variant, Mock 은 hair 없음), 400 잘못된 variant, 404 `JOB_NOT_FOUND`, 500 |
+| `GET /api/v1/jobs/{jobId}/asset?variant=base` | `variant` 는 `base` 뿐, 생략 시 `base`. `hair` 는 2026-11-21 계약에서 뺐다(#4) | **200** `model/gltf-binary`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`, `Content-Length` | 409 `JOB_NOT_COMPLETED`(미완료·실패), 404 `ASSET_NOT_FOUND`(완료됐지만 GLB 파일 없음), 400 `INVALID_REQUEST`(`base` 가 아닌 variant — `hair` 포함, 작업 상태와 상관없이), 404 `JOB_NOT_FOUND`, 500 |
 | `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500, 503 `QUEUE_FULL` + `Retry-After`(작업은 FAILED 그대로, `error.jobId` 는 그 작업. **[제안값] 안건 #21, 계약 회의 전**) |
 | `GET /api/v1/jobs?limit=&cursor=` | `limit` 1~100(기본 20), `cursor` = 이전 `nextCursor` | **200** `{ items: JobResponse[], nextCursor: string\|null }` 최신순 | 400 `INVALID_REQUEST`, 500 |
-| `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile: "mock"\|"real", workerType: "mock"\|"real" }` | — |
+| `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile, workerType: "mock"\|"real" }`. `profile` 은 활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음, 예 `mock`·`real`, 공개 서버는 `real,prod`, 활성 프로파일이 없으면 `mock`). 앱은 `mock`\|`real` 둘 중 하나라고 가정하지 않는다(워커 종류는 `workerType`) | — |
 
 ### JobResponse
 
@@ -51,7 +51,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `timings.queuedMs` | PENDING 경과. 진행 중이면 현재까지, 이후 고정 |
 | `timings.processingMs` | PROCESSING 시작 전 `null`, 진행 중 경과, 종료 후 고정 |
 | `timings.totalMs` | COMPLETED/FAILED 전 `null`, 이후 접수(또는 retry)~종료 |
-| `asset` | COMPLETED 일 때만, base 에셋만 설명. `url` 은 **서버 루트 기준 상대 경로** → 앱이 baseUrl 과 결합 |
+| `asset` | COMPLETED 일 때만. `variant` 는 `base` 하나다(털 맵은 그 GLB 안, §4). `url` 은 **서버 루트 기준 상대 경로** → 앱이 baseUrl 과 결합(#1 유지) |
 | `error` | FAILED 일 때만. `code` 는 §3 의 Job 실패 코드, `message` 는 개발자용(사용자에게 그대로 표시 금지) |
 | `uploadedFiles` | 원본 파일명(경로 제거)과 크기. 서버 경로 없음 |
 
@@ -61,7 +61,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 { "error": { "code": "JOB_NOT_COMPLETED", "message": "developer text", "jobId": "uuid 또는 null" } }
 ```
 
-상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지. 503 은 `QUEUE_FULL` 전용이다(**[제안값] 안건 #21, 계약 회의 전**). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
+상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지. 503 은 `QUEUE_FULL` 전용이다(**[제안값] 안건 #21, 계약 회의 전**). 429 `RATE_LIMITED` + `Retry-After`(클라이언트별 요청 제한)는 이름만 예약했다(2026-11-21 #22, 구현·한도는 [계획]). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
@@ -78,7 +78,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `INVALID_REQUEST` | 400 | 잘못된 variant/limit/cursor, 0바이트 파일, 깨진 multipart | 요청이 올바르지 않아요. 앱을 최신 버전으로 업데이트해 주세요. |
 | `NO_PHOTOS` | 400 | `photos` 파트 없음 | 사진을 1장 이상 선택해 주세요. |
 | `TOO_MANY_PHOTOS` | 400 | 11장 이상 | 사진은 최대 10장까지 올릴 수 있어요. |
-| `UNSUPPORTED_IMAGE_TYPE` | 400 | jpeg/png/webp 외 | JPG, PNG, WEBP 사진만 사용할 수 있어요. |
+| `UNSUPPORTED_IMAGE_TYPE` | 400 | jpeg/png/webp 외(prod 는 파일 앞 바이트 시그니처도 봄, #17) | JPG, PNG, WEBP 사진만 사용할 수 있어요. |
 | `UNREADABLE_IMAGE` | 400 | 대표 사진 검사: 이미지로 읽을 수 없음(디코딩 실패·화소 수 초과·5초 초과) | 대표 사진을 읽을 수 없어요. 다른 사진을 골라 주세요. |
 | `IMAGE_TOO_SMALL` | 400 | 대표 사진 검사: 짧은 변 < 320 px (제안) | 대표 사진의 해상도가 너무 낮아요. 더 큰 사진을 골라 주세요. |
 | `NO_ANIMAL_DETECTED` | 400 | 대표 사진 검사: 개·고양이 없음 | 대표 사진에서 강아지나 고양이를 찾지 못했어요. 반려동물이 잘 보이는 사진을 골라 주세요. |
@@ -88,14 +88,14 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `IMAGE_TOO_BLURRY` | 400 | 대표 사진 검사: 동물 박스 라플라시안 분산 < 50 (제안) | 대표 사진이 흔들렸어요. 선명한 사진을 골라 주세요. |
 | `PAYLOAD_TOO_LARGE` | 413 | 장당 5 MB 또는 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. |
 | `JOB_NOT_FOUND` | 404 | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. |
-| `ASSET_NOT_FOUND` | 404 | 완료됐지만 해당 variant 파일 없음 | 요청한 모델 파일이 없어요. |
+| `ASSET_NOT_FOUND` | 404 | 완료됐지만 GLB 파일 없음(보존 기간이 지나 지운 작업도 이 코드 — #23, 자동 삭제는 [계획]) | 요청한 모델 파일이 없어요. |
 | `NOT_FOUND` | 404 | 알 수 없는 v1 경로 | 요청한 정보를 찾을 수 없어요. |
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
 | `QUEUE_FULL` | 503 | 대기 작업(PENDING)과 접수 중인 요청이 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이름. `Retry-After` 초 뒤에 다시 보낸다. **[제안값] 안건 #21, 계약 회의 전** | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. |
 
-대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔, 기준값은 제안값이다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`: 코드·테스트). VM 에서의 시간·메모리는 **[계획]**.
+대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔이라 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다. 2026-11-21 결정(#19): 이 동작과 400 코드 7개를 확정하고, 기준값은 제안값 그대로 두고 팀 사진 판정표 뒤 다시 본다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[구현됨]**(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합: 코드·테스트). VM(2 vCPU)의 검사 시간은 2차 부하 시험에 있다 **[실험 결과]**(`checkMs` 실행별 평균 381~483 ms, 같은 사진 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 메모리는 **[계획]**.
 
 대기열 상한(`QUEUE_FULL`)은 계약 회의 전 초안이다(**[제안값] 안건 #21**). 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 의 요청은 상한과 상관없이 그 키의 작업을 받는다(첫 요청이 아직 접수 중이어도). 거절된 retry 의 작업은 FAILED 그대로다. 서버 설정 `admission.stale-after-ms`(기본은 정상 작업의 가장 긴 대기)보다 오래된 PENDING 은 세지 않는다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
 
@@ -104,34 +104,36 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | code | 상황 | 앱 표시 문구 | retry |
 |---|---|---|---|
 | `INFERENCE_FAILED` | 3D 생성 실패, 입력 품질(real: 추론 서비스의 4xx·500). Mock 의 `fail` 트리거 | 3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요. | 예 |
-| `INFERENCE_TIMEOUT` | 추론이 `inference.timeout-ms` 초과 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
+| `INFERENCE_TIMEOUT` | 추론 요청이 `inference.timeout-ms`(120 s, §6.1) 초과 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
 | `INFERENCE_UNAVAILABLE` | 추론 서버 연결 불가, 모델 미준비(501~504) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | OBJ/PNG → GLB 변환 실패, GLB 규격 위반, real 워커가 받은 GLB 가 없거나 glTF 2.0 이 아님 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
-| `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김, real 워커의 예기치 못한 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
+| `INTERNAL_ERROR` | 서버 재시작·워커 중단으로 작업이 끊김, 워커(mock·real)의 예기치 못한 오류, 서버가 GLB 를 쓰거나 결과 폴더로 복사하지 못함(디스크 등) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 
 모르는 코드는 일반 오류 문구로 처리한다. 문구는 제안이며 코드 이름은 유지한다.
 
 ---
 
-## 4. GLB 에셋 계약 — [계획] (변환기·유효 샘플 투입 전)
+## 4. GLB 에셋 계약 — [구현됨: 변환기·리깅] / [실험 결과: 삼각형·파일 크기] / [계획: gltf-validator·유효 샘플]
+
+요약이다. 원본은 [asset/GLB_SPEC.md](asset/GLB_SPEC.md)(스킨·클립·털 맵 형식 포함). 변환기 `generation/tools/convert_asset.py` 와 리깅 `rig_transfer.py` 는 #1(2026-10-14)로 들어와 추론 서비스가 작업마다 부른다 **[구현됨]**. 두 도구의 자동 시험은 `generation/inference_service/test_app.py` 에 있다(합성 메시·합성 템플릿, 모델·GPU 없음): 털 맵을 GLB 안에 넣기·리깅본으로 옮기기(`FurMapsInGlbTest`·`RigTransferFurMapsTest`, PR #25), 업로드 → 내려받은 GLB 의 털 맵(`RealConversionCancelTest`), 리깅의 정점 순서·크기 상한(`RigTransferVertexOrderTest`·`RiggedResultTest`·`OversizeRiggedResultTest`). 좌표·노드 배치(GLB_SPEC §2·§3)를 직접 보는 시험은 없다 — [generation/tools/README.md](../generation/tools/README.md).
 
 | 항목 | 값 |
 |---|---|
 | 포맷 | glTF 2.0 binary `.glb` 단일 파일, 텍스처 임베드, 확장 없음. `Content-Type: model/gltf-binary` |
 | 좌표계 | **Y-up**, 오른손. **1 unit = 1 m**. 원점 = 네 발바닥 중심(최저점 y = 0). 정면 **+Z** |
 | 크기 정규화 | 바운딩 박스 최장 축 1.0 m (제안값) |
-| 노드 | `variant=base`: 노드 1개 `base`. `variant=hair`: 노드 2개 `base`, `hair` (파일 하나로 자급) |
-| 삼각형 상한 | base ≤ 20,000 / hair ≤ 100,000 (제안값) |
-| 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0` 필수, `TANGENT` 선택, 인덱스 uint16/uint32 |
-| 머티리얼 | PBR metallic-roughness, baseColorTexture = `uv.png`, metallic 0, roughness 0.8~1.0 (제안값). hair: `alphaMode MASK/BLEND`, `doubleSided` |
-| 텍스처 | ≤ 2048² (제안값), PNG/JPEG, sRGB. base 1장 + hair 1장(선택) |
-| 파일 크기 | ≤ 10 MB (제안값) |
-| 검증 | gltf-validator 오류 0, Unity glTFast 로드, 바닥 접지·정면 확인 |
-| 변환기 출력 | `{jobId}-base.glb` (+ `-hair.glb`) + `metrics.json { vertices, triangles, textureSize, bytes, convertMs }` |
-| 서버 저장 | real: `backend/storage/results/{jobId}/base.glb` [구현됨] — 받은 GLB 의 glTF 헤더만 확인하고 복사. `hair.glb` [계획]. Mock 은 `results/sample-dog.glb` |
+| variant | `base` 하나. `hair` variant·hair GLB 는 없다(2026-11-21 #4) |
+| 노드·스킨 | 정적(기본): 노드 1개 `base`, 스킨·클립 없음. 리깅(선택, 추론 서비스에 리깅 템플릿이 있을 때만): 리깅 템플릿의 노드(메시 + 관절, 이름은 템플릿이 정함)·스킨 1개·클립 5개(`Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt`). 관절 36개는 안건 #14 기록의 값이고 템플릿이 리포 밖이라 리포 시험으로 세지 않는다. 리깅이 실패하거나 크기 상한을 넘으면 정적 GLB 를 준다(#14, GLB_SPEC §3·§3.1) |
+| 삼각형 상한 | ≤ 20,000 (제안값, exp-02·기기 FPS 측정 뒤 확정 — #3). 실제 출력 7,774 **[실험 결과]**(exp-01·2차 부하 시험) |
+| 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0`, 리깅본은 + `JOINTS_0`·`WEIGHTS_0`(템플릿 것). 인덱스 uint16/uint32 |
+| 머티리얼 | PBR metallic-roughness, baseColorTexture = `uv.png`, metallic 0, roughness 0.8~1.0 (제안값) |
+| 텍스처 | ≤ 2048² (제안값, #3), PNG 임베드, sRGB. base color 1장(+ 아래 털 맵 2장은 linear 데이터, 같은 해상도 상한) |
+| 털 맵 | 앱 셸 털용 길이·결 맵 두 장(PNG, BIN 청크)과 `furLength` 를 base GLB 루트 `extras.beside` = `{ hairLengthImage, hairFlowImage, furLength }` 에 싣는다(2026-11-21 #14). 변환기가 넣고 리깅본도 옮긴다 **[구현됨: PR #25, main 병합(2026-11-21)·Pod 반영 전]**. 앱은 작업 흐름으로 받은 GLB 에서만 읽는다. 기기 확인 **[계획]**. 형식은 GLB_SPEC §4.1 |
+| 파일 크기 | ≤ 10 MB (제안값, #3). 실제 출력 1,310,876~1,327,400 B **[실험 결과]**(exp-01 — 리깅 없고 털 맵을 GLB 에 넣기 전의 출력) |
+| 검증 | gltf-validator 오류 0 **[계획]**(exp-02), Unity glTFast 로드, 바닥 접지·정면 확인. 변환기는 삼각형·텍스처·파일 크기 상한을 넘으면 `CONVERSION_FAILED` 로 끝낸다 **[구현됨]** |
+| 변환기 출력 | `base.glb` + `base.metrics.json { vertices, triangles, textureSize, bytes, convertMs }`(리깅한 GLB 를 쓰면 `bytes`·`convertMs` 를 그 기준으로 다시 씀) |
+| 서버 저장 | real: `backend/storage/results/{jobId}/base.glb` [구현됨] — 받은 GLB 의 glTF 헤더만 확인하고 복사. Mock 은 `results/sample-dog.glb`(지금 0바이트, 교체는 직접 할 일) |
 | 앱 배치 | 캐시 `persistentDataPath/models/{jobId}-{variant}.glb`. 기본 스케일 **0.6**, 핀치 **0.2~1.5**, 바닥 평면에 원점 접지, 초기 정면이 카메라를 향하도록 Y축 회전 |
-
-애니메이션·리깅은 확장 기능(없음).
 
 ---
 
@@ -139,19 +141,19 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 주체 | 파일 | 필드 | 상태 |
 |---|---|---|---|
-| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` + (2026-10-06 추가) `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion` + (2026-11-04 추가, [구현됨] 2026-11-05) `checkMs, checkResult, preprocessMs, preprocessResult, preprocessVersion` | [구현됨] (측정값은 아직 없음) |
+| 서버 | `backend/storage/events.jsonl` | `jobId, attempt, finishedAt, uploadBytes, uploadMs, queuedMs, processingMs, totalMs, workerType, result` + (2026-10-06 추가) `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs, glbBytes, passthrough, modelVersion` + (2026-11-04 추가, [구현됨] 2026-11-05) `checkMs, checkResult, preprocessMs, preprocessResult, preprocessVersion` | [구현됨]. 실제 모델 값은 [실험 결과]: VM 부하 시험 2~4차(2026-11-18~19, VM + Runpod A40, 같은 사진 반복)의 실행 폴더 `vm/events.jsonl`([perf/load/](perf/load/)). 사진 10장 이상은 [계획] |
 | 서버 | H2 테이블 `job_runs` (`beside-{mock,real}.mv.db`, 실행마다 한 행, PK `jobId:attempt`) | 위 줄과 같은 필드를 snake_case 로 + `status, error_code`. 측정표는 SQL 로 뽑는다(METRICS §1.1) | [구현됨] 2026-10-06 |
-| 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` (+ 선택 `modelVersion`) — Spring 저장은 [구현됨], 서비스가 채우는 것은 [계획] | [계획] |
-| 앱 | `persistentDataPath/metrics/metrics.csv` 헤더 순서 고정 | `jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device` | [계획] |
-| 3D 품질 (사람, 1~5점, 평가자 2명 이상) | 실험 기록 표 | `faceShape`(얼굴 형태), `ears`(귀 모양/위치), `bodyProportion`(체형 비율), `furColor`(털 색상), `pattern`(무늬 재현), `textureArtifacts`(텍스처 번짐/seam) | [계획] |
+| 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` (+ 선택 `modelVersion`). `convertMs` 는 리깅이 성공한 실행이면 리깅 시간을 포함한다(#16) | 서비스가 채움 [구현됨](#1, `animallift_runner.py`·`convert_asset.py`), Spring 저장 [구현됨]. 값은 [실험 결과]: [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(4건 + 2차 부하 시험 539건, 리깅 없음) |
+| 앱 | `persistentDataPath/metrics/metrics.csv` 헤더 순서 고정 | `jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device` | 기록 코드 [구현됨](`MetricsRecorder.cs`, `JobManager.cs` 가 채움 — 실기기 실행 증빙은 리포에 없음). 측정값 0건, 기기 FPS 포함 [계획] |
+| 3D 품질 (사람, 1~5점, 평가자 2명 이상) | 실험 기록 표 | `faceShape`(얼굴 형태), `ears`(귀 모양/위치), `bodyProportion`(체형 비율), `furColor`(털 색상), `pattern`(무늬 재현), `textureArtifacts`(텍스처 번짐/seam) | [계획] (exp-01 표의 품질 칸은 비어 있음) |
 
 단위: 시간 ms 정수, 크기 bytes/MB 정수. 환경(GPU, 드라이버, 해상도, 커밋) 함께 기록. 자세한 정의는 [METRICS.md](METRICS.md).
 
 ---
 
-## 6. 내부 계약: Spring real 워커 ↔ Python 추론 서비스 — [구현됨: Spring 호출·FastAPI 스텁] / [계획: 모델]
+## 6. 내부 계약: Spring real 워커 ↔ Python 추론 서비스 — [구현됨: Spring 호출·FastAPI·AnimalLift 모델 모드] / [실험 결과: VM ↔ Runpod A40]
 
-Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스트 또는 공유 볼륨을 가정한다. 디스크를 공유하지 않는 분리 배포는 §6.1 업로드 모드로 한다.
+Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스트 또는 공유 볼륨을 가정한다. 디스크를 공유하지 않는 분리 배포는 §6.1 업로드 모드로 한다(2026-11-21 #6 결정, 운영 VM 은 업로드 모드). 실제 모델로 돈 기록은 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)과 VM 부하 시험 2~4차([perf/load/](perf/load/))다 **[실험 결과]**. 모델은 첫 사진 1장만 쓴다.
 
 `POST /infer`
 
@@ -162,13 +164,15 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
         "passthrough": false, "modelVersion": "animallift-baseline@3f2a1c9" }
 ```
 
-`modelVersion` 은 선택 필드(2026-10-06 추가, 없으면 null)로 GLB 를 만든 모델·가중치 버전이다. Spring 은 `metrics`·`passthrough`·`modelVersion` 을 실행마다 `job_runs` 행과 `events.jsonl` 줄에 저장한다(§5).
+`modelVersion` 은 선택 필드(2026-10-06 추가, 없으면 null)로 GLB 를 만든 모델·가중치 버전이다. 끝의 `+rig` 는 그 작업에서 리깅이 성공했을 때만 붙는다(2026-11-21 #18, main 동작). Spring 은 `metrics`·`passthrough`·`modelVersion` 을 실행마다 `job_runs` 행과 `events.jsonl` 줄에 저장한다(§5). `options.hair` 와 `hairGlbPath` 는 자리만 남았다: Spring 은 늘 `false` 를 보내고 서비스는 늘 `null` 을 준다(hair variant 는 #4 로 뺐다).
 
 | HTTP | `detail.code` | Spring 이 Job 에 기록 |
 |---|---|---|
-| 400 | `INFERENCE_FAILED` | `INFERENCE_FAILED` |
+| 400 | `INFERENCE_FAILED` (사진 경로가 파일이 아님) | `INFERENCE_FAILED` |
+| 500 | `INFERENCE_FAILED` (모델 실패·사진 읽기 실패, 취소된 실행) | `INFERENCE_FAILED` |
 | 500 | `CONVERSION_FAILED` | `CONVERSION_FAILED` |
-| 501 | `INFERENCE_UNAVAILABLE` (모델 미구현, 현재 기본) | `INFERENCE_UNAVAILABLE` |
+| 501 | `INFERENCE_UNAVAILABLE` (모델 미설정: 모델 경로·`BESIDE_SAMPLE_GLB` 모두 없음) | `INFERENCE_UNAVAILABLE` |
+| 503 | `INFERENCE_UNAVAILABLE` (모델 불러오는 중·불러오기 실패) | `INFERENCE_UNAVAILABLE` |
 | 501~504 | 없음·모르는 코드 | `INFERENCE_UNAVAILABLE` |
 | 그 밖의 4xx·5xx | 없음·모르는 코드 | `INFERENCE_FAILED` |
 | 200 | — (`glbPath` 없음·파일 없음·glTF 2.0 바이너리 아님) | `CONVERSION_FAILED` |
@@ -181,9 +185,11 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 필드 추가(2026-11-20, 장애 훈련 FD18) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `loadError`(모델을 불러오지 못한 이유 한 줄 — 예외 이름과 짧은 메시지, 경로·토큰 없음, 최대 200자. 불러오는 중·불러온 뒤·패스스루는 null). `status`·`modelLoaded`·UP 판정은 그대로이고(작업은 지금처럼 PENDING 으로 기다린다), Spring 은 생기고 풀릴 때 Discord 알림(🧩, 예외 이름만)을 한 번씩 보낸다.
 필드 추가(2026-11-20, 장애 훈련 FD16b) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `instanceId`(서비스 프로세스마다 새로 정하는 무작위 16진 12자). 상태·UP 판정·알림은 그대로이고, prod Spring 은 요청을 보낼 때 본 값과 다른 `instanceId` 가 보이면 끝나지 않은 그 요청을 포기한다(`POST` 중 `INFERENCE_UNAVAILABLE`, 내려받는 중 `CONVERSION_FAILED`, [inference_service/README.md](../generation/inference_service/README.md) 'Spring 쪽 매핑 추가').
 
-### 6.1 업로드 모드 — [구현됨: Spring·FastAPI, 같은 PC 패스스루로 연동 확인] / [계획: VM ↔ GPU PC 실제 배치] (2026-10-30 결정, REVIEW_CHECKLIST #6 (b))
+### 6.1 업로드 모드 — [구현됨: Spring·FastAPI, VM ↔ Runpod Pod 운영] / [실험 결과: VM 부하 시험 2~4차] / [계획: VM ↔ 팀원 GPU PC 배치] (2026-11-21 결정, REVIEW_CHECKLIST #6 (b))
 
-Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망)라 디스크를 공유하지 않는다. 위 `/infer`(경로 모드)는 그대로 두고 사진을 올리고 GLB 를 내려받는 엔드포인트를 **추가**한다. Spring `inference.transfer=path|upload`(기본 `path`)로 고른다. 자세한 표는 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드'.
+2026-10-30 에 (b) 로 제안해 구현했고, 2026-11-21 에 (b) 업로드 모드로 결정했다(계약 회의 대신 Backend 담당). 결정한 모양은 사진 멀티파트 업로드 `POST /infer/upload` → JSON `glbUrl` → `GET /artifacts/{jobId}/base.glb`·`DELETE /artifacts/{jobId}` 다(GLB 바이너리를 응답 본문으로 주지 않는다). 경로 모드(`/infer`)는 같은 호스트(개발 PC·GPU PC 한 대 배치)용으로 남긴다.
+
+Spring 은 클라우드 VM, 추론 서비스는 Runpod Pod(대안: 팀원 GPU PC, 둘 다 Tailscale 사설망)라 디스크를 공유하지 않는다. Spring `inference.transfer=path|upload`(기본 `path`, VM compose 는 `upload`)로 고른다. 자세한 표는 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드'.
 
 ```text
 POST   /infer/upload            multipart: request = {"jobId", "options": {"hair": false}} (application/json, 파일명 없음)
@@ -204,13 +210,16 @@ DELETE /artifacts/{jobId}            → 204 작업 폴더(업로드 사진·결
 | `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
 | 그 밖 | 업로드 | 위 표 그대로 |
 
-Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 600000), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
+Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 120000 — 2026-11-21 #7 로 600000 에서 줄였다. 그 작업 자신의 요청에만 걸리고 PENDING 대기는 세지 않는다. 앱의 최대 대기 600 s 는 그대로. 운영 VM 은 이 값을 담은 main 을 배포한 뒤부터 [계획]), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
 
 ---
 
-## 7. 회의에서 결정할 것 (요약)
+## 7. 결정 기록 (2026-11-21)
 
-1. `asset.url` 상대 경로 유지 여부 · 2. GIF/HEIC 허용 여부 · 3. 숫자 상한 확정 · 4. hair variant 의 v1.0 포함과 노출 방식 · 5. Idempotency-Key 유지 여부(현재 DB 저장) · 6. Spring↔Python 파일 공유 vs 바이너리 전송 · 7. 폴링·retry 상한과 재시작 때 진행 중 작업 처리 · 8. healthz 경로·`apiVersion` 추가 · 9. 목록 API 공개 범위 · 10. v0 제거 시점. 상세와 결정 칸은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md).
+안건 #1~#23 은 2026-11-21 에 계약 회의를 열지 않고 Backend 담당(저장소 관리자)이 정했다. 결정 전문은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md) 의 '결정' 칸, 버전별 정리는 [api/CHANGELOG.md](api/CHANGELOG.md).
+
+- `api-v1.0` 에 넣는 것: `hair` variant 삭제(#4), GLB_SPEC 을 실제 출력에 맞춤(#14), 에셋 상한은 제안값 유지·hair 상한 삭제(#3), 프로파일 차이 명시(#17·#19), 429 `RATE_LIMITED` 이름 예약(#22), 내부 계약 — 업로드 모드(#6)·`inference.timeout-ms` 120 s(#7)·`+rig`(#18), 측정 문서 표기(#16). #7 의 나머지(retry 횟수 제한 없음, 서버 재시작 때 끊긴 작업은 FAILED `INTERNAL_ERROR` + retry, 폴링 1~2초, 앱 최대 대기 600 s)와 #1·#2·#5·#8·#9·#10·#13·#15·#20 은 지금 문서 그대로 확정.
+- 남은 것 **[계획]**: `git tag api-v1.0`, 작업 대기열 상한 적용(503 `QUEUE_FULL`, `api-v1.1`, PR #19 — #21), v1.1 검토 브랜치에서 고른 기능(`api-v1.2` — #11·#12), 보존 정책의 자동 삭제 구현(사진 7일·GLB 30일, 공개 베타 전 — #23), 요청 제한의 키·한도·구현(#22).
 
 ## 8. 원본 문서
 

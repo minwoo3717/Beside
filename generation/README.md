@@ -20,7 +20,7 @@ generation/
 ## 파이프라인
 
 ```text
-사진 1~10장 ─▶ AnimalLift 추론 ─▶ mesh.obj + uv.png (+ hair.npz) ─▶ tools/convert_asset.py ─▶ {jobId}/base.glb (+ hair.glb) + base.metrics.json
+사진 1~10장 ─▶ AnimalLift 추론 ─▶ mesh.obj + uv.png (+ hair.npz) ─▶ tools/convert_asset.py ─▶ {jobId}/base.glb (털 맵은 그 안 extras.beside) + base.metrics.json
                  inferMs, gpuPeakMB, modelParams                         convertMs, vertices, triangles, textureSize, bytes
 ```
 
@@ -31,7 +31,7 @@ Spring 의 real 워커가 `POST /infer` 로 이 파이프라인을 호출하고,
 - **[구현됨]** `inference_service/app.py`: 입·출력 스키마, `GET /healthz`, 모델 미설정 501·로딩 중 503, `BESIDE_SAMPLE_GLB` 패스스루, 업로드 모드(2026-10-30).
 - **머지됨(#1, 2026-10-14)** AnimalLift 실행(`animallift_runner.py`), `tools/convert_asset.py`, 자동 리깅(`tools/rig_transfer.py`, 템플릿은 리포 밖).
 - **[실험 결과]** 이 코드로 시험 사진 3장(`backend/src/test/resources/photos/`)을 돌린 1건 시간·GPU 메모리·출력 크기: [exp-01](experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, 리깅 끔, 표본 4건 + 2차 부하 539건).
-- **[계획]** ([docs/PLAN.md](../docs/PLAN.md) 3단계) 품질 6항목 채점, 우리 사진으로 실제 E2E(exp-02, `job_runs` CSV) → 품질·속도 개선 실험(exp-03·04, exp-03 은 틀만 있다). 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣는 지금 전처리(`animallift_runner.py` 의 Resize) 대신 정사각 패딩·배경 제거(Spring 쪽 구현은 [구현됨] 2026-11 — 원본/크롭/배경 제거 3D 비교 실험은 [계획], [experiments/](experiments/) 의 틀), 여러 장 중 가장 좋은 사진 고르기, 털 맵을 GLB 에 넣어 앱의 털 표현 켜기.
+- **[계획]** ([docs/PLAN.md](../docs/PLAN.md) 3단계) 품질 6항목 채점, 우리 사진으로 실제 E2E(exp-02, `job_runs` CSV) → 품질·속도 개선 실험(exp-03·04, exp-03 은 틀만 있다). 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣는 지금 전처리(`animallift_runner.py` 의 Resize) 대신 정사각 패딩·배경 제거(Spring 쪽 구현은 [구현됨] 2026-11 — 원본/크롭/배경 제거 3D 비교 실험은 [계획], [experiments/](experiments/) 의 틀), 여러 장 중 가장 좋은 사진 고르기. (털 맵을 GLB 에 넣는 것은 2026-11-21 PR #25 로 변환기·리깅 쪽 [구현됨] — main 병합(2026-11-21)·Pod 반영 전, 기기에서 털·FPS 확인은 [계획], [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §4.1.)
 - **직접 할 일**: glTFast 로드 검증 결과와 실험 기록을 `experiments/` 에 넣는다. 모델은 추론 서비스와 같은 conda env 에서 같은 프로세스로 돈다([inference_service/ANIMALLIFT_SETUP.md](inference_service/ANIMALLIFT_SETUP.md)).
 
 ## 실험 기록 규칙

@@ -2,7 +2,11 @@
 
 세 트랙이 **같은 이름**으로 측정값을 남긴다. 이름은 여기서만 정의하고, 보고서·발표·실험 기록은 이 이름을 그대로 쓴다. 단위는 시간 ms(정수), 크기 bytes 또는 MB(정수), 비율 0~1. 측정 시점이 다른 값(예: 서버가 잰 `processingMs` 와 앱이 잰 `waitMs`)은 이름이 다르므로 섞지 않는다.
 
-상태: `JobResponse.timings`(queuedMs, processingMs, totalMs) 와 서버 `events.jsonl` 은 **[구현됨]**(2026-10-04). 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장은 **[구현됨]**(2026-10-06). 추론 서비스가 수치를 **채우는** 것과 앱 `metrics.csv` 는 **[계획]** — 각 트랙이 PLAN 의 해당 단계에서 구현한다. 아직 **[실험 결과]** 로 인용할 측정값은 없다(Mock·패스스루 동작 확인뿐). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록은 **[구현됨]**(2026-11-05, 브랜치 `feat/preprocess`). 첫 측정은 개발 PC 의 [실험 결과]([preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md))뿐이고 VM 측정은 [계획].
+상태(2026-11-21 갱신, 안건 #16 결정대로 실제에 맞춤):
+
+- **[구현됨]**: `JobResponse.timings`(queuedMs, processingMs, totalMs)와 서버 `events.jsonl`(2026-10-04), 실행별 측정 테이블 `job_runs` 와 `/infer` 응답 수치의 서버 저장(2026-10-06). 추론 서비스가 §2 수치를 채우는 것(#1, 2026-10-14: `animallift_runner.py`·`convert_asset.py`·`app.py`). 앱 `metrics.csv` 기록 코드(#1: `unity/Assets/Beside/Metrics/MetricsRecorder.cs`, `JobManager.cs` 가 단계마다 채움 — 실기기에서 돌린 증빙은 리포에 없다). 대표 사진 검사·전처리 측정 5개(`checkMs`, `checkResult`, `preprocessMs`, `preprocessResult`, `preprocessVersion`, 2026-11-04 추가)의 기록(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합).
+- **[실험 결과]**: 추론 수치는 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(2026-11-17 Runpod A40, 4건)과 VM 부하 시험 2~4차(2026-11-18~19, VM + Runpod A40, 같은 사진 반복, [perf/load/](perf/load/) — 2차 539건은 exp-01 6절에 정리). 서버 §1 값도 같은 실행들의 `vm/events.jsonl` 에 있다. 대표 사진 검사·전처리는 개발 PC([preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md))와 VM 2차 부하 시험(`checkMs`·`preprocessMs`, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)).
+- **[계획]**: 앱 `metrics.csv` 측정값(기기 FPS·`memMB` 포함, 0건), 3D 품질 점수(§4, 0건), 사진 10장 이상의 서버·추론 측정, 리깅을 켠 실행의 `convertMs`(지금까지의 기록은 모두 리깅 없음).
 
 ## 1. 서버 `events.jsonl` (Backend, [구현됨] PLAN 0단계)
 
@@ -61,24 +65,26 @@ CALL CSVWRITE('../generation/experiments/YYYY-MM-DD_exp-NN/job_runs.csv',
 
 제외 규칙: FAILED 행(실패 통계는 `error_code` 로 따로 센다), `passthrough = TRUE`(모델이 돌지 않음), 재시작으로 끊긴 `INTERNAL_ERROR`. 전처리 비교(3D 품질 실험)는 `preprocess_result = 'OFF'`(원본)와 `preprocess_version` 의 `bg=keep`·`bg=remove` 로 나누고, `FALLBACK:*` 행은 원본이 들어간 것이므로 개선안 쪽에서 뺀다. 서버를 끈 상태에서는 H2 Shell(`java -cp h2-2.2.224.jar org.h2.tools.Shell -url jdbc:h2:file:./storage/db/beside-real -user sa -sql "..."`)로 같은 문장을 실행할 수 있다. 서버가 켜져 있을 때 다른 프로세스가 파일을 열 수는 없다. 테이블이 생기기 전(2026-10-06 이전)에 끝난 실행은 행이 없고 `events.jsonl` 줄만 있다.
 
-## 2. 추론 서비스 (3D Generation, 수치 채우기는 [계획] PLAN 3·4단계)
+## 2. 추론 서비스 (3D Generation, 수치 채우기 [구현됨], 값 [실험 결과])
 
-`POST /infer` 응답의 `metrics` 와 실험 기록 표에 같은 이름을 쓴다. Spring real 워커는 응답 `metrics`·`passthrough`·`modelVersion` 을 실행마다 `job_runs` 행과 `events.jsonl` 줄에 저장한다 **[구현됨]**(2026-10-06, §1·§1.1). 추론 서비스가 이 값을 실제로 채우는 것은 모델 연결(PLAN 3단계) 뒤의 일이다. 작업별 파일 저장(`results/{jobId}/*.metrics.json`)은 [계획]. `convert_asset.py` 의 `metrics.json`(vertices, triangles, textureSize, bytes, convertMs) 과 겹치는 이름은 같은 의미다.
+`POST /infer` 응답의 `metrics` 와 실험 기록 표에 같은 이름을 쓴다. 추론 서비스는 모델 모드에서 여섯 값을 모두 채운다 **[구현됨]**(#1, 2026-10-14: `inferMs`·`gpuPeakMB` 는 `animallift_runner.py`, `modelParams` 는 모델을 불러올 때, `outputVertices`·`outputTriangles`·`convertMs` 는 `convert_asset.py` 결과에 `app.py` 가 리깅 시간을 더한 것). 패스스루(`BESIDE_SAMPLE_GLB`)는 `inferMs`(모의 생성 시간)와 `convertMs` 0 만 채운다. Spring real 워커는 응답 `metrics`·`passthrough`·`modelVersion` 을 실행마다 `job_runs` 행과 `events.jsonl` 줄에 저장한다 **[구현됨]**(2026-10-06, §1·§1.1). 변환기는 추론 서비스의 작업 폴더에 `base.metrics.json`(vertices, triangles, textureSize, bytes, convertMs — 겹치는 이름은 같은 의미)도 쓰지만, 업로드 모드에서는 Spring 의 정리 `DELETE /artifacts/{jobId}` 로 함께 지워진다. 남는 기록은 `job_runs`·`events.jsonl` 이다.
 
 | 필드 | 타입 | 정의 | 측정 방법 |
 |---|---|---|---|
-| `inferMs` | int | 이미지 입력 → `mesh.obj`/`uv.png` 생성 완료까지 | 서비스 내부 타이머 |
-| `gpuPeakMB` | int | 추론 중 GPU 메모리 최대 사용량 | `torch.cuda.max_memory_allocated()` 를 MB 로 |
+| `inferMs` | int | 이미지 입력 → `mesh.obj`/`uv.png`(와 `hair.npz`) 저장 완료까지. GPU 잠금(`MODEL_LOCK`) 대기는 빠진다 | 서비스 내부 타이머 |
+| `gpuPeakMB` | int | 추론 중 GPU 메모리 최대 사용량(torch 할당 기준. nvidia-smi 의 프로세스 전체 사용은 이보다 크다 — exp-01 6절) | `torch.cuda.max_memory_allocated()` 를 MB 로 |
 | `modelParams` | int | 모델 파라미터 수 | `sum(p.numel())` |
 | `outputVertices` | int | 생성 메시 정점 수 (base 기준) | 변환기 `vertices` |
 | `outputTriangles` | int | 생성 메시 삼각형 수 (base 기준) | 변환기 `triangles` |
-| `convertMs` | int | OBJ/PNG → GLB 변환 시간 | 변환기 타이머 |
+| `convertMs` | int | OBJ/PNG → GLB 변환 시간. **리깅이 성공한 실행**(`modelVersion` 끝이 `+rig`)은 리깅(`rig_transfer.py`, 리깅한 파일의 크기 재검사 포함) 시간이 더해진다(2026-11-21 안건 #16 결정). 리깅이 실패해 리깅 없는 GLB 를 돌려준 실행에는 더하지 않는다. 리깅을 켠 실행과 끈 실행의 `convertMs` 는 섞지 않고 `modelVersion` 으로 나눈다 | 변환기 타이머 + 추론 서비스의 리깅 타이머 |
 
 환경 기록 필수: GPU 모델, 드라이버/CUDA 버전, 입력 사진 수·해상도, 배치 크기, 코드 커밋.
 
-## 3. 앱 `metrics.csv` (Unity, [계획] PLAN 1·2단계)
+측정값 **[실험 결과]**([exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md), Runpod A40, AnimalLift `5d364cf`, 사진 1장/작업): 2차 부하 시험 539건(같은 사진 반복)은 `inferMs` 중앙값 3,761(p95 4,326), `convertMs` 중앙값 816(p95 987), `gpuPeakMB` 5,120~5,128, `modelParams` 153,833,642, `outputVertices` 4,310, `outputTriangles` 7,774 다. 모두 리깅이 붙지 않은 실행이다(`modelVersion` `animallift-baseline@5d364cf:latest`, `+rig` 없음). 사진 다양성·리깅을 켠 실행은 [계획].
 
-위치 `Application.persistentDataPath/metrics/metrics.csv`. 한 작업당 한 줄, 헤더는 아래 순서 그대로.
+## 3. 앱 `metrics.csv` (Unity, 기록 코드 [구현됨], 측정값 [계획] PLAN 1·2단계)
+
+위치 `Application.persistentDataPath/metrics/metrics.csv`. 한 작업당 한 줄, 헤더는 아래 순서 그대로. 기록 코드는 #1(2026-10-14)로 들어왔다(`unity/Assets/Beside/Metrics/MetricsRecorder.cs` 가 줄을 쓰고 `Job/JobManager.cs` 가 단계마다 값을 채운다, 단계마다 logcat `[BesideMetric]` JSON 한 줄도 남긴다). 실기기에서 모은 줄은 리포에 0건이다 [계획].
 
 ```csv
 jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
@@ -94,6 +100,13 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 | `avgFps`, `minFps` | 모델 배치 후 30초 동안의 평균/최저 FPS | AR 배치 중 |
 | `memMB` | 배치 후 `Profiler.GetTotalAllocatedMemoryLong()` 을 MB 로 | AR 배치 중 |
 | `device` | `SystemInfo.deviceModel` | — |
+
+지금 코드의 동작(정의와 다른 점, 측정표를 만들 때 주의 — 바꿀지는 Unity 담당이 정한다):
+
+- `downloadMs`: 캐시에 유효한 GLB 가 있으면 내려받지 않고 0 이다.
+- `e2eMs`: 모델 준비 뒤 **첫 AR 배치**(`objectSpawned`) 때 끝난다. 사용자가 평면을 찾고 탭하기까지 기다린 시간이 들어간다.
+- `avgFps`·`minFps`·`memMB`·`device`: 배치 뒤 30초(`fpsSampleSeconds`)를 잰 다음 줄을 쓴다. 그 전에 앱이 종료되면 줄이 남지 않는다.
+- 이어서 기다리기(앱 재시작 뒤 저장된 jobId)와 retry 실행은 업로드가 없어 `uploadMs` 0 인 줄을 하나 더 쓴다('작업당 한 줄'과 다름, [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고').
 
 ## 4. 3D 품질 체크리스트 (사람 평가, 1~5점)
 

@@ -3,7 +3,7 @@
 Beside 의 공개 API 서버. 트랙 규칙과 명령 요약은 [CLAUDE.md](CLAUDE.md), 계약은 [docs/api/openapi.yaml](../docs/api/openapi.yaml).
 
 - **[구현됨]** API v1 `/api/v1` (Unity 가 보는 계약), API v0 `/api/jobs` (동결, 리포 안 사용처 없음 — 제거 대기), 브라우저 Mock UI(v1 사용), Mock 워커(`PENDING → PROCESSING → COMPLETED | FAILED`, retry), 계약 테스트(openapi.yaml ↔ springdoc), 프로파일 `mock | real`, H2 파일 DB(작업·Idempotency-Key 를 재시작 후에도 보존), 서버 측정 로그 `storage/events.jsonl` 과 실행별 측정 테이블 `job_runs`(서버 타이밍 + `/infer` 수치 + 패스스루·모델 버전, 측정표는 SQL 로), real 워커(Python `/infer` 호출·순차 처리·결과 GLB 저장 — 가짜 추론 서버 테스트와 FastAPI 스텁 패스스루로 확인), 디스크를 공유하지 않는 배치용 업로드 전송 모드(`inference.transfer=upload`, `X-Inference-Token` — 2026-10-30, 같은 PC 패스스루로 연동 확인), 운영 지표(Actuator·Prometheus, 관리 포트 8081 전용 — 2026-11-01, 아래 '운영 지표').
-- **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), hair variant 결과, VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
+- **[계획]** 실제 AnimalLift 모델로 돌린 E2E 기록(모델 연결 코드는 #1 로 generation 에 머지됨), VM ↔ GPU PC 실제 분리 배치(업로드 모드로).
 - **직접 할 일**: `storage/results/sample-dog.glb` 는 **0바이트**다. [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) 를 만족하는 유효한 GLB 로 교체해야 Unity 로드 검증이 가능하다. 그 전까지 v1 `asset.bytes` 는 0 이 온다.
 
 ## 실행
@@ -33,12 +33,12 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 
 | 메서드·경로 | 응답 | 비고 |
 |---|---|---|
-| `POST /api/v1/jobs` (multipart `photos` 1~10장, jpeg/png/webp, 장당 ≤5MB, 전체 ≤20MB, 헤더 `Idempotency-Key` 선택) | 202 + `Location` + `{ jobId }` | 400 `NO_PHOTOS`/`TOO_MANY_PHOTOS`/`UNSUPPORTED_IMAGE_TYPE`/`INVALID_REQUEST`, 413 |
+| `POST /api/v1/jobs` (multipart `photos` 1~10장, jpeg/png/webp, 장당 ≤5MB, 전체 ≤20MB, 헤더 `Idempotency-Key` 선택) | 202 + `Location` + `{ jobId }` | 400 `NO_PHOTOS`/`TOO_MANY_PHOTOS`/`UNSUPPORTED_IMAGE_TYPE`/`INVALID_REQUEST`, 413. prod 만 파일 시그니처도 검사(`upload.verify-magic`), real·prod 는 대표 사진 검사 400 코드 7개(ERROR_CODES '프로파일 차이') |
 | `GET /api/v1/jobs/{id}` | 200 `JobResponse` | 404 `JOB_NOT_FOUND` |
-| `GET /api/v1/jobs/{id}/asset?variant=base\|hair` | 200 `model/gltf-binary`, `Content-Disposition: attachment` | 409 `JOB_NOT_COMPLETED`, 404 `ASSET_NOT_FOUND`(Mock 은 hair 없음), 400 잘못된 variant |
+| `GET /api/v1/jobs/{id}/asset?variant=base` | 200 `model/gltf-binary`, `Content-Disposition: attachment` | 409 `JOB_NOT_COMPLETED`, 404 `ASSET_NOT_FOUND`(GLB 파일 없음), 400 `INVALID_REQUEST`(base 가 아닌 variant. `hair` 는 2026-11-21 에 계약에서 뺐고 작업 상태와 상관없이 400) |
 | `POST /api/v1/jobs/{id}/retry` | 202 + `{ jobId }` | FAILED 만, 그 외 409 `JOB_NOT_FAILED` |
 | `GET /api/v1/jobs?limit=&cursor=` | 200 `{ items, nextCursor }` | 개발·디버그용, 최신순 |
-| `GET /api/v1/healthz` | 200 `{ status, profile, workerType }` | |
+| `GET /api/v1/healthz` | 200 `{ status, profile, workerType }` | `profile` 은 활성 프로파일을 쉼표로 이은 값(공개 서버는 `real,prod`) |
 
 오류는 `{ "error": { "code", "message", "jobId?" } }` 봉투, 코드와 앱 표시 문구는 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md). `JobResponse` 는 서버 경로를 노출하지 않는다(`asset.url` 은 `/api/v1/jobs/{id}/asset?variant=base` 상대 경로).
 
@@ -61,7 +61,7 @@ curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
 `RealJobWorker` 가 [내부 계약 v0](../generation/inference_service/README.md) 대로 `POST {inference.base-url}/infer` 를 부른다 **[구현됨]**(2026-10-04, PLAN 4단계 선행). AnimalLift 모델 연결은 #1(2026-10-14)로 추론 서비스에 머지됐지만 실제 사진으로 돌린 기록은 아직 없어, 이 리포의 확인은 패스스루 모드 연동까지다.
 
 1. 추론 슬롯을 기다린다. `inference.max-concurrency`(기본 1 = GPU 1장)건만 동시에 `/infer` 를 부르고, 나머지 작업은 PENDING 으로 기다린다(`queuedMs` = 대기열 시간).
-2. PROCESSING(progress `null` — 추론 서비스가 진행률을 주지 않는다) → `{ jobId, imagePaths(절대 경로), options.hair=false }` 전송.
+2. PROCESSING(progress `null` — 추론 서비스가 진행률을 주지 않는다) → `{ jobId, imagePaths(절대 경로), options.hair=false }` 전송. `options.hair` 는 내부 `/infer` 계약의 필드로 늘 false 다(공개 API 의 hair variant 는 2026-11-21 에 뺐다, REVIEW_CHECKLIST #4).
 3. 돌아온 `glbPath` 가 glTF 2.0 바이너리인지 헤더만 확인하고 `storage/results/{jobId}/base.glb` 로 복사 → COMPLETED. 전체 검증(gltf-validator·상한)은 변환기 몫이다([GLB_SPEC](../docs/asset/GLB_SPEC.md)).
 
 | 상황 | `error.code` |
@@ -69,7 +69,7 @@ curl.exe -i -X POST http://localhost:8080/api/v1/jobs/<jobId>/retry
 | 오류 본문 `detail.code` 가 Job 실패 코드 | 그 코드 |
 | 그 밖의 HTTP 401·403(토큰 누락·불일치) / 501~504 / 그 밖 4xx·500 | `INFERENCE_UNAVAILABLE` / `INFERENCE_UNAVAILABLE` / `INFERENCE_FAILED` |
 | 연결 거부·끊김·5초 안에 연결 못 함 | `INFERENCE_UNAVAILABLE` |
-| `inference.timeout-ms`(기본 600000) 안에 답 없음 | `INFERENCE_TIMEOUT` |
+| `inference.timeout-ms`(기본 120000, 2026-11-21 전에는 600000) 안에 답 없음 | `INFERENCE_TIMEOUT` |
 | 200 인데 `glbPath` 없음·파일 없음·GLB 아님 | `CONVERSION_FAILED` |
 | 업로드 모드: 200 인데 `glbUrl` 없음, GLB 다운로드가 200 아님·연결 실패·시간 초과 | `CONVERSION_FAILED` |
 | 서버 종료로 끊김, 예기치 못한 오류 | `INTERNAL_ERROR` |
@@ -98,7 +98,7 @@ cd backend
 
 ### 업로드 모드 (Spring 과 추론 서비스가 디스크를 공유하지 않을 때)
 
-결정(2026-10-30, REVIEW_CHECKLIST #6 (b)): Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망). 경로 모드(위)는 그대로 두고 `inference.transfer=upload` 로 고른다 **[구현됨]**. 계약은 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드', [docs/CONTRACT.md](../docs/CONTRACT.md) §6.1.
+결정(2026-10-30 제안, 2026-11-21 확정, REVIEW_CHECKLIST #6 (b)): Spring 은 클라우드 VM, 추론 서비스는 팀원 GPU PC(Tailscale 사설망). 경로 모드(위)는 그대로 두고 `inference.transfer=upload` 로 고른다 **[구현됨]**. 계약은 [inference_service/README.md](../generation/inference_service/README.md) '전송 모드', [docs/CONTRACT.md](../docs/CONTRACT.md) §6.1.
 
 1. `POST {inference.base-url}/infer/upload` — multipart `request`(JSON `{jobId, options.hair=false}`) + `photos`(저장한 사진 파일, 업로드 원래 파일명, 확장자로 Content-Type).
 2. 응답은 경로 모드와 같은 필드 + `glbUrl`(서비스 기준 상대 경로). Spring 은 `inference.base-url` 뒤에 붙여 GET 하고 `storage/tmp/{jobId}/base.glb` 에 받는다. 절대 URL 은 받지 않는다(그 호스트로 토큰이 가지 않도록).
@@ -155,7 +155,7 @@ $env:INFERENCE_TOKEN = 'dev-secret'
 
 파일 위치(모두 그 PC, gitignore): H2 `backend\storage\db\beside-real.mv.db`(서버 하나만 연다), 업로드 `backend\storage\uploads\`, 결과 `backend\storage\results\{jobId}\base.glb`, `backend\storage\events.jsonl`. 세션이 끝나면 `job_runs` 를 CSV 로 내보내고(아래 '측정 내보내기') `events.jsonl` 사본과 함께 `generation/experiments/<exp 폴더>/` 에 넣어 커밋한다. DB 파일 자체는 커밋하지 않는다.
 
-타임아웃(제안값): exp-01 에서 잰 1건 추론 시간의 약 3배를 `--inference.timeout-ms`(기본 600000 = 10분)로, Unity `maxWaitSeconds` 는 600. 앱의 대기는 큐 대기(PENDING)를 포함하고 서버는 `/infer` 를 1건씩 부르므로, 둘이 동시에 올리면 뒤 작업은 앞 작업 시간만큼 더 기다린다(REVIEW_CHECKLIST #7).
+타임아웃: `inference.timeout-ms` 는 120000(2분)이다. 2026-11-21 에 600000(10분)에서 줄였다(REVIEW_CHECKLIST #7). exp-01 에 기록된 1건 시간(Runpod A40, 표본 4건, 전체 약 12~16 s)보다 넉넉하고, 이 시간은 그 작업 자신의 요청에만 걸린다(PENDING 대기 제외). 바꿀 때는 `--inference.timeout-ms`. Unity `maxWaitSeconds` 는 600 그대로다. 앱의 대기는 큐 대기(PENDING)를 포함하고 서버는 `/infer` 를 1건씩 부르므로, 둘이 동시에 올리면 뒤 작업은 앞 작업 시간만큼 더 기다린다(REVIEW_CHECKLIST #7).
 
 ### 측정 내보내기 (`job_runs`)
 
@@ -270,7 +270,8 @@ Remove-Item Env:BESIDE_MVP_URL
 | 테스트 | 확인 내용 |
 |---|---|
 | `JobAsyncIntegrationTest` | v0: 홈페이지·정적 파일·404·잘못된 요청·비동기 상태 전이·다운로드 API (동결 보호) |
-| `JobV1ApiTest` | v1: 202/Location/jobId, 폴링, timings, asset 409→200, asset Range 206(한 구간은 그 길이, 여러 구간은 파일 전체 Content-Length 없음), hair 404, retry 202/409, 검증 400, Idempotency-Key, 목록 cursor, healthz, 오류 봉투 |
+| `JobV1ApiTest` | v1: 202/Location/jobId, 폴링, timings, asset 409→200, asset Range 206(한 구간은 그 길이, 여러 구간은 파일 전체 Content-Length 없음), `?variant=hair` 는 완료·미완료·없는 작업 모두 400 `INVALID_REQUEST`(jobId 없음, 2026-11-21 계약에서 삭제), retry 202/409, 검증 400, Idempotency-Key, 목록 cursor, healthz, 오류 봉투 |
+| `ProfileContractSettingsTest` | 계약 문서가 적은 프로파일 차이를 설정 파일에서 확인: 파일 시그니처 검사는 prod 만(`upload.verify-magic`), 대표 사진 검사는 real 켬·mock 끔·prod 는 물려받음, `inference.timeout-ms` 는 real 120000·prod 는 물려받음 |
 | `JobServiceRetryRaceTest` | 같은 FAILED 작업에 retry 8건을 동시에: 202 한 건·409 `JOB_NOT_FAILED` 일곱 건, dispatch 한 번, attempt 2 의 PENDING 으로 필드 정리 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
@@ -281,7 +282,7 @@ Remove-Item Env:BESIDE_MVP_URL
 | `GlobalExceptionHandlerTest` | 413 이 v1 봉투 / v0 평면으로 나뉘는지 (멀티파트 한도는 MockMvc 로 재현 불가), 클라이언트가 끊은 연결은 응답 없이 DEBUG(다른 IOException 은 500 + ERROR) |
 | `ObservabilityEndpointTest` | 실제 Tomcat: 공개 포트 `/actuator*` 404, 관리 포트 health(상세 없음)·prometheus 200, `http_server_requests` SLO 버킷·`env`·JVM/Tomcat/Hikari/디스크, `beside_*` 기동 직후 존재, RST 로 끊은 32 MB 다운로드가 `client_abort` 이고 ERROR 로그 없음 |
 | `JobMetricsTest` | `beside.jobs.finished` 태그(완료·실패 코드·패스스루), 작업 타이머 값과 버킷, processingMs 없음, 이상한 이벤트에도 예외 없음, 대기열 게이지 갱신과 실패 시 마지막 값 유지 (SimpleMeterRegistry) |
-| `OperationalMetricsFlowTest` | mock 흐름: created(재요청 제외)·retried·finished·타이머·게이지, 에셋 GET 409/404/200/404(hair) outcome, 폴링은 세지 않음 |
+| `OperationalMetricsFlowTest` | mock 흐름: created(재요청 제외)·retried·finished·타이머·게이지, 에셋 GET 409/404/200/400(`variant=hair` → error) outcome, 폴링은 세지 않음 |
 | `AssetDownloadMetricsFilterTest` | outcome 판정: 전체·빈 GLB·짧은 본문·헤더 Content-Length·쓰는 중 끊김·flush 끊김·404/409/500/400·예외, 대상 아닌 요청 |
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부, 503 `QUEUE_FULL`(**[제안값] 안건 #21, 계약 회의 전**)의 문구와 `Retry-After` 초 동안 생성 버튼 잠금(다시 보내지 않음, 양의 정수만 인정) (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 
