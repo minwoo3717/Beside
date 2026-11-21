@@ -114,7 +114,11 @@ class ObservabilityEndpointTest {
                 .contains("beside_jobs_created_total{env=\"local\",}")
                 .contains("beside_jobs_retried_total{")
                 .contains("beside_jobs_queue{env=\"local\",state=\"pending\",}")
-                .contains("beside_jobs_queue{env=\"local\",state=\"processing\",}");
+                .contains("beside_jobs_queue{env=\"local\",state=\"processing\",}")
+                // Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): 0 while it is off.
+                .contains("beside_jobs_refused_total{env=\"local\",op=\"create\",} 0.0")
+                .contains("beside_jobs_refused_total{env=\"local\",op=\"retry\",} 0.0")
+                .contains("beside_jobs_pending_stale{env=\"local\",} 0.0");
     }
 
     @Test

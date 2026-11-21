@@ -62,7 +62,8 @@ public class JobV1Controller {
             description = "multipart/form-data 의 photos 파트로 1~10장 (image/jpeg|png|webp, 장당 ≤5MB, 전체 ≤20MB). 접수 즉시 202, 처리는 비동기."
                     + " prod 는 사진마다 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 검사한다(upload.verify-magic, 아니면 400"
                     + " UNSUPPORTED_IMAGE_TYPE). 다른 프로파일은 선언된 Content-Type 만 본다."
-                    + " real·prod 는 첫 장(대표 사진)을 접수 전에 검사해 400 으로 거절할 수 있다(mock 은 끔).")
+                    + " real·prod 는 첫 장(대표 사진)을 접수 전에 검사해 400 으로 거절할 수 있다(mock 은 끔)."
+                    + " 대기열 상한을 켠 경우(기본 꺼짐, 안건 #21 2026-11-21 결정) 503 QUEUE_FULL + Retry-After 로 거절할 수 있다.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "작업 접수",
                     headers = @Header(name = "Location", description = "/api/v1/jobs/{jobId}", schema = @Schema(type = "string")),
@@ -74,6 +75,10 @@ public class JobV1Controller {
             @ApiResponse(responseCode = "413", description = "용량 초과 (PAYLOAD_TOO_LARGE)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "생성 대기열이 가득 참 (QUEUE_FULL) — 안건 #21, 2026-11-21 결정",
+                    headers = @Header(name = "Retry-After", description = "다시 보내기까지 기다릴 초",
+                            schema = @Schema(type = "integer", minimum = "1")),
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping(value = "/jobs", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = JSON)
     public ResponseEntity<JobCreatedResponse> createJob(
@@ -154,6 +159,10 @@ public class JobV1Controller {
             @ApiResponse(responseCode = "409", description = "FAILED 가 아님 (JOB_NOT_FAILED)",
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
+                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "503", description = "생성 대기열이 가득 참 (QUEUE_FULL), 작업은 FAILED 그대로 — 안건 #21, 2026-11-21 결정",
+                    headers = @Header(name = "Retry-After", description = "다시 보내기까지 기다릴 초",
+                            schema = @Schema(type = "integer", minimum = "1")),
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @PostMapping(value = "/jobs/{jobId}/retry", produces = JSON)
     public ResponseEntity<JobCreatedResponse> retryJob(@PathVariable("jobId") String jobId) {

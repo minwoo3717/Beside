@@ -7,8 +7,9 @@
     python scripts/load/cap_model.py retry <run dir> [--rate 517] [--cap 19] [--retry-after 60 --retry-after 165]
     python scripts/load/cap_model.py all --out docs/perf/load/data/2026-11-20_queue-cap/cap_model-output.txt
 
-The cap ([계획], not on main): POST /api/v1/jobs and /retry get 503 QUEUE_FULL + Retry-After while the PENDING jobs
-(plus requests being admitted) number N or more. A refused request leaves no job behind; throughput does not change.
+The cap (decided 2026-11-21, #21: N 19, Retry-After 165 s, API v1.1; server code in PR #19, off in production until a
+new Unity build and the 5th load test): POST /api/v1/jobs and /retry get 503 QUEUE_FULL + Retry-After while the PENDING
+jobs (plus requests being admitted) number N or more. A refused request leaves no job behind; throughput does not change.
 
 One job, from a run folder's events.jsonl (the backend's job_runs lines; the same reading as the round-2 g_trace.py and
 the round-4 g4_analyze.py under docs/perf/load/data/):
@@ -107,7 +108,7 @@ def retry_after(n: int, mu_per_h: float) -> float:
 
 
 def retry_after_header(n: int, mu_per_h: float) -> int:
-    """The Retry-After header value: whole seconds, at least 1 (the draft contract's minimum), rounded half up."""
+    """The Retry-After header value: whole seconds, at least 1 (the contract's minimum), rounded half up."""
     return max(1, math.floor(retry_after(n, mu_per_h) + 0.5))
 
 

@@ -10,6 +10,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -19,6 +21,8 @@ import java.util.concurrent.TimeUnit;
  *   <li>{@code beside.job.queued|processing|total} (worker, result, passthrough): the run's queuedMs, processingMs and
  *       totalMs (the same numbers as job_runs and events.jsonl) as timers with fixed SLO buckets.</li>
  *   <li>{@code beside.jobs.created}, {@code beside.jobs.retried}: JobServiceImpl calls these after a dispatch succeeded.</li>
+ *   <li>{@code beside.jobs.refused} (op = create | retry): AdmissionGate calls it for every v1 request it answers 503
+ *       QUEUE_FULL (queue cap, REVIEW_CHECKLIST #21, decided 2026-11-21). Both series exist from startup.</li>
  * </ul>
  * The finish listener runs inside JobFinisher on the worker thread, so it never throws: a failure here would skip the
  * other listeners (the webhook). Metrics never change a job.
@@ -33,6 +37,7 @@ public class JobMetrics {
     private final MeterRegistry registry;
     private final Counter created;
     private final Counter retried;
+    private final Map<AdmissionGate.Op, Counter> refused = new EnumMap<>(AdmissionGate.Op.class);
     private final Logger log = LoggerFactory.getLogger(JobMetrics.class);
 
     public JobMetrics(MeterRegistry registry) {
@@ -43,6 +48,12 @@ public class JobMetrics {
         this.retried = Counter.builder("beside.jobs.retried")
                 .description("Retries accepted and handed to the worker")
                 .register(registry);
+        for (AdmissionGate.Op op : AdmissionGate.Op.values()) {
+            refused.put(op, Counter.builder("beside.jobs.refused")
+                    .description("v1 creates and retries answered 503 QUEUE_FULL by the queue cap (admission.max-pending)")
+                    .tag("op", op.tag())
+                    .register(registry));
+        }
     }
 
     public void jobCreated() {
@@ -51,6 +62,10 @@ public class JobMetrics {
 
     public void jobRetried() {
         retried.increment();
+    }
+
+    public void jobRefused(AdmissionGate.Op op) {
+        refused.get(op).increment();
     }
 
     @EventListener

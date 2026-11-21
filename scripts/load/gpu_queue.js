@@ -39,7 +39,7 @@
 // its job ended FAILED, so failures were injected (an F1a / F2 run without SCENARIO) or occurred, and the same holds.
 // An F2 run whose jobs all waited out the outage has no retry: only SCENARIO=F2 marks it. The stdout report ends with
 // these.
-// Queue cap ([계획] agenda #21: the server refuses a create or a retry with 503 QUEUE_FULL + Retry-After once N jobs
+// Queue cap (agenda #21, decided 2026-11-21, off in production for now: the server refuses a create or a retry with 503 QUEUE_FULL + Retry-After once N jobs
 // wait). QUEUE_CAP is the N the server was set to (meta.queueCap, null when not given, 0 = cap off), so every run
 // records it; meta.measuredRefused / measuredRefusedRetries are the 503 QUEUE_FULL of creates / retries, and
 // meta.measuredRetryAfterChecks the Retry-After checks of lib/flow.js (QUEUE_RETRY_AFTER, lib/config.js). The queue

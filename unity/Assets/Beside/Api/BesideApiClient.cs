@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -31,11 +32,21 @@ namespace Beside.Api
         public string message;     // developer text, never shown to the user
         public long httpStatus;
         public string jobId;
+        /// <summary>Retry-After of the response in seconds (QUEUE_FULL), 0 when absent or not a positive integer.
+        /// The app does not send the request again before this many seconds have passed.</summary>
+        public int retryAfterSeconds;
 
         public const string Network = "NETWORK_ERROR";
         public const string BadResponse = "BAD_RESPONSE";
 
-        public override string ToString() => $"{code} (HTTP {httpStatus}) {message}";
+        public override string ToString() => $"{code} (HTTP {httpStatus}) {message}" + (retryAfterSeconds > 0 ? $" Retry-After {retryAfterSeconds}" : "");
+
+        /// <summary>Retry-After as delta-seconds: a positive integer only (no sign, fraction or HTTP date), else 0.</summary>
+        public static int ParseRetryAfter(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return 0;
+            return int.TryParse(value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out int seconds) && seconds > 0 ? seconds : 0;
+        }
     }
 
     /// <summary>
@@ -197,6 +208,7 @@ namespace Beside.Api
             }
 
             // ProtocolError (4xx / 5xx): try the { error: { code, message, jobId } } envelope
+            error.retryAfterSeconds = ApiError.ParseRetryAfter(ResponseHeader(req, "Retry-After"));
             var envelope = Parse<ErrorResponse>(errorBody ?? ReadText(req));
             if (envelope?.error != null && !string.IsNullOrEmpty(envelope.error.code))
             {
@@ -209,6 +221,19 @@ namespace Beside.Api
                 error.code = req.responseCode == 404 ? "NOT_FOUND" : "INTERNAL_ERROR";
             }
             return false;
+        }
+
+        /// <summary>A response header by name, or null. Header names are case-insensitive and may arrive in lower case
+        /// (HTTP/2), so the full list is searched when the direct lookup finds nothing.</summary>
+        static string ResponseHeader(UnityWebRequest req, string name)
+        {
+            string value = req.GetResponseHeader(name);
+            if (value != null) return value;
+            var all = req.GetResponseHeaders();
+            if (all == null) return null;
+            foreach (var kv in all)
+                if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)) return kv.Value;
+            return null;
         }
 
         static T Parse<T>(string json) where T : class

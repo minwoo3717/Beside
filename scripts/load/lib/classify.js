@@ -3,8 +3,9 @@
 //
 //   ok          the status this request expects (e.g. 202 for POST /jobs, 400 for an intentionally bad upload)
 //   error       status 0 (connection error, timeout, reset) or any 5xx that is not an intended rejection
-//   rejected    429 RATE_LIMITED / 503 QUEUE_FULL — [계획] R1~R3 codes, not in the v1 contract yet; counted apart so a
-//               protected server is not reported as failing
+//   rejected    503 QUEUE_FULL (API v1.1, #21 decided 2026-11-21, off unless admission.max-pending > 0) / 429
+//               RATE_LIMITED (#22, reserved name, not sent); counted apart so a protected server is not reported as
+//               failing
 //   unexpected  any other status (e.g. 404 JOB_NOT_FOUND while polling a job the run created)
 
 export const REJECTION_CODES = { 429: 'RATE_LIMITED', 503: 'QUEUE_FULL' };
@@ -39,7 +40,7 @@ export const STATUS_CLASSES = ['0', '4xx', '5xx'];
 export const STATUS_METRIC = { '0': 'load_status0Count', '4xx': 'load_status4xxCount', '5xx': 'load_status5xxCount' };
 // The 5xx codes kept one by one over the whole run (verdict.httpStatus["5xxByCode"]; any other 5xx is "other"): 500
 // from the app, and the codes a gateway such as the reverse proxy answers with when the upstream fails it (RFC 9110:
-// 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout; the app's 503 QUEUE_FULL is [계획]).
+// 502 Bad Gateway, 503 Service Unavailable, 504 Gateway Timeout; the app's 503 QUEUE_FULL (v1.1 queue cap)).
 export const STATUS_5XX_CODES = ['500', '502', '503', '504'];
 
 export function statusClass(status) {

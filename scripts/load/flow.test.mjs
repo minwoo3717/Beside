@@ -108,7 +108,7 @@ test('flow: an asset whose size differs from job.asset.bytes fails the flow', as
   assert.equal(samples('load_unexpectedCount')[0].tags.reason, 'asset_size');
 });
 
-// 503 QUEUE_FULL + Retry-After is the [계획] queue cap (agenda #21): the fake server answers it the way the draft does.
+// 503 QUEUE_FULL + Retry-After is the queue cap (agenda #21, decided 2026-11-21): the fake server answers it the way the server does.
 const QUEUE_FULL = '{"error":{"code":"QUEUE_FULL","message":"x"}}';
 
 function isCreate(req) {
@@ -186,7 +186,7 @@ test('flow: every 503 QUEUE_FULL has its Retry-After checked (whole seconds >= 1
   assert.equal(f.retryAfterOk('1', null), true);
   assert.equal(f.retryAfterOk('165', 165), true);
   assert.equal(f.retryAfterOk('60', 165), false);
-  // missing, empty, zero, negative, a fraction, padded, or an HTTP-date (RFC 9110 allows it, the draft contract does not)
+  // missing, empty, zero, negative, a fraction, padded, or an HTTP-date (RFC 9110 allows it, the contract does not)
   [undefined, '', '0', '-5', '1.5', ' 165', '165s', 'Wed, 21 Oct 2026 07:28:00 GMT'].forEach((v) => {
     assert.equal(f.retryAfterOk(v, null), false, String(v));
   });

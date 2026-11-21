@@ -19,7 +19,9 @@ namespace Beside.Api
         public string nextCursor;
     }
 
-    /// <summary>Envelope of every v1 error response (HTTP 400 / 404 / 409 / 413 / 500).</summary>
+    /// <summary>Envelope of every v1 error response (HTTP 400 / 404 / 409 / 413 / 500, and 503 QUEUE_FULL of the
+    /// queue cap — 안건 #21, 2026-11-21 결정, API v1.1). A 503 carries a Retry-After header, which BesideApiClient
+    /// reads into ApiError.retryAfterSeconds.</summary>
     [Serializable]
     public class ErrorResponse
     {

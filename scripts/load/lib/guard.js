@@ -1,6 +1,7 @@
 // Optional abort guard (docs/perf/load/TRAFFIC_MODEL.md §8 "중단 조건"): when PROM_URL points at the run's Prometheus (SSH tunnel or
 // Tailscale, e.g. http://localhost:9090), one VU checks every GUARD_EVERY_S seconds
-//   - the server's 5xx ratio over the last minute  > 5 %  (GUARD_BREACHES checks in a row)
+//   - the server's 5xx ratio over the last minute  > 5 %  (GUARD_BREACHES checks in a row), without the intended
+//     503 QUEUE_FULL refusals of the queue cap (REFUSED_METRIC below)
 //   - the fullest disk the backend reports          > 80 %
 // and stops the test with exec.test.abort(). Its requests are tagged endpoint=guard and are kept out of the
 // load_* metrics. Without PROM_URL there is no guard scenario. Knobs (lib/config.js cfg.guard): GUARD_EVERY_S (15),
@@ -16,10 +17,19 @@ import * as m from './metrics.js';
 export const GUARD_ABORT = { errors: 1, disk: 2, blind: 3 };
 export const GUARD_FAIL = { noResponse: 0, notPrometheus: -1, noDiskSeries: -2 };
 
+// The server's count of v1 creates and retries the queue cap answered 503 QUEUE_FULL (docs/METRICS.md §5.1, Micrometer
+// beside.jobs.refused{op}). Those 503s are intended, so the 5xx ratio leaves them out: REVIEW_CHECKLIST #21
+// decision D9 (2026-11-21). "or vector(0)": a server without the counter (no cap code) takes
+// nothing out. clamp_min(.., 0): the refusal is counted before the 503 is recorded in http_server_requests, so a 1m
+// window can hold one more refusal than 503s. scripts/load/test_collect.py checks the name against the METRICS.md row.
+export const REFUSED_METRIC = 'beside_jobs_refused_total';
+
 export function guardQueries(env) {
   const sel = `env="${env}"`;
+  const refused = `(sum(rate(${REFUSED_METRIC}{${sel}}[1m])) or vector(0))`;
   return {
-    errorRatio: `sum(rate(http_server_requests_seconds_count{${sel},status=~"5.."}[1m])) / clamp_min(sum(rate(http_server_requests_seconds_count{${sel}}[1m])), 1e-9)`,
+    errorRatio: `clamp_min(sum(rate(http_server_requests_seconds_count{${sel},status=~"5.."}[1m])) - ${refused}, 0)` +
+      ` / clamp_min(sum(rate(http_server_requests_seconds_count{${sel}}[1m])), 1e-9)`,
     diskUsed: `max(1 - disk_free_bytes{${sel}} / disk_total_bytes{${sel}})`,
   };
 }

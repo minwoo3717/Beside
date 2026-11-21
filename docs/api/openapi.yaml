@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Beside API
-  version: 1.0.0
+  version: 1.1.0
   description: |
     사진 기반 반려동물 3D 재현 서비스의 공개 API 계약 v1. Unity 앱이 보는 유일한 인터페이스이며
     이 파일이 단일 진실 공급원(single source of truth)이다. backend 의 계약 테스트(JobV1ContractTest)가
@@ -56,8 +56,16 @@ paths:
           400 을 돌려주고(코드 7개는 ERROR_CODES.md 의 '대표 사진 검사'), 거절된 요청은 아무것도 남기지 않는다.
           검사 기준값은 제안값이다(장수·용량 상한과 달리 아직 확정하지 않음).
         - 검사 순서: 용량(413) → 개수 → 사진마다 (빈 파일 → Content-Type → 시그니처) → `Idempotency-Key` 길이 →
-          같은 키의 재요청이면 그 작업(202) → 대표 사진 검사. 그래서 시그니처가 없는 첫 장은 prod 에서
-          `UNSUPPORTED_IMAGE_TYPE`, real 에서는 대표 사진 검사의 `UNREADABLE_IMAGE` 다.
+          같은 키의 재요청이면 그 작업(202) → 대기열 상한(켠 경우 503, 아래) → 대표 사진 검사. 그래서 시그니처가
+          없는 첫 장은 prod 에서 `UNSUPPORTED_IMAGE_TYPE`, real 에서는 대표 사진 검사의 `UNREADABLE_IMAGE` 다.
+
+        대기열 상한(2026-11-21 안건 #21 결정, api-v1.1): 서버 설정 `admission.max-pending` 으로 켠 경우(기본 꺼짐)
+        PENDING 작업과 지금 접수 중인 요청을 더한 수가 서버 상한에 이르면 작업을 만들지 않고 503(QUEUE_FULL)과
+        `Retry-After`(초)로 거절한다(`admission.stale-after-ms` 보다 오래된 PENDING 은 세지 않는다,
+        ERROR_CODES.md '대기열 상한'). 거절된 요청은 사진·작업·`Idempotency-Key` 를 남기지 않는다.
+        상한은 대표 사진 검사보다 먼저라, 상한이 차 있으면 사진 문제(400)보다 503 을 먼저 받는다.
+        같은 키의 요청은 상한과 상관없이 그 키의 작업을 202 로 돌려준다. 같은 키의 요청이 아직 접수 중이면
+        함께 접수해 작업은 많아야 하나만 생긴다.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -95,6 +103,8 @@ paths:
           $ref: '#/components/responses/PayloadTooLarge'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/QueueFull'
     get:
       tags: [jobs]
       operationId: listJobs
@@ -186,6 +196,12 @@ paths:
       description: |
         status=FAILED 인 작업만 재시도할 수 있다. 성공하면 202 와 함께 같은 jobId 를 돌려주고 작업은 PENDING 으로 돌아간다.
         error 는 비워지고 timings 는 재시도 시점부터 다시 측정한다. FAILED 가 아닌 작업은 409(JOB_NOT_FAILED).
+
+        대기열 상한(2026-11-21 안건 #21 결정, api-v1.1): 상한을 켠 경우(기본 꺼짐) 404·409 를 먼저 보고,
+        PENDING 작업과 지금 접수 중인 요청을 더한 수가 서버 상한에 이르면 작업을 FAILED 그대로 두고
+        503(QUEUE_FULL)과 `Retry-After`(초)로 거절한다. 이때 error.jobId 는 그 작업이다.
+        같은 작업의 retry 가 동시에 들어오면 202 는 많아야 하나다. 자리가 있으면 나머지는 409(JOB_NOT_FAILED),
+        대기열이 차 있으면 모두 503(QUEUE_FULL)이다.
       parameters:
         - $ref: '#/components/parameters/JobId'
       responses:
@@ -206,6 +222,8 @@ paths:
           $ref: '#/components/responses/Conflict'
         '500':
           $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/QueueFull'
 
   /api/v1/healthz:
     get:
@@ -303,6 +321,24 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: 서버 오류 (INTERNAL_ERROR)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    QueueFull:
+      description: >-
+        생성 대기열이 가득 참 (QUEUE_FULL) — 작업을 만들지도, 다시 대기열에 넣지도 않았다. Retry-After 초 뒤에 다시 보낸다.
+        PENDING 작업과 접수 중인 요청을 더한 수가 서버 상한(admission.max-pending, 기본 꺼짐)에 이를 때만 온다.
+        queuedAt 이 admission.stale-after-ms(기본은 정상 작업의 가장 긴 대기, prod·N 19·c 1 이면 2시간 56분)보다 오래된 PENDING 은
+        세지 않는다(돌릴 워커가 없는 작업을 위한 안전망, ERROR_CODES.md '대기열 상한').
+        2026-11-21 안건 #21 결정(N 19, Retry-After 165 s — 5차 부하 시험 뒤 다시 계산할 수 있음), api-v1.1.
+        운영 서버는 Unity 새 빌드와 5차 부하 시험 전까지 상한을 꺼 둔다.
+      headers:
+        Retry-After:
+          description: 다시 보내기까지 기다릴 초(정수, 1 이상). 서버 설정 admission.retry-after-seconds.
+          schema:
+            type: integer
+            minimum: 1
       content:
         application/json:
           schema:

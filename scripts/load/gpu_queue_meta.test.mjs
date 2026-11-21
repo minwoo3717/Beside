@@ -193,7 +193,7 @@ test('gpu_queue.js: a MAX_VUS below the computed pre-allocation caps it instead 
   await assert.rejects(load('gpu_queue.js', Object.assign({}, G1, { MAX_VUS: '2.5' })), /MAX_VUS must be a whole number >= 1/);
 });
 
-// The [계획] queue cap (agenda #21): the server refuses a create or a retry with 503 QUEUE_FULL + Retry-After. The
+// The queue cap (agenda #21, decided 2026-11-21): the server refuses a create or a retry with 503 QUEUE_FULL + Retry-After. The
 // refusals reach the summary through the submetrics the script keeps with no-op thresholds.
 const REFUSED_CREATE = 'load_queueFullCount{endpoint:create}';
 const REFUSED_RETRY = 'load_queueFullCount{endpoint:retry}';

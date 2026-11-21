@@ -11,12 +11,19 @@ public class ApiException extends RuntimeException {
     private final HttpStatus status;
     private final ErrorCode code;
     private final String jobId;
+    /** Seconds for the Retry-After header (v1 responses only); null = no header. */
+    private final Integer retryAfterSeconds;
 
     public ApiException(HttpStatus status, ErrorCode code, String message, String jobId) {
+        this(status, code, message, jobId, null);
+    }
+
+    private ApiException(HttpStatus status, ErrorCode code, String message, String jobId, Integer retryAfterSeconds) {
         super(message);
         this.status = status;
         this.code = code;
         this.jobId = jobId;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
 
     public static ApiException badRequest(ErrorCode code, String message) {
@@ -34,5 +41,15 @@ public class ApiException extends RuntimeException {
 
     public static ApiException conflict(ErrorCode code, String jobId, String message) {
         return new ApiException(HttpStatus.CONFLICT, code, message, jobId);
+    }
+
+    /**
+     * 503 QUEUE_FULL with Retry-After (REVIEW_CHECKLIST #21, decided 2026-11-21, API v1.1).
+     *
+     * @param jobId the job of a refused retry (ERROR_CODES.md jobId rule, decision D7); null for a refused create
+     */
+    public static ApiException queueFull(String jobId, int retryAfterSeconds) {
+        return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.QUEUE_FULL,
+                "Generation queue is full; retry after " + retryAfterSeconds + " s", jobId, retryAfterSeconds);
     }
 }

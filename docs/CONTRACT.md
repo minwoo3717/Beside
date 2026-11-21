@@ -1,4 +1,4 @@
-# Beside 계약서 v1.0 (통합본)
+# Beside 계약서 v1.1 (통합본)
 
 세 트랙(Backend · Unity · 3D Generation)이 지켜야 할 경계면을 한 파일에 모았다. 기계가 읽는 원본은 [api/openapi.yaml](api/openapi.yaml)이며 backend 계약 테스트(`JobV1ContractTest`)가 서버와 비교한다. 이 문서와 원본이 다르면 원본이 우선이고, 이 문서를 고친다. 상태 표기: **[구현됨]** / **[실험 결과]** / **[계획]**. "제안값"은 확정 전까지 임시값이다(2026-11-21 에 정한 것은 §7).
 
@@ -21,10 +21,10 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 메서드·경로 | 요청 | 성공 | 오류 |
 |---|---|---|---|
-| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB(#3 확정), `image/jpeg \| image/png \| image/webp`. prod 는 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 보고, 다른 프로파일은 선언된 Content-Type 만 본다(`upload.verify-magic`, #17). 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`, 대표 사진 검사 400 7개(real·prod, §3), 413 `PAYLOAD_TOO_LARGE`, 500 |
+| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB(#3 확정), `image/jpeg \| image/png \| image/webp`. prod 는 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 보고, 다른 프로파일은 선언된 Content-Type 만 본다(`upload.verify-magic`, #17). 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`, 대표 사진 검사 400 7개(real·prod, §3), 413 `PAYLOAD_TOO_LARGE`, 500, 503 `QUEUE_FULL` + `Retry-After`(대기열 상한, 기본 꺼짐. 2026-11-21 #21 결정, `api-v1.1`) |
 | `GET /api/v1/jobs/{jobId}` | 1~2초 간격 폴링 | **200** `JobResponse` | 404 `JOB_NOT_FOUND`, 500 |
 | `GET /api/v1/jobs/{jobId}/asset?variant=base` | `variant` 는 `base` 뿐, 생략 시 `base`. `hair` 는 2026-11-21 계약에서 뺐다(#4) | **200** `model/gltf-binary`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`, `Content-Length` | 409 `JOB_NOT_COMPLETED`(미완료·실패), 404 `ASSET_NOT_FOUND`(완료됐지만 GLB 파일 없음), 400 `INVALID_REQUEST`(`base` 가 아닌 variant — `hair` 포함, 작업 상태와 상관없이), 404 `JOB_NOT_FOUND`, 500 |
-| `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500 |
+| `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500, 503 `QUEUE_FULL` + `Retry-After`(작업은 FAILED 그대로, `error.jobId` 는 그 작업. 2026-11-21 #21 결정, `api-v1.1`) |
 | `GET /api/v1/jobs?limit=&cursor=` | `limit` 1~100(기본 20), `cursor` = 이전 `nextCursor` | **200** `{ items: JobResponse[], nextCursor: string\|null }` 최신순 | 400 `INVALID_REQUEST`, 500 |
 | `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile, workerType: "mock"\|"real" }`. `profile` 은 활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음, 예 `mock`·`real`, 공개 서버는 `real,prod`, 활성 프로파일이 없으면 `mock`). 앱은 `mock`\|`real` 둘 중 하나라고 가정하지 않는다(워커 종류는 `workerType`) | — |
 
@@ -61,7 +61,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 { "error": { "code": "JOB_NOT_COMPLETED", "message": "developer text", "jobId": "uuid 또는 null" } }
 ```
 
-상태 코드는 400 / 404 / 409 / 413 / 500 다섯 가지. 429 `RATE_LIMITED` + `Retry-After`(클라이언트별 요청 제한)는 이름만 예약했다(2026-11-21 #22, 구현·한도는 [계획]). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
+상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지. 503 은 `QUEUE_FULL` 전용이다(2026-11-21 #21 결정, `api-v1.1` 에서 더함. 상한을 켠 서버만 보낸다). 429 `RATE_LIMITED` + `Retry-After`(클라이언트별 요청 제한)는 이름만 예약했다(2026-11-21 #22, 구현·한도는 [계획]). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
@@ -93,8 +93,11 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `JOB_NOT_COMPLETED` | 409 | 미완료·실패 상태에서 asset 요청 | 아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요. |
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
+| `QUEUE_FULL` | 503 | 대기 작업(PENDING)과 접수 중인 요청이 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이름. `Retry-After` 초 뒤에 다시 보낸다. 2026-11-21 #21 결정, `api-v1.1` | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. |
 
 대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔이라 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다. 2026-11-21 결정(#19): 이 동작과 400 코드 7개를 확정하고, 기준값은 제안값 그대로 두고 팀 사진 판정표 뒤 다시 본다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[구현됨]**(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합: 코드·테스트). VM(2 vCPU)의 검사 시간은 2차 부하 시험에 있다 **[실험 결과]**(`checkMs` 실행별 평균 381~483 ms, 같은 사진 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 메모리는 **[계획]**.
+
+대기열 상한(`QUEUE_FULL`)은 2026-11-21 에 Backend 담당이 정했다(안건 #21, `api-v1.1`): 503 `QUEUE_FULL` + `Retry-After`, N=19·`Retry-After` 165 s(목표 최악 대기 W=180 s 규칙, c=1. 5차 부하 시험에서 S_busy 를 다시 재면 다시 계산할 수 있다). 서버 기본값은 꺼짐(`admission.max-pending=0`)이고 운영 서버는 Unity 새 빌드 설치와 5차 부하 시험 전까지 꺼 둔다 **[계획: 운영에서 켜기]**. 서버·웹 코드와 시험은 **[구현됨]**(PR #19), Unity 는 에디터·기기 확인 **[계획]**. 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 의 요청은 상한과 상관없이 그 키의 작업을 받는다(첫 요청이 아직 접수 중이어도). 거절된 retry 의 작업은 FAILED 그대로다. 서버 설정 `admission.stale-after-ms`(기본은 정상 작업의 가장 긴 대기, prod·N 19·c 1 이면 2시간 56분)보다 오래된 PENDING 은 세지 않는다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
 
@@ -215,8 +218,9 @@ Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `ht
 
 안건 #1~#23 은 2026-11-21 에 계약 회의를 열지 않고 Backend 담당(저장소 관리자)이 정했다. 결정 전문은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md) 의 '결정' 칸, 버전별 정리는 [api/CHANGELOG.md](api/CHANGELOG.md).
 
-- `api-v1.0` 에 넣는 것: `hair` variant 삭제(#4), GLB_SPEC 을 실제 출력에 맞춤(#14), 에셋 상한은 제안값 유지·hair 상한 삭제(#3), 프로파일 차이 명시(#17·#19), 429 `RATE_LIMITED` 이름 예약(#22), 내부 계약 — 업로드 모드(#6)·`inference.timeout-ms` 120 s(#7)·`+rig`(#18), 측정 문서 표기(#16). #7 의 나머지(retry 횟수 제한 없음, 서버 재시작 때 끊긴 작업은 FAILED `INTERNAL_ERROR` + retry, 폴링 1~2초, 앱 최대 대기 600 s)와 #1·#2·#5·#8·#9·#10·#13·#15·#20 은 지금 문서 그대로 확정.
-- 남은 것 **[계획]**: `git tag api-v1.0`, 작업 대기열 상한 적용(503 `QUEUE_FULL`, `api-v1.1`, PR #19 — #21), v1.1 검토 브랜치에서 고른 기능(`api-v1.2` — #11·#12), 보존 정책의 자동 삭제 구현(사진 7일·GLB 30일, 공개 베타 전 — #23), 요청 제한의 키·한도·구현(#22).
+- `api-v1.0`(2026-11-21 태그)에 넣은 것: `hair` variant 삭제(#4), GLB_SPEC 을 실제 출력에 맞춤(#14), 에셋 상한은 제안값 유지·hair 상한 삭제(#3), 프로파일 차이 명시(#17·#19), 429 `RATE_LIMITED` 이름 예약(#22), 내부 계약 — 업로드 모드(#6)·`inference.timeout-ms` 120 s(#7)·`+rig`(#18), 측정 문서 표기(#16). #7 의 나머지(retry 횟수 제한 없음, 서버 재시작 때 끊긴 작업은 FAILED `INTERNAL_ERROR` + retry, 폴링 1~2초, 앱 최대 대기 600 s)와 #1·#2·#5·#8·#9·#10·#13·#15·#20 은 지금 문서 그대로 확정.
+- `api-v1.1` 에 넣는 것: 작업 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, N=19·165 s, 기본 꺼짐 — #21, PR #19). 운영에서 켜는 것은 Unity 새 빌드와 5차 부하 시험 뒤 **[계획]**.
+- 남은 것 **[계획]**: v1.1 검토 브랜치에서 고른 기능(`api-v1.2` — #11·#12), 보존 정책의 자동 삭제 구현(사진 7일·GLB 30일, 공개 베타 전 — #23), 요청 제한의 키·한도·구현(#22).
 
 ## 8. 원본 문서
 

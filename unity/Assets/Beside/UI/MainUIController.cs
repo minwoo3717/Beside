@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using Beside.Api;
 using Beside.AR;
@@ -31,6 +32,7 @@ namespace Beside.UI
         GameObject readyTemplate;
         bool placed;
         GameObject uiRoot;
+        Coroutine sendCountdown;    // this UI has no Update loop: the Retry-After wait re-renders through this
         SpawnLimiter limiter;
         UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets.ObjectSpawner spawner;
 
@@ -162,17 +164,23 @@ namespace Beside.UI
             statusText.color = s == JobManager.State.Failed ? UiKit.Danger : Color.white;
             stepText.text = Steps(s);
 
+            if (sendCountdown != null) { StopCoroutine(sendCountdown); sendCountdown = null; }
             foreach (Transform c in actionsRow) Destroy(c.gameObject);
             switch (s)
             {
                 case JobManager.State.Idle:
-                    UiKit.Button("Pick", actionsRow, photoPicker != null && photoPicker.GalleryAvailable ? "사진 선택" : "사진으로 만들기", UiKit.Accent, PickAndStart);
+                {
+                    var pick = UiKit.Button("Pick", actionsRow, photoPicker != null && photoPicker.GalleryAvailable ? "사진 선택" : "사진으로 만들기", UiKit.Accent, PickAndStart);
+                    Button shot = null, failTest = null;
                     if (debugButtons)
                     {
-                        UiKit.Button("Shot", actionsRow, "캡처로 테스트", UiKit.ButtonBg, () => CaptureAndStart("camera.jpg"), 32);
-                        UiKit.Button("FailTest", actionsRow, "실패 테스트", UiKit.ButtonBg, () => CaptureAndStart("fail.jpg"), 32);
+                        shot = UiKit.Button("Shot", actionsRow, "캡처로 테스트", UiKit.ButtonBg, () => CaptureAndStart("camera.jpg"), 32);
+                        failTest = UiKit.Button("FailTest", actionsRow, "실패 테스트", UiKit.ButtonBg, () => CaptureAndStart("fail.jpg"), 32);
                     }
+                    // QUEUE_FULL wait kept across "처음부터": these buttons upload at once, so they wait for Retry-After too
+                    if (jobManager.RetryWaitSeconds > 0f) sendCountdown = StartCoroutine(SendCountdown(s, "사진 선택", pick, shot, failTest));
                     break;
+                }
                 case JobManager.State.Uploading:
                 case JobManager.State.Waiting:
                 case JobManager.State.Downloading:
@@ -180,7 +188,12 @@ namespace Beside.UI
                     UiKit.Button("Cancel", actionsRow, "취소", UiKit.ButtonBg, () => { jobManager.CancelJob(); RenderState(JobManager.State.Idle, IdleText); });
                     break;
                 case JobManager.State.Failed:
-                    if (jobManager.LastErrorRetryable) UiKit.Button("Retry", actionsRow, "다시 시도", UiKit.Accent, jobManager.Retry);
+                    if (jobManager.LastErrorRetryable)
+                    {
+                        var retry = UiKit.Button("Retry", actionsRow, "다시 시도", UiKit.Accent, jobManager.Retry);
+                        // QUEUE_FULL: locked with a countdown until Retry-After, then rendered again (nothing is sent by itself)
+                        if (jobManager.RetryWaitSeconds > 0f) sendCountdown = StartCoroutine(SendCountdown(s, "다시 시도", retry));
+                    }
                     UiKit.Button("Reset", actionsRow, "처음부터", UiKit.ButtonBg, StartOver);
                     break;
                 case JobManager.State.Ready:
@@ -189,6 +202,23 @@ namespace Beside.UI
                     UiKit.Button("New", actionsRow, "새로 만들기", UiKit.Accent, StartOver);
                     break;
             }
+        }
+
+        /// <summary>Keeps the buttons that send ("다시 시도", or after "처음부터" the pick and test buttons) non-interactable
+        /// while Retry-After runs, counting down on the first one's label, then renders the same state again so they
+        /// become usable at RetryAvailableAt. It never sends anything itself.</summary>
+        IEnumerator SendCountdown(JobManager.State state, string action, params Button[] buttons)
+        {
+            foreach (var b in buttons) if (b != null) b.interactable = false;
+            var label = buttons[0].GetComponentInChildren<Text>();
+            float wait = jobManager.RetryWaitSeconds;
+            do   // yields before re-rendering: StartCoroutine runs this part inside RenderState
+            {
+                if (label != null) label.text = $"{Mathf.CeilToInt(wait)}초 뒤 {action}";
+                yield return new WaitForSecondsRealtime(Mathf.Clamp(wait, 0.05f, 1f));
+            } while ((wait = jobManager.RetryWaitSeconds) > 0f);
+            sendCountdown = null;
+            if (jobManager.CurrentState == state) RenderState(state, "");   // empty text keeps the message
         }
 
         static string Steps(JobManager.State s)

@@ -34,6 +34,15 @@ namespace Beside.Job
         public string CurrentJobId { get; private set; }
         public string LastErrorCode { get; private set; }
         public bool LastErrorRetryable { get; private set; }
+        /// <summary>UTC time before which neither Retry() nor StartJob() sends anything: set by a failure that carried
+        /// Retry-After (QUEUE_FULL), null otherwise. It outlives ClearSavedJob ("처음부터"), so new photos wait too, like the
+        /// web Mock UI; a server switch clears it. Nothing is re-sent automatically; the UI enables its send buttons from
+        /// this time.</summary>
+        public DateTime? RetryAvailableAt { get; private set; }
+        /// <summary>Seconds left until RetryAvailableAt (0 when Retry or StartJob can send now).</summary>
+        public float RetryWaitSeconds => RetryAvailableAt.HasValue
+            ? Mathf.Max(0f, (float)(RetryAvailableAt.Value - DateTime.UtcNow).TotalSeconds)
+            : 0f;
         public string BaseUrl => baseUrl;
         /// <summary>The URL set in the Inspector (build default). The app can override it at runtime.</summary>
         public string DefaultBaseUrl { get; private set; }
@@ -108,6 +117,11 @@ namespace Beside.Job
         public void StartJob(IList<Photo> photos)
         {
             if (IsBusy) return;
+            if (RetryWaitSeconds > 0f)   // QUEUE_FULL: a new upload also waits for Retry-After (checked before Fail clears it)
+            {
+                Debug.Log($"[JobManager] upload ignored: Retry-After has {RetryWaitSeconds:0} s left");
+                return;
+            }
             if (photos == null || photos.Count == 0) { Fail("NO_PHOTOS"); return; }
             if (photos.Count > ApiV1Routes.MaxPhotos) { Fail("TOO_MANY_PHOTOS"); return; }
             long total = 0;
@@ -132,16 +146,24 @@ namespace Beside.Job
         }
 
         /// <summary>Retry after a failure. A failed upload sends the same photos again (same Idempotency-Key);
-        /// server job failures go through POST /retry; other app-side failures re-run the flow.</summary>
+        /// server job failures go through POST /retry; other app-side failures re-run the flow.
+        /// QUEUE_FULL: nothing is sent before RetryAvailableAt. A refused upload keeps CurrentJobId null, so it is
+        /// sent again as an upload; a refused POST /retry (the job stays FAILED) goes through POST /retry again.</summary>
         public void Retry()
         {
             if (IsBusy) return;
+            if (RetryWaitSeconds > 0f)
+            {
+                Debug.Log($"[JobManager] retry ignored: Retry-After has {RetryWaitSeconds:0} s left");
+                return;
+            }
             if (string.IsNullOrEmpty(CurrentJobId))
             {
                 if (lastPhotos != null) running = StartCoroutine(Flow(lastPhotos, null));
                 return;
             }
-            if (lastFailureWasJob || ErrorMessages.IsJobFailureCode(LastErrorCode)) running = StartCoroutine(RetryOnServer(CurrentJobId));
+            if (lastFailureWasJob || ErrorMessages.IsJobFailureCode(LastErrorCode) || LastErrorCode == ErrorMessages.QueueFull)
+                running = StartCoroutine(RetryOnServer(CurrentJobId));
             else ResumeJob(CurrentJobId);
         }
 
@@ -162,6 +184,7 @@ namespace Beside.Job
             LastErrorCode = null;
             lastPhotos = null;
             uploadKey = null;
+            // RetryAvailableAt stays: the server's queue is still full for new photos ("처음부터", "다른 사진 고르기")
         }
 
         public void CheckHealth(Action<HealthResponse> onOk, Action<ApiError> onError) => StartCoroutine(api.Health(onOk, onError));
@@ -183,6 +206,7 @@ namespace Beside.Job
             baseUrl = n;
             api = new BesideApiClient(baseUrl);
             ClearSavedJob();
+            RetryAvailableAt = null;   // Retry-After came from the old server
             Debug.Log($"[JobManager] server -> {baseUrl}");
         }
 
@@ -218,7 +242,7 @@ namespace Beside.Job
                 yield return api.UploadPhotos(photos, requestId, r => jobId = r.jobId, e => err = e, uploadKey);
                 row.uploadMs = sw.ElapsedMilliseconds;
                 MetricsRecorder.Log(requestId, jobId, "upload", row.uploadMs, err?.code, err?.message);
-                if (err != null) { Fail(err.code); yield break; }
+                if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // CurrentJobId stays null
 
                 lastPhotos = null;   // accepted: later retries go through the jobId
                 CurrentJobId = jobId;
@@ -244,7 +268,7 @@ namespace Beside.Job
                 {
                     MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", wait.ElapsedMilliseconds, err.code, err.message);
                     if (err.code == "JOB_NOT_FOUND") PlayerPrefs.DeleteKey(JobIdPrefKey);
-                    Fail(err.code);
+                    Fail(err.code, retryAfterSeconds: err.retryAfterSeconds);
                     yield break;
                 }
                 job = got;
@@ -330,18 +354,20 @@ namespace Beside.Job
             ApiError err = null;
             yield return api.RetryJob(jobId, requestId, _ => { }, e => err = e);
             MetricsRecorder.Log(requestId, jobId, "retry", 0, err?.code, err?.message);
-            if (err != null) { Fail(err.code); yield break; }
+            if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // QUEUE_FULL: the job is still FAILED
             running = StartCoroutine(Flow(null, jobId));
         }
 
         // ---------- helpers ----------
 
-        void Fail(string code, bool fromJob = false)
+        /// <summary>retryAfterSeconds: Retry-After of the refusing response (QUEUE_FULL), 0 = Retry may send at once.</summary>
+        void Fail(string code, bool fromJob = false, int retryAfterSeconds = 0)
         {
             running = null;
             LastErrorCode = code;
             lastFailureWasJob = fromJob;
             LastErrorRetryable = fromJob || ErrorMessages.IsRetryable(code);
+            RetryAvailableAt = retryAfterSeconds > 0 ? DateTime.UtcNow.AddSeconds(retryAfterSeconds) : (DateTime?)null;   // before the events: the UI reads it
             SetState(State.Failed, ErrorMessages.ForCode(code));
             JobFailed?.Invoke(code, ErrorMessages.ForCode(code), LastErrorRetryable);
         }

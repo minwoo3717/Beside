@@ -46,6 +46,8 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | `LOADTEST_INFERENCE_TIMEOUT_MS` | `INFERENCE_TIMEOUTMS` → `inference.timeout-ms` | `120000` | 운영 기본값(`application-real.properties`, 2026-11-21 #7 로 600000 에서 줄임)과 같다. F1b 는 `20000` |
 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS` | `INFERENCE_OFFLINEWAITMS` → `inference.offline-wait-ms` | `300000` | 운영 1800000 보다 짧게. F2 는 운영과 같은 `1800000` |
 | `LOADTEST_INFERENCE_MAX_CONCURRENCY` | `INFERENCE_MAXCONCURRENCY` → `inference.max-concurrency` | `1` | G2 의 c(1·2·4). 스텁 `BESIDE_PASSTHROUGH_SLOTS` 와 같게 |
+| `LOADTEST_ADMISSION_MAX_PENDING` | `ADMISSION_MAXPENDING` → `admission.max-pending` | `0` | 대기열 상한(안건 #21, 2026-11-21 결정, `api-v1.1`) 끔. 운영 `deploy/.env` 의 `ADMISSION_MAX_PENDING` 은 읽지 않는다. A2 는 PENDING 1,000건을 시드하므로 켜면 시드가 503 이 된다. 아래 '상한을 켠 G3' 만 준다 |
+| `LOADTEST_ADMISSION_RETRY_AFTER_SECONDS` | `ADMISSION_RETRYAFTERSECONDS` → `admission.retry-after-seconds` | `165` | 상한이 거절할 때의 `Retry-After` 초. N 과 함께 다시 계산한다(c=1·N 19 가 2026-11-21 #21 결정 값) |
 | (볼륨) | `beside-loadtest-storage:/app/storage` | — | 부하 작업·사진·`events.jsonl` 은 여기에만 쌓인다. 운영 `beside-storage` 는 붙지 않는다. 전처리 모델 `/app/models`(읽기 전용)는 기본 파일 그대로 붙는다 |
 
 ### 시리즈별 값
@@ -57,6 +59,7 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | G1 (큐 이론, c=1, T=10초) | `LOADTEST_PROFILES=real,prod LOADTEST_INFERENCE_BASE_URL=http://<스텁>:8001 LOADTEST_INFERENCE_TOKEN=<스텁 토큰>` | `BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1` |
 | G2 (c = 1, 2, 4) | G1 + `LOADTEST_INFERENCE_MAX_CONCURRENCY=<c>` | `BESIDE_PASSTHROUGH_SLOTS=<c>` |
 | G3 (과부하 ρ=1.5) | G1 과 같음(도착률은 k6 가 정한다) | G1 과 같음 |
+| G3 상한 켬 (안건 #21, **[계획]**) | G3 + `LOADTEST_ADMISSION_MAX_PENDING=<N> LOADTEST_ADMISSION_RETRY_AFTER_SECONDS=<R>`(아래 '상한을 켠 G3') | G3 과 같음 |
 | F1a (생성 실패 20 %) | G1 과 같음 | `BESIDE_PASSTHROUGH_FAIL_RATE=0.2` |
 | F1b (타임아웃) | G1 + `LOADTEST_INFERENCE_TIMEOUT_MS=20000` | `BESIDE_PASSTHROUGH_DELAY_MS=10000 BESIDE_PASSTHROUGH_SLOTS=1 BESIDE_PASSTHROUGH_SLOW_TOKEN=slow BESIDE_PASSTHROUGH_SLOW_MS=30000`, `BESIDE_PASSTHROUGH_FAIL_TOKEN` 은 설정하지 않는다. slow 사진 이름은 k6 가 만든다(아래 'F1b 명령') |
 | F2 (GPU 꺼짐·backend 재시작) | G1 + `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | 시험 중 스텁을 끄고 다시 켠다 |
@@ -169,7 +172,8 @@ unset LOADTEST_INFERENCE_TOKEN
 | B3 | `LOADTEST_INFERENCE_TIMEOUT_MS=<τ>`(G0 에서 정함. 2차 G0 기준 5000: 업로드(31건 상한 1.9~2.8 s)가 끝나고 추론(3.7~4.7 s)이 도는 동안. 여유가 작다. 3차에서 5000 으로 돌려 66시도가 모두 시간 초과였다. 4차(PR #11 Pod)도 74시도가 모두 시간 초과였다) | F1b-real |
 | B4 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS=1800000` | F2, F1a(스텁으로 바꾼 Pod) |
 
-**k6 공통 값**: `-e PHOTOS=<리포>/backend/src/test/resources/photos/dog.jpg -e RTT_BASE_MS=<G0 의 healthz p50> -e T_SEC=<S0>`.
+**k6 공통 값**: `-e PHOTOS=<리포>/backend/src/test/resources/photos/dog.jpg -e RTT_BASE_MS=<G0 의 healthz p50> -e T_SEC=<S0> -e QUEUE_CAP=<서버의 상한 N>`.
+- `QUEUE_CAP` 은 그 backend 의 상한이다(5번 `admission.txt`. 꺼졌거나 상한 코드가 없는 이미지면 0). 실행마다 요약 `meta.queueCap` 에 남는다. 주지 않으면 null 이라 상한이 있었는지 나중에 알 수 없다.
 - `PHOTOS` 에 적은 파일은 모두 각 작업에 들어간다. 모델·검사·크롭은 첫 장만 쓰지만 나머지도 Pod 로 보내져 슬롯이 길어지므로 1장만 준다.
 - k6 는 이름을 `.png`·`image/png` 로 붙이지만 서버는 바이트 시그니처로 JPEG 를 받는다.
 
@@ -249,6 +253,37 @@ k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RUN_ID -e RTT_BASE_MS=<A0 의 
 - 스텁은 Spring 이 끊은 뒤에도 30초를 다 채우며 슬롯을 쥔다. 그래서 바로 뒤 작업이 그만큼 기다렸다가 같이 시간 초과될 수 있다(TRAFFIC_MODEL 의 'MODEL_LOCK 문제로 실패가 예상'). 그러면 그대로 기록한다.
 - **곧바로 보통 G1 을 한 번** 돌린다. backend·스텁은 그대로 두고 `newrun g1postf1b1` 로 새 RUN_ID 와 새 결과 폴더를 정해 `-e RHO=0.7 -e SLOTS=1 -e T_SEC=10` 을 준다(FAIL_TOKEN·FAIL_RATIO 없이). 이름에 `slow` 가 없으므로 모두 10초 작업이다. 모든 흐름이 COMPLETED 이고 `INFERENCE_TIMEOUT` 이 0 이며 retry 가 없으면(`meta.measuredRetries` 0) F1b 뒤에 연쇄 실패가 남지 않은 것이다. retry 가 있으면 요약이 큐 재계산을 빼고 `N retries: ...` 줄을 남긴다.
 
+### 상한을 켠 G3 (안건 #21, 2026-11-21 결정) — VM 실행은 [계획]
+
+대기열 상한(대기 작업 + 접수 중 요청이 N 이상이면 v1 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 바로 거절)을 켠 과부하 실행이다. 상한 코드는 PR #19(`api-v1.1`)로 main 에 들어간다. 그래서 **그 main 이 VM 에 배포된 이미지에서만** 돌린다. VM 에서 다른 브랜치를 빌드하지 않는다(compose 프로젝트 이름이 고정이라 운영 컨테이너를 바꾼다). 이 실행이 5차 부하 시험이고, 운영에서 상한을 켜는 것은 이 시험과 Unity 새 빌드 뒤다. 값과 근거·결정은 [docs/perf/load/2026-11-20_queue-cap.md](../../docs/perf/load/2026-11-20_queue-cap.md) 9절.
+
+- **짝 실행**: 같은 Pod·같은 `RHO` 로 상한 0(B1) 실행과 상한 N 실행을 한 번씩 돈다. 포화 구간의 처리량이 상한 0 실행과 ±5 % 안이어야 한다(상한이 GPU 처리량을 깎으면 안 된다).
+- **길이**: 실제 도착률로 정한다. 4차 `g3c1` 은 요청 517건/h 에 실제 471건/h, 용량 약 415건/h 였다. 순증 약 56건/h 라 N 19 가 차는 데 약 20분이 걸린다 [계산]. 그래서 `DURATION_S=2400`(40분)이다.
+- **값**: N 과 R 은 함께 정한다. c=1 은 N 19·R 165 로 정했다(2026-11-21 #21, W=180 s 규칙). 털 맵이 든 GLB 로 상한 0 실행의 S_busy 가 4차(8.67 s)와 다르면 같은 규칙으로 다시 계산해 그 값으로 돌린다. B2(c=2)로 돌리면 다시 계산한다(c=2 는 N 23·R 167 **[계산]**, 4차 값).
+- 셸 변수로만 켠다. 덮어쓰기는 운영 `deploy/.env` 의 `ADMISSION_*` 를 읽지 않는다.
+
+```bash
+# VM: 그 실행의 OUT(5번 첫 줄)을 먼저 정한다. B1 값 + 상한
+RID=g3cap19; OUT=~/lt-$TS/$RID && mkdir -p "$OUT"
+LOADTEST_ADMISSION_MAX_PENDING=19 LOADTEST_ADMISSION_RETRY_AFTER_SECONDS=165 \
+LOADTEST_PROFILES=real,prod LOADTEST_INFERENCE_BASE_URL=http://100.83.86.62:8002 \
+LOADTEST_PREPROCESS_CHECK_ENABLED=true LOADTEST_PREPROCESS_CUTOUT_ENABLED=true $L up -d backend
+$L logs --no-color backend | grep -E "Queue admission: (on|off)" | tail -1     # Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=...
+# k6 시작 직전: 거절 카운터의 시작 값(op 별). 끝 값은 5번의 refused-end.txt
+$L exec -T backend curl -fsS http://localhost:8081/actuator/prometheus | grep '^beside_jobs_refused_total' > "$OUT/refused-start.txt"
+# k6 Pod: 서버와 같은 N·R 을 준다(요약 meta.queueCap·meta.queueRetryAfterS, 거절마다 Retry-After check)
+/root/lt/run.sh g3cap19 gpu_queue.js -e PHOTOS=$P -e RTT_BASE_MS=<G0 의 healthz p50> -e SCENARIO=G3 -e RHO=1.65 -e SLOTS=1 \
+    -e T_SEC=<S0> -e DURATION_S=2400 -e QUEUE_CAP=19 -e QUEUE_RETRY_AFTER=165
+# 짝(상한 0): VM 은 LOADTEST_ADMISSION_* 없이 B1, k6 는 같은 명령에 -e QUEUE_CAP=0(QUEUE_RETRY_AFTER 없이)
+```
+
+- **볼 것** (기준은 회의 자료와 같다. 상한 0 짝은 1·4 를 빼고 본다):
+  1. 거절은 모두 503 `QUEUE_FULL` + `Retry-After` 165: 요약 `meta.measuredRetryAfterChecks.failed` 0. 다른 5xx 는 0: `verdict.httpStatus` 의 `5xxByCode` 에서 503 수 = `load_queueFullCount` 합이고 다른 5xx 코드가 없다.
+  2. PENDING 이 N 을 넘지 않는다: `prometheus/jobs_queue.csv` 의 `state=pending` 최대 ≤ 19(5초 묵은 값).
+  3. 받아들인 작업의 최대 대기(`vm/events.jsonl` 의 COMPLETED `totalMs` 최대) ≤ (N+1)·S_busy + 10 s(N 19 면 약 184 s).
+  4. 거절 수: k6 `load_queueFullCount{endpoint:create}`·`{endpoint:retry}` = `refused-end.txt` − `refused-start.txt` 의 `op="create"`·`op="retry"`. `collect.py` 의 `jobs_refused_rate` 는 비율이라 개수 비교에 쓰지 않는다.
+  5. k6 Pod 는 Prometheus 에 닿지 않아 가드(`PROM_URL`)를 쓰지 않는다. `PROM_URL` 을 쓰는 실행이면 가드의 5xx 비율은 의도한 503 을 빼고 본다([scripts/load/README.md](../../scripts/load/README.md) '큐 상한을 켠 실행').
+
 ## 0. 준비 (하루 전까지)
 
 1. **팀 공지**(Discord 등): 시작 시각·예상 길이, "그동안 앱·웹으로 만든 작업은 처리되지 않는다(운영 backend 를 내린다), 시작 시점에 진행 중인 작업은 FAILED 가 되니 재시도", 담당자.
@@ -288,7 +323,7 @@ $L ps
 # 볼륨이 바뀌었는지: beside-loadtest-storage -> /app/storage 여야 한다. beside-storage 가 보이면 멈추고 '6. 복구'
 docker inspect -f '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{println}}{{end}}' beside-backend-1
 # 설정이 들어갔는지(토큰 값은 가린다)
-$L exec -T backend sh -c 'env | grep -E "^(SPRING_PROFILES_ACTIVE|METRICS_ENV|NOTIFY_WEBHOOKURL|STORAGE_BACKUP_ENABLED|MOCK_WORKER_|SPRING_TASK_EXECUTION_POOL_CORESIZE|INFERENCE_)" | sed "s/TOKEN=.*/TOKEN=(hidden)/"'
+$L exec -T backend sh -c 'env | grep -E "^(SPRING_PROFILES_ACTIVE|METRICS_ENV|NOTIFY_WEBHOOKURL|STORAGE_BACKUP_ENABLED|MOCK_WORKER_|SPRING_TASK_EXECUTION_POOL_CORESIZE|INFERENCE_|ADMISSION_)" | sed "s/TOKEN=.*/TOKEN=(hidden)/"'
 curl -fsS "$D/api/v1/healthz"; echo        # {"status":"ok","profile":"mock,prod","workerType":"mock"} (G 는 real,prod / real)
 ```
 
@@ -449,6 +484,12 @@ docker inspect -f '{{.State.StartedAt}} restarts={{.RestartCount}}' beside-backe
 docker stats --no-stream --format '{{json .}}' > "$OUT/docker-stats-end.jsonl"
 df -h / > "$OUT/df.txt"
 git -C ~/Beside rev-parse HEAD > "$OUT/commit.txt"
+# 큐 상한(안건 #21): 이 backend 가 시작할 때 남긴 한 줄(off, 또는 on 과 max-pending·retry-after-seconds)과 거절 카운터의 끝 값.
+# 상한 코드가 없는 이미지는 둘 다 빈 파일이다(상한 0 과 같다). k6 의 -e QUEUE_CAP 은 이 값과 같아야 한다.
+# 시작 줄(on/off)만 고른다: 실행 중에도 같은 머리말 "Queue admission:" 로 같은 Idempotency-Key 의 겹친 생성(INFO)과
+# 오래된 PENDING(WARN) 줄이 찍히므로, 머리말만으로 tail -1 을 하면 그 줄이 상한 기록을 대신한다
+$L logs --no-color backend | grep -E "Queue admission: (on|off)" | tail -1 > "$OUT/admission.txt"
+$L exec -T backend curl -fsS http://localhost:8081/actuator/prometheus | grep '^beside_jobs_refused_total' > "$OUT/refused-end.txt"
 sha256sum /tmp/lt-sample-1500000.glb > "$OUT/glb.sha256"        # A 시리즈(mock 이 내주는 GLB). G·F 는 아래 stub-glb.sha256
 # 대상 상태(Prometheus 는 VM 루프백에만 있으므로 VM 안에서 읽는다)
 $L exec -T prometheus wget -qO- 'http://localhost:9090/api/v1/query?query=up' > "$OUT/prom-up.json"
@@ -513,15 +554,16 @@ kill $CADDY_NS
 mkdir -p "$RUN/vm" && scp "<user@VM>:~/lt-<TS>/$RUN_ID/*" "$RUN/vm/"   # 그 실행의 VM 파일을 $RUN/vm/ 에(scp 는 없는 폴더에 여러 파일을 넣지 못한다)
 python scripts/load/collect.py "$RUN" --scenario <A0…F5> --summary "$RUN/k6-summary.json" --prom-url http://localhost:9090 \
   --attach "$RUN/vm/events.jsonl" --attach "$RUN/vm/docker-stats-end.jsonl" --attach "$RUN/vm/df.txt" \
-  --attach "$RUN/vm/commit.txt" --attach "$RUN/vm/glb.sha256" --attach "$RUN/vm/prom-up.json"
+  --attach "$RUN/vm/commit.txt" --attach "$RUN/vm/glb.sha256" --attach "$RUN/vm/prom-up.json" --attach "$RUN/vm/admission.txt"
 # F3 은 --attach "$RUN/vm/f3-leftovers.txt" --attach "$RUN/f3-throttled.json" 을 더한다
+# 상한을 켠 G3 는 --attach "$RUN/vm/refused-start.txt" --attach "$RUN/vm/refused-end.txt" 를 더한다
 # F4 는 k6 요약이 없다: --summary 대신 f4.json 의 구간과 대상을 준다(run.json outcome.ended 는 null):
 #   --scenario F4 --base-url "$BASE_URL" --start <f4.json 의 startedAt> --end <f4.json 의 endedAt> --attach "$RUN/f4.json"
 # 나머지 옵션(--tier, --k6-version, --vm-*, --uplink-mbps(A4 는 --downlink-mbps 도), --client-cpu-max-pct, --server-sha, --photo)은
 # scripts/load/README.md '결과 수집'
 ```
 
-`collect.py` 는 끝에 `status: <run.json 의 status>` 와 `prometheus: N of 18 CSV written to ...`(실패·빈 CSV 이름 포함)를 출력한다.
+`collect.py` 는 끝에 `status: <run.json 의 status>` 와 `prometheus: N of 19 CSV written to ...`(실패·빈 CSV 이름 포함. 상한 코드가 없는 이미지는 `jobs_refused_rate` 가 빈 CSV 다)를 출력한다.
 
 - `vm/` 의 파일은 **`collect.py --attach` 로 준 것만** run.json 에 들어간다(사본이 `attachments/` 에, 크기·SHA-256 과 함께). `backend.log`·`backend-started.txt` 처럼 크거나 덜 쓰는 파일은 `vm/` 에만 둔다.
 - G·F 시리즈는 `glb.sha256` 대신, 스텁 PC 에서 잰 해시(스텁 절의 `sha256sum`·`Get-FileHash` 출력)를 `$RUN/vm/stub-glb.sha256` 에 적어 `--attach` 한다.

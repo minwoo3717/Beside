@@ -69,6 +69,37 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void queueFullCarriesRetryAfterOnV1OnlyAndIsLoggedByTheGateNotHere() {
+        // REVIEW_CHECKLIST #21 (decided 2026-11-21): 503 + Retry-After, jobId of a refused retry.
+        ResponseEntity<?> retry = handler.handleApi(ApiException.queueFull("job-1", 45),
+                new MockHttpServletRequest("POST", "/api/v1/jobs/job-1/retry"));
+        assertThat(retry.getStatusCode().value()).isEqualTo(503);
+        assertThat(retry.getHeaders().getFirst("Retry-After")).isEqualTo("45");
+        assertThat(retry.getHeaders().getContentType()).hasToString("application/json");
+        ErrorResponse body = (ErrorResponse) retry.getBody();
+        assertThat(body.error().code()).isEqualTo("QUEUE_FULL");
+        assertThat(body.error().jobId()).isEqualTo("job-1");
+
+        ResponseEntity<?> create = handler.handleApi(ApiException.queueFull(null, 45),
+                new MockHttpServletRequest("POST", "/api/v1/jobs"));
+        assertThat(((ErrorResponse) create.getBody()).error().jobId()).isNull();
+
+        // Outside /api/v1/ the frozen flat shape, without the new header.
+        ResponseEntity<?> v0 = handler.handleApi(ApiException.queueFull(null, 45),
+                new MockHttpServletRequest("POST", "/api/jobs"));
+        assertThat(v0.getStatusCode().value()).isEqualTo(503);
+        assertThat(v0.getHeaders().containsKey("Retry-After")).isFalse();
+        assertThat(v0.getBody()).isInstanceOf(Map.class);
+
+        // Other API errors keep their WARN line and get no Retry-After.
+        ResponseEntity<?> notFound = handler.handleApi(ApiException.jobNotFound("x"),
+                new MockHttpServletRequest("GET", "/api/v1/jobs/x"));
+        assertThat(notFound.getHeaders().containsKey("Retry-After")).isFalse();
+        assertThat(logged.list).extracting(ILoggingEvent::getLevel)
+                .containsExactly(Level.DEBUG, Level.DEBUG, Level.DEBUG, Level.WARN);
+    }
+
+    @Test
     void aClientThatWentAwayIsNoServerError(CapturedOutput output) {
         // A phone that leaves the screen mid-download: Tomcat reports ClientAbortException while the GLB is written.
         // The response is already committed (200, GLB headers), so there is nothing left to answer and nothing to page

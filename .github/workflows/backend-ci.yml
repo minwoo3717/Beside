@@ -161,11 +161,17 @@ jobs:
           "${compose[@]}" config --format json > compose-base.json
           "${compose[@]}" --profile monitoring config --format json > compose-monitoring.json
           "${compose[@]}" "${loadtest[@]}" config --format json > compose-loadtest.json
-          python3 - compose-base.json compose-monitoring.json compose-loadtest.json <<'PY'
+          # a VM deploy/.env with the queue cap on (#21, decided 2026-11-21): .env.example has those lines commented out, so render
+          # base and overlay once more with an env file that sets them (values unlike the defaults 0 and 165)
+          { cat deploy/.env.example; echo; echo ADMISSION_MAX_PENDING=19; echo ADMISSION_RETRY_AFTER_SECONDS=300; } > capped.env
+          capped=(docker compose -f deploy/docker-compose.yml --env-file capped.env)
+          "${capped[@]}" config --format json > compose-capped.json
+          "${capped[@]}" "${loadtest[@]}" config --format json > compose-loadtest-capped.json
+          python3 - compose-base.json compose-monitoring.json compose-loadtest.json compose-capped.json compose-loadtest-capped.json <<'PY'
           import json
           import sys
 
-          base, mon, lt = (json.load(open(path)) for path in sys.argv[1:4])
+          base, mon, lt, capped, lt_capped = (json.load(open(path)) for path in sys.argv[1:6])
           # only caddy publishes to the network: backend 8080/8081 (Actuator) and grafana 3000 stay internal,
           # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py)
           for name, svc in mon["services"].items():
@@ -178,6 +184,16 @@ jobs:
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
+          # queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21, off in production for now): off unless deploy/.env turns it on,
+          # and the compose default Retry-After is the server's own default (application.properties)
+          props = dict(line.split("=", 1) for line in open("backend/src/main/resources/application.properties", encoding="utf-8")
+                       .read().splitlines() if "=" in line and not line.startswith("#"))
+          assert mon["services"]["backend"]["environment"]["ADMISSION_MAXPENDING"] == "0"
+          assert mon["services"]["backend"]["environment"]["ADMISSION_RETRYAFTERSECONDS"] == props["admission.retry-after-seconds"]
+          # ... and when deploy/.env sets the two lines, both reach the backend
+          got = {k: capped["services"]["backend"]["environment"].get(k) for k in ("ADMISSION_MAXPENDING", "ADMISSION_RETRYAFTERSECONDS")}
+          assert got == {"ADMISSION_MAXPENDING": "19", "ADMISSION_RETRYAFTERSECONDS": "300"}, f"deploy/.env cap on: backend gets {got}"
+
           # prod does not start on a missing H2 file (failure drill FD5); only a new server overrides it from the shell
           assert mon["services"]["backend"]["environment"]["STORAGE_DB_CREATEIFMISSING"] == "false"
 
@@ -228,6 +244,13 @@ jobs:
           }
           for key, value in want.items():
               assert env.get(key) == value, f"{key}={env.get(key)!r}, want {value!r}"
+          # queue cap off and the server's Retry-After whatever deploy/.env says: A2 seeds 1,000 PENDING jobs (#21,
+          # decided 2026-11-21). Checked with the cap on in the env file too, else the base's own default 0 would pass
+          # an overlay that lost these lines
+          for label, doc in (("deploy/.env cap off", lt), ("deploy/.env cap on", lt_capped)):
+              got = {k: doc["services"]["backend"]["environment"].get(k) for k in ("ADMISSION_MAXPENDING", "ADMISSION_RETRYAFTERSECONDS")}
+              assert got == {"ADMISSION_MAXPENDING": "0", "ADMISSION_RETRYAFTERSECONDS": props["admission.retry-after-seconds"]}, \
+                  f"load-test overlay, {label}: backend gets {got}"
           for key in ("NOTIFY_WEBHOOKURL", "INFERENCE_TOKEN"):
               assert env.get(key) in ("", None), f"{key} must be empty in the load-test overlay"
           assert lt["services"]["caddy"] == base["services"]["caddy"], "overlay changed caddy"
