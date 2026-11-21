@@ -1,0 +1,10 @@
+W9 pass criteria, 5th load test (2026-11-21 UTC), cap run g3cap19 vs cap-0 run g3cap0, same GPU Pod jvytgcpcgahd1t, same lambda (RHO 1.65, T_SEC 11.5 -> 517/h requested)
+N 19, Retry-After 167 s (W 180 s rule on S_busy 8.81 s of g3cap0; decided values were N 19 / 165 s)
+1 PASS  Retry-After checks passed 51 failed 0; 5xxByCode 503 51 = measuredRefused 51; 500/502/504/other 0. (k6 'create 202' check fails 51 = the 51 refusals)
+2 PASS  prometheus jobs_queue state=pending max 19.0 (n 174) <= 19; backend.log 51 refusals, 0 below cap (all pending=19 reserved=0 cap=19)
+3 PASS  measured wait max 176.3 s (p95 173.1, mean 138.6, n 286) <= (N+1)*S_busy(cap run 8.8077)+10 = 186.2 s
+4 PASS  server refused_total increase create 51 retry 0 = k6 measuredRefused 51, measuredRefusedRetries 0
+5 PASS  S_busy cap19 8.8077 s (283 busy pairs of 286) / cap0 8.8083 s (344 of 345) = 0.9999 (0.95..1.05)
+6 OK    actual create rate cap19 505.5/h (337 creates / 2400 s; 429/h admitted), cap0 575/h (383 / 2400 s). fluid fill 11.8 min at 505.5/h; first refusal at 481 s (02:34:49Z);
+        refused share 51/337 = 15.1 % vs Monte Carlo 505.5/h N19 40 min 14.5 % (5-95 %: 6.8-21.4 %), first refusal median 602 s (264-1330)
+accepted jobs in window: 286 COMPLETED, 0 FAILED; unfinishedFlows 0; inference UP->DOWN 0 in both runs

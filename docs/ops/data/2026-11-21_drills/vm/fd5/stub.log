@@ -1,0 +1,35 @@
+INFO:     172.18.0.3:55402 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:43128 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51976 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51976 - "GET /healthz HTTP/1.1" 200 OK
+job 90d15f50-301f-48b8-904e-9197f042e746: passthrough sim 4000 ms (planned 4000), slot wait 0 ms of 1 slot(s), outcome ok
+job 90d15f50-301f-48b8-904e-9197f042e746: upload mode, 1 photo(s) in, /work/90d15f50-301f-48b8-904e-9197f042e746/base.glb out (passthrough sample)
+INFO:     172.18.0.3:51984 - "POST /infer/upload HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51984 - "GET /artifacts/90d15f50-301f-48b8-904e-9197f042e746/base.glb HTTP/1.1" 200 OK
+job 90d15f50-301f-48b8-904e-9197f042e746: work folder deleted
+INFO:     172.18.0.3:51984 - "DELETE /artifacts/90d15f50-301f-48b8-904e-9197f042e746 HTTP/1.1" 204 No Content
+INFO:     172.18.0.3:51976 - "GET /healthz HTTP/1.1" 200 OK
+job 6320d845-0978-4ee6-963f-4e3db9fcb7d7: passthrough sim 4000 ms (planned 4000), slot wait 0 ms of 1 slot(s), outcome ok
+job 6320d845-0978-4ee6-963f-4e3db9fcb7d7: upload mode, 1 photo(s) in, /work/6320d845-0978-4ee6-963f-4e3db9fcb7d7/base.glb out (passthrough sample)
+INFO:     172.18.0.3:51984 - "POST /infer/upload HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51984 - "GET /artifacts/6320d845-0978-4ee6-963f-4e3db9fcb7d7/base.glb HTTP/1.1" 200 OK
+job 6320d845-0978-4ee6-963f-4e3db9fcb7d7: work folder deleted
+INFO:     172.18.0.3:51984 - "DELETE /artifacts/6320d845-0978-4ee6-963f-4e3db9fcb7d7 HTTP/1.1" 204 No Content
+INFO:     172.18.0.3:51976 - "GET /healthz HTTP/1.1" 200 OK
+job 3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2: passthrough sim 4000 ms (planned 4000), slot wait 0 ms of 1 slot(s), outcome ok
+job 3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2: upload mode, 1 photo(s) in, /work/3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2/base.glb out (passthrough sample)
+INFO:     172.18.0.3:51984 - "POST /infer/upload HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51984 - "GET /artifacts/3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2/base.glb HTTP/1.1" 200 OK
+job 3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2: work folder deleted
+INFO:     172.18.0.3:51984 - "DELETE /artifacts/3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2 HTTP/1.1" 204 No Content
+INFO:     172.18.0.3:51976 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:55756 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:33444 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:35198 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:45458 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:57102 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:52446 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:44984 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:60170 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:33250 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:35384 - "GET /healthz HTTP/1.1" 200 OK

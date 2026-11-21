@@ -1,0 +1,2 @@
+sent: 🧱 backend 가 시작하자마자 계속 꺼져요 (VM 감시 · beside-vm.asia-northeast3-a.c.beside-514511.internal) — 마지막 정상 확인 뒤 Docker 가 7번 다시 띄웠어요. docker logs --tail 50 1c3207d4ab00 로 원인을 확인해 주세요. 'H2 database file ... does not exist' 면 DB 를 잃은 것이니 docs/ops/RUNBOOK.md 'DB 복구' 로 되돌립니다
+sent: ✅ backend 가 다시 정상으로 떴어요 (VM 감시 · beside-vm.asia-northeast3-a.c.beside-514511.internal) — 시작하자마자 꺼지던 것이 멈췄어요

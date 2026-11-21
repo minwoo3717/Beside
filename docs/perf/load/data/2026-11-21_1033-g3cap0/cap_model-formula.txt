@@ -1,0 +1,11 @@
+== cap rule for a target worst wait W (wait = created -> COMPLETED, what the app's 600 s counts)
+  c=1: N = floor(W/S) - 1, worst wait (N+1)*S, Retry-After R = N*3600/mu; S 8.81 s (S_busy), mu 408.627/h
+    W 180 s: N 19, worst 176.2 s, left of the app's 600 s 423.8 s, R 167.4 s -> Retry-After 167
+  slot time drift: the same N with S = 11.5 s (round-2 Pod S0)
+    N 19 -> worst 230.0 s
+  c=2: N = floor(mu2*(W - T2)/3600), worst N*3600/mu2 + T2, R = N*3600/mu2; mu2 495/h (counted lower bound), T2 9.86 s (mean processing)
+    W 180 s: N 23, worst 177.1 s, R 167.3 s -> Retry-After 167
+  c=2 the wrong ways: doubling the c=1 cap for W 180 s gives N 38 -> worst 286.2 s; the 600 s formula floor(c*(600-T)/T) with c 2, T 10.45 s gives N 112 -> worst 824.4 s if the capacity is the lower bound
+  outage (prod keeps jobs PENDING up to 1800 s while the inference service is down), arrivals 120/h (tier T2 peak, [가정]):
+    no cap: 60 jobs pile up, draining them takes 529 s once the GPU is back
+    N 19: backlog 19, drain 167 s; 41 of the 60 outage arrivals refused

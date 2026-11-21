@@ -1,0 +1,9 @@
+2026-11-20T05:47:06Z start: service pid 218, supervisor pid 210: bash /workspace/Beside/scripts/start_inference_wsl.sh
+2026-11-20T05:48:25Z service pid 218 exited (status 137, signal 9) after 79 s; restart 1 in 5 s
+2026-11-20T05:48:30Z restart 1: service pid 315
+2026-11-20T05:49:53Z service pid 315 exited (status 143, signal 15) after 83 s; /workspace/beside-norestart exists - not restarting, supervisor ends
+2026-11-20T05:49:55Z start: service pid 440, supervisor pid 432: bash /workspace/Beside/scripts/start_inference_wsl.sh
+2026-11-20T05:51:03Z service pid 440 exited (status 143, signal 15) after 68 s; /workspace/beside-norestart exists - not restarting, supervisor ends
+2026-11-20T05:51:03Z start: service pid 570, supervisor pid 562: bash /workspace/Beside/scripts/start_inference_wsl.sh
+2026-11-21T01:19:36Z start: service pid 308, supervisor pid 300: bash /workspace/Beside/scripts/start_inference_wsl.sh
+2026-11-21T03:17:14Z start: service pid 180, supervisor pid 172: bash /workspace/Beside/scripts/start_inference_wsl.sh

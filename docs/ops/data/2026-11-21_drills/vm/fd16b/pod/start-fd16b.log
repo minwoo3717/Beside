@@ -1,0 +1,13 @@
+[1/4] Tailscale 1.104.6 already in /workspace/tailscale/bin
+[2/4] tailscaled started (userspace networking, state /workspace/tailscale/state)
+[3/4] tailnet login as 'beside-gpu' (a link appears only on the first run: approve it in the team tailnet;
+      it is also written to /workspace/beside-logs/tailscale-up.log)
+[4/4] inference service up (model, 127.0.0.1:8002, X-Inference-Token required, keep-alive 75 s, threads 8)
+      supervisor pid 172 restarts it when it exits (/workspace/beside-logs/supervisor.log); stop on purpose: touch /workspace/beside-norestart && kill 180
+
+Pod tailnet address : 100.83.86.62
+VM deploy/.env      : INFERENCE_BASE_URL=http://100.83.86.62:8002
+check from the VM   : curl -sS http://100.83.86.62:8002/healthz
+service log         : tail -f /workspace/beside-logs/inference.log
+restart log         : /workspace/beside-logs/supervisor.log (stop on purpose: touch /workspace/beside-norestart first)
+model               : wait for 'model loaded ... on cuda' in the log (healthz modelLoaded)

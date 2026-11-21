@@ -1,0 +1,475 @@
+2026-11-21T03:46:00.042Z  INFO 1 --- [   scheduling-1] c.e.mockbackend.service.DatabaseBackup   : H2 backup written: beside-20261121-124600-000.zip (408052 bytes)
+2026-11-21T03:46:12.698Z  INFO 1 --- [nio-8080-exec-2] c.e.mockbackend.service.JobServiceImpl   : Job created: 90d15f50-301f-48b8-904e-9197f042e746 status=PENDING worker=real
+2026-11-21T03:46:12.708Z  INFO 1 --- [        task-61] c.e.mockbackend.service.RealJobWorker    : jobId=90d15f50-301f-48b8-904e-9197f042e746 stage=PROCESSING POST http://beside-stub-drill:8001/infer/upload
+2026-11-21T03:46:13.682Z  INFO 1 --- [nio-8080-exec-5] c.e.mockbackend.service.JobServiceImpl   : Job created: 6320d845-0978-4ee6-963f-4e3db9fcb7d7 status=PENDING worker=real
+2026-11-21T03:46:14.727Z  INFO 1 --- [nio-8080-exec-8] c.e.mockbackend.service.JobServiceImpl   : Job created: 3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2 status=PENDING worker=real
+2026-11-21T03:46:16.743Z  WARN 1 --- [        task-61] c.e.mockbackend.service.RealJobWorker    : jobId=90d15f50-301f-48b8-904e-9197f042e746 stage=COMPLETED with the passthrough sample GLB: not an inference result, leave it out of measurements (job_runs.passthrough = true)
+2026-11-21T03:46:16.755Z  INFO 1 --- [        task-62] c.e.mockbackend.service.RealJobWorker    : jobId=6320d845-0978-4ee6-963f-4e3db9fcb7d7 stage=PROCESSING POST http://beside-stub-drill:8001/infer/upload
+2026-11-21T03:46:20.784Z  WARN 1 --- [        task-62] c.e.mockbackend.service.RealJobWorker    : jobId=6320d845-0978-4ee6-963f-4e3db9fcb7d7 stage=COMPLETED with the passthrough sample GLB: not an inference result, leave it out of measurements (job_runs.passthrough = true)
+2026-11-21T03:46:20.796Z  INFO 1 --- [        task-63] c.e.mockbackend.service.RealJobWorker    : jobId=3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2 stage=PROCESSING POST http://beside-stub-drill:8001/infer/upload
+2026-11-21T03:46:24.823Z  WARN 1 --- [        task-63] c.e.mockbackend.service.RealJobWorker    : jobId=3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2 stage=COMPLETED with the passthrough sample GLB: not an inference result, leave it out of measurements (job_runs.passthrough = true)
+2026-11-21T03:47:05.301Z  INFO 1 --- [ionShutdownHook] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-11-21T03:47:05.304Z  INFO 1 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-11-21T03:47:05.516Z  INFO 1 --- [ionShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:08.386Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:08.399Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:10.730Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:10.841Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 101 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:11.083Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:11.116Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:11.144Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:13.254Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:13.267Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:15.655Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:15.750Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 85 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:15.948Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:15.981Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:16.008Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:18.298Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:18.314Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:20.884Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:21.022Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 122 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:21.236Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:21.272Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:21.298Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:23.701Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:23.715Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:25.950Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:26.075Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 114 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:26.301Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:26.334Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:26.372Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:29.177Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:29.189Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:31.552Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:31.662Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 100 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:31.887Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:31.921Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:31.946Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:35.602Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:35.614Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:38.098Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:38.223Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 114 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:38.443Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:38.476Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:38.506Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:43.745Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:43.757Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:45.994Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:46.112Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 108 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:46.296Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:46.323Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:46.351Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:47:54.761Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:47:54.772Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:47:57.158Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:47:57.274Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 105 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:47:57.514Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:47:57.564Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:47:57.594Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:48:12.375Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:48:12.386Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:48:14.847Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:48:14.967Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 109 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:48:15.184Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:48:15.214Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:48:15.240Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:48:42.936Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:48:42.949Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:48:48.200Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:48:48.697Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 423 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:48:49.512Z  WARN 1 --- [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+2026-11-21T03:48:49.570Z  INFO 1 --- [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-11-21T03:48:49.626Z ERROR 1 --- [           main] o.s.boot.SpringApplication               : Application run failed
+
+java.lang.IllegalStateException: H2 database file /app/storage/db/beside-real.mv.db does not exist and storage.db.create-if-missing=false (prod): not starting with an empty database (failure drill FD5). If the file was lost, restore it from a backup (docs/ops/RUNBOOK.md 'DB 복구'). If the backend runs on the wrong storage volume, fix the mount. Only on a new server: start once with storage.db.create-if-missing=true (container environment STORAGE_DB_CREATEIFMISSING=true; with deploy/docker-compose.yml STORAGE_DB_CREATE_IF_MISSING=true in front of docker compose up, deploy/README.md 'VM 첫 설정').
+	at com.example.mockbackend.config.DatabaseFileGuard.check(DatabaseFileGuard.java:56) ~[!/:0.0.1-SNAPSHOT]
+	at com.example.mockbackend.config.DatabaseFileGuard.postProcessBeanFactory(DatabaseFileGuard.java:41) ~[!/:0.0.1-SNAPSHOT]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:363) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(PostProcessorRegistrationDelegate.java:189) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.invokeBeanFactoryPostProcessors(AbstractApplicationContext.java:775) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:597) ~[spring-context-6.1.1.jar!/:6.1.1]
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+	at com.example.mockbackend.MockBackendApplication.main(MockBackendApplication.java:13) ~[!/:0.0.1-SNAPSHOT]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(Unknown Source) ~[na:na]
+	at java.base/java.lang.reflect.Method.invoke(Unknown Source) ~[na:na]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[app.jar:0.0.1-SNAPSHOT]
+	at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[app.jar:0.0.1-SNAPSHOT]
+
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:49:29.620Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:49:29.633Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:49:31.998Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:49:32.119Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 110 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:49:33.750Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-11-21T03:49:34.315Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-21T03:49:34.315Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-21T03:49:34.463Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-11-21T03:49:34.465Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 4682 ms
+2026-11-21T03:49:35.063Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-11-21T03:49:35.136Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+2026-11-21T03:49:35.184Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-11-21T03:49:35.537Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-11-21T03:49:35.569Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-21T03:49:35.882Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:file:./storage/db/beside-real user=SA
+2026-11-21T03:49:35.885Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-21T03:49:37.390Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-11-21T03:49:37.473Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-11-21T03:49:38.346Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-11-21T03:49:39.886Z  INFO 1 --- [           main] c.e.mockbackend.service.InferenceClient  : inference transfer=upload url=http://beside-stub-drill:8001/infer/upload token=set
+2026-11-21T03:49:39.981Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: check off, cutout off (no model loaded)
+2026-11-21T03:49:40.137Z  INFO 1 --- [           main] c.e.mockbackend.service.AdmissionGate    : Queue admission: off (admission.max-pending=0)
+2026-11-21T03:49:40.429Z  INFO 1 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-11-21T03:49:41.714Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2026-11-21T03:49:41.887Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+2026-11-21T03:49:41.890Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-21T03:49:41.891Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-21T03:49:41.903Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+2026-11-21T03:49:41.904Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 184 ms
+2026-11-21T03:49:41.910Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-11-21T03:49:41.912Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-11-21T03:49:41.915Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 2 ms
+2026-11-21T03:49:41.945Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+2026-11-21T03:49:42.064Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path ''
+2026-11-21T03:49:42.109Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 13.486 seconds (process running for 14.45)
+2026-11-21T03:49:42.367Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+2026-11-21T03:49:55.754Z  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServletRegistration'
+2026-11-21T03:49:55.754Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServletRegistration'
+2026-11-21T03:49:55.755Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+2026-11-21T03:50:00.059Z  INFO 1 --- [   scheduling-1] c.e.mockbackend.service.DatabaseBackup   : H2 backup written: beside-20261121-125000-001.zip (407759 bytes)
+2026-11-21T03:51:34.887Z  WARN 1 --- [nio-8080-exec-2] c.e.m.exception.GlobalExceptionHandler   : GET /api/v1/jobs/90d15f50-301f-48b8-904e-9197f042e746 JOB_NOT_FOUND: Job not found: 90d15f50-301f-48b8-904e-9197f042e746
+2026-11-21T03:51:35.325Z  WARN 1 --- [nio-8080-exec-3] c.e.m.exception.GlobalExceptionHandler   : GET /api/v1/jobs/6320d845-0978-4ee6-963f-4e3db9fcb7d7 JOB_NOT_FOUND: Job not found: 6320d845-0978-4ee6-963f-4e3db9fcb7d7
+2026-11-21T03:51:35.788Z  WARN 1 --- [nio-8080-exec-4] c.e.m.exception.GlobalExceptionHandler   : GET /api/v1/jobs/3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2 JOB_NOT_FOUND: Job not found: 3c47fa2b-bd0d-492a-b2dc-1d28dfe2c4a2

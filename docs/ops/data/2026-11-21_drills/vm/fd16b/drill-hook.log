@@ -1,0 +1,42 @@
+2026-11-21T03:13:05.690Z {"content":"drill-hook selftest"}
+/hook.py:10: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+  print(datetime.datetime.utcnow().isoformat(timespec="milliseconds") + "Z " + body, flush=True)
+2026-11-21T03:14:02.255Z {"content":"✅ 3D 모델 완성 · 작업 `af0e51c8` · 12초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:14:22.855Z {"content":"✅ 3D 모델 완성 · 작업 `13249e8e` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:14:43.913Z {"content":"✅ 3D 모델 완성 · 작업 `07cecccc` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:15:05.936Z {"content":"✅ 3D 모델 완성 · 작업 `950b83bb` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:15:26.658Z {"content":"✅ 3D 모델 완성 · 작업 `38108cf0` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:15:48.157Z {"content":"✅ 3D 모델 완성 · 작업 `770164bf` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:16:09.624Z {"content":"✅ 3D 모델 완성 · 작업 `3b682137` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:16:30.845Z {"content":"✅ 3D 모델 완성 · 작업 `4e3fe61b` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:17:36.020Z {"content":"🟡 GPU 추론 서버(Runpod A40)는 켜졌지만 모델이 아직 준비되지 않았어요"}
+2026-11-21T03:17:36.249Z {"content":"⚠️ 3D 생성 실패 · 작업 `c9bca430` · INFERENCE_UNAVAILABLE · 54초"}
+2026-11-21T03:18:03.533Z {"content":"🟢 GPU 추론 서버(Runpod A40) 연결됨 (cuda) — 기다리던 작업을 이어서 처리합니다"}
+2026-11-21T03:18:17.566Z {"content":"✅ 3D 모델 완성 · 작업 `3ebf3cf2` · 1분 14초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:18:26.437Z {"content":"✅ 3D 모델 완성 · 작업 `08e155df` · 1분 2초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:18:35.219Z {"content":"✅ 3D 모델 완성 · 작업 `0a7688e8` · 49초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:18:44.004Z {"content":"✅ 3D 모델 완성 · 작업 `68c6d1ed` · 37초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:18:53.256Z {"content":"✅ 3D 모델 완성 · 작업 `0309b7a6` · 25초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:19:02.029Z {"content":"✅ 3D 모델 완성 · 작업 `ea83ff0b` · 12초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:19:22.072Z {"content":"✅ 3D 모델 완성 · 작업 `dea45753` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:19:43.313Z {"content":"✅ 3D 모델 완성 · 작업 `31dda086` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:20:04.843Z {"content":"✅ 3D 모델 완성 · 작업 `710a4f72` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:20:26.206Z {"content":"✅ 3D 모델 완성 · 작업 `3783a735` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:20:47.399Z {"content":"✅ 3D 모델 완성 · 작업 `1e1f6bd7` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:21:08.747Z {"content":"✅ 3D 모델 완성 · 작업 `cf45cf43` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:21:30.360Z {"content":"✅ 3D 모델 완성 · 작업 `6dceb237` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:21:51.679Z {"content":"✅ 3D 모델 완성 · 작업 `e9e77045` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:22:13.077Z {"content":"✅ 3D 모델 완성 · 작업 `be285d34` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:22:34.454Z {"content":"✅ 3D 모델 완성 · 작업 `8b0f928c` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:22:55.877Z {"content":"✅ 3D 모델 완성 · 작업 `37719d3a` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:23:17.190Z {"content":"✅ 3D 모델 완성 · 작업 `66b70e39` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:23:38.768Z {"content":"✅ 3D 모델 완성 · 작업 `70189c38` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:23:59.712Z {"content":"✅ 3D 모델 완성 · 작업 `08bbed27` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:24:21.305Z {"content":"✅ 3D 모델 완성 · 작업 `dbe31c45` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:24:42.151Z {"content":"✅ 3D 모델 완성 · 작업 `6d6b4ba4` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:25:03.759Z {"content":"✅ 3D 모델 완성 · 작업 `8606dbff` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:25:25.305Z {"content":"✅ 3D 모델 완성 · 작업 `45692cd6` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:25:46.482Z {"content":"✅ 3D 모델 완성 · 작업 `c2a30286` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:26:08.080Z {"content":"✅ 3D 모델 완성 · 작업 `b56fb4d9` · 11초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:26:29.322Z {"content":"✅ 3D 모델 완성 · 작업 `1c000e1e` · 10초 · animallift-baseline@5d364cf:latest"}
+2026-11-21T03:26:50.884Z {"content":"✅ 3D 모델 완성 · 작업 `f1db5efb` · 11초 · animallift-baseline@5d364cf:latest"}
