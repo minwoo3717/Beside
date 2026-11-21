@@ -1,6 +1,6 @@
 # 털 표현 (Fur Rendering)
 
-상태: 쉘 털 v2·그림자 바닥면·GLB 털 맵 읽기 **[구현됨]**, 성능 **[실험 결과]**(브랜치 `Unity` 코드, SM-S947N 1대), 화질 옵션·부위별 털 **[계획]**. 코드는 `unity/Assets/Beside/Loader/`(앱)와 `unity/Assets/Beside/FurLab/`(측정 전용). 2026-11-17 브랜치 `Unity` 에 쓴 문서를 2026-11-21 main 에 옮기며 서버 쪽 설명을 main 의 변환기에 맞췄다. main 에 합친 코드의 에디터·기기 확인은 [계획].
+상태: 쉘 털 v2·그림자 바닥면·GLB 털 맵 읽기 **[미검증]**(코드는 main 에 있지만 Unity 시험이 없고 main 에서는 컴파일만 확인. 쉘 털 v2·그림자 바닥면은 연구용 프로젝트에서 브랜치 코드로 기기 확인), 성능 **[실험 결과]**(브랜치 `Unity` 코드, SM-S947N 1대. 기록 위치 `unity/experiments/` 를 루트 CLAUDE.md 의 [실험 결과] 정의(`generation/experiments/`·`docs/` 기록)에 넣을지는 결정 전), 화질 옵션·부위별 털 **[계획]**. 코드는 `unity/Assets/Beside/Loader/`(앱)와 `unity/Assets/Beside/FurLab/`(측정 전용). 2026-11-17 브랜치 `Unity` 에 쓴 문서를 2026-11-21 main 에 옮기며 서버 쪽 설명을 main 의 변환기에 맞췄다. main 에 합친 코드의 에디터·기기 확인은 [계획].
 
 AnimalLift가 만든 강아지 모델(정점 4,310개, 삼각형 7,774개, 색 텍스처 1장)에 털을 입히는 방법과 코드 구조를 정리한다. 측정값은 [experiments/2026-11-03_fur-benchmark.md](../experiments/2026-11-03_fur-benchmark.md)에 있다.
 
