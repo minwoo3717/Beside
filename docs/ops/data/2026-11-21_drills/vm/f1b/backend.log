@@ -1,0 +1,58 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-11-21T03:28:24.546Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Starting MockBackendApplication v0.0.1-SNAPSHOT using Java 17.0.20.1 with PID 1 (/app/app.jar started by beside in /app)
+2026-11-21T03:28:24.576Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : The following 2 profiles are active: "real", "prod"
+2026-11-21T03:28:31.873Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-11-21T03:28:32.198Z  INFO 1 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 268 ms. Found 3 JPA repository interfaces.
+2026-11-21T03:28:35.600Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-11-21T03:28:36.656Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-21T03:28:36.660Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-21T03:28:36.956Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-11-21T03:28:36.960Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 11811 ms
+2026-11-21T03:28:37.990Z  INFO 1 --- [           main] o.hibernate.jpa.internal.util.LogHelper  : HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-11-21T03:28:38.062Z  INFO 1 --- [           main] org.hibernate.Version                    : HHH000412: Hibernate ORM core version 6.3.1.Final
+2026-11-21T03:28:38.132Z  INFO 1 --- [           main] o.h.c.internal.RegionFactoryInitiator    : HHH000026: Second-level cache disabled
+2026-11-21T03:28:38.461Z  INFO 1 --- [           main] o.s.o.j.p.SpringPersistenceUnitInfo      : No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-11-21T03:28:38.542Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-11-21T03:28:38.825Z  INFO 1 --- [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection conn0: url=jdbc:h2:file:./storage/db/beside-real user=SA
+2026-11-21T03:28:38.828Z  INFO 1 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-11-21T03:28:40.411Z  INFO 1 --- [           main] o.h.e.t.j.p.i.JtaPlatformInitiator       : HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-11-21T03:28:40.478Z  INFO 1 --- [           main] j.LocalContainerEntityManagerFactoryBean : Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-11-21T03:28:41.255Z  INFO 1 --- [           main] o.s.d.j.r.query.QueryEnhancerFactory     : Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-11-21T03:28:42.602Z  INFO 1 --- [           main] c.e.mockbackend.service.InferenceClient  : inference transfer=upload url=http://beside-stub-drill:8001/infer/upload token=set
+2026-11-21T03:28:42.675Z  INFO 1 --- [           main] c.e.m.s.preprocess.PreprocessModels      : preprocess: check off, cutout off (no model loaded)
+2026-11-21T03:28:42.823Z  INFO 1 --- [           main] c.e.mockbackend.service.AdmissionGate    : Queue admission: off (admission.max-pending=0)
+2026-11-21T03:28:43.254Z  INFO 1 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-11-21T03:28:44.730Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+2026-11-21T03:28:44.832Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8081 (http)
+2026-11-21T03:28:44.834Z  INFO 1 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-11-21T03:28:44.834Z  INFO 1 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-11-21T03:28:44.841Z  INFO 1 --- [           main] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring embedded WebApplicationContext
+2026-11-21T03:28:44.841Z  INFO 1 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 104 ms
+2026-11-21T03:28:44.861Z  INFO 1 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 2 endpoint(s) beneath base path '/actuator'
+2026-11-21T03:28:44.964Z  INFO 1 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8081 (http) with context path ''
+2026-11-21T03:28:45.023Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 23.421 seconds (process running for 26.963)
+2026-11-21T03:28:45.121Z  INFO 1 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-11-21T03:28:45.122Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-11-21T03:28:45.127Z  INFO 1 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 4 ms
+2026-11-21T03:28:45.230Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+2026-11-21T03:28:55.754Z  INFO 1 --- [nio-8081-exec-1] o.a.c.c.C.[Tomcat-1].[localhost].[/]     : Initializing Spring DispatcherServlet 'dispatcherServletRegistration'
+2026-11-21T03:28:55.754Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServletRegistration'
+2026-11-21T03:28:55.755Z  INFO 1 --- [nio-8081-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 0 ms
+2026-11-21T03:29:00.291Z  INFO 1 --- [nio-8080-exec-3] c.e.mockbackend.service.JobServiceImpl   : Job created: 120c4948-53f9-4a02-880c-85e5aa8bd1b1 status=PENDING worker=real
+2026-11-21T03:29:00.336Z  INFO 1 --- [         task-1] c.e.mockbackend.service.RealJobWorker    : jobId=120c4948-53f9-4a02-880c-85e5aa8bd1b1 stage=PROCESSING POST http://beside-stub-drill:8001/infer/upload
+2026-11-21T03:29:02.368Z  INFO 1 --- [nio-8080-exec-4] c.e.mockbackend.service.JobServiceImpl   : Job created: b45f3f4f-7e19-4e35-b78d-e99d62d8ad26 status=PENDING worker=real
+2026-11-21T03:30:00.065Z  INFO 1 --- [   scheduling-1] c.e.mockbackend.service.DatabaseBackup   : H2 backup written: beside-20261121-123000-001.zip (498144 bytes)
+2026-11-21T03:31:00.393Z  WARN 1 --- [         task-1] c.e.mockbackend.service.RealJobWorker    : jobId=120c4948-53f9-4a02-880c-85e5aa8bd1b1 stage=FAILED code=INFERENCE_TIMEOUT No answer from the inference service within inference.timeout-ms=120000 [POST http://beside-stub-drill:8001/infer/upload: no complete answer in time]
+2026-11-21T03:31:00.423Z  WARN 1 --- [         task-2] c.e.m.service.InferenceHealthMonitor     : inference service has been busy with one run for 120046 ms (healthz busyForMs, limit 120000 ms): inference may be stuck
+2026-11-21T03:31:00.440Z  INFO 1 --- [         task-2] c.e.mockbackend.service.RealJobWorker    : jobId=b45f3f4f-7e19-4e35-b78d-e99d62d8ad26 stage=PROCESSING POST http://beside-stub-drill:8001/infer/upload
+2026-11-21T03:32:00.052Z  INFO 1 --- [   scheduling-1] c.e.mockbackend.service.DatabaseBackup   : H2 backup written: beside-20261121-123200-000.zip (475552 bytes)
+2026-11-21T03:32:04.432Z  WARN 1 --- [         task-2] c.e.mockbackend.service.RealJobWorker    : jobId=b45f3f4f-7e19-4e35-b78d-e99d62d8ad26 stage=COMPLETED with the passthrough sample GLB: not an inference result, leave it out of measurements (job_runs.passthrough = true)
+2026-11-21T03:32:15.334Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service is no longer stuck (healthz busyForMs=0)

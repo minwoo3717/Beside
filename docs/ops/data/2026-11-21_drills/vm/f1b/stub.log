@@ -1,0 +1,36 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:53826 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:40408 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:58844 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:58844 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:50120 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51158 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:34546 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:54538 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:34814 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:44620 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:60790 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:50670 - "GET /healthz HTTP/1.1" 200 OK
+job 120c4948-53f9-4a02-880c-85e5aa8bd1b1: work folder deleted, cancelled the run still in progress
+INFO:     172.18.0.3:50686 - "DELETE /artifacts/120c4948-53f9-4a02-880c-85e5aa8bd1b1 HTTP/1.1" 204 No Content
+INFO:     172.18.0.3:50670 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:42146 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:47252 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:38230 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:42776 - "GET /healthz HTTP/1.1" 200 OK
+job 120c4948-53f9-4a02-880c-85e5aa8bd1b1: passthrough sim 180000 ms (planned 180000), slot wait 0 ms of 1 slot(s), outcome ok (slow token)
+job 120c4948-53f9-4a02-880c-85e5aa8bd1b1: work folder deleted during the run (DELETE /artifacts after the client gave up), stopping before copying the sample, answering INFERENCE_FAILED
+job b45f3f4f-7e19-4e35-b78d-e99d62d8ad26: passthrough sim 4000 ms (planned 4000), slot wait 59924 ms of 1 slot(s), outcome ok
+job b45f3f4f-7e19-4e35-b78d-e99d62d8ad26: upload mode, 1 photo(s) in, /work/b45f3f4f-7e19-4e35-b78d-e99d62d8ad26/base.glb out (passthrough sample)
+INFO:     172.18.0.3:50686 - "POST /infer/upload HTTP/1.1" 200 OK
+INFO:     172.18.0.3:50686 - "GET /artifacts/b45f3f4f-7e19-4e35-b78d-e99d62d8ad26/base.glb HTTP/1.1" 200 OK
+job b45f3f4f-7e19-4e35-b78d-e99d62d8ad26: work folder deleted
+INFO:     172.18.0.3:50686 - "DELETE /artifacts/b45f3f4f-7e19-4e35-b78d-e99d62d8ad26 HTTP/1.1" 204 No Content
+INFO:     172.18.0.3:53150 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:51634 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:33890 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:40742 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     172.18.0.3:56680 - "GET /healthz HTTP/1.1" 200 OK

@@ -1,0 +1,2 @@
+== time to fill N from an empty queue (fluid: N / (arrivals - capacity)), capacity 408.6/h
+  arrivals 505.5/h, net 96.9/h: N 19 11.8 min

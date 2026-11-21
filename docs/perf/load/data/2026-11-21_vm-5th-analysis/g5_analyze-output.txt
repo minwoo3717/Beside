@@ -1,0 +1,119 @@
+Computed numbers of the round-5 load test and short drills (2026-11-21 UTC), from the raw folders.
+
+== 1. per-run job times (first attempts created inside the k6 window, COMPLETED), round 5 vs round 4
+  g0d4 (2026-11-20_0224-g0d4): window 17:24:38-17:39:51, first attempts 31, COMPLETED 31, results {'COMPLETED': 31}
+    processingMs s: n 31 mean 8.054 p50 8.085 p90 8.210 p95 8.284 min 7.653 max 8.304
+    inferMs p50 3.638  convertMs p50 0.822  rest (processing - infer - convert) mean 3.639 p50 3.635
+    h0 = median(queuedMs - preprocessMs) 0.293 s;  S0 = mean processing + 2*h0 = 8.64 s
+    glbBytes {1326748: 31}
+    Pod join: 31 of 31 jobs
+      VM processing start -> POST head (mixed clocks)  p50 0.151 p90 0.154 mean 0.151 max 0.156
+      upload receive body_ms                           p50 1.355 p90 1.357 mean 1.354 max 1.359
+      Pod work start_ms - body_ms                      p50 4.542 p90 4.656 mean 4.507 max 4.757
+        of which outside infer+convert                 p50 0.090 p90 0.110 mean 0.093 max 0.136
+      answer -> GET head (Pod clock)                   p50 0.274 p90 0.276 mean 0.275 max 0.277
+      GLB hand-off end_ms - start_ms                   p50 0.016 p90 0.022 mean 0.017 max 0.033
+      GLB leg: hand-off end -> VM finishedAt (mixed)   p50 1.746 p90 1.752 mean 1.745 max 1.761
+  g0d5 (2026-11-21_1022-g0d5): window 01:22:39-01:32:39, first attempts 20, COMPLETED 20, results {'COMPLETED': 20}
+    processingMs s: n 20 mean 8.302 p50 8.301 p90 8.437 p95 8.462 min 7.994 max 8.481
+    inferMs p50 3.671  convertMs p50 0.790  rest (processing - infer - convert) mean 3.877 p50 3.873
+    h0 = median(queuedMs - preprocessMs) 0.286 s;  S0 = mean processing + 2*h0 = 8.88 s
+    glbBytes {1923996: 20}
+    Pod join: 20 of 20 jobs
+      VM processing start -> POST head (mixed clocks)  p50 0.148 p90 0.150 mean 0.148 max 0.152
+      upload receive body_ms                           p50 1.345 p90 1.346 mean 1.345 max 1.355
+      Pod work start_ms - body_ms                      p50 4.522 p90 4.658 mean 4.521 max 4.694
+        of which outside infer+convert                 p50 0.092 p90 0.115 mean 0.095 max 0.126
+      answer -> GET head (Pod clock)                   p50 0.273 p90 0.274 mean 0.273 max 0.276
+      GLB hand-off end_ms - start_ms                   p50 0.020 p90 0.023 mean 0.020 max 0.025
+      GLB leg: hand-off end -> VM finishedAt (mixed)   p50 1.990 p90 1.993 mean 1.990 max 1.995
+  g3c1 (2026-11-20_0256-g3c1): window 17:56:23-18:19:45, first attempts 157, COMPLETED 157, results {'COMPLETED': 157}
+    processingMs s: n 157 mean 8.087 p50 8.106 p90 8.217 p95 8.268 min 7.646 max 8.961
+    inferMs p50 3.642  convertMs p50 0.818  rest (processing - infer - convert) mean 3.661 p50 3.647
+    glbBytes {1326748: 157}
+    Pod join: 157 of 157 jobs
+      VM processing start -> POST head (mixed clocks)  p50 0.147 p90 0.152 mean 0.150 max 0.422
+      upload receive body_ms                           p50 1.356 p90 1.361 mean 1.357 max 1.376
+      Pod work start_ms - body_ms                      p50 4.554 p90 4.656 mean 4.525 max 5.055
+        of which outside infer+convert                 p50 0.094 p90 0.121 mean 0.099 max 0.181
+      answer -> GET head (Pod clock)                   p50 0.274 p90 0.276 mean 0.274 max 0.281
+      GLB hand-off end_ms - start_ms                   p50 0.016 p90 0.021 mean 0.017 max 0.038
+      GLB leg: hand-off end -> VM finishedAt (mixed)   p50 1.747 p90 1.756 mean 1.758 max 2.559
+  g3cap0 (2026-11-21_1033-g3cap0): window 01:34:03-02:24:05, first attempts 345, COMPLETED 345, results {'COMPLETED': 345}
+    processingMs s: n 345 mean 8.240 p50 8.256 p90 8.382 p95 8.406 min 7.880 max 9.764
+    inferMs p50 3.633  convertMs p50 0.765  rest (processing - infer - convert) mean 3.869 p50 3.860
+    glbBytes {1923996: 345}
+    Pod join: 342 of 345 jobs
+      VM processing start -> POST head (mixed clocks)  p50 0.144 p90 0.147 mean 0.145 max 0.420
+      upload receive body_ms                           p50 1.343 p90 1.348 mean 1.342 max 1.363
+      Pod work start_ms - body_ms                      p50 4.490 p90 4.604 mean 4.465 max 5.269
+        of which outside infer+convert                 p50 0.086 p90 0.117 mean 0.094 max 0.192
+      answer -> GET head (Pod clock)                   p50 0.270 p90 0.273 mean 0.271 max 0.288
+      GLB hand-off end_ms - start_ms                   p50 0.020 p90 0.023 mean 0.021 max 0.132
+      GLB leg: hand-off end -> VM finishedAt (mixed)   p50 1.989 p90 1.996 mean 1.992 max 3.575
+  g3cap19 (2026-11-21_1126-g3cap19): window 02:26:49-03:09:02, first attempts 286, COMPLETED 286, results {'COMPLETED': 286}
+    processingMs s: n 286 mean 8.235 p50 8.242 p90 8.364 p95 8.418 min 7.876 max 9.376
+    inferMs p50 3.634  convertMs p50 0.749  rest (processing - infer - convert) mean 3.865 p50 3.858
+    glbBytes {1923996: 286}
+    Pod join: 286 of 286 jobs
+      VM processing start -> POST head (mixed clocks)  p50 0.144 p90 0.147 mean 0.145 max 0.432
+      upload receive body_ms                           p50 1.343 p90 1.347 mean 1.342 max 1.352
+      Pod work start_ms - body_ms                      p50 4.475 p90 4.593 mean 4.462 max 4.844
+        of which outside infer+convert                 p50 0.086 p90 0.112 mean 0.092 max 0.220
+      answer -> GET head (Pod clock)                   p50 0.270 p90 0.274 mean 0.271 max 0.286
+      GLB hand-off end_ms - start_ms                   p50 0.020 p90 0.024 mean 0.021 max 0.064
+      GLB leg: hand-off end -> VM finishedAt (mixed)   p50 1.989 p90 1.995 mean 1.990 max 2.795
+  mean processing g3cap0 - g3c1 = +0.153 s, g0d5 - g0d4 = +0.248 s, g3cap19 - g3cap0 = -0.005 s
+
+== 2. k6 flows of the G3 runs (k6-summary.json): what a client saw
+  g3c1: creates POST 157 (471.0/h), admitted 157 (471/h), refused None, refused retries None, Retry-After checks None, queueCap None R None
+    flows ok 157 / 157; flows that hit the 600 s client timeout 0; flowMs p50 49.6 p95 199.3 max 216.6 s; waitMs (completed flows) p95 196.5 max 213.7 s
+    http 5xx {'500': 0, '502': 0, '503': 0, '504': 0, 'other': 0}, 4xx 0, status0 0, dropped 0, unfinishedFlows 0, failed thresholds ['http_req_duration{endpoint:asset} p(99)<6000', 'http_req_duration{endpoint:create} p(95)<1500']
+    asset (k6 Pod <-> VM) n 157 p50 1.06 p90 1.09 p95 2.29 p99 7.38 max 8.62 s
+  g3cap0: creates POST 383 (574.5/h), admitted 383 (575/h), refused 0, refused retries 0, Retry-After checks {'passed': 0, 'failed': 0}, queueCap 0 R None
+    flows ok 251 / 383; flows that hit the 600 s client timeout 132; flowMs p50 449.5 p95 603.5 max 604.0 s; waitMs (completed flows) p95 602.0 max 602.1 s
+    http 5xx {'500': 0, '502': 0, '503': 0, '504': 0, 'other': 0}, 4xx 0, status0 0, dropped 0, unfinishedFlows 0, failed thresholds ['http_req_duration{endpoint:asset} p(95)<3000', 'http_req_duration{endpoint:asset} p(99)<6000']
+    asset (k6 Pod <-> VM) n 251 p50 1.23 p90 7.72 p95 7.98 p99 8.14 max 10.07 s
+  g3cap19: creates POST 337 (505.5/h), admitted 286 (429/h), refused 51, refused retries 0, Retry-After checks {'passed': 51, 'failed': 0}, queueCap 19 R 167
+    flows ok 286 / 337; flows that hit the 600 s client timeout 0; flowMs p50 156.0 p95 177.2 max 182.9 s; waitMs (completed flows) p95 174.5 max 178.0 s
+    http 5xx {'500': 0, '502': 0, '503': 51, '504': 0, 'other': 0}, 4xx 0, status0 0, dropped 0, unfinishedFlows 0, failed thresholds ['http_req_duration{endpoint:asset} p(99)<6000']
+    asset (k6 Pod <-> VM) n 286 p50 1.23 p90 1.24 p95 1.27 p99 8.10 max 8.74 s
+
+== 3. the cap-0 run's jobs after the run (events of the next backend, which carries the earlier finishes too)
+  created in the g3cap0 window 383: {'COMPLETED': 351, 'FAILED:INTERNAL_ERROR': 32}
+  INTERNAL_ERROR (closed by the W7 backend restart): PENDING 31, PROCESSING 1; closed at 02:26:22-02:26:23; their wait at closing (totalMs) min 739.5 max 923.8 s
+  COMPLETED wait created -> COMPLETED: n 351 mean 434.6 p50 408.6 p90 813.1 p95 837.2 min 12.3 max 887.8
+  COMPLETED later than the run end (02:24:05): 12
+
+== 4. Retry-After R = round(N * S_busy) with N 19 (W 180 s rule), half up
+  round 4 g3c1 (decision)      S_busy 8.6700 s: N 19, worst (N+1)*S 173.4 s, R 164.73 -> 165
+  round 2 g3r165 (other Pod)   S_busy 8.8100 s: N 19, worst (N+1)*S 176.2 s, R 167.39 -> 167
+  round 5 g3cap0               S_busy 8.8083 s: N 19, worst (N+1)*S 176.2 s, R 167.36 -> 167
+  round 5 g3cap19              S_busy 8.8077 s: N 19, worst (N+1)*S 176.2 s, R 167.35 -> 167
+  R 165 <=> S_busy in [8.658, 8.711) s (N 19)
+  R 167 <=> S_busy in [8.763, 8.816) s (N 19)
+  N stays 19 while S_busy <= 9.00 s
+
+== 5. drills (docs/ops/data/2026-11-21_drills)
+  fd16b: flows 37 {('COMPLETED', None): 36, ('FAILED', 'INFERENCE_UNAVAILABLE'): 1}; totalMs s n 37 mean 17.0 p50 10.6 p90 41.7 p95 55.9 min 10.1 max 74.3; processingMs p50 8.387 max 52.305 s
+    probe (public healthz, 1 s) 784: codes {200: 784}, slowest 1489 ms
+    total > 20 s: post 03:16:41 c9bca430 FAILED INFERENCE_UNAVAILABLE 54.4 s
+    total > 20 s: post 03:17:03 3ebf3cf2 COMPLETED None 74.3 s
+    total > 20 s: post 03:17:24 08e155df COMPLETED None 61.8 s
+    total > 20 s: post 03:17:46 0a7688e8 COMPLETED None 49.2 s
+    total > 20 s: post 03:18:07 68c6d1ed COMPLETED None 36.6 s
+    total > 20 s: post 03:18:28 0309b7a6 COMPLETED None 24.6 s
+  fd9: flows 55 {('COMPLETED', None): 55}; totalMs s n 55 mean 15.1 p50 4.0 p90 54.9 p95 73.7 min 4.0 max 92.5; processingMs p50 4.031 max 92.444 s
+    probe (public healthz, 1 s) 603: codes {200: 603}, slowest 3725 ms
+  f1b 120c4948: FAILED:INFERENCE_TIMEOUT queuedMs 190 processingMs 120038 totalMs 120228
+  f1b b45f3f4f: COMPLETED queuedMs 118067 processingMs 63989 totalMs 182057
+  drill-hook during FD9 (03:34:30-03:43:51): 28 posts; by first emoji U+2705 19, U+1F4ED 4, U+1F534 3, U+1F7E2 1, U+1F4E6 1
+  job ids posted more than once as single messages during FD9: 0
+  fd5 dr5a check: 200 COMPLETED, 200 COMPLETED, 200 COMPLETED
+  fd5 dr5b check: 404 -, 404 -, 404 -
+
+== 6. downtime and Pod cost (operation records: the state log of this night, outside the repo; prices read at create)
+  production backend down 01:19:04 -> 03:55:22.740000: 9379 s = 2.605 h (limit 4 h, end of limit 05:19:04)
+  GPU A40 jvytgcpcgahd1t: 01:15:18 -> 03:28:02 = 2.212 h x $0.59/h = $1.31
+  k6 cpu3g ho9wgig3hz2a9q: 01:12:40 -> 03:54:59 = 2.705 h x $0.16/h = $0.43
+  total $1.74 (network volume billed monthly, not included)
