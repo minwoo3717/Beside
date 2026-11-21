@@ -53,7 +53,7 @@
       "id": 2,
       "type": "stat",
       "title": "생성 성공률 (선택 기간)",
-      "description": "끝난 작업 중 COMPLETED 비율. beside_jobs_finished_total{result} 의 선택 기간 증가량으로 계산한다. retry 는 새 시도로 따로 센다. 끝난 작업이 없으면 '-'.",
+      "description": "끝난 작업 중 COMPLETED 비율. beside_jobs_finished_total{result} 의 선택 기간 증가량으로 계산한다. retry 는 새 시도로 따로 센다. 사용자가 대기 중에 취소한 실행(code=\"CANCELED\", API v1.2)은 분모에서 뺀다(docs/METRICS.md §5.3, 관리 stats 와 같은 규칙). 끝난 작업이 없으면 '-'.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -116,7 +116,7 @@
             "uid": "beside-prometheus"
           },
           "refId": "A",
-          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\"}[$__range])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\"}[$__range]))",
+          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\"}[$__range])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",code!=\"CANCELED\"}[$__range]))",
           "legendFormat": "성공률",
           "instant": true,
           "range": false
@@ -473,7 +473,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "생성 성공률 추이 ($window 창)",
-      "description": "각 시점에서 지난 $window 동안 끝난 작업 중 COMPLETED 비율. A = 전체, B = 패스스루 제외(passthrough=\"false\"). 주의: FAILED 실행은 늘 passthrough=\"false\" 로 태그된다(backend 는 스텁의 실패와 모델의 실패를 구분하지 못한다). 그래서 B 는 추론 서비스가 실제 모델을 돌릴 때만 맞다. 스텁을 쓰는 부하 시험(G·F)에서는 A(필터 없음)나 scripts/load/collect.py 결과를 본다.",
+      "description": "각 시점에서 지난 $window 동안 끝난 작업 중 COMPLETED 비율. A = 전체, B = 패스스루 제외(passthrough=\"false\"). 둘 다 사용자 취소(code=\"CANCELED\")는 분모에서 뺀다. 주의: FAILED 실행은 늘 passthrough=\"false\" 로 태그된다(backend 는 스텁의 실패와 모델의 실패를 구분하지 못한다). 그래서 B 는 추론 서비스가 실제 모델을 돌릴 때만 맞다. 스텁을 쓰는 부하 시험(G·F)에서는 A(필터 없음)나 scripts/load/collect.py 결과를 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -543,7 +543,7 @@
             "uid": "beside-prometheus"
           },
           "refId": "A",
-          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\"}[$window])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\"}[$window]))",
+          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\"}[$window])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",code!=\"CANCELED\"}[$window]))",
           "legendFormat": "성공률",
           "instant": false,
           "range": true
@@ -554,7 +554,7 @@
             "uid": "beside-prometheus"
           },
           "refId": "B",
-          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\",passthrough=\"false\"}[$window])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",passthrough=\"false\"}[$window]))",
+          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",result=\"COMPLETED\",passthrough=\"false\"}[$window])) / sum(increase(beside_jobs_finished_total{env=\"$env\",worker=~\"$worker\",passthrough=\"false\",code!=\"CANCELED\"}[$window]))",
           "legendFormat": "성공률 (패스스루 제외)",
           "instant": false,
           "range": true

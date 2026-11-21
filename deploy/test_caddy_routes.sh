@@ -160,6 +160,19 @@ check 401 GET  /grafana
 check 401 GET  /grafana/
 check 401 GET  /grafana/api/health
 check 401 GET  /grafana/d/beside-ops
+check 401 GET  "/api/v1/jobs/$JOB/ratings"
+check 401 PUT  "/api/v1/jobs/$JOB/ratings/minwoo"
+check 401 GET  "/api/v1/jobs/$JOB/ratings/"
+check 401 GET  "/api/v1/jobs/$JOB/ratings/minwoo"
+# 공유 링크 만들기·모두 끊기는 웹 작업 상세만 쓴다(앱은 아직 공유하지 않음, 2026-11-21 v1.2 검토)
+check 401 POST "/api/v1/jobs/$JOB/shares"
+check 401 POST "/api/v1/jobs/$JOB/shares?ttlDays=30"
+check 401 post "/api/v1/jobs/$JOB/shares"
+check 401 DELETE "/api/v1/jobs/$JOB/shares"
+check 401 POST "/api/v1/jobs/$JOB/shares/"
+check 401 DELETE /api/v1/shares/AbCdEf123
+check 401 delete /api/v1/shares/AbCdEf123
+check 401 PATCH /api/v1/shares/AbCdEf123
 check 401 GET  /api/v1/jobs -u "$AUTH_USER:wrong-password"
 
 echo "-- 200 with credentials"
@@ -169,6 +182,10 @@ check 200 DELETE "/api/v1/jobs/$JOB" "${AUTH[@]}"
 check 200 GET  /api/v1/admin/overview "${AUTH[@]}"
 check 200 GET  /grafana/ "${AUTH[@]}"
 check 200 GET  /grafana/api/health "${AUTH[@]}"
+check 200 DELETE /api/v1/shares/AbCdEf123 "${AUTH[@]}"
+check 200 POST "/api/v1/jobs/$JOB/shares" "${AUTH[@]}"
+check 200 DELETE "/api/v1/jobs/$JOB/shares" "${AUTH[@]}"
+check 200 PUT  "/api/v1/jobs/$JOB/ratings/minwoo" "${AUTH[@]}"
 
 echo "-- 200 public: app API, healthz, share links, static files"
 check 200 GET  /api/v1/healthz
@@ -176,6 +193,7 @@ check 200 POST /api/v1/jobs
 check 200 GET  "/api/v1/jobs/$JOB"
 check 200 GET  "/api/v1/jobs/$JOB/asset?variant=base"
 check 200 POST "/api/v1/jobs/$JOB/retry"
+check 200 POST "/api/v1/jobs/$JOB/cancel"
 check 200 GET  /styles.css
 check 200 GET  /s/AbCdEf123
 check 200 GET  /share.html

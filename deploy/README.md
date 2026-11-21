@@ -79,8 +79,8 @@ gcloud compute addresses delete beside-ip --region=asia-northeast3   # VM 만 �
 | 처리 | 경로 |
 |---|---|
 | **404** (없는 것처럼) | `/api/jobs`, `/api/jobs/*`(v0 동결 API — 서버 경로를 노출한다), `/h2-console*`, `/swagger*`, `/v3/api-docs*`, `/webjars*`(prod 에서도 Swagger UI 묶음이 나간다), `/actuator*`(Actuator 는 관리 포트 8081 에만 있다 — 두 겹), 경로에 `;` 가 든 모든 요청 |
-| **Basic 인증** | `/`, `/index.html*`, `/app.js*`(Mock 업로드 UI — 끝에 `/` 를 붙인 경로도), `/admin*`, `/library*`, `/job*`(앞으로 생길 웹 화면), `/grafana*`(→ Grafana, 그다음 Grafana 로그인), `/api/v1/jobs`·`/api/v1/jobs/` 의 **POST 가 아닌** 모든 method(목록 등), `/api/v1/jobs/*` 의 **GET·HEAD·POST 가 아닌** 모든 method(삭제 등), `/api/v1/jobs/*/pet*`, `/api/v1/admin*`, `/api/v1/pets*` |
-| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs`, `GET`·`HEAD /api/v1/jobs/{id}`·`/asset`, `POST /retry`), `/api/v1/healthz`, 공유 링크(`/s/*`, `/share.*`, `/api/v1/shares/*`), `styles.css` 같은 정적 파일 |
+| **Basic 인증** | `/`, `/index.html*`, `/app.js*`(Mock 업로드 UI — 끝에 `/` 를 붙인 경로도), `/admin*`, `/library*`, `/job*`(관리·보관함·작업 상세 웹 화면), `/grafana*`(→ Grafana, 그다음 Grafana 로그인), `/api/v1/jobs`·`/api/v1/jobs/` 의 **POST 가 아닌** 모든 method(목록 등), `/api/v1/jobs/*` 의 **GET·HEAD·POST 가 아닌** 모든 method(삭제·평가 저장 등), `/api/v1/jobs/*/pet*`, `/api/v1/jobs/*/ratings*`·`/ratings/*`(품질 평가), `/api/v1/jobs/*/shares*`·`/shares/*`(공유 링크 만들기·모두 끊기 — 웹 작업 상세만 쓴다, 앱은 아직 공유하지 않음), `/api/v1/shares/*` 의 **GET·HEAD 가 아닌** 모든 method(공유 취소), `/api/v1/admin*`, `/api/v1/pets*` |
+| **공개** | 그 밖 전부: 앱 API(`POST /api/v1/jobs` — 펫을 받지 않아 보관함에 쓰지 않는다, `GET`·`HEAD /api/v1/jobs/{id}`·`/asset`, `POST /retry`·`/cancel` — 작업 UUID 를 아는 쪽만 부를 수 있다), `/api/v1/healthz`, 공유 링크 보기(`/s/*`, `/share.*`, `GET /api/v1/shares/*` — Scene Viewer 가 인증 없이 GLB 를 받는다), `styles.css` 같은 정적 파일 |
 | **413** | 요청 본문 25MB 초과(Caddy). 20MB·장당 5MB 초과는 Spring 이 v1 오류 봉투(`PAYLOAD_TOO_LARGE`)로 413 |
 | **모든 응답** | `Strict-Transport-Security: max-age=15552000`(180일, 하위 도메인 없이), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. 손님이 보낸 `Forwarded`·`X-Forwarded-Prefix`·`-Port`·`-Ssl` 은 Spring 에 넘기기 전에 지운다(`X-Forwarded-For`·`-Proto`·`-Host` 는 Caddy 가 새로 쓴다) |
 
@@ -88,6 +88,9 @@ gcloud compute addresses delete beside-ip --region=asia-northeast3   # VM 만 �
 - Caddy 의 path 비교는 대소문자를 가리지 않고, 퍼센트 인코딩을 풀고 `//`·`..` 를 정리한 뒤에 한다. `caddy:2.11.1` 미만은 이 정리에 우회 취약점(CVE-2026-27587)이 있으므로 이미지를 내리지 않는다.
 - 규칙을 바꾸면 [test_caddy_routes.sh](test_caddy_routes.sh) 의 기대값도 고친다. Linux + Docker 에서 `bash deploy/test_caddy_routes.sh` 로 가짜 백엔드 앞에 같은 Caddyfile 을 띄워 경로마다 상태 코드를 확인한다(CI 도 같은 명령).
 - 공개 경로의 작업은 UUID 를 아는 사람만 볼 수 있다는 가정이다(계정 없음). 목록 API 를 막는 이유가 이것이다.
+- 공개 `GET /api/v1/jobs/{id}` 의 `petId`(보관함의 펫 UUID)는 그 작업 UUID 를 가진 쪽에게 보이지만, 그 UUID 로 할 수 있는 일(펫 보기·작업 넣기·지우기)은 모두 위 인증 뒤다.
+- 요청 수 제한은 아직 없다(#22 `RATE_LIMITED` 는 이름만 예약, **[계획]**). 공개 `POST /retry`·`/cancel` 을 되풀이하면 실행 기록(`job_runs`·`events.jsonl`)이 늘어난다. 취소는 Discord 로 보내지 않아 팀 채널은 덮이지 않는다. `job_runs`·`events.jsonl`·`share_links` 의 보존 기간은 #23 과 함께 정한다 **[계획]**.
+- Spring 은 브라우저가 다른 사이트의 페이지에서 보낸 `/api/v1` 쓰기(`Sec-Fetch-Site`·`Origin` 으로 판단)를 400 으로 거절한다(`CrossSiteWriteFilter`). Basic 인증을 한 브라우저는 다른 사이트의 폼 POST 에도 인증 정보를 붙이기 때문이다.
 - 파일 이름도 접두사(`/index.html*`)로 맞추는 이유: Caddy 는 `//` 와 `.` 조각은 정리하지만 끝의 `/` 는 남기고, Spring 은 `/index.html/` 을 그 파일로 내준다. 2026-11-13 첫 배포 감사에서 예전 규칙(정확히 맞추기)으로 Mock UI 가 인증 없이 200 이었다. method 도 "GET 이면 인증" 이 아니라 "POST 가 아니면 인증" 으로 쓴다(method 비교는 대소문자를 가린다).
 
 ## 직접 할 일 (한 번)

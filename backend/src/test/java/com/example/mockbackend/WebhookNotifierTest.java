@@ -83,6 +83,9 @@ class WebhookNotifierTest {
     @Autowired
     MockMvc mvc;
 
+    @Autowired
+    WebhookNotifier notifier;
+
     @BeforeEach
     void reset() {
         received.clear();
@@ -111,6 +114,23 @@ class WebhookNotifierTest {
                 .contains("3D 생성 실패").contains(failed.substring(0, 8)).contains("INFERENCE_FAILED"));
     }
 
+    /**
+     * Review finding 2026-11-21: a run the client canceled is not posted (public POST /cancel and /retry repeated would
+     * otherwise flood the channel and push real results out of the bounded queue). The queue keeps order, so once the
+     * later result has arrived a canceled line would have arrived too.
+     */
+    @Test
+    void canceledRunsAreNotPosted() {
+        notifier.onJobFinished(new JobFinishedEvent("cancel0123456789", 1, JobStatus.FAILED, "CANCELED", 900L, "mock", null, false));
+        notifier.onJobFinished(new JobFinishedEvent("after0123456789", 1, JobStatus.FAILED, "INFERENCE_FAILED", 900L, "mock", null, false));
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> received.stream().map(WebhookNotifierTest::content)
+                .anyMatch(text -> text.contains("after012")));
+        assertThat(received.stream().map(WebhookNotifierTest::content))
+                .noneSatisfy(text -> assertThat(text).contains("cancel01"))
+                .noneSatisfy(text -> assertThat(text).contains("⏹️"));
+    }
+
     @Test
     void failingWebhookLeavesTheJobCompleted() throws Exception {
         answer.set(500);
@@ -127,6 +147,8 @@ class WebhookNotifierTest {
         assertThat(text).isEqualTo("✅ 3D 모델 완성 · 작업 `01234567` · 2분 5초 · 2번째 시도 · animallift@abc:latest+rig");
         assertThat(WebhookNotifier.jobMessage(new JobFinishedEvent("j", 1, JobStatus.COMPLETED, null, 900L, "real", null, true), ""))
                 .contains("패스스루");
+        assertThat(WebhookNotifier.jobMessage(new JobFinishedEvent("abcdef1234", 1, JobStatus.FAILED, "CANCELED", 30_000L, "real", null, false), ""))
+                .startsWith("⏹️ 대기 중 취소 · 작업 `abcdef12`").doesNotContain("실패");
 
         Instant now = Instant.now();
         Status unknown = new Status(State.UNKNOWN, null, null, now, "not checked yet");

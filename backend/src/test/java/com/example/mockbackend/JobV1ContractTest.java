@@ -25,8 +25,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Contract test: the document of record (docs/api/openapi.yaml) versus what springdoc generates from the
  * running code (/v3/api-docs). Compared structurally, not byte for byte:
- * paths x methods, operationIds, response status codes, component schema names, JobResponse properties,
- * the status / variant enums (AssetInfo.variant and the ?variant= parameter) and the ErrorResponse envelope.
+ * paths x methods, operationIds, response status codes, component schema names, the properties of every contract
+ * schema (allOf flattened), every enum on a schema, a property or a parameter (status, variant, species, ?format=, ...)
+ * and the ErrorResponse envelope.
  * If this fails, fix the document first (contract meeting rules in CLAUDE.md), then the code.
  */
 @SpringBootTest
@@ -68,11 +69,36 @@ class JobV1ContractTest {
         assertThat(names(generated.at("/components/schemas"))).as("component schemas")
                 .containsAll(names(contract.at("/components/schemas")));
 
-        // 4. JobResponse has exactly the contract properties (additions must be written into the contract).
-        assertThat(names(generated.at("/components/schemas/JobResponse/properties"))).as("JobResponse properties")
-                .containsExactlyInAnyOrderElementsOf(names(contract.at("/components/schemas/JobResponse/properties")));
+        // 4. Every schema of the contract has exactly its properties (allOf flattened; additions must be written into
+        //    the contract) and the same enum values on the schema and on each property (species, status, variant, ...).
+        //    Until 2026-11-21 only JobResponse and ErrorDetail were compared, so the ~30 schemas of v1.2 could drift.
+        for (String schema : names(contract.at("/components/schemas"))) {
+            JsonNode expectedSchema = contract.at("/components/schemas/" + schema);
+            JsonNode actualSchema = generated.at("/components/schemas/" + schema);
+            Map<String, JsonNode> expected = properties(contract, expectedSchema);
+            Map<String, JsonNode> actual = properties(generated, actualSchema);
+            assertThat(actual.keySet()).as("%s properties", schema).containsExactlyInAnyOrderElementsOf(expected.keySet());
+            assertThat(enumOf(generated, actualSchema)).as("%s enum", schema)
+                    .containsExactlyInAnyOrderElementsOf(enumOf(contract, expectedSchema));
+            expected.forEach((property, node) -> assertThat(enumOf(generated, actual.get(property)))
+                    .as("%s.%s enum", schema, property)
+                    .containsExactlyInAnyOrderElementsOf(enumOf(contract, node)));
+        }
+        // ... and every parameter the contract gives an enum (?variant=, the admin exports' ?format=) has it in code too.
+        contractOps.forEach((operation, expected) -> {
+            for (JsonNode candidate : expected.path("parameters")) {
+                JsonNode parameter = resolve(contract, candidate);
+                List<String> values = enumOf(contract, parameter.path("schema"));
+                if (!values.isEmpty()) {
+                    String name = parameter.path("name").asText();
+                    assertThat(enumOf(generated, parameter(generated, generatedOps.get(operation), name).path("schema")))
+                            .as("%s ?%s= enum", operation, name)
+                            .containsExactlyInAnyOrderElementsOf(values);
+                }
+            }
+        });
 
-        // 5. Enum values.
+        // 5. Enum values (also covered by 4; kept as the named checks of the app's two enums).
         assertThat(enumValues(generated, generated.at("/components/schemas/JobResponse/properties/status")))
                 .as("JobResponse.status enum")
                 .containsExactlyInAnyOrderElementsOf(
@@ -138,6 +164,35 @@ class JobV1ContractTest {
     private static List<String> enumValues(JsonNode document, JsonNode node) {
         List<String> values = new ArrayList<>();
         resolve(document, node).path("enum").forEach(value -> values.add(value.asText()));
+        return values;
+    }
+
+    /** Property name → node of a schema, following $ref and merging allOf parts (PetDetailResponse = PetResponse + more). */
+    private static Map<String, JsonNode> properties(JsonNode document, JsonNode schema) {
+        Map<String, JsonNode> properties = new TreeMap<>();
+        JsonNode resolved = resolve(document, schema);
+        for (JsonNode part : resolved.path("allOf")) {
+            properties.putAll(properties(document, part));
+        }
+        resolved.path("properties").fields().forEachRemaining(field -> properties.put(field.getKey(), field.getValue()));
+        return properties;
+    }
+
+    /**
+     * The enum values of a schema or property however it is written: inline, behind a $ref, inside allOf (the
+     * contract's nullable references) or on array items. Empty when it has none.
+     */
+    private static List<String> enumOf(JsonNode document, JsonNode node) {
+        JsonNode resolved = resolve(document, node);
+        List<String> values = enumValues(document, resolved);
+        if (values.isEmpty()) {
+            for (JsonNode part : resolved.path("allOf")) {
+                values.addAll(enumOf(document, part));
+            }
+        }
+        if (values.isEmpty() && resolved.has("items")) {
+            values.addAll(enumOf(document, resolved.get("items")));
+        }
         return values;
     }
 }

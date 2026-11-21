@@ -34,12 +34,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Profile "real" with inference.offline-wait-ms (prod): while the GPU PC's /healthz does not report a loaded model,
  * jobs wait as PENDING without calling /infer, start once it does, and fail INFERENCE_UNAVAILABLE only after the wait,
- * which counts from dispatch, not from taking the inference slot.
+ * which counts from dispatch, not from taking the inference slot. Such a job reports queue.reason INFERENCE_OFFLINE,
+ * and canceling it ends the wait.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -48,6 +50,7 @@ class RealJobWorkerOfflineTest {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final AtomicBoolean gpuUp = new AtomicBoolean(false);
     private static final AtomicInteger inferCalls = new AtomicInteger();
+    private static final AtomicInteger healthChecks = new AtomicInteger();
 
     @TempDir
     static Path storage;
@@ -75,15 +78,24 @@ class RealJobWorkerOfflineTest {
         handlers = Executors.newCachedThreadPool();
         inference.setExecutor(handlers);
         inference.createContext("/healthz", exchange -> {
+            healthChecks.incrementAndGet();
             if (gpuUp.get()) {
-                respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":true,\"passthrough\":false}");
+                respond(exchange, 200, "{\"status\":\"ok\",\"device\":\"cuda\",\"modelLoaded\":true,\"passthrough\":false,\"modelVersion\":\"fake-animallift@1+rig\"}");
             } else {
                 respond(exchange, 503, "{\"detail\":\"model loading\"}");
             }
         });
         inference.createContext("/infer", exchange -> {
             inferCalls.incrementAndGet();
-            exchange.getRequestBody().readAllBytes();
+            String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            if (request.contains("broken-dog")) {
+                respond(exchange, 500, "{\"detail\":{\"code\":\"INFERENCE_FAILED\",\"message\":\"model error\"}}");
+                return;
+            }
+            if (request.contains("token-dog")) { // the service refuses the token: the model never ran
+                respond(exchange, 401, "{\"detail\":{\"code\":\"INFERENCE_UNAVAILABLE\",\"message\":\"bad token\"}}");
+                return;
+            }
             respond(exchange, 200, JSON.createObjectNode().put("glbPath", glb.toString()).put("passthrough", false).toString());
         });
         inference.start();
@@ -97,6 +109,9 @@ class RealJobWorkerOfflineTest {
 
     @Autowired
     MockMvc mvc;
+
+    @Autowired
+    com.example.mockbackend.repository.JobRunRepository jobRuns;
 
     @BeforeEach
     void reset() {
@@ -148,9 +163,78 @@ class RealJobWorkerOfflineTest {
         assertThat(inferCalls.get()).isZero();
     }
 
+    @Test
+    void adminOverviewShowsTheMonitorsGpuReading() throws Exception {
+        String body = mvc.perform(get("/api/v1/admin/overview")).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        var inference = JSON.readTree(body).path("inference");
+        assertThat(inference.isObject()).isTrue();
+        assertThat(inference.path("state").asText()).isIn("UP", "LOADING", "DOWN", "UNKNOWN");
+        assertThat(inference.has("since")).isTrue();
+        assertThat(inference.path("detail").asText()).doesNotContain("127.0.0.1");
+    }
+
+    @Test
+    void cancelingAJobThatWaitsForTheGpuStopsTheWait() throws Exception {
+        int before = healthChecks.get();
+        String jobId = upload();
+        // The worker holds the slot and re-reads /healthz every offline-poll-ms while the job stays PENDING.
+        await().atMost(Duration.ofSeconds(5)).until(() -> healthChecks.get() > before);
+        String waiting = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString();
+        assertThat(JSON.readTree(waiting).path("status").asText()).isEqualTo("PENDING");
+        assertThat(JSON.readTree(waiting).path("queue").path("ahead").asInt()).isZero();
+        assertThat(JSON.readTree(waiting).path("queue").path("reason").asText()).isEqualTo("INFERENCE_OFFLINE");
+
+        String canceled = mvc.perform(post("/api/v1/jobs/{id}/cancel", jobId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        assertThat(JSON.readTree(canceled).path("error").path("code").asText()).isEqualTo("CANCELED");
+
+        // The wait ends at the next poll: no more /healthz checks for this job, and no /infer once the GPU is back.
+        Thread.sleep(300);
+        int checksAfterCancel = healthChecks.get();
+        gpuUp.set(true);
+        await().during(Duration.ofMillis(800)).atMost(Duration.ofSeconds(3)).pollInterval(Duration.ofMillis(50))
+                .untilAsserted(() -> {
+                    assertThat(healthChecks.get()).as("the wait loop stopped").isEqualTo(checksAfterCancel);
+                    assertThat(inferCalls.get()).isZero();
+                    assertThat(statusOf(jobId)).isEqualTo("FAILED");
+                });
+        String body = mvc.perform(get("/api/v1/jobs/{id}", jobId)).andReturn().getResponse().getContentAsString();
+        assertThat(JSON.readTree(body).path("error").path("code").asText()).as("not INFERENCE_UNAVAILABLE").isEqualTo("CANCELED");
+    }
+
+    @Test
+    void aFailedRunCountsAgainstTheModelTheServiceHasLoaded() throws Exception {
+        gpuUp.set(true);
+        String jobId = upload("broken-dog.png");
+        await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(jobId).equals("FAILED"));
+        await().atMost(Duration.ofSeconds(5)).until(() -> !jobRuns.findByJobIdOrderByAttemptAsc(jobId).isEmpty());
+        var run = jobRuns.findByJobIdOrderByAttemptAsc(jobId).get(0);
+        assertThat(run.getErrorCode()).isEqualTo("INFERENCE_FAILED");
+        // The fake /healthz still says +rig, as the review branch's service did: +rig belongs only to a run whose rigging
+        // succeeded (REVIEW_CHECKLIST #18), so the failure counts against the model without it.
+        assertThat(run.getModelVersion()).as("admin stats group the failure with that model").isEqualTo("fake-animallift@1");
+    }
+
+    @Test
+    void aRunTheModelNeverSawCountsAgainstNoModel() throws Exception {
+        gpuUp.set(true); // /healthz is open without a token and reports the loaded model
+        String jobId = upload("token-dog.png");
+        await().atMost(Duration.ofSeconds(10)).until(() -> statusOf(jobId).equals("FAILED"));
+        await().atMost(Duration.ofSeconds(5)).until(() -> !jobRuns.findByJobIdOrderByAttemptAsc(jobId).isEmpty());
+        var run = jobRuns.findByJobIdOrderByAttemptAsc(jobId).get(0);
+        assertThat(run.getErrorCode()).isEqualTo("INFERENCE_UNAVAILABLE");
+        assertThat(run.getModelVersion()).as("a refused token is not a failure of the loaded model").isNull();
+    }
+
     private String upload() throws Exception {
+        return upload("dog.png");
+    }
+
+    private String upload(String filename) throws Exception {
         String body = mvc.perform(multipart("/api/v1/jobs")
-                        .file(new MockMultipartFile("photos", "dog.png", "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))
+                        .file(new MockMultipartFile("photos", filename, "image/png", new byte[]{(byte) 0x89, 'P', 'N', 'G'})))
                 .andExpect(status().isAccepted())
                 .andReturn().getResponse().getContentAsString();
         return JSON.readTree(body).path("jobId").asText();
