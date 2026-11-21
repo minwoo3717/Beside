@@ -61,7 +61,8 @@ cd C:\beside\Beside
 - 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 2026-11 부터 Spring(real·prod)이 한다: 첫 사진 자리에 개를 가운데 둔 정사각 RGBA PNG(`*-cutout.png`, 투명한 곳은 `load_rgb` 가 흰색으로)가 온다. 끄는 법과 비교 실험은 [backend/README.md](../../backend/README.md) '대표 사진 검사·전처리'.
 - 같은 사진은 같은 결과(시드 고정).
 - 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
-- 털: 털 맵 두 장이 `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 들어가 앱의 셸 털이 그것을 쓴다. GLB 옆의 `hair_length.png`/`hair_flow.png`/`hair_maps.json` 은 확인용 사본이고 API 로 내려주지 않는다.
+- 털: 털 맵 두 장이 `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 들어가 앱의 셸 털이 그것을 쓴다. GLB 옆의 `hair_length.png`/`hair_flow.png`/`hair_maps.json` 은 확인용 사본이고 API 로 내려주지 않는다. `BESIDE_EMBED_HAIR=0` 이면 털 맵을 넣지 않는다(`extras.beside` 없음 → 앱은 서버 모델에 털을 그리지 않음) **[구현됨]**(2026-11-21, 시험 `ConverterSwitchTest`·`RealEmbedHairOffTest`). Pod 에 넣는 것은 [계획].
+- 변환기 선택 기능(브랜치 `Unity` 2d2e235 에서 옮김, **기본 꺼짐** — 켜면 GLB_SPEC §4·§4.1 서술과 달라지므로 Pod 에서 켜기 전에 계약 결정이 필요하다, [tools/README.md](../tools/README.md)): `BESIDE_HAIR_META=<AnimalLift>/assets/hair_map_meta_uvanchor.npz` 는 가이드 텍셀로 털 맵을 다시 만들고 같은 폴더에 `base_texture.png` 가 있으면 코·발바닥 털을 없앤다(읽지 못하면 경고 뒤 원래 맵). `BESIDE_PAD_TEXTURE=1` 은 `uv.png` 의 초록 배경을 채운 `texture_padded.png` 를 정적·리깅 GLB 모두에 쓴다. 둘 다 코드·시험은 [구현됨], AnimalLift 실제 메타 파일이 Pod 에 있는지·화면 확인은 [계획].
 - 라이선스: AnimalLift 리포에 라이선스 파일이 없다. 학습·연구 목적 사용은 저자 안내를 따르고, 결과물·가중치를 공개 배포하기 전에 확인한다.
 
 ## 모델 교체 (개선 모델로 바꿀 때)
