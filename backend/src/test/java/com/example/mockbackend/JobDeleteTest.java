@@ -7,7 +7,6 @@ import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
 import com.example.mockbackend.repository.ShareLinkRepository;
-import com.example.mockbackend.service.ThumbnailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -17,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.mock.web.MockPart;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -37,14 +37,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * DELETE /api/v1/jobs/{id} against the mock worker: a finished job loses its photos, its result folder, its thumbnail,
- * its share links and its Idempotency-Key, but its job_runs rows stay (they are measurements). The mock serves one
- * shared sample GLB for every job, which must survive. PENDING lasts long enough here to try deleting a waiting job.
+ * Deleting jobs, which API v1.2 does only through the library: DELETE /api/v1/pets/{id}?withJobs=true
+ * (JobDeletionService). The review branch's DELETE /api/v1/jobs/{id}, GET /api/v1/jobs/{id}/thumbnail and
+ * GET /api/v1/jobs/{id}/photos/{index} were not taken (REVIEW_CHECKLIST #11, 2026-11-21) and are not served.
+ * A deleted job loses its photos, its result folder, its share links and its Idempotency-Key, but its job_runs rows
+ * and quality ratings stay (they are measurements). The mock serves one shared sample GLB for every job, which must
+ * survive. PENDING lasts long enough here to try deleting a waiting job.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -58,7 +60,6 @@ class JobDeleteTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("storage.upload.dir", () -> storage.resolve("uploads").toString());
         registry.add("storage.result.dir", () -> storage.resolve("results").toString());
-        registry.add("storage.thumb.dir", () -> storage.resolve("thumbs").toString());
         registry.add("storage.result.sample", () -> sample().toString());
         registry.add("mock.worker.pending-ms", () -> String.valueOf(PENDING_MS));
         registry.add("mock.worker.processing-ms", () -> "100");
@@ -91,43 +92,40 @@ class JobDeleteTest {
     @Autowired
     IdempotencyKeyRepository idempotencyKeys;
 
-    @Autowired
-    ThumbnailService thumbnails;
-
     @Test
-    void deletingAFinishedJobRemovesFilesLinksAndKeyButKeepsItsRuns() throws Exception {
+    void deletingAPetWithItsJobsRemovesFilesLinksAndKeyButKeepsRunsAndRatings() throws Exception {
+        String petId = createPet("정리");
         String key = "delete-key-" + UUID.randomUUID();
         String jobId = json(mvc.perform(multipart("/api/v1/jobs")
-                        .file(new MockMultipartFile("photos", "dog.jpg", "image/jpeg", TestImages.jpeg(300, 200)))
-                        .file(new MockMultipartFile("photos", "dog-2.png", "image/png", TestImages.pngWithAlpha(40, 40)))
+                        .file(new MockMultipartFile("photos", "dog.jpg", "image/jpeg", new byte[]{1, 2, 3}))
+                        .file(new MockMultipartFile("photos", "dog-2.png", "image/png", new byte[]{4, 5, 6}))
+                        .part(new MockPart("petId", petId.getBytes(StandardCharsets.UTF_8)))
                         .header("Idempotency-Key", key))
                 .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
         awaitStatus(jobId, "COMPLETED");
 
         List<Path> photos = jobs.findById(jobId).orElseThrow().getUploads().stream().map(u -> Path.of(u.path())).toList();
         assertThat(photos).hasSize(2).allSatisfy(photo -> assertThat(Files.isRegularFile(photo)).isTrue());
-        Path thumb = storage.resolve("thumbs").resolve(jobId + ".jpg");
-        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("queued thumbnail made").isTrue();
-        assertThat(Files.isRegularFile(thumb)).isTrue();
         // What the real worker leaves: {storage.result.dir}/{jobId}/base.glb.
         Path resultFolder = Files.createDirectories(storage.resolve("results").resolve(jobId));
         Files.write(resultFolder.resolve("base.glb"), "glTF real result".getBytes(StandardCharsets.UTF_8));
         String token = json(mvc.perform(post("/api/v1/jobs/{id}/shares", jobId))
                 .andExpect(status().isCreated()).andReturn()).path("token").asText();
+        mvc.perform(put("/api/v1/jobs/{id}/ratings/{rater}", jobId, "minwoo")
+                        .contentType("application/json")
+                        .content("{\"faceShape\":4,\"ears\":3,\"bodyProportion\":4,\"furColor\":5,\"pattern\":3,\"textureArtifacts\":4}"))
+                .andExpect(status().isOk());
         assertThat(idempotencyKeys.findById(key)).isPresent();
-        List<JobRun> runsBefore = jobRuns.findByJobIdOrderByAttemptAsc(jobId);
-        assertThat(runsBefore).hasSize(1);
+        assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).hasSize(1);
 
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId))
-                .andExpect(status().isNoContent())
-                .andExpect(content().string(""));
+        mvc.perform(delete("/api/v1/pets/{id}", petId).param("withJobs", "true"))
+                .andExpect(status().isNoContent());
 
         mvc.perform(get("/api/v1/jobs/{id}", jobId))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"));
         assertThat(jobs.findById(jobId)).isEmpty();
         assertThat(photos).allSatisfy(photo -> assertThat(photo).doesNotExist());
-        assertThat(thumb).doesNotExist();
         assertThat(resultFolder).doesNotExist();
         assertThat(sample()).as("the mock's shared sample GLB is not this job's file").isRegularFile();
 
@@ -145,17 +143,17 @@ class JobDeleteTest {
 
         assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).as("job_runs are measurements and stay")
                 .extracting(JobRun::result).containsExactly("COMPLETED");
-
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"))
-                .andExpect(jsonPath("$.error.jobId").value(jobId));
+        mvc.perform(get("/api/v1/jobs/{id}/ratings", jobId)).andExpect(status().isNotFound());
+        String csv = mvc.perform(get("/api/v1/admin/ratings").param("format", "csv"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(csv).as("a human rating is a measurement, like job_runs").contains(jobId).contains("minwoo");
     }
 
     @Test
-    void aWaitingJobCannotBeDeletedUntilItIsCanceled() throws Exception {
-        String jobId = upload("wait.jpg");
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId))
+    void aWaitingJobBlocksDeletingItsPetUntilItIsCanceled() throws Exception {
+        String petId = createPet("대기");
+        String jobId = upload("wait.jpg", petId);
+        mvc.perform(delete("/api/v1/pets/{id}", petId).param("withJobs", "true"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("JOB_IN_PROGRESS"))
                 .andExpect(jsonPath("$.error.jobId").value(jobId));
@@ -164,7 +162,7 @@ class JobDeleteTest {
         assertThat(Path.of(uploads.get(0).path())).isRegularFile();
 
         mvc.perform(post("/api/v1/jobs/{id}/cancel", jobId)).andExpect(status().isOk());
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/pets/{id}", petId).param("withJobs", "true")).andExpect(status().isNoContent());
         assertThat(Path.of(uploads.get(0).path())).doesNotExist();
         assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).extracting(JobRun::result).containsExactly("FAILED:CANCELED");
 
@@ -175,37 +173,53 @@ class JobDeleteTest {
     }
 
     @Test
-    void aFailedJobCanBeDeleted() throws Exception {
-        String jobId = upload("fail-dog.jpg");
+    void aFailedJobIsDeletedWithItsPet() throws Exception {
+        String petId = createPet("실패");
+        String jobId = upload("fail-dog.jpg", petId);
         awaitStatus(jobId, "FAILED");
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/pets/{id}", petId).param("withJobs", "true")).andExpect(status().isNoContent());
         assertThat(jobs.findById(jobId)).isEmpty();
         assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).extracting(JobRun::getErrorCode).containsExactly("INFERENCE_FAILED");
     }
 
+    /**
+     * Not served in API v1.2 (#11): no route answers DELETE on a job (405, v1 envelope INVALID_REQUEST, the job stays)
+     * and the thumbnail and photo paths are unknown v1 paths (404 NOT_FOUND).
+     */
     @Test
-    void ratingsOfADeletedJobStayInTheMeasurementTable() throws Exception {
-        String jobId = upload("dog.jpg");
+    void theEndpointsLeftOutOfV12AreNotServed() throws Exception {
+        String jobId = upload("dog.jpg", null);
         awaitStatus(jobId, "COMPLETED");
-        mvc.perform(put("/api/v1/jobs/{id}/ratings/{rater}", jobId, "minwoo")
-                        .contentType("application/json")
-                        .content("{\"faceShape\":4,\"ears\":3,\"bodyProportion\":4,\"furColor\":5,\"pattern\":3,\"textureArtifacts\":4}"))
-                .andExpect(status().isOk());
 
-        mvc.perform(delete("/api/v1/jobs/{id}", jobId)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/v1/jobs/{id}", jobId))
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+        assertThat(readJob(jobId).path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(readJob(jobId).has("thumbnailUrl")).as("JobResponse has no thumbnailUrl").isFalse();
 
-        mvc.perform(get("/api/v1/jobs/{id}/ratings", jobId)).andExpect(status().isNotFound());
-        String csv = mvc.perform(get("/api/v1/admin/ratings").param("format", "csv"))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertThat(csv).as("a human rating is a measurement, like job_runs").contains(jobId).contains("minwoo");
+        for (String path : List.of("/api/v1/jobs/{id}/thumbnail", "/api/v1/jobs/{id}/photos/0")) {
+            mvc.perform(get(path, jobId))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+        }
     }
 
     // ------------------------------------------------------------------ helpers
 
-    private String upload(String filename) throws Exception {
-        return json(mvc.perform(multipart("/api/v1/jobs")
-                        .file(new MockMultipartFile("photos", filename, "image/jpeg", new byte[]{1, 2, 3})))
-                .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
+    private String createPet(String name) throws Exception {
+        return json(mvc.perform(post("/api/v1/pets").contentType("application/json")
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("name", name))))
+                .andExpect(status().isCreated()).andReturn()).path("id").asText();
+    }
+
+    /** POST /api/v1/jobs with the optional petId text part (null = no part). */
+    private String upload(String filename, String petId) throws Exception {
+        var request = multipart("/api/v1/jobs")
+                .file(new MockMultipartFile("photos", filename, "image/jpeg", new byte[]{1, 2, 3}));
+        if (petId != null) {
+            request.part(new MockPart("petId", petId.getBytes(StandardCharsets.UTF_8)));
+        }
+        return json(mvc.perform(request).andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
     }
 
     private void awaitStatus(String jobId, String expected) {

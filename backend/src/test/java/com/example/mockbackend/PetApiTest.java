@@ -6,7 +6,6 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
-import com.example.mockbackend.service.ThumbnailService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -67,7 +66,6 @@ class PetApiTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("storage.upload.dir", () -> storage.resolve("uploads").toString());
         registry.add("storage.result.dir", () -> storage.resolve("results").toString());
-        registry.add("storage.thumb.dir", () -> storage.resolve("thumbs").toString());
         registry.add("storage.result.sample", () -> storage.resolve("sample-dog.glb").toString());
         registry.add("mock.worker.pending-ms", () -> "100");
         registry.add("mock.worker.processing-ms", () -> "50");
@@ -90,9 +88,6 @@ class PetApiTest {
     @Autowired
     JobRunRepository jobRuns;
 
-    @Autowired
-    ThumbnailService thumbnails;
-
     // ------------------------------------------------------------------ CRUD
 
     @Test
@@ -108,7 +103,8 @@ class PetApiTest {
         assertThat(choco.path("species").asText()).isEqualTo("CAT");
         assertThat(choco.path("note").asText()).isEqualTo("갈색 고양이");
         assertThat(choco.path("jobCount").asInt()).isZero();
-        for (String empty : List.of("coverJobId", "coverThumbnailUrl", "latestJobAt")) {
+        assertThat(choco.has("coverThumbnailUrl")).as("no thumbnail endpoint in API v1.2 (#11)").isFalse();
+        for (String empty : List.of("coverJobId", "latestJobAt")) {
             assertThat(choco.has(empty)).as(empty).isTrue();
             assertThat(choco.path(empty).isNull()).as(empty).isTrue();
         }
@@ -261,27 +257,25 @@ class PetApiTest {
     void coverIsTheChosenCompletedJobOrElseTheNewestCompleted() throws Exception {
         String petId = createPet("대표", "DOG");
         String other = createPet("남의 펫", "CAT");
-        String withThumb = completed(upload("photo.jpg", petId, TestImages.jpeg(64, 64)));
+        String chosenJob = completed(upload("photo.jpg", petId));
         String newest = completed(upload("plain.jpg", petId));
         String failed = upload("fail-dog.jpg", petId);
         awaitStatus(failed, "FAILED");
         String othersJob = completed(upload("other.jpg", other));
-        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("queued thumbnails made").isTrue();
 
         JsonNode auto = pet(petId);
         assertThat(auto.path("jobCount").asInt()).isEqualTo(3);
         assertThat(auto.path("coverJobId").asText()).as("newest COMPLETED").isEqualTo(newest);
-        assertThat(auto.path("coverThumbnailUrl").isNull()).as("that job has no thumbnail").isTrue();
         assertThat(auto.path("latestJobAt").asText()).isEqualTo(job(failed).path("createdAt").asText());
         List<String> order = new ArrayList<>();
         auto.path("jobs").forEach(item -> order.add(item.path("id").asText()));
-        assertThat(order).as("newest first").containsExactly(failed, newest, withThumb);
+        assertThat(order).as("newest first").containsExactly(failed, newest, chosenJob);
+        assertThat(auto.path("jobs").get(0).has("thumbnailUrl")).as("no thumbnail endpoint in API v1.2 (#11)").isFalse();
         assertThat(auto.path("jobs").get(0).path("petId").asText()).isEqualTo(petId);
 
-        JsonNode chosen = body(mvc.perform(json(patch("/api/v1/pets/{id}", petId), Map.of("coverJobId", withThumb)))
+        JsonNode chosen = body(mvc.perform(json(patch("/api/v1/pets/{id}", petId), Map.of("coverJobId", chosenJob)))
                 .andExpect(status().isOk()).andReturn());
-        assertThat(chosen.path("coverJobId").asText()).isEqualTo(withThumb);
-        assertThat(chosen.path("coverThumbnailUrl").asText()).isEqualTo("/api/v1/jobs/" + withThumb + "/thumbnail");
+        assertThat(chosen.path("coverJobId").asText()).isEqualTo(chosenJob);
         JsonNode listed = null;
         for (JsonNode item : body(mvc.perform(get("/api/v1/pets")).andExpect(status().isOk()).andReturn()).path("items")) {
             if (item.path("id").asText().equals(petId)) {
@@ -289,7 +283,7 @@ class PetApiTest {
             }
         }
         assertThat(listed).isNotNull();
-        assertThat(listed.path("coverJobId").asText()).isEqualTo(withThumb);
+        assertThat(listed.path("coverJobId").asText()).isEqualTo(chosenJob);
         assertThat(listed.path("jobCount").asInt()).isEqualTo(3);
 
         for (String notAllowed : List.of(failed, othersJob, UUID.randomUUID().toString())) {
@@ -297,15 +291,15 @@ class PetApiTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
         }
-        assertThat(pet(petId).path("coverJobId").asText()).isEqualTo(withThumb);
+        assertThat(pet(petId).path("coverJobId").asText()).isEqualTo(chosenJob);
 
         // Moving the chosen job away clears the choice; the cover falls back to the newest COMPLETED job.
-        mvc.perform(json(put("/api/v1/jobs/{id}/pet", withThumb), Map.of("petId", other))).andExpect(status().isOk());
+        mvc.perform(json(put("/api/v1/jobs/{id}/pet", chosenJob), Map.of("petId", other))).andExpect(status().isOk());
         assertThat(pet(petId).path("coverJobId").asText()).isEqualTo(newest);
-        mvc.perform(json(put("/api/v1/jobs/{id}/pet", withThumb), Map.of("petId", petId))).andExpect(status().isOk());
+        mvc.perform(json(put("/api/v1/jobs/{id}/pet", chosenJob), Map.of("petId", petId))).andExpect(status().isOk());
         assertThat(pet(petId).path("coverJobId").asText()).as("not chosen again by itself").isEqualTo(newest);
 
-        mvc.perform(json(patch("/api/v1/pets/{id}", petId), Map.of("coverJobId", withThumb))).andExpect(status().isOk());
+        mvc.perform(json(patch("/api/v1/pets/{id}", petId), Map.of("coverJobId", chosenJob))).andExpect(status().isOk());
         mvc.perform(patch("/api/v1/pets/{id}", petId).contentType(MediaType.APPLICATION_JSON).content("{\"coverJobId\":null}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.coverJobId").value(newest));
@@ -349,7 +343,7 @@ class PetApiTest {
     @Test
     void deletingAPetWithItsJobsRefusesWhileOneIsRunning() throws Exception {
         String petId = createPet("정리", "DOG");
-        String done = completed(upload("done.jpg", petId, TestImages.jpeg(40, 40)));
+        String done = completed(upload("done.jpg", petId));
         String running = completed(upload("running.jpg", petId));
         Path photo = Path.of(jobs.findById(done).orElseThrow().getUploads().get(0).path());
         setStatus(running, JobStatus.PROCESSING); // a run that has not ended
@@ -373,8 +367,6 @@ class PetApiTest {
             assertThat(jobRuns.findByJobIdOrderByAttemptAsc(jobId)).as("runs stay").isNotEmpty();
         }
         assertThat(photo).doesNotExist();
-        assertThat(thumbnails.drain(Duration.ofSeconds(10))).as("a late thumbnail removes itself").isTrue();
-        assertThat(storage.resolve("thumbs").resolve(done + ".jpg")).doesNotExist();
     }
 
     // ------------------------------------------------------------------ page

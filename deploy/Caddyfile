@@ -35,11 +35,11 @@
 	#    웹 화면: Mock 업로드 UI(/ · /index.html · /app.js), 앞으로 생길 관리(/admin)·보관함(/library)·작업 상세(/job) 페이지,
 	#    Grafana(/grafana, monitoring 프로필 — 이 인증 다음에 Grafana 자체 로그인이 한 번 더 있다).
 	#    API: 관리(/api/v1/admin), 보관함(/api/v1/pets), 작업을 펫에 넣기(/api/v1/jobs/{id}/pet),
-	#    작업의 원본 사진·썸네일·품질 평가(웹 작업 상세·보관함만 쓴다, 사진은 개인정보, 평가는 팀 평가자 이름·의견).
+	#    품질 평가(웹 작업 상세만 쓴다, 팀 평가자 이름·의견).
 	#    가운데 * 는 한 조각만 맞으므로 평가는 /ratings* 와 /ratings/* 둘로 적는다(PUT 은 아래 @jobWrite 도 막는다).
 	#    파일 이름에도 끝에 * 를 붙인다: Caddy 는 // 와 . 조각은 정리하지만 끝의 / 는 남기므로 /index.html/ 은 /index.html 과
 	#    맞지 않는데, Spring 은 그것을 index.html 파일로 내준다(2026-11-13 감사에서 /index.html/ · /app.js/ 가 인증 없이 200).
-	@web path / /index.html* /app.js* /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet* /api/v1/jobs/*/photos/* /api/v1/jobs/*/thumbnail* /api/v1/jobs/*/ratings* /api/v1/jobs/*/ratings/*
+	@web path / /index.html* /app.js* /admin* /library* /job* /grafana* /api/v1/admin* /api/v1/pets* /api/v1/jobs/*/pet* /api/v1/jobs/*/ratings* /api/v1/jobs/*/ratings/*
 	basic_auth @web {
 		{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
 	}

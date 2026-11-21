@@ -36,12 +36,8 @@ test("species and status labels, unknown values never crash", () => {
   assert.equal(L.statusKey("FAILED"), "FAILED");
 });
 
-test("delete and cancel follow the API rules", () => {
-  assert.equal(L.canDelete({ status: "COMPLETED" }), true);
-  assert.equal(L.canDelete({ status: "FAILED" }), true);
-  assert.equal(L.canDelete({ status: "PENDING" }), false);
-  assert.equal(L.canDelete({ status: "PROCESSING" }), false);
-  assert.equal(L.canDelete(null), false);
+test("cancel follows the API rules; no single-job delete in API v1.2 (REVIEW_CHECKLIST #11)", () => {
+  assert.equal(L.canDelete, undefined);
   assert.equal(L.canCancel({ status: "PENDING" }), true);
   assert.equal(L.canCancel({ status: "PROCESSING" }), false);
   assert.equal(L.isFinished("COMPLETED"), true);

@@ -81,11 +81,6 @@
     return status === "COMPLETED" || status === "FAILED";
   }
 
-  /** DELETE /jobs/{id} takes finished jobs only (else 409 JOB_IN_PROGRESS). */
-  function canDelete(job) {
-    return Boolean(job) && isFinished(job.status);
-  }
-
   /** POST /cancel takes PENDING jobs only. */
   function canCancel(job) {
     return Boolean(job) && job.status === "PENDING";
@@ -234,7 +229,7 @@
 
   return Object.freeze({
     PHOTO_RULES, NAME_MAX, NOTE_MAX, POLL_MS, MAX_WAIT_MS, SPECIES, ANIMATIONS,
-    speciesLabel, statusKey, statusLabel, isFinished, canDelete, canCancel, errorMessage,
+    speciesLabel, statusKey, statusLabel, isFinished, canCancel, errorMessage,
     parseRoute, petRoute, jobDetailUrl, assetUrl, formatDateTime, formatRemaining, waitText,
     checkPhotos, checkPetForm, petBody, unassigned, photoCount, viewerJob, finishNotice,
     animationLabel, animationChips, defaultAnimation

@@ -160,8 +160,6 @@ check 401 GET  /grafana
 check 401 GET  /grafana/
 check 401 GET  /grafana/api/health
 check 401 GET  /grafana/d/beside-ops
-check 401 GET  "/api/v1/jobs/$JOB/photos/0"
-check 401 GET  "/api/v1/jobs/$JOB/thumbnail"
 check 401 GET  "/api/v1/jobs/$JOB/ratings"
 check 401 PUT  "/api/v1/jobs/$JOB/ratings/minwoo"
 check 401 GET  "/api/v1/jobs/$JOB/ratings/"

@@ -66,7 +66,6 @@ public class JobServiceImpl implements JobService {
     private final QueueClock queueClock;
     /** Library (tag pets): an optional petId part must name an existing pet. */
     private final PetRepository petRepository;
-    private final ThumbnailService thumbnails;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -204,8 +203,6 @@ public class JobServiceImpl implements JobService {
             }
             throw shuttingDown;
         }
-        // Queued, not made here: the 202 does not wait for the decode. Failures only mean "no thumbnail".
-        thumbnails.createLater(job.getId(), Path.of(job.getUploads().get(0).path()));
         return job;
     }
 
@@ -241,11 +238,6 @@ public class JobServiceImpl implements JobService {
             throw shuttingDown;
         }
         jobMetrics.jobRetried();
-        if (!job.getUploads().isEmpty() && thumbnails.find(id).isEmpty()) {
-            // Lost at a shutdown before it was made (the queue does not survive one): make it with the new attempt.
-            // Checked on disk, not with exists(): a retry is rare, and a file that went missing is noticed here too.
-            thumbnails.createLater(id, Path.of(job.getUploads().get(0).path()));
-        }
         log.info("Job retried: {} attempt={}", id, job.getAttempt());
         return job;
     }

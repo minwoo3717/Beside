@@ -17,6 +17,5 @@ public record PetResponse(
         @Schema(description = "이 펫에 들어 있는 작업 수(상태와 관계없이)") int jobCount,
         @Schema(nullable = true, format = "uuid", description = "대표 모델: 고른 작업이 아직 이 펫의 COMPLETED 작업이면 그것, "
                 + "아니면 가장 최근 COMPLETED 작업, 없으면 null") String coverJobId,
-        @Schema(nullable = true, description = "대표 작업의 썸네일 상대 경로. 대표나 썸네일이 없으면 null") String coverThumbnailUrl,
         @Schema(nullable = true, description = "이 펫의 가장 최근 작업의 createdAt. 작업이 없으면 null") Instant latestJobAt) {
 }

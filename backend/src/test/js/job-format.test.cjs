@@ -51,7 +51,7 @@ test("rating items are the six METRICS §4 names in order", () => {
 
 test("URLs encode the job id and the rater", () => {
   assert.equal(J.assetUrl(jobId), `/api/v1/jobs/${jobId}/asset`);
-  assert.equal(J.photoUrl(jobId, 2), `/api/v1/jobs/${jobId}/photos/2`);
+  assert.equal(J.photoUrl, undefined, "no photos endpoint in API v1.2 (REVIEW_CHECKLIST #11)");
   assert.equal(J.ratingsUrl(jobId), `/api/v1/jobs/${jobId}/ratings`);
   assert.equal(J.ratingUrl(jobId, "민우 #1?"), `/api/v1/jobs/${jobId}/ratings/%EB%AF%BC%EC%9A%B0%20%231%3F`);
   assert.equal(J.sharesUrl(jobId), `/api/v1/jobs/${jobId}/shares`);

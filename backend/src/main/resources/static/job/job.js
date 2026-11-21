@@ -1,6 +1,7 @@
 "use strict";
 // Job detail page (/job/?id={jobId}): status and timings (GET /api/v1/jobs/{id} + /api/v1/admin/jobs/{id}), the input
-// photos next to the model (photos/{index}, asset), the quality rating panel (ratings) and a share link with a QR code.
+// photos' names and sizes next to the model (asset), the quality rating panel (ratings) and a share link with a QR code.
+// API v1.2 has no endpoint that serves the uploaded photos (REVIEW_CHECKLIST #11), so the page lists them only.
 // Rules and texts live in job-format.js, number formats in /admin/admin-format.js, clip labels in /share.js and the QR
 // code in qr.js (all node-tested). Server text is only ever set as textContent.
 (function () {
@@ -126,21 +127,9 @@
     const files = Array.isArray(current.uploadedFiles) ? current.uploadedFiles : [];
     $("#photo-count").textContent = `${files.length}장`;
     $("#photos").replaceChildren(...files.map((file, index) => {
-      const figure = document.createElement("figure");
-      const link = document.createElement("a");
-      link.href = J.photoUrl(current.id, index);
-      link.target = "_blank";
-      link.rel = "noopener";
-      const image = document.createElement("img");
-      image.src = link.href;
-      image.alt = `입력 사진 ${index + 1}`;
-      image.loading = "lazy";
-      const caption = document.createElement("figcaption");
-      caption.textContent = `${file.name || "사진"} · ${F.formatBytes(file.bytes)}`;
-      image.addEventListener("error", () => { caption.textContent = `${file.name || "사진"} · 사진을 불러오지 못했어요`; });
-      link.append(image);
-      figure.append(link, caption);
-      return figure;
+      const item = document.createElement("li");
+      item.textContent = `${index + 1}. ${file.name || "사진"} · ${F.formatBytes(file.bytes)}`;
+      return item;
     }));
   }
 

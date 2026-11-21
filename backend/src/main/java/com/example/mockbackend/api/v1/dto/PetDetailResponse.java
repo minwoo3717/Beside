@@ -21,13 +21,12 @@ public record PetDetailResponse(
         Instant updatedAt,
         int jobCount,
         @Schema(nullable = true, format = "uuid") String coverJobId,
-        @Schema(nullable = true) String coverThumbnailUrl,
         @Schema(nullable = true) Instant latestJobAt,
         @Schema(description = "이 펫의 작업, createdAt 최신순.") List<JobResponse> jobs,
         @Schema(description = "jobId → 마지막으로 끝난 실행의 modelVersion. 없으면 키가 없다.") Map<String, String> modelVersions) {
 
     public static PetDetailResponse of(PetResponse pet, List<JobResponse> jobs, Map<String, String> modelVersions) {
         return new PetDetailResponse(pet.id(), pet.name(), pet.species(), pet.note(), pet.createdAt(), pet.updatedAt(),
-                pet.jobCount(), pet.coverJobId(), pet.coverThumbnailUrl(), pet.latestJobAt(), jobs, modelVersions);
+                pet.jobCount(), pet.coverJobId(), pet.latestJobAt(), jobs, modelVersions);
     }
 }

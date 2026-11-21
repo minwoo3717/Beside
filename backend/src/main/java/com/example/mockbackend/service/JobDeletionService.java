@@ -21,10 +21,12 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Deleting finished jobs (DELETE /api/v1/jobs/{id}, DELETE /api/v1/pets/{id}?withJobs=true). Removes what belongs to the
- * job: share links are revoked, Idempotency-Keys pointing at it are released, a pet that chose it as cover forgets it,
- * the jobs row goes, then the files (uploaded photos, {storage.result.dir}/{jobId}, {storage.tmp.dir}/{jobId}, the
- * thumbnail). job_runs rows and events.jsonl lines stay: they are measurements of runs that happened.
+ * Deleting finished jobs, used by deleting a pet with its jobs (DELETE /api/v1/pets/{id}?withJobs=true). API v1.2 has no
+ * public endpoint for deleting one job (REVIEW_CHECKLIST #11, 2026-11-21: the review branch's DELETE /api/v1/jobs/{id}
+ * was not taken). Removes what belongs to the job: share links are revoked, Idempotency-Keys pointing at it are
+ * released, a pet that chose it as cover forgets it, the jobs row goes, then the files (uploaded photos,
+ * {storage.result.dir}/{jobId}, {storage.tmp.dir}/{jobId}). job_runs rows, events.jsonl lines, quality ratings and
+ * imported app metrics stay: they are measurements of runs that happened.
  * The mock's shared sample GLB is never touched (it is not inside the job's result folder).
  * PENDING and PROCESSING jobs are refused (409 JOB_IN_PROGRESS): a worker still holds them. A file that cannot be
  * deleted (locked on Windows, already gone) is logged; the job is deleted anyway, the leftovers are disk only.
@@ -36,15 +38,13 @@ public class JobDeletionService {
     private final IdempotencyKeyRepository idempotencyKeys;
     private final PetRepository petRepository;
     private final ShareService shareService;
-    private final ThumbnailService thumbnails;
     private final JobTransitions jobTransitions;
     private final Path resultDir;
     private final Path tmpDir;
     private final Logger log = LoggerFactory.getLogger(JobDeletionService.class);
 
     public JobDeletionService(JobRepository jobRepository, IdempotencyKeyRepository idempotencyKeys,
-                              PetRepository petRepository, ShareService shareService, ThumbnailService thumbnails,
-                              JobTransitions jobTransitions,
+                              PetRepository petRepository, ShareService shareService, JobTransitions jobTransitions,
                               @Value("${storage.result.dir:storage/results}") String resultDir,
                               @Value("${storage.tmp.dir:storage/tmp}") String tmpDir) {
         this.jobTransitions = jobTransitions;
@@ -52,24 +52,8 @@ public class JobDeletionService {
         this.idempotencyKeys = idempotencyKeys;
         this.petRepository = petRepository;
         this.shareService = shareService;
-        this.thumbnails = thumbnails;
         this.resultDir = Path.of(resultDir);
         this.tmpDir = Path.of(tmpDir);
-    }
-
-    /** @throws ApiException 404 JOB_NOT_FOUND, 409 JOB_IN_PROGRESS */
-    public void delete(String jobId) {
-        Job job = jobRepository.findById(jobId).orElseThrow(() -> ApiException.jobNotFound(jobId));
-        requireFinished(job);
-        boolean[] removed = {false};
-        // The check is repeated and the row deleted under JobTransitions' lock: a retry in between cannot make it run.
-        jobTransitions.removeIfFinished(List.of(jobId), jobs -> {
-            jobs.forEach(this::remove);
-            removed[0] = !jobs.isEmpty();
-        }).ifPresent(JobDeletionService::requireFinished);
-        if (!removed[0]) {
-            throw ApiException.jobNotFound(jobId); // deleted by another request meanwhile
-        }
     }
 
     /**
@@ -118,7 +102,6 @@ public class JobDeletionService {
         }
         failed += deleteFolder(jobId, resultDir.resolve(jobId)) ? 0 : 1;
         failed += deleteFolder(jobId, tmpDir.resolve(jobId)) ? 0 : 1;
-        thumbnails.delete(jobId);
         return failed;
     }
 

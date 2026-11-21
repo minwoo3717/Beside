@@ -105,10 +105,6 @@
     return `${jobUrl(jobId)}/asset`;
   }
 
-  function photoUrl(jobId, index) {
-    return `${jobUrl(jobId)}/photos/${Number(index)}`;
-  }
-
   function ratingsUrl(jobId) {
     return `${jobUrl(jobId)}/ratings`;
   }
@@ -166,7 +162,7 @@
 
   return Object.freeze({
     DASH, MAX_RATER_LENGTH, MAX_COMMENT_LENGTH, RATER_STORAGE_KEY, RATING_ITEMS,
-    jobIdFromSearch, normalizeRater, ratingBody, jobUrl, assetUrl, photoUrl, ratingsUrl, ratingUrl, sharesUrl,
+    jobIdFromSearch, normalizeRater, ratingBody, jobUrl, assetUrl, ratingsUrl, ratingUrl, sharesUrl,
     adminJobUrl, shareLink, formatScore, jobErrorText, requestErrorText, isInFlight, ratingOf
   });
 });

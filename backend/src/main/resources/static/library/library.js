@@ -103,16 +103,9 @@
     }
   }
 
-  function thumb(url, label, className) {
-    const box = el("span", { className: `thumb ${className || ""}`.trim() });
-    if (url) {
-      const img = el("img", { src: url, alt: label || "", loading: "lazy", decoding: "async" });
-      img.addEventListener("error", () => { img.remove(); box.classList.add("placeholder"); });
-      box.append(img);
-    } else {
-      box.classList.add("placeholder");
-    }
-    return box;
+  /** The picture slot of a row or a pet: always the placeholder, API v1.2 has no thumbnails (REVIEW_CHECKLIST #11). */
+  function thumb(className) {
+    return el("span", { className: `thumb placeholder ${className || ""}`.trim() });
   }
 
   function badge(status) {
@@ -151,7 +144,7 @@
     const grid = byId("pet-grid");
     grid.replaceChildren(...state.pets.map((pet) => el("li", null,
       el("a", { className: "pet-card", href: L.petRoute(pet.id) },
-        thumb(pet.coverThumbnailUrl, `${pet.name} 대표 사진`, "cover-thumb"),
+        thumb("cover-thumb"),
         el("span", { className: "pet-card-body" },
           el("strong", { className: "pet-card-name", text: pet.name }),
           el("span", { className: "hint", text: `${L.speciesLabel(pet.species)} · 모델 ${pet.jobCount}개` }),
@@ -192,9 +185,9 @@
       await loadHome();
     }));
     return el("li", { className: "job-row" },
-      thumb(job.thumbnailUrl, "첫 사진"),
+      thumb(),
       jobInfo(job, null),
-      el("div", { className: "job-actions" }, select, assign, detailLink(job), deleteButton(job, loadHome)));
+      el("div", { className: "job-actions" }, select, assign, detailLink(job)));
   }
 
   // ---------------------------------------------------------------- pet view
@@ -225,7 +218,7 @@
 
   function renderPet(pet) {
     doc.title = `${pet.name} · Beside 보관함`;
-    byId("pet-cover").replaceChildren(thumb(pet.coverThumbnailUrl, "", "cover-thumb large"));
+    byId("pet-cover").replaceChildren(thumb("cover-thumb large"));
     byId("pet-species").textContent = L.speciesLabel(pet.species);
     byId("pet-name").textContent = pet.name;
     byId("pet-note").textContent = pet.note || "";
@@ -253,22 +246,6 @@
 
   function detailLink(job) {
     return el("a", { className: "ghost-button small", href: L.jobDetailUrl(job.id), text: "상세" });
-  }
-
-  function deleteButton(job, reload) {
-    if (!L.canDelete(job)) return null;
-    const button = el("button", { className: "danger-button small", type: "button", text: "삭제" });
-    button.addEventListener("click", async () => {
-      const answer = await confirmDialog("이 모델을 지울까요?",
-        "사진·3D 모델·썸네일이 지워지고 공유 링크도 끊겨요. 되돌릴 수 없어요. (측정 기록은 남아요)", false);
-      if (!answer.ok) return;
-      await busy(button, async () => {
-        await api("DELETE", `/api/v1/jobs/${enc(job.id)}`);
-        setMessage("지웠어요.", "ok");
-        await reload();
-      });
-    });
-    return button;
   }
 
   function historyRow(pet, job) {
@@ -303,9 +280,8 @@
       await loadPet(pet.id, true);
     }));
     actions.push(out);
-    actions.push(deleteButton(job, () => loadPet(pet.id, true)));
     return el("li", { className: "job-row", dataset: { jobId: job.id } },
-      thumb(job.thumbnailUrl, "첫 사진"), jobInfo(job, pet), el("div", { className: "job-actions" }, actions));
+      thumb(), jobInfo(job, pet), el("div", { className: "job-actions" }, actions));
   }
 
   // ---------------------------------------------------------------- editing and deleting the pet

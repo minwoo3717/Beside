@@ -8,13 +8,8 @@ import com.example.mockbackend.api.v1.dto.PetDetailResponse;
 import com.example.mockbackend.api.v1.dto.PetListResponse;
 import com.example.mockbackend.api.v1.dto.PetResponse;
 import com.example.mockbackend.api.v1.dto.UpdatePetRequest;
-import com.example.mockbackend.exception.ApiException;
-import com.example.mockbackend.exception.ErrorCode;
-import com.example.mockbackend.service.JobDeletionService;
-import com.example.mockbackend.service.JobService;
 import com.example.mockbackend.service.PetService;
 import com.example.mockbackend.service.PetWithJobs;
-import com.example.mockbackend.service.ThumbnailService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -24,10 +19,6 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -41,15 +32,14 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
- * The web library (docs/api/openapi.yaml tag pets): pets, moving jobs between them, deleting finished jobs and job
- * thumbnails. Used by /library (static/library/), not by the app; Caddy Basic auth guards these routes in deployment and
- * Spring has no auth code. Method names are the operationIds (JobV1ContractTest).
+ * The web library (docs/api/openapi.yaml tag pets): pets, moving jobs between them, and deleting a pet with or without
+ * its finished jobs (JobDeletionService through PetService). Used by /library (static/library/), not by the app; Caddy
+ * Basic auth guards these routes in deployment and Spring has no auth code. Method names are the operationIds
+ * (JobV1ContractTest). API v1.2 (REVIEW_CHECKLIST #11, 2026-11-21) did not take the review branch's
+ * DELETE /api/v1/jobs/{jobId} and GET /api/v1/jobs/{jobId}/thumbnail.
  */
 @RestController
 @RequestMapping(ApiV1Paths.BASE)
@@ -57,13 +47,8 @@ import java.nio.file.Path;
 @Tag(name = "pets", description = "반려동물 보관함 웹(/library)용. 앱은 쓰지 않는다.")
 public class PetV1Controller {
     private static final String JSON = MediaType.APPLICATION_JSON_VALUE;
-    /** A job's thumbnail never changes; it sits behind Basic auth, so only the browser may keep it. */
-    static final String THUMBNAIL_CACHE = "private, max-age=86400";
 
     private final PetService petService;
-    private final JobService jobService;
-    private final JobDeletionService jobDeletion;
-    private final ThumbnailService thumbnails;
     private final PetResponseMapper petMapper;
     private final JobResponseMapper jobMapper;
 
@@ -158,43 +143,5 @@ public class PetV1Controller {
     @PutMapping(value = "/jobs/{jobId}/pet", produces = JSON)
     public JobResponse setJobPet(@PathVariable("jobId") String jobId, @RequestBody JobPetRequest body) {
         return jobMapper.toResponse(petService.setJobPet(jobId, body));
-    }
-
-    @Operation(operationId = "deleteJob", summary = "끝난 작업을 지운다 (보관함 웹)",
-            description = "COMPLETED·FAILED 만. 사진·결과 폴더·썸네일을 지우고 공유 링크를 취소하고 Idempotency-Key 를 지운다. job_runs 는 남긴다.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "지움"),
-            @ApiResponse(responseCode = "404", description = "없는 작업 (JOB_NOT_FOUND)",
-                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "PENDING·PROCESSING (JOB_IN_PROGRESS)",
-                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
-                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
-    @DeleteMapping("/jobs/{jobId}")
-    public ResponseEntity<Void> deleteJob(@PathVariable("jobId") String jobId) {
-        jobDeletion.delete(jobId);
-        return ResponseEntity.noContent().build();
-    }
-
-    @Operation(operationId = "downloadThumbnail", summary = "작업의 썸네일 (첫 사진, JPEG)",
-            description = "긴 변 256px JPEG. 썸네일이 없으면 404 ASSET_NOT_FOUND, 없는 작업은 404 JOB_NOT_FOUND.")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "JPEG 썸네일",
-                    headers = @Header(name = "Cache-Control", description = THUMBNAIL_CACHE, schema = @Schema(type = "string")),
-                    content = @Content(mediaType = MediaType.IMAGE_JPEG_VALUE, schema = @Schema(type = "string", format = "binary"))),
-            @ApiResponse(responseCode = "404", description = "없는 작업 또는 썸네일 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND)",
-                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "500", description = "서버 오류 (INTERNAL_ERROR)",
-                    content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
-    @GetMapping("/jobs/{jobId}/thumbnail")
-    public ResponseEntity<Resource> downloadThumbnail(@PathVariable("jobId") String jobId) throws IOException {
-        jobService.getJobOrThrow(jobId);
-        Path file = thumbnails.find(jobId).orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND,
-                ErrorCode.ASSET_NOT_FOUND, "No thumbnail for job " + jobId + " (its first photo could not be read)", jobId));
-        return ResponseEntity.ok()
-                .contentType(MediaType.IMAGE_JPEG)
-                .contentLength(Files.size(file))
-                .header(HttpHeaders.CACHE_CONTROL, THUMBNAIL_CACHE)
-                .body(new FileSystemResource(file));
     }
 }

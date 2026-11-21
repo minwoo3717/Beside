@@ -47,9 +47,4 @@ public final class ApiV1Paths {
     public static String pet(String petId) {
         return PETS + "/" + petId;
     }
-
-    /** Relative URL exposed as JobResponse.thumbnailUrl and PetResponse.coverThumbnailUrl. */
-    public static String thumbnail(String jobId) {
-        return job(jobId) + "/thumbnail";
-    }
 }

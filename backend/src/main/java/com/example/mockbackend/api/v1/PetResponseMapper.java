@@ -27,8 +27,7 @@ public class PetResponseMapper {
         Pet pet = value.pet();
         String coverJobId = value.cover().map(Job::getId).orElse(null);
         return new PetResponse(pet.getId(), pet.getName(), pet.getSpecies(), pet.getNote(), pet.getCreatedAt(),
-                pet.getUpdatedAt(), value.jobs().size(), coverJobId,
-                coverJobId == null ? null : jobMapper.thumbnailUrl(coverJobId), value.latestJobAt());
+                pet.getUpdatedAt(), value.jobs().size(), coverJobId, value.latestJobAt());
     }
 
     public PetDetailResponse toDetail(PetWithJobs value) {

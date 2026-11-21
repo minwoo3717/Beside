@@ -13,7 +13,6 @@ import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.JobTimings;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.service.QueueEstimator;
-import com.example.mockbackend.service.ThumbnailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -23,8 +22,7 @@ import java.util.List;
 
 /**
  * Job (internal) → JobResponse (contract v1). Never copies server paths. queue and estimate come from QueueEstimator,
- * for the list too: they cost nothing for finished jobs and one read-only transaction per PENDING job. thumbnailUrl is
- * set while the thumbnail file exists, which ThumbnailService answers from memory.
+ * for the list too: they cost nothing for finished jobs and one read-only transaction per PENDING job.
  */
 @Component
 @RequiredArgsConstructor
@@ -32,7 +30,6 @@ public class JobResponseMapper {
     public static final String GLB_CONTENT_TYPE = "model/gltf-binary";
 
     private final QueueEstimator queueEstimator;
-    private final ThumbnailService thumbnails;
 
     public JobResponse toResponse(Job job) {
         return toResponse(job, Instant.now());
@@ -52,13 +49,7 @@ public class JobResponseMapper {
                 job.getUploads().stream().map(u -> new UploadedFile(u.name(), u.bytes())).toList(),
                 queue(outlook.queue()),
                 estimate(outlook.estimate()),
-                job.getPetId(),
-                thumbnailUrl(job.getId()));
-    }
-
-    /** JobResponse.thumbnailUrl / PetResponse.coverThumbnailUrl: the relative URL while the file exists, else null. */
-    public String thumbnailUrl(String jobId) {
-        return thumbnails.exists(jobId) ? ApiV1Paths.thumbnail(jobId) : null;
+                job.getPetId());
     }
 
     static JobQueue queue(QueueEstimator.Position position) {

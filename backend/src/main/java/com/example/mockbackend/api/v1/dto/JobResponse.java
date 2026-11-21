@@ -30,7 +30,5 @@ public record JobResponse(
                 + "근거 실행이 없으면 null, 그 외 상태 null.")
         JobEstimate estimate,
         @Schema(nullable = true, format = "uuid", description = "이 작업이 들어 있는 보관함의 반려동물. 없으면 null = 미분류.")
-        String petId,
-        @Schema(nullable = true, description = "첫 사진 썸네일(JPEG, 긴 변 256px)의 상대 경로 /api/v1/jobs/{jobId}/thumbnail. 없으면 null.")
-        String thumbnailUrl) {
+        String petId) {
 }
