@@ -121,7 +121,8 @@ jobId,uploadMs,waitMs,downloadMs,loadMs,e2eMs,avgFps,minFps,memMB,device
 
 앱은 바꾸지 않는다. 팀원이 `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` 로 받은 파일을 관리 페이지 `/admin` 의 "앱 metrics.csv 올리기" 로 올린다(API `POST /api/v1/admin/client-metrics`, multipart 파트 `file`).
 
-- 첫 줄이 위 헤더와 **정확히** 같아야 한다. 아니면 아무것도 저장하지 않고 400. 데이터 줄은 줄마다 검사해 잘못된 줄만 결과의 `errors[{line, reason}]` 에 담고(줄 번호는 헤더 = 1) 나머지는 저장한다: 칸 10개, `uploadMs, waitMs, downloadMs, loadMs, e2eMs, memMB` 는 0 이상 정수, `avgFps, minFps` 는 0 이상 소수(`.`), `device` 는 빈 칸 허용.
+- 첫 줄이 위 헤더와 **정확히** 같아야 한다. 아니면 아무것도 저장하지 않고 400. 데이터 줄은 줄마다 검사해 잘못된 줄만 결과의 `errors[{line, reason}]` 에 담고(줄 번호는 헤더 = 1) 나머지는 저장한다: 칸 10개, `jobId` 는 작업 id 형식(UUID, 2026-11-21 부터 — 그 전에는 64자 이하 아무 문자열), `uploadMs, waitMs, downloadMs, loadMs, e2eMs, memMB` 는 0 이상 정수, `avgFps, minFps` 는 0 이상 소수(`.`), `device` 는 빈 칸 허용.
+- CSV 내보내기(이 절·§1.1·§4.1 모두): 글자 칸이 `=` `+` `-` `@` 탭·CR 로 시작하면 앞에 작은따옴표(`'`)를 붙여 내보낸다. Excel·Google Sheets 가 수식으로 실행하지 않게 하려는 것이다(OWASP CSV Injection). 숫자 칸은 바꾸지 않는다. 가져오기는 `device` 칸 앞의 그 작은따옴표를 떼고 읽어서, 내보낸 파일을 다시 올려도 중복으로 건너뛴다.
 - `(jobId, device, e2eMs)` 가 이미 저장된 행(또는 같은 파일의 앞 줄)과 같으면 중복으로 건너뛴다(`skipped`). 같은 파일을 여러 번 올려도 한 번만 들어간다. 폰마다 파일이 따로이므로 폰 여러 대의 파일을 차례로 올리면 된다.
 - 저장 위치: H2 테이블 `client_metrics`(컬럼 `job_id, upload_ms, wait_ms, download_ms, load_ms, e2e_ms, avg_fps, min_fps, mem_mb, device` + `id, imported_at`). jobId 가 이 서버에 없는 작업이어도 저장한다.
 - 내보내기: `GET /api/v1/admin/client-metrics?format=csv` → `client_metrics.csv`, 열은 위 헤더 그대로(다시 올려도 전부 중복으로 건너뛴다).
@@ -156,7 +157,7 @@ COMPLETED 실행이 없으면(다른 서버·프로파일의 작업, 실패한 �
 
 ### 4.1 평가 저장과 내보내기 (Backend, [구현됨] 2026-10-30, `RatingApiTest`)
 
-평가자는 작업 상세 웹 페이지 `/job/?id={jobId}` 에서 입력 사진과 3D 모델을 나란히 보고 6항목을 채점한다(평가자 이름은 브라우저 localStorage 에 기억). 저장은 API `PUT /api/v1/jobs/{jobId}/ratings/{rater}`(본문 = 위 6개 이름, 각 1~5 정수 + 선택 `comment` ≤ 500자), COMPLETED 작업만 받는다. **같은 작업·같은 평가자는 덮어쓴다** — 평가자 한 명당 작업마다 한 행이므로 "평가자 2명 이상"은 서로 다른 이름 2개 이상이다.
+평가자는 작업 상세 웹 페이지 `/job/?id={jobId}` 에서 3D 모델을 보고, 올린 원본 사진은 따로 옆에 두고(페이지는 파일 이름·크기만 보여 준다, v1.2 에 사진 API 없음 #11) 6항목을 채점한다(평가자 이름은 브라우저 localStorage 에 기억). 저장은 API `PUT /api/v1/jobs/{jobId}/ratings/{rater}`(본문 = 위 6개 이름, 각 1~5 정수 + 선택 `comment` ≤ 500자), COMPLETED 작업만 받는다. **같은 작업·같은 평가자는 덮어쓴다** — 평가자 한 명당 작업마다 한 행이므로 "평가자 2명 이상"은 서로 다른 이름 2개 이상이다.
 
 - 저장 위치: H2 테이블 `job_ratings`(컬럼 `job_id, rater, face_shape, ears, body_proportion, fur_color, pattern, texture_artifacts, comment, created_at, updated_at` + `id`, `(job_id, rater)` 유일).
 - 작업별 평균: `GET /api/v1/jobs/{jobId}/ratings` → `items`(평가자 이름순) + `average`(6항목 평균과 `raters`). 평가가 없으면 `average = null`.
@@ -229,14 +230,16 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 
 | 멘토 지표 | PromQL |
 |---|---|
-| 생성 성공률 | `sum(increase(beside_jobs_finished_total{env="prod",passthrough="false",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="prod",passthrough="false"}[1h]))` (추론 서비스가 실제 모델일 때만 맞다, 표 아래 주의) · 실패 코드별 `sum by (code) (increase(beside_jobs_finished_total{env="prod",result="FAILED"}[1h]))` |
+| 생성 성공률 | `sum(increase(beside_jobs_finished_total{env="prod",passthrough="false",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="prod",passthrough="false",code!="CANCELED"}[1h]))` (추론 서비스가 실제 모델일 때만 맞다, 사용자 취소는 분모에서 뺀다, 표 아래 주의) · 실패 코드별 `sum by (code) (increase(beside_jobs_finished_total{env="prod",result="FAILED"}[1h]))` |
 | 생성 시간 평균 | `sum(rate(beside_job_processing_seconds_sum{env="prod",result="COMPLETED",passthrough="false"}[15m])) / sum(rate(beside_job_processing_seconds_count{env="prod",result="COMPLETED",passthrough="false"}[15m]))` |
 | 생성 시간 p95 | `histogram_quantile(0.95, sum by (le) (rate(beside_job_processing_seconds_bucket{env="prod",result="COMPLETED",passthrough="false"}[15m])))` · 앱이 느끼는 시간은 `beside_job_total_seconds_bucket`, 대기만은 `beside_job_queued_seconds_bucket`(GPU 증설 기준 'p95 queuedMs > 60초') |
 | 대기열 길이 | `beside_jobs_queue{env="prod",state="pending"}` · 10분 최대 `max_over_time(beside_jobs_queue{env="prod",state="pending"}[10m])` · 들어온 양 대 끝난 양 `sum(rate(beside_jobs_created_total{env="prod"}[5m]))` 대 `sum(rate(beside_jobs_finished_total{env="prod"}[5m]))` |
 | API 응답 시간 | `histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env="prod",uri=~"/api/v1/.*"}[5m])))` · 5xx 비율 `sum(rate(http_server_requests_seconds_count{env="prod",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{env="prod"}[5m]))` · 큐 상한의 의도한 503 `QUEUE_FULL` 을 뺀 5xx 비율(2026-11-21 #21 결정 D9: 5xx 비율은 이 식으로 본다) `clamp_min(sum(rate(http_server_requests_seconds_count{env="prod",status=~"5.."}[5m])) - (sum(rate(beside_jobs_refused_total{env="prod"}[5m])) or vector(0)), 0) / sum(rate(http_server_requests_seconds_count{env="prod"}[5m]))`(카운터가 없는 서버는 0 을 뺀다. 0 아래 자르기는 거절이 503 기록보다 먼저 세어져서) |
 | 에셋 다운로드 실패율 | `sum(increase(beside_asset_downloads_total{env="prod",outcome=~"client_abort\|error"}[1h])) / sum(increase(beside_asset_downloads_total{env="prod",outcome=~"ok\|client_abort\|error"}[1h]))` · `not_found`·`not_completed` 는 따로 본다(완료 전 요청·잘못된 id 는 서버 실패가 아니다. 다만 완료된 작업의 파일이 없어진 `ASSET_NOT_FOUND` 도 `not_found` 에 들어가므로 0 이 아니면 로그를 확인한다) |
 
-주의(생성 성공률): FAILED 실행은 늘 `passthrough="false"` 로 세어진다(§5.1 주의, 백엔드는 스텁의 실패와 모델의 실패를 구별하지 못한다). 그래서 위의 `passthrough="false"` 식, 그리고 Grafana `beside-ops` 성공률 패널의 B 계열 `성공률 (패스스루 제외)` 는 추론 서비스가 **실제 모델**을 돌리는 동안에만 맞다. 패스스루 스텁으로 돌리는 부하 시험(G·F 계열)에서는 분자에서 스텁의 성공이 모두 빠지고 분모에는 스텁의 실패만 남아, 성공률이 0 이 되거나(실패가 있을 때) 값이 없다(실패가 없을 때). 이때는 거르지 않은 성공률 `sum(increase(beside_jobs_finished_total{env="loadtest",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="loadtest"}[1h]))`(같은 패널의 A 계열 `성공률`)이나 `scripts/load/collect.py` 가 모은 값을 쓴다.
+주의(생성 성공률): FAILED 실행은 늘 `passthrough="false"` 로 세어진다(§5.1 주의, 백엔드는 스텁의 실패와 모델의 실패를 구별하지 못한다). 그래서 위의 `passthrough="false"` 식, 그리고 Grafana `beside-ops` 성공률 패널의 B 계열 `성공률 (패스스루 제외)` 는 추론 서비스가 **실제 모델**을 돌리는 동안에만 맞다. 패스스루 스텁으로 돌리는 부하 시험(G·F 계열)에서는 분자에서 스텁의 성공이 모두 빠지고 분모에는 스텁의 실패만 남아, 성공률이 0 이 되거나(실패가 있을 때) 값이 없다(실패가 없을 때). 이때는 거르지 않은 성공률 `sum(increase(beside_jobs_finished_total{env="loadtest",result="COMPLETED"}[1h])) / sum(increase(beside_jobs_finished_total{env="loadtest",code!="CANCELED"}[1h]))`(같은 패널의 A 계열 `성공률`)이나 `scripts/load/collect.py` 가 모은 값을 쓴다.
+
+주의(취소): 사용자가 대기 중에 취소한 실행(API v1.2 `POST /cancel`)도 `beside_jobs_finished_total{result="FAILED",code="CANCELED"}` 로 세어진다. 성공률의 **분모에서는 `code!="CANCELED"` 로 뺀다**(§1.1 제외 규칙·관리 API stats 의 `canceled` 와 같은 규칙. Grafana `beside-ops` 성공률 패널 세 식도 같다). 라벨 이름과 값은 그대로다. 실패 코드별 식에는 `CANCELED` 도 한 줄로 나온다.
 
 표 안의 `\|` 는 표 구분자를 피하려고 쓴 것이고, PromQL 에는 `|` 로 쓴다.
 

@@ -1,11 +1,15 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.api.v1.dto.JobPetRequest;
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.JobRun;
 import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.RunDetails;
+import com.example.mockbackend.exception.ApiException;
+import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.JobRunRepository;
+import com.example.mockbackend.service.PetService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -34,6 +38,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -50,7 +59,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * The pet library (docs/api/openapi.yaml tag pets) against the mock worker with short delays: pet CRUD and its checks,
- * uploading into a pet (multipart text part petId), moving jobs between pets and back to unassigned, the cover rule
+ * uploading for a pet (the public POST /api/v1/jobs makes an unassigned job and ignores a petId part; the library then
+ * calls PUT /api/v1/jobs/{id}/pet), moving jobs between pets and back to unassigned, the cover rule
  * (chosen COMPLETED job of the pet, else the newest COMPLETED one) and the two ways to delete a pet.
  * One Spring context for the class, so every test makes its own pets and jobs and looks only at those.
  */
@@ -87,6 +97,9 @@ class PetApiTest {
 
     @Autowired
     JobRunRepository jobRuns;
+
+    @Autowired
+    PetService petService;
 
     // ------------------------------------------------------------------ CRUD
 
@@ -204,16 +217,16 @@ class PetApiTest {
         assertThat(job(jobId).path("petId").asText()).isEqualTo(first);
         assertThat(pet(first).path("jobCount").asInt()).isEqualTo(1);
 
-        assertThat(job(upload("blank.jpg", "")).path("petId").isNull()).as("an empty part means no pet").isTrue();
-        long before = jobs.count();
-        for (String unknown : List.of(UUID.randomUUID().toString(), "abc")) {
-            mvc.perform(multipart("/api/v1/jobs")
+        // The public create route writes nothing into the library (review finding, 2026-11-21): the review branch's
+        // petId part is ignored, whether it names a pet or not, and the job is unassigned.
+        for (String part : List.of(first, UUID.randomUUID().toString(), "abc")) {
+            String created = body(mvc.perform(multipart("/api/v1/jobs")
                             .file(new MockMultipartFile("photos", "dog.jpg", "image/jpeg", new byte[]{1, 2, 3}))
-                            .part(new MockPart("petId", unknown.getBytes(StandardCharsets.UTF_8))))
-                    .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+                            .part(new MockPart("petId", part.getBytes(StandardCharsets.UTF_8))))
+                    .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
+            assertThat(job(created).path("petId").isNull()).as("petId part %s", part).isTrue();
         }
-        assertThat(jobs.count()).as("no job made for an unknown pet").isEqualTo(before);
+        assertThat(pet(first).path("jobCount").asInt()).as("only the job put there with PUT /pet").isEqualTo(1);
 
         JsonNode moved = body(mvc.perform(json(put("/api/v1/jobs/{id}/pet", jobId), Map.of("petId", second)))
                 .andExpect(status().isOk()).andReturn());
@@ -369,6 +382,46 @@ class PetApiTest {
         assertThat(photo).doesNotExist();
     }
 
+    /**
+     * Review finding 2026-11-21: putting a job into a pet raced with deleting that pet (existsById, then the update),
+     * so a job could keep the deleted pet's id and show up nowhere — under no pet and not as unassigned. Both now run
+     * under PetService's lock: whichever goes first, the job ends unassigned (moved, then the deletion unassigns it;
+     * or deleted first, and the move is refused as an unknown pet).
+     */
+    @Test
+    void aJobPutIntoAPetWhileThePetIsDeletedEndsUnassigned() throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            for (int round = 0; round < 20; round++) {
+                String petId = createPet("경주 " + round, "DOG");
+                String jobId = upload("race.jpg", null);
+                JobPetRequest move = new JobPetRequest();
+                move.setPetId(petId);
+                CountDownLatch go = new CountDownLatch(1);
+                Future<?> moving = pool.submit(() -> {
+                    go.await();
+                    try {
+                        petService.setJobPet(jobId, move);
+                    } catch (ApiException unknownPet) {
+                        assertThat(unknownPet.getCode()).isEqualTo(ErrorCode.INVALID_REQUEST); // the deletion won
+                    }
+                    return null;
+                });
+                Future<?> deleting = pool.submit(() -> {
+                    go.await();
+                    petService.delete(petId, false);
+                    return null;
+                });
+                go.countDown();
+                moving.get(10, TimeUnit.SECONDS);
+                deleting.get(10, TimeUnit.SECONDS);
+                assertThat(jobs.findById(jobId).orElseThrow().getPetId()).as("round %d", round).isNull();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     // ------------------------------------------------------------------ page
 
     @Test
@@ -403,14 +456,15 @@ class PetApiTest {
         return upload(filename, petId, new byte[]{1, 2, 3});
     }
 
-    /** POST /api/v1/jobs with the optional petId text part (null = no part at all). */
+    /** POST /api/v1/jobs, then PUT /api/v1/jobs/{id}/pet as the library page does (null = stays unassigned). */
     private String upload(String filename, String petId, byte[] bytes) throws Exception {
         var request = multipart("/api/v1/jobs").file(new MockMultipartFile("photos", filename, "image/jpeg", bytes));
-        if (petId != null) {
-            request.part(new MockPart("petId", petId.getBytes(StandardCharsets.UTF_8)));
-        }
         ResultActions result = mvc.perform(request).andExpect(status().isAccepted());
-        return body(result.andReturn()).path("jobId").asText();
+        String jobId = body(result.andReturn()).path("jobId").asText();
+        if (petId != null) {
+            mvc.perform(json(put("/api/v1/jobs/{id}/pet", jobId), Map.of("petId", petId))).andExpect(status().isOk());
+        }
+        return jobId;
     }
 
     private String completed(String jobId) {

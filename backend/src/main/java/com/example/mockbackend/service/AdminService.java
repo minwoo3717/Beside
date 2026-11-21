@@ -30,7 +30,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,7 +50,6 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Read-only views for the admin dashboard and the measurement export (PLAN S5, docs/api/openapi.yaml tag admin).
@@ -71,7 +69,6 @@ public class AdminService {
     public static final String NO_MODEL_VERSION = "(none)";
     static final int DEFAULT_JOBS_LIMIT = 20;
     static final int MAX_JOBS_LIMIT = 100;
-    private static final String CRLF = "\r\n";
     private static final Instant NO_LOWER_BOUND = Instant.EPOCH;
     private static final Instant NO_UPPER_BOUND = Instant.parse("9999-01-01T00:00:00Z");
     /** The dashboard polls every 5 s; walking the storage tree once a minute is enough. */
@@ -207,25 +204,12 @@ public class AdminService {
 
     /** RFC 4180 CSV: header line of RUN_COLUMNS, then one line per run, CRLF line ends, null as an empty cell. */
     public static byte[] toCsv(List<AdminRun> runs) {
-        StringBuilder csv = new StringBuilder(String.join(",", RUN_COLUMNS)).append(CRLF);
-        for (AdminRun run : runs) {
-            List<Object> cells = Arrays.asList(run.jobId(), run.attempt(), run.finishedAt(), run.workerType(),
-                    run.status(), run.errorCode(), run.uploadBytes(), run.uploadMs(), run.queuedMs(),
-                    run.processingMs(), run.totalMs(), run.inferMs(), run.gpuPeakMB(), run.modelParams(),
-                    run.outputVertices(), run.outputTriangles(), run.convertMs(), run.glbBytes(), run.passthrough(),
-                    run.modelVersion());
-            csv.append(cells.stream().map(AdminService::csvCell).collect(Collectors.joining(","))).append(CRLF);
-        }
-        return csv.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    static String csvCell(Object value) {
-        if (value == null) {
-            return "";
-        }
-        String text = value.toString();
-        boolean quote = text.indexOf(',') >= 0 || text.indexOf('"') >= 0 || text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0;
-        return quote ? '"' + text.replace("\"", "\"\"") + '"' : text;
+        // One writer for every admin export (Csv: quoting and the spreadsheet-formula guard).
+        return Csv.write(RUN_COLUMNS, runs.stream().map(run -> Arrays.<Object>asList(run.jobId(), run.attempt(),
+                run.finishedAt(), run.workerType(), run.status(), run.errorCode(), run.uploadBytes(), run.uploadMs(),
+                run.queuedMs(), run.processingMs(), run.totalMs(), run.inferMs(), run.gpuPeakMB(), run.modelParams(),
+                run.outputVertices(), run.outputTriangles(), run.convertMs(), run.glbBytes(), run.passthrough(),
+                run.modelVersion())).toList());
     }
 
     private static AdminRun toAdminRun(JobRun run) {

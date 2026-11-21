@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
 
 /**
  * Share links of completed jobs (docs/api/openapi.yaml tag "share").
- * Creating a link is part of the app API and answers with the caller's own job id on errors. Everything reached by a
+ * Creating links and revoking all links of a job are called by the job page (behind the team account in production) and
+ * answer with the caller's own job id on errors. Everything reached by a
  * token is public: there every problem (unknown, malformed, expired or revoked token, job deleted or no longer
  * COMPLETED, file missing) is the same 404 SHARE_NOT_FOUND without a job id, so the share page never learns the job.
  */
@@ -33,6 +34,11 @@ import java.util.regex.Pattern;
 public class ShareService {
     public static final int MIN_TTL_DAYS = 1;
     public static final int MAX_TTL_DAYS = 30;
+    /**
+     * Active (not expired, not revoked) links one job may have. Every call issues a new token and each is a share_links
+     * row, so without a bound one job could gather links without end (review finding, 2026-11-21).
+     */
+    public static final int MAX_ACTIVE_PER_JOB = 20;
     /** 128 bits. */
     static final int TOKEN_BYTES = 16;
     /** Browsers and Scene Viewer may keep the GLB this long at most (less when the link expires sooner). */
@@ -58,11 +64,12 @@ public class ShareService {
     }
 
     /**
-     * A new link for a COMPLETED job with its base GLB; every call issues another token.
+     * A new link for a COMPLETED job with its base GLB; every call issues another token, up to
+     * {@link #MAX_ACTIVE_PER_JOB} active links per job (synchronized, so two requests cannot both take the last one).
      * @param ttlDays 1~30, null for share.ttl-days
      * @throws ApiException 400 INVALID_REQUEST, 404 JOB_NOT_FOUND / ASSET_NOT_FOUND, 409 JOB_NOT_COMPLETED
      */
-    public ShareLink create(String jobId, Integer ttlDays) {
+    public synchronized ShareLink create(String jobId, Integer ttlDays) {
         int days = ttlDays != null ? ttlDays : defaultTtlDays;
         if (days < MIN_TTL_DAYS || days > MAX_TTL_DAYS) {
             throw ApiException.badRequest(ErrorCode.INVALID_REQUEST,
@@ -70,6 +77,12 @@ public class ShareService {
         }
         jobService.resolveAsset(jobId, AssetVariant.base);
         Instant now = now();
+        long active = shareLinks.findByJobId(jobId).stream().filter(existing -> existing.isActiveAt(now)).count();
+        if (active >= MAX_ACTIVE_PER_JOB) {
+            throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "This job already has " + active
+                    + " active share links (at most " + MAX_ACTIVE_PER_JOB + "); revoke them first with"
+                    + " DELETE /api/v1/jobs/{jobId}/shares");
+        }
         ShareLink link = ShareLink.issue(newToken(), jobId, now, now.plus(Duration.ofDays(days)));
         shareLinks.save(link);
         log.info("Share created: jobId={} token={} expiresAt={}", jobId, abbreviate(link.getToken()), link.getExpiresAt());
@@ -104,8 +117,18 @@ public class ShareService {
         log.info("Share revoked: jobId={} token={}", link.getJobId(), abbreviate(token));
     }
 
+    /**
+     * DELETE /api/v1/jobs/{jobId}/shares: ends every still active link of an existing job without knowing the tokens
+     * (they are answered once, and logs keep a prefix only), e.g. when a link has spread further than meant.
+     * Returns how many were active. @throws ApiException 404 JOB_NOT_FOUND
+     */
+    public int revokeAllForExistingJob(String jobId) {
+        jobService.getJobOrThrow(jobId);
+        return revokeAllForJob(jobId);
+    }
+
     /** Ends every still active link of a job (for deleting the job). Returns how many were active. */
-    public int revokeAllForJob(String jobId) {
+    public synchronized int revokeAllForJob(String jobId) {
         Instant now = now();
         List<ShareLink> active = shareLinks.findByJobId(jobId).stream().filter(link -> link.isActiveAt(now)).toList();
         active.forEach(link -> link.revoke(now));

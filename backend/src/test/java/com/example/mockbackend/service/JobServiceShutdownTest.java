@@ -66,7 +66,7 @@ class JobServiceShutdownTest {
     void aNewJobIsRemovedWithItsPhotosAndKey() throws IOException {
         long before = jobRepository.count();
         MockMultipartFile photo = new MockMultipartFile("photos", "late.png", "image/png", new byte[]{1, 2, 3});
-        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo), "late-key", null))
+        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo), "late-key"))
                 .isInstanceOf(TaskRejectedException.class);
         assertThat(jobRepository.count()).isEqualTo(before);
         assertThat(idempotencyKeys.findById("late-key")).isEmpty();

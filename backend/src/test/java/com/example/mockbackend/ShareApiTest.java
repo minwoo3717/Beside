@@ -202,6 +202,44 @@ class ShareApiTest {
         assertThat(shareLinks.findById(active)).get().extracting(ShareLink::getRevokedAt).isNotNull();
     }
 
+    /**
+     * Review finding 2026-11-21: a link that spread too far could not be ended without its token (answered once, logs
+     * keep a prefix). DELETE /api/v1/jobs/{id}/shares ends them all; and one job keeps at most MAX_ACTIVE_PER_JOB
+     * active links, since each call adds a share_links row.
+     */
+    @Test
+    void allLinksOfAJobCanBeEndedWithoutTheirTokensAndAJobHasAtMostTwentyActive() throws Exception {
+        String jobId = completedJob("capped-dog.jpg");
+        String otherJob = completedJob("capped-other.jpg");
+        String otherJobsLink = createShare(otherJob);
+        List<String> tokens = new java.util.ArrayList<>();
+        for (int i = 0; i < ShareService.MAX_ACTIVE_PER_JOB; i++) {
+            tokens.add(createShare(jobId));
+        }
+        mvc.perform(post("/api/v1/jobs/{id}/shares", jobId))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+        assertThat(shareLinks.findByJobId(jobId)).as("no 21st row").hasSize(ShareService.MAX_ACTIVE_PER_JOB);
+
+        mvc.perform(delete("/api/v1/jobs/{id}/shares", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revoked").value(ShareService.MAX_ACTIVE_PER_JOB));
+        for (String token : List.of(tokens.get(0), tokens.get(tokens.size() - 1))) {
+            assertShareNotFound(token);
+        }
+        mvc.perform(get("/api/v1/shares/{token}", otherJobsLink)).andExpect(status().isOk());
+        mvc.perform(delete("/api/v1/jobs/{id}/shares", jobId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revoked").value(0));
+        createShare(jobId); // room again once the old links are ended
+
+        String unknown = UUID.randomUUID().toString();
+        mvc.perform(delete("/api/v1/jobs/{id}/shares", unknown))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"))
+                .andExpect(jsonPath("$.error.jobId").value(unknown));
+    }
+
     @Test
     void sharePageForwardsToTheViewer() throws Exception {
         mvc.perform(get("/s/{token}", randomToken()))

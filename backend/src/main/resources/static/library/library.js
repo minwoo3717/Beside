@@ -564,9 +564,20 @@
       errorEl.hidden = true;
       const data = new FormData();
       files.forEach((file) => data.append("photos", file, file.name));
-      data.append("petId", pet.id);
       button.textContent = "올리는 중…";
-      api("POST", "/api/v1/jobs", data).then((created) => {
+      // The public POST /jobs takes no pet (every library write stays behind the team account): the new job is
+      // unassigned until PUT /jobs/{id}/pet. When that second call fails the model is still made and waits in
+      // "미분류", so the run goes on and the page only says so.
+      let assignProblem = null;
+      api("POST", "/api/v1/jobs", data).then(async (created) => {
+        try {
+          await api("PUT", `/api/v1/jobs/${enc(created.jobId)}/pet`, { petId: pet.id });
+        } catch (error) {
+          assignProblem = `만든 작업을 이 펫에 넣지 못해 미분류에 있어요. 끝난 뒤 미분류에서 옮겨 주세요. (${error.message})`;
+        }
+        return created;
+      }).then((created) => {
+        if (assignProblem) setMessage(assignProblem);
         state.active = { jobId: created.jobId, petId: pet.id, petName: pet.name, startedAt: Date.now(), timer: null };
         const box = byId("create-progress");
         box.dataset.petId = pet.id;

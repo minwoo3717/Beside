@@ -15,16 +15,12 @@ public interface JobService {
 
     // --- v1 (docs/api/openapi.yaml) ---
 
-    /** Validates per contract (1~10 photos, jpeg/png/webp, non-empty), honours Idempotency-Key, stores and dispatches. */
-    default Job submitJobV1(List<MultipartFile> photos, String idempotencyKey) {
-        return submitJobV1(photos, idempotencyKey, null);
-    }
-
     /**
-     * Same, into the library pet {@code petId} (null or blank = unassigned). An Idempotency-Key replay answers with the
-     * first job and ignores petId. @throws ApiException 400 INVALID_REQUEST for an unknown pet (no job is made)
+     * Validates per contract (1~10 photos, jpeg/png/webp, non-empty), honours Idempotency-Key, stores and dispatches.
+     * The job is unassigned (petId null): this is the public route, and the library assigns jobs only through the
+     * team-only PetService.setJobPet (PUT /api/v1/jobs/{id}/pet).
      */
-    Job submitJobV1(List<MultipartFile> photos, String idempotencyKey, String petId);
+    Job submitJobV1(List<MultipartFile> photos, String idempotencyKey);
 
     /** @throws com.example.mockbackend.exception.ApiException 404 JOB_NOT_FOUND */
     Job getJobOrThrow(String id);

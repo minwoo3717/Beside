@@ -50,7 +50,11 @@ public class ClientMetricService {
             "uploadBytes", "serverUploadMs", "queuedMs", "processingMs", "totalMs",
             "inferMs", "gpuPeakMB", "modelParams", "outputVertices", "outputTriangles", "convertMs", "glbBytes",
             "uploadMs", "waitMs", "downloadMs", "loadMs", "e2eMs", "avgFps", "minFps", "memMB", "device");
-    static final int MAX_JOB_ID_LENGTH = 64;
+    /**
+     * The app writes the server's job id, a UUID. Anything else is refused, so the free text of an uploaded file is only
+     * the device column (the import is a form POST that a page on another site could also send; review 2026-11-21).
+     */
+    private static final Pattern JOB_ID = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
     static final int MAX_DEVICE_LENGTH = 256;
     private static final Pattern WHOLE = Pattern.compile("\\d{1,18}");
     /** Plain decimals as Unity writes them with InvariantCulture ("58.3"); no exponent, sign, NaN or Infinity. */
@@ -130,10 +134,11 @@ public class ClientMetricService {
         if (jobId.isEmpty()) {
             throw new LineException("jobId is empty");
         }
-        if (jobId.length() > MAX_JOB_ID_LENGTH) {
-            throw new LineException("jobId is longer than " + MAX_JOB_ID_LENGTH + " characters");
+        if (!JOB_ID.matcher(jobId).matches()) {
+            throw new LineException("jobId is not a job id (UUID): '" + shorten(jobId, SHOWN_CELL_LENGTH) + "'");
         }
-        String device = cells.get(9);
+        // An exported client_metrics.csv guards a device name that looks like a formula ('=...): read it back as it was.
+        String device = Csv.unguard(cells.get(9));
         if (device.length() > MAX_DEVICE_LENGTH) {
             throw new LineException("device is longer than " + MAX_DEVICE_LENGTH + " characters");
         }

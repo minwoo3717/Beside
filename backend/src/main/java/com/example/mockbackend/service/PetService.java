@@ -29,7 +29,11 @@ import java.util.stream.Collectors;
 /**
  * The web library (docs/api/openapi.yaml tag pets): pets, which jobs belong to which pet, and the cover rule.
  * A missing resource in the path is 404 (PET_NOT_FOUND, JOB_NOT_FOUND); a pet or job named in a body that does not exist
- * or breaks a rule is 400 INVALID_REQUEST. Job.petId changes only through JobRepository.updatePetId/unassignPet.
+ * or breaks a rule is 400 INVALID_REQUEST. Job.petId changes only through JobRepository.updatePetId/unassignPet, and
+ * only here: every job is created unassigned (the public POST /api/v1/jobs takes no pet).
+ * Changing a pet's jobs or cover and deleting a pet are synchronized on this service: a job put into a pet while that
+ * pet is being deleted would otherwise keep the deleted pet's id and show up nowhere (neither under a pet nor as
+ * unassigned). One server per database file (CLAUDE.md), so a lock inside this process is enough.
  */
 @Service
 @RequiredArgsConstructor
@@ -78,7 +82,7 @@ public class PetService {
     }
 
     /** Merge patch: only the fields sent change. @throws ApiException 404 PET_NOT_FOUND, 400 INVALID_REQUEST */
-    public PetWithJobs update(String petId, UpdatePetRequest request) {
+    public synchronized PetWithJobs update(String petId, UpdatePetRequest request) {
         Pet pet = find(petId);
         if (request == null) {
             throw invalid("A JSON object body is required");
@@ -101,10 +105,10 @@ public class PetService {
     }
 
     /**
-     * Without jobs: the pet's jobs go back to unassigned. With jobs: they are deleted like DELETE /jobs/{id}, all or
+     * Without jobs: the pet's jobs go back to unassigned. With jobs: they are deleted (JobDeletionService), all or
      * nothing. @throws ApiException 404 PET_NOT_FOUND, 409 JOB_IN_PROGRESS (nothing deleted)
      */
-    public void delete(String petId, boolean withJobs) {
+    public synchronized void delete(String petId, boolean withJobs) {
         Pet pet = find(petId);
         if (withJobs) {
             List<Job> jobs = jobRepository.findByPetNewestFirst(pet.getId());
@@ -121,7 +125,7 @@ public class PetService {
      * Moves a job into a pet ({"petId": null} = unassigned), in any state. Leaving a pet also drops the job as that
      * pet's chosen cover. @throws ApiException 404 JOB_NOT_FOUND, 400 INVALID_REQUEST
      */
-    public Job setJobPet(String jobId, JobPetRequest request) {
+    public synchronized Job setJobPet(String jobId, JobPetRequest request) {
         Job job = jobService.getJobOrThrow(jobId);
         if (request == null || !request.petIdSent()) {
             throw invalid("The body must have a petId field (null to make the job unassigned)");

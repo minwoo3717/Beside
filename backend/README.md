@@ -35,12 +35,13 @@ Java 17 환경에서 `backend` 폴더의 PowerShell 로 실행한다.
 
 | 메서드·경로 | 응답 | 비고 |
 |---|---|---|
-| `POST /api/v1/jobs` (multipart `photos` 1~10장, jpeg/png/webp, 장당 ≤5MB, 전체 ≤20MB, 헤더 `Idempotency-Key` 선택) | 202 + `Location` + `{ jobId }` | 400 `NO_PHOTOS`/`TOO_MANY_PHOTOS`/`UNSUPPORTED_IMAGE_TYPE`/`INVALID_REQUEST`(없는 `petId` 포함), 413, 503 `QUEUE_FULL`(상한을 켠 경우). 선택 텍스트 파트 `petId`(보관함, v1.2). prod 만 파일 시그니처도 검사(`upload.verify-magic`), real·prod 는 대표 사진 검사 400 코드 7개(ERROR_CODES '프로파일 차이') |
+| `POST /api/v1/jobs` (multipart `photos` 1~10장, jpeg/png/webp, 장당 ≤5MB, 전체 ≤20MB, 헤더 `Idempotency-Key` 선택) | 202 + `Location` + `{ jobId }` | 400 `NO_PHOTOS`/`TOO_MANY_PHOTOS`/`UNSUPPORTED_IMAGE_TYPE`/`INVALID_REQUEST`, 413, 503 `QUEUE_FULL`(상한을 켠 경우). 펫은 받지 않는다(새 작업은 미분류, 보관함은 `PUT /jobs/{id}/pet`). prod 만 파일 시그니처도 검사(`upload.verify-magic`), real·prod 는 대표 사진 검사 400 코드 7개(ERROR_CODES '프로파일 차이') |
 | `GET /api/v1/jobs/{id}` | 200 `JobResponse` | 404 `JOB_NOT_FOUND` |
 | `GET /api/v1/jobs/{id}/asset?variant=base` | 200 `model/gltf-binary`, `Content-Disposition: attachment` | 409 `JOB_NOT_COMPLETED`, 404 `ASSET_NOT_FOUND`(GLB 파일 없음), 400 `INVALID_REQUEST`(base 가 아닌 variant. `hair` 는 2026-11-21 에 계약에서 뺐고 작업 상태와 상관없이 400) |
 | `POST /api/v1/jobs/{id}/retry` | 202 + `{ jobId }` | FAILED 만, 그 외 409 `JOB_NOT_FAILED` |
 | `POST /api/v1/jobs/{id}/cancel` | 200 `JobResponse`(FAILED, `error.code=CANCELED`) | PENDING 만, 그 외(PROCESSING 포함) 409 `JOB_NOT_PENDING` |
-| `POST /api/v1/jobs/{id}/shares` (선택 쿼리 `?ttlDays=` 1~30, 기본 `share.ttl-days`=7) | 201 `{ token, url: /s/{token}, expiresAt }` | 공유 링크(v1.2). 완료 작업만: 409 `JOB_NOT_COMPLETED`, 404 `JOB_NOT_FOUND`/`ASSET_NOT_FOUND`, 400 `INVALID_REQUEST` |
+| `POST /api/v1/jobs/{id}/shares` (선택 쿼리 `?ttlDays=` 1~30, 기본 `share.ttl-days`=7) | 201 `{ token, url: /s/{token}, expiresAt }` | 공유 링크(v1.2, 웹 작업 상세만 씀, 배포에서는 Caddy Basic 인증). 완료 작업만: 409 `JOB_NOT_COMPLETED`, 404 `JOB_NOT_FOUND`/`ASSET_NOT_FOUND`, 400 `INVALID_REQUEST`(ttlDays 범위, 작업당 살아 있는 링크 20개 초과) |
+| `DELETE /api/v1/jobs/{id}/shares` | 200 `{ revoked }` | 작업의 살아 있는 공유 링크를 토큰 없이 모두 끊는다(v1.2). 404 `JOB_NOT_FOUND`. 배포에서는 Caddy Basic 인증 |
 | `GET /api/v1/shares/{token}`, `GET /api/v1/shares/{token}/asset` | 200 `ShareInfo` / GLB | 공개(웹 뷰어 `/s/{token}`). 없는·만료·취소 토큰은 404 `SHARE_NOT_FOUND`(작업 id 없음) |
 | `DELETE /api/v1/shares/{token}` | 204 | 공유 취소. 배포에서는 Caddy Basic 인증 |
 | `GET /api/v1/jobs?limit=&cursor=` | 200 `{ items, nextCursor }` | 개발·디버그용, 최신순 |
@@ -322,9 +323,9 @@ src/main/
 
 팀 내부 테스트용 화면이다. 앱은 바꾸지 않았고(마지막 작업 1개만 기억), 웹에서 반려동물별로 생성 기록을 모은다. 배포에서는 Caddy Basic 인증 뒤이고 Spring 에는 인증 코드가 없다. 관리 대시보드(`/admin`) 머리에 링크가 있다.
 
-- **첫 화면**: 펫 목록(이름·종·모델 수, 그림 자리는 자리표시 — 썸네일은 v1.2 에 없음) + **펫 추가**. 아래 **미분류 작업**은 `GET /api/v1/jobs` 에서 `petId` 가 없는 작업(앱에서 만든 작업)이다 — 펫을 골라 **넣기**(`PUT /jobs/{id}/pet`). 최근 500건까지만 살펴본다.
+- **첫 화면**: 펫 목록(이름·종·모델 수, 그림 자리는 자리표시 — 썸네일은 v1.2 에 없음) + **펫 추가**. 아래 **미분류 작업**은 `GET /api/v1/jobs` 에서 `petId` 가 없는 작업(앱에서 만든 작업, 펫에 넣기 전의 작업)이다 — 펫을 골라 **넣기**(`PUT /jobs/{id}/pet`). 최근 500건까지만 살펴본다.
 - **펫 화면**(`/library/#/pets/{petId}`): 이름·종·메모 편집, 3D 보기(model-viewer 3.5.0, 동작 칩은 공유 뷰어와 같은 라벨), 생성 기록(날짜·상태·modelVersion). 기록마다 3D 보기·대표로·상세(`/job/?id=` — 품질 평가·공유 링크·QR 은 작업 상세 페이지)·미분류로(작업 하나 지우기는 v1.2 에 없음). 펫 삭제는 기본으로 작업을 미분류로 돌리고, 확인 대화에서 고르면 작업도 지운다.
-- **새 모델 만들기**: 사진 1~10장(JPG·PNG·WEBP, 장당 5MB, 합계 18MB — Mock UI 와 같은 사전 검사) → `POST /api/v1/jobs` 에 `petId` 파트 → 2초 폴링(최대 20분)으로 "앞에 N명 · 약 M분"(`queue.ahead`·`estimate.remainingMs`), 대기 중이면 **취소**(`POST /cancel`). 끝나면 브라우저 알림(허용했을 때)을 보내고 기록을 새로 읽는다.
+- **새 모델 만들기**: 사진 1~10장(JPG·PNG·WEBP, 장당 5MB, 합계 18MB — Mock UI 와 같은 사전 검사) → `POST /api/v1/jobs`(공개 경로라 펫을 받지 않는다) → 202 뒤 `PUT /api/v1/jobs/{id}/pet` 으로 이 펫에 넣기(실패하면 작업은 미분류에 남고 화면이 알려 준다) → 2초 폴링(최대 20분)으로 "앞에 N명 · 약 M분"(`queue.ahead`·`estimate.remainingMs`), 대기 중이면 **취소**(`POST /cancel`). 끝나면 브라우저 알림(허용했을 때)을 보내고 기록을 새로 읽는다.
 - 검토 브랜치의 썸네일(첫 사진 256px JPEG, `thumbnailUrl`)은 v1.2 에 받지 않았다(#11). 펫과 함께 지우는 작업은 사진·`storage.result.dir/{jobId}` 를 지우지만 Mock 의 공용 샘플 GLB 와 `job_runs`(측정)는 남긴다.
 
 ## v0 `/api/jobs` (동결)
@@ -356,7 +357,7 @@ Remove-Item Env:BESIDE_MVP_URL
 | `JobServiceRetryRaceTest` | 같은 FAILED 작업에 retry 8건을 동시에: 202 한 건·409 `JOB_NOT_FAILED` 일곱 건, dispatch 한 번, attempt 2 의 PENDING 으로 필드 정리 |
 | `JobV1ContractTest` | `/v3/api-docs` 와 `docs/api/openapi.yaml` 의 경로×메서드·operationId·상태 코드·스키마 이름·JobResponse 속성·enum·오류 봉투 비교 |
 | `RatingApiTest` | 품질 평가: 완료 전 409, 1~5 밖·3.5·"3"·잘못된 이름·JSON 아님 400, 같은 평가자 덮어쓰기, 평균, 관리 CSV 열 순서·마지막 실행의 modelVersion·패스스루 제외, modelVersion 별 요약, adminJob |
-| `ClientMetricsApiTest` | 앱 metrics.csv: Unity 형식 그대로 가져오기, BOM·CRLF, 중복 건너뜀, 헤더 불일치 400, 잘못된 줄만 errors(줄 번호), e2e 결합(마지막 COMPLETED 실행, serverUploadMs) |
+| `ClientMetricsApiTest` | 앱 metrics.csv: Unity 형식 그대로 가져오기, BOM·CRLF, 중복 건너뜀, 헤더 불일치 400, 잘못된 줄만 errors(줄 번호, UUID 가 아닌 jobId 포함), CSV 수식 주입 막기(`=`·`@` 등으로 시작하는 칸 앞 `'`, 다시 올려도 중복), 다른 사이트 페이지의 쓰기 거절(`CrossSiteWriteFilter`), e2e 결합(마지막 COMPLETED 실행, serverUploadMs) |
 | `JobDetailPageTest` | /job 페이지(끝 `/` 있든 없든)와 그 스크립트, 공유 페이지와 같은 model-viewer, 사진 엔드포인트를 부르지 않음, 관리 페이지 스크립트 |
 | `JobEventsTest` | events.jsonl: 완료·실패·retry 실패가 각각 한 줄, 19개 필드 이름·순서(mock 은 추론 필드 null), uploadBytes/uploadMs/타이밍/result, `job_runs` 행 3개가 줄과 같은 값 |
 | `JobPersistenceTest` | H2: 같은 DB 파일로 컨텍스트를 두 번 띄워 재시작 재현. 작업·업로드·타이밍 보존, 같은 Idempotency-Key 재요청, 키 삽입 전용, 끊긴 작업 FAILED → retry. `job_runs`: 삽입 전용, 모든 컬럼 보존, 같은 attempt 두 번 종료해도 첫 행 유지·예외 없음, attempt 1·2 두 행 |
@@ -371,11 +372,11 @@ Remove-Item Env:BESIDE_MVP_URL
 | `mock-mvp.test.cjs` | 브라우저 Mock UI(v1): 성공·오류·시간 초과·중복 클릭, 오류 봉투와 `error.code` → ERROR_CODES 문구, v0 Location 거부, GIF 거부, 503 `QUEUE_FULL`(안건 #21, 2026-11-21 결정, `api-v1.1`)의 문구와 `Retry-After` 초 동안 생성 버튼 잠금(다시 보내지 않음, 양의 정수만 인정) (작은 DOM 대역에서 실제 app.js 실행, `BESIDE_MVP_URL` 이 있으면 실제 서버와 함께) |
 | `RealJobWorkerOfflineTest` | profile real + `inference.offline-wait-ms`: GPU 가 꺼져 있으면 PENDING 으로 기다렸다 돌아오면 시작, 시간 초과면 `INFERENCE_UNAVAILABLE`, 대기 중 `queue.reason=INFERENCE_OFFLINE`, 대기 중 취소하면 `/healthz` 확인을 멈추고 `/infer` 없이 `CANCELED` 유지 (가짜 추론 서버) |
 | `JobV1CancelTest` | mock: PENDING 취소 → 200 FAILED `CANCELED`, 워커가 시작하지 않음, `job_runs` 행 `FAILED:CANCELED`, COMPLETED·이미 취소한 작업 409 `JOB_NOT_PENDING`, 없는 작업 404, 취소 → retry → COMPLETED(앞 attempt 의 워커가 새 attempt 를 건드리지 않음) |
-| `RealJobQueueTest` | profile real, GPU 슬롯 1개: 처리 중 1건 + 대기 2건의 `queue.ahead` 1·2, 완료 실행이 없으면 `estimate=null`, 생긴 뒤 `remainingMs`·`basedOnRuns`, PROCESSING 취소 409, 대기 중 취소하면 순번이 줄고 `/infer` 가 그 작업으로 불리지 않음 (가짜 추론 서버) |
-| `ShareApiTest` | 공유 링크: 만들기(완료 작업만, ttlDays 범위)·보기·GLB·취소, 없는·만료·취소 토큰 404 `SHARE_NOT_FOUND`(작업 id 미노출), `/s/{token}` 페이지 |
+| `RealJobQueueTest` | profile real, GPU 슬롯 1개: 처리 중 1건 + 대기 2건의 `queue.ahead` 1·2, 완료 실행이 없으면 `estimate=null`, 생긴 뒤 `remainingMs`·`basedOnRuns`, PROCESSING 취소 409, 대기 중 취소하면 순번이 줄고 `/infer` 가 그 작업으로 불리지 않음, 슬롯을 기다리다 취소된 작업은 차례를 기다리지 않고 줄을 떠남(`waitingForSlot`) (가짜 추론 서버) |
+| `ShareApiTest` | 공유 링크: 만들기(완료 작업만, ttlDays 범위, 작업당 살아 있는 링크 20개)·보기·GLB·취소·작업의 링크 모두 끊기, 없는·만료·취소 토큰 404 `SHARE_NOT_FOUND`(작업 id 미노출), `/s/{token}` 페이지 |
 | `QueueEstimatorTest` | JPA 슬라이스: 최근 20건 중앙값(짝수는 가운데 둘의 평균), 실패·패스스루·다른 워커 제외, 근거 없음 → null, 같은 queuedAt 은 id 순, 처리 중 작업의 경과는 중앙값까지만 뺌, PROCESSING 은 0 이상, 60초 캐시와 완료 시 무효화 |
-| `PetApiTest` | 보관함: 펫 CRUD·검사(이름 공백·41자, 모르는 종, 메모 501자, JSON 아님 → 400), PATCH 는 보낸 필드만, `petId` 파트 업로드(없는 펫 400, 작업 안 만듦), 작업 이동·미분류, 워커가 옛 사본을 저장해도 `petId` 유지, 대표 규칙(고른 COMPLETED → 아니면 최신 COMPLETED), 작업별 modelVersion, 펫 삭제 두 방식(진행 중이면 409 로 아무것도 안 지움), `/library` 페이지 |
-| `JobDeleteTest` | 펫과 함께 작업 삭제(`withJobs=true`): 사진·결과 폴더 삭제, Mock 공용 샘플 GLB 는 남김, 공유 링크 취소, Idempotency-Key 삭제(같은 키로 새 작업), `job_runs`·평가 유지, PENDING 409 `JOB_IN_PROGRESS` → 취소 후 삭제, FAILED 삭제. v1.2 에 받지 않은 `DELETE /jobs/{id}`(405)·`/thumbnail`·`/photos/{index}`(404) 는 응답하지 않음 |
+| `PetApiTest` | 보관함: 펫 CRUD·검사(이름 공백·41자, 모르는 종, 메모 501자, JSON 아님 → 400), PATCH 는 보낸 필드만, 공개 업로드는 `petId` 파트를 무시하고 미분류로 만듦, 작업 이동·미분류, 펫 삭제와 작업 넣기가 겹쳐도 지운 펫을 가리키는 작업이 남지 않음, 워커가 옛 사본을 저장해도 `petId` 유지, 대표 규칙(고른 COMPLETED → 아니면 최신 COMPLETED), 작업별 modelVersion, 펫 삭제 두 방식(진행 중이면 409 로 아무것도 안 지움), `/library` 페이지 |
+| `JobDeleteTest` | 펫과 함께 작업 삭제(`withJobs=true`): 사진·결과 폴더·배경 제거 사진(`storage.preprocessed.dir/{jobId}-*.png`) 삭제, Mock 공용 샘플 GLB 는 남김, 공유 링크 취소, Idempotency-Key 삭제(같은 키로 새 작업), `job_runs`·평가 유지, PENDING 409 `JOB_IN_PROGRESS` → 취소 후 삭제, FAILED 삭제. v1.2 에 받지 않은 `DELETE /jobs/{id}`(405)·`/thumbnail`·`/photos/{index}`(404) 는 응답하지 않음 |
 | `library-core.test.cjs` | 보관함 페이지 순수 함수: 경로(`#/pets/{id}`), 종·상태 라벨(모르는 값), 오류 코드 문구, "앞에 N명 · 약 M분", 사진 선택 규칙, 펫 폼 검사, 미분류 거르기, 3D 첫 모델, 애니메이션 칩이 share.js 와 같은지 |
 
 계약을 바꿀 때는 `openapi.yaml` → 코드 → 계약 테스트 → `CHANGELOG.md` 순서를 지킨다([CLAUDE.md](CLAUDE.md)).

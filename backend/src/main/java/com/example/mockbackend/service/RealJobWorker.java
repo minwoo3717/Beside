@@ -25,15 +25,16 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Semaphore;
 
 /**
  * Profile "real": the 3D model comes from the Python inference service (generation/inference_service).
  * <ol>
  *   <li>Preprocesses the first photo (CutoutStage: crop, background removal, square PNG) while still PENDING and
  *       before the slot, so the CPU work overlaps the GPU run of the job ahead; a failed cutout sends the original.</li>
- *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU). The job stays PENDING meanwhile, so
- *       queuedMs measures the queue and inference.timeout-ms only counts the job's own inference.</li>
+ *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU), first come first served
+ *       ({@link InferenceSlots}). The job stays PENDING meanwhile, so queuedMs measures the queue and
+ *       inference.timeout-ms only counts the job's own inference. A job that stops being PENDING in this attempt while
+ *       it waits (canceled) leaves the line within inference.slot-recheck-ms (1 s) and gives its worker thread back.</li>
  *   <li>With inference.offline-wait-ms &gt; 0 (prod): while {@link InferenceHealthMonitor} does not read UP (the GPU PC
  *       is off or its model is still loading) the job keeps waiting as PENDING, checked every inference.offline-poll-ms,
  *       and fails INFERENCE_UNAVAILABLE only after that long, counted from dispatch (the wait for the slot is part
@@ -45,8 +46,9 @@ import java.util.concurrent.Semaphore;
  *       {@link #restartWatch}).</li>
  *   <li>Whenever the job is no longer PENDING in the dispatched attempt (canceled with POST /cancel, or canceled and
  *       retried, which dispatches the new attempt separately) the worker stops without calling the service: checked
- *       before the cutout, on every offline-wait poll and, under {@link JobTransitions}' lock, at the switch to
- *       PROCESSING. The slot is given back either way, so the next job in line starts.</li>
+ *       before the cutout, before and while waiting for the slot, on every offline-wait poll and, under
+ *       {@link JobTransitions}' lock, at the switch to PROCESSING. The slot is given back either way, so the next job
+ *       in line starts.</li>
  *   <li>Checks that the answer is a glTF 2.0 binary and copies it to {storage.result.dir}/{jobId}/base.glb, which the
  *       asset endpoint serves (a copy that fails is this server's disk: INTERNAL_ERROR). The run ends through
  *       JobFinisher (status, then the job_runs row and the events.jsonl line, carrying the /infer metrics, the
@@ -75,7 +77,7 @@ public class RealJobWorker implements JobWorker {
     private final JobFinisher jobFinisher;
     private final InferenceClient inferenceClient;
     private final Path resultDir;
-    private final Semaphore inferenceSlots;
+    private final InferenceSlots inferenceSlots;
     private final InferenceHealthMonitor healthMonitor;
     private final CutoutStage cutoutStage;
     private final long offlineWaitMs;
@@ -87,7 +89,8 @@ public class RealJobWorker implements JobWorker {
                          @Value("${storage.result.dir:storage/results}") String resultDir,
                          @Value("${inference.max-concurrency:1}") int maxConcurrency,
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
-                         @Value("${inference.offline-poll-ms:5000}") long offlinePollMs) {
+                         @Value("${inference.offline-poll-ms:5000}") long offlinePollMs,
+                         @Value("${inference.slot-recheck-ms:1000}") long slotRecheckMs) {
         this.jobRepository = jobRepository;
         this.jobTransitions = jobTransitions;
         this.jobFinisher = jobFinisher;
@@ -95,7 +98,7 @@ public class RealJobWorker implements JobWorker {
         this.healthMonitor = healthMonitor;
         this.cutoutStage = cutoutStage;
         this.resultDir = Path.of(resultDir);
-        this.inferenceSlots = new Semaphore(Math.max(1, maxConcurrency), true);
+        this.inferenceSlots = new InferenceSlots(maxConcurrency, slotRecheckMs);
         this.offlineWaitMs = Math.max(0, offlineWaitMs);
         this.offlinePollMs = Math.max(10, offlinePollMs);
     }
@@ -103,6 +106,11 @@ public class RealJobWorker implements JobWorker {
     @Override
     public String type() {
         return "real";
+    }
+
+    /** Dispatches waiting in line for an inference slot now (RealJobQueueTest; a canceled job leaves the line). */
+    public int waitingForSlot() {
+        return inferenceSlots.waiting();
     }
 
     @Async
@@ -115,7 +123,12 @@ public class RealJobWorker implements JobWorker {
         PreparedPhoto photo = null;
         try {
             photo = prepare(jobId, attempt);
-            inferenceSlots.acquire();
+            // Asked before the line and again every inference.slot-recheck-ms while waiting in it: a job canceled (or
+            // canceled and retried into a newer attempt) gives its thread back instead of holding it until its turn.
+            if (!inferenceSlots.acquire(() -> jobTransitions.isPending(jobId, attempt))) {
+                logNotStarted(jobId, attempt);
+                return;
+            }
             try {
                 run(jobId, attempt, start, photo, offlineDeadline);
             } finally {

@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.mock.web.MockPart;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -44,7 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Deleting jobs, which API v1.2 does only through the library: DELETE /api/v1/pets/{id}?withJobs=true
  * (JobDeletionService). The review branch's DELETE /api/v1/jobs/{id}, GET /api/v1/jobs/{id}/thumbnail and
  * GET /api/v1/jobs/{id}/photos/{index} were not taken (REVIEW_CHECKLIST #11, 2026-11-21) and are not served.
- * A deleted job loses its photos, its result folder, its share links and its Idempotency-Key, but its job_runs rows
+ * A deleted job loses its photos, its result folder, its cutouts ({storage.preprocessed.dir}/{jobId}-*.png, which the
+ * real worker leaves; written by hand here), its share links and its Idempotency-Key, but its job_runs rows
  * and quality ratings stay (they are measurements). The mock serves one shared sample GLB for every job, which must
  * survive. PENDING lasts long enough here to try deleting a waiting job.
  */
@@ -60,6 +60,7 @@ class JobDeleteTest {
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("storage.upload.dir", () -> storage.resolve("uploads").toString());
         registry.add("storage.result.dir", () -> storage.resolve("results").toString());
+        registry.add("storage.preprocessed.dir", () -> storage.resolve("preprocessed").toString());
         registry.add("storage.result.sample", () -> sample().toString());
         registry.add("mock.worker.pending-ms", () -> String.valueOf(PENDING_MS));
         registry.add("mock.worker.processing-ms", () -> "100");
@@ -99,9 +100,9 @@ class JobDeleteTest {
         String jobId = json(mvc.perform(multipart("/api/v1/jobs")
                         .file(new MockMultipartFile("photos", "dog.jpg", "image/jpeg", new byte[]{1, 2, 3}))
                         .file(new MockMultipartFile("photos", "dog-2.png", "image/png", new byte[]{4, 5, 6}))
-                        .part(new MockPart("petId", petId.getBytes(StandardCharsets.UTF_8)))
                         .header("Idempotency-Key", key))
                 .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
+        assign(jobId, petId);
         awaitStatus(jobId, "COMPLETED");
 
         List<Path> photos = jobs.findById(jobId).orElseThrow().getUploads().stream().map(u -> Path.of(u.path())).toList();
@@ -109,6 +110,14 @@ class JobDeleteTest {
         // What the real worker leaves: {storage.result.dir}/{jobId}/base.glb.
         Path resultFolder = Files.createDirectories(storage.resolve("results").resolve(jobId));
         Files.write(resultFolder.resolve("base.glb"), "glTF real result".getBytes(StandardCharsets.UTF_8));
+        // And the cutout of its first photo, one per preprocessing version (CutoutStage: {jobId}-{tag}.png), next to
+        // another job's cutout that must stay.
+        Path preprocessed = Files.createDirectories(storage.resolve("preprocessed"));
+        List<Path> cutouts = List.of(preprocessed.resolve(jobId + "-abc.png"), preprocessed.resolve(jobId + "-def123.png"));
+        for (Path cutout : cutouts) {
+            Files.write(cutout, "png".getBytes(StandardCharsets.UTF_8));
+        }
+        Path otherCutout = Files.write(preprocessed.resolve(UUID.randomUUID() + "-abc.png"), "png".getBytes(StandardCharsets.UTF_8));
         String token = json(mvc.perform(post("/api/v1/jobs/{id}/shares", jobId))
                 .andExpect(status().isCreated()).andReturn()).path("token").asText();
         mvc.perform(put("/api/v1/jobs/{id}/ratings/{rater}", jobId, "minwoo")
@@ -127,6 +136,8 @@ class JobDeleteTest {
         assertThat(jobs.findById(jobId)).isEmpty();
         assertThat(photos).allSatisfy(photo -> assertThat(photo).doesNotExist());
         assertThat(resultFolder).doesNotExist();
+        assertThat(cutouts).as("the background-removed photos go too").allSatisfy(cutout -> assertThat(cutout).doesNotExist());
+        assertThat(otherCutout).as("another job's cutout").isRegularFile();
         assertThat(sample()).as("the mock's shared sample GLB is not this job's file").isRegularFile();
 
         mvc.perform(get("/api/v1/shares/{token}", token))
@@ -212,14 +223,21 @@ class JobDeleteTest {
                 .andExpect(status().isCreated()).andReturn()).path("id").asText();
     }
 
-    /** POST /api/v1/jobs with the optional petId text part (null = no part). */
+    /** POST /api/v1/jobs, then into {@code petId} with PUT /api/v1/jobs/{id}/pet as the library does (null = stays unassigned). */
     private String upload(String filename, String petId) throws Exception {
-        var request = multipart("/api/v1/jobs")
-                .file(new MockMultipartFile("photos", filename, "image/jpeg", new byte[]{1, 2, 3}));
+        String jobId = json(mvc.perform(multipart("/api/v1/jobs")
+                        .file(new MockMultipartFile("photos", filename, "image/jpeg", new byte[]{1, 2, 3})))
+                .andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
         if (petId != null) {
-            request.part(new MockPart("petId", petId.getBytes(StandardCharsets.UTF_8)));
+            assign(jobId, petId);
         }
-        return json(mvc.perform(request).andExpect(status().isAccepted()).andReturn()).path("jobId").asText();
+        return jobId;
+    }
+
+    private void assign(String jobId, String petId) throws Exception {
+        mvc.perform(put("/api/v1/jobs/{id}/pet", jobId).contentType("application/json")
+                        .content(objectMapper.writeValueAsString(java.util.Map.of("petId", petId))))
+                .andExpect(status().isOk());
     }
 
     private void awaitStatus(String jobId, String expected) {

@@ -372,7 +372,11 @@
     button.disabled = !(job && job.status === "COMPLETED");
     const link = result.ok && result.body ? J.shareLink(window.location.origin, result.body.url) : null;
     if (!link) {
-      say(message, `링크를 만들지 못했어요. ${J.requestErrorText(result.status, result.code)}`, "error");
+      // The only 400 a ttl-less request can get is the cap on active links per job (openapi createShare).
+      const why = result.code === "INVALID_REQUEST"
+        ? "이 작업의 살아 있는 공유 링크가 이미 20개예요. '모두 끊기' 뒤 다시 만들어 주세요."
+        : J.requestErrorText(result.status, result.code);
+      say(message, `링크를 만들지 못했어요. ${why}`, "error");
       return;
     }
     $("#share-url").value = link;
@@ -381,6 +385,25 @@
     drawQr(link);
     $("#share-result").hidden = false;
     say(message, "새 공유 링크를 만들었어요. 폰 카메라로 QR 을 찍으면 열려요.", "ok");
+  }
+
+  /** DELETE /api/v1/jobs/{id}/shares: ends every active link of this job, also ones made elsewhere or earlier. */
+  async function revokeShares() {
+    const button = $("#share-revoke-button");
+    const message = $("#share-message");
+    if (!window.confirm("이 작업의 공유 링크를 모두 끊을까요? 이미 보낸 링크와 QR 도 열리지 않게 돼요.")) return;
+    button.disabled = true;
+    say(message, "링크를 끊는 중…");
+    const result = await request(J.sharesUrl(jobId), { method: "DELETE" });
+    button.disabled = false;
+    if (!result.ok || !result.body) {
+      say(message, `링크를 끊지 못했어요. ${J.requestErrorText(result.status, result.code)}`, "error");
+      return;
+    }
+    $("#share-result").hidden = true;
+    $("#share-url").value = "";
+    const count = result.body.revoked;
+    say(message, count > 0 ? `공유 링크 ${count}개를 끊었어요.` : "끊을 공유 링크가 없었어요.", "ok");
   }
 
   function drawQr(text) {
@@ -434,6 +457,7 @@
   });
   ratingForm.addEventListener("submit", saveRating);
   $("#share-button").addEventListener("click", createShare);
+  $("#share-revoke-button").addEventListener("click", revokeShares);
   $("#copy-button").addEventListener("click", copyLink);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && job && J.isInFlight(job.status)) loadJob();

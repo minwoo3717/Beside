@@ -74,7 +74,7 @@ public class AdminV1Controller {
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping("/runs")
     public ResponseEntity<?> adminRuns(
-            @Parameter(description = "json(기본) | csv") @RequestParam(value = "format", required = false, defaultValue = "json") String format,
+            @Parameter(description = "json(기본) | csv, 대소문자 무시", schema = @Schema(type = "string", allowableValues = {"json", "csv"}, defaultValue = "json")) @RequestParam(value = "format", required = false, defaultValue = "json") String format,
             @Parameter(description = "finishedAt 하한(포함), ISO 8601 instant") @RequestParam(value = "from", required = false) String from,
             @Parameter(description = "finishedAt 상한(제외), ISO 8601 instant") @RequestParam(value = "to", required = false) String to,
             @Parameter(description = "이 modelVersion 만. (none) = 값 없음") @RequestParam(value = "modelVersion", required = false) String modelVersion,

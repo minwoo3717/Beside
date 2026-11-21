@@ -55,6 +55,24 @@ test("error codes map to ERROR_CODES copy, unknown codes to a generic line", () 
   assert.equal(L.errorMessage("constructor"), "요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.");
 });
 
+// Review finding 2026-11-21: the library creates jobs with POST /api/v1/jobs, so every 400 and 503 code of that route
+// needs its own copy (a refused photo is refused again; the generic "다시 시도" line misleads). Same copy as the app
+// column of docs/api/ERROR_CODES.md, except INVALID_REQUEST, whose app line asks to update the app.
+test("every 400 and 503 code of docs/api/ERROR_CODES.md has the document's copy", () => {
+  const fs = require("node:fs");
+  const doc = fs.readFileSync(path.resolve(__dirname, "../../../../docs/api/ERROR_CODES.md"), "utf8");
+  const rows = [...doc.matchAll(/^\| `([A-Z_]+)` \| (400|503) \| [^|]*\| [^|]*\| ([^|]+?) \|/gm)];
+  const codes = rows.map((row) => row[1]);
+  for (const code of ["NO_PHOTOS", "UNREADABLE_IMAGE", "IMAGE_TOO_BLURRY", "QUEUE_FULL"]) {
+    assert.ok(codes.includes(code), `ERROR_CODES.md row for ${code} was read`);
+  }
+  const generic = L.errorMessage("NEW_CODE", 400);
+  for (const [, code, status, copy] of rows) {
+    assert.notEqual(L.errorMessage(code, Number(status)), generic, `${code} has its own line`);
+    if (code !== "INVALID_REQUEST") assert.equal(L.errorMessage(code, Number(status)), copy, code);
+  }
+});
+
 test("waiting line: queue position, estimate, GPU offline, processing", () => {
   assert.equal(L.waitText({ status: "PENDING", queue: { ahead: 2, reason: null }, estimate: { remainingMs: 150000, basedOnRuns: 3 } }),
     "앞에 2명 · 약 3분");

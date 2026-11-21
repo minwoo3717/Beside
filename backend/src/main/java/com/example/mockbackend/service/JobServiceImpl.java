@@ -10,7 +10,6 @@ import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.IdempotencyKeyEntry;
 import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
-import com.example.mockbackend.repository.PetRepository;
 import com.example.mockbackend.service.preprocess.UploadCheck;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -64,8 +63,6 @@ public class JobServiceImpl implements JobService {
     private final JobTransitions jobTransitions;
     /** queuedAt of new and retried jobs: strictly increasing, so queue order (JobResponse.queue) = arrival order. */
     private final QueueClock queueClock;
-    /** Library (tag pets): an optional petId part must name an existing pet. */
-    private final PetRepository petRepository;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -109,7 +106,7 @@ public class JobServiceImpl implements JobService {
     // ------------------------------------------------------------------ v1
 
     @Override
-    public Job submitJobV1(List<MultipartFile> photos, String idempotencyKey, String petId) {
+    public Job submitJobV1(List<MultipartFile> photos, String idempotencyKey) {
         if (photos == null || photos.isEmpty()) {
             throw ApiException.badRequest(ErrorCode.NO_PHOTOS, "At least one photo is required in the 'photos' part");
         }
@@ -144,12 +141,6 @@ public class JobServiceImpl implements JobService {
                 return replay.get();
             }
         }
-        // Library (tag pets): an optional petId part puts the job into that pet. An input check (400), so before the
-        // queue cap like the others; after the key replay, which answers with its job whatever the part says.
-        String pet = petId == null || petId.isBlank() ? null : petId.strip();
-        if (pet != null && !petRepository.existsById(pet)) {
-            throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Unknown petId: " + pet);
-        }
         // Queue cap (ERROR_CODES.md "대기열 상한", REVIEW_CHECKLIST #21 D6): after validation and the key replay,
         // so a bad request stays 400 and a replay always gets its job, and before the photo check, so a full queue
         // costs no check slot. The place is held until saveUploads has committed the PENDING row the gate counts and
@@ -174,7 +165,7 @@ public class JobServiceImpl implements JobService {
                         "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
             }
             try {
-                job = saveUploads(photos, pet, check);
+                job = saveUploads(photos, check);
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to store uploads", e);
             }
@@ -373,20 +364,18 @@ public class JobServiceImpl implements JobService {
      * photos already copied for this request are deleted again (no job owns them).
      */
     Job saveUploads(List<MultipartFile> photos) throws IOException {
-        return saveUploads(photos, null, UploadCheck.Outcome.OFF);
+        return saveUploads(photos, UploadCheck.Outcome.OFF);
     }
 
     /**
-     * Same, into the library pet {@code petId} (null = unassigned) and recording the first-photo check: checkMs and
-     * checkResult, and uploadMs without the check's time so that uploadMs keeps its meaning (receive + parse + store,
-     * docs/METRICS.md §1).
+     * Same, recording the first-photo check: checkMs and checkResult, and uploadMs without the check's time so that
+     * uploadMs keeps its meaning (receive + parse + store, docs/METRICS.md §1). The job is unassigned (petId null).
      */
-    Job saveUploads(List<MultipartFile> photos, String petId, UploadCheck.Outcome check) throws IOException {
+    Job saveUploads(List<MultipartFile> photos, UploadCheck.Outcome check) throws IOException {
         Job job = new Job();
         String jobId = UUID.randomUUID().toString();
         Instant now = queueClock.next(); // never ties with the job submitted just before (queue order)
         job.setId(jobId);
-        job.setPetId(petId);
         job.setStatus(JobStatus.PENDING);
         job.setCreatedAt(now);
         job.setUpdatedAt(now);

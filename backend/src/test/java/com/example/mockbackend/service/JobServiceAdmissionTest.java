@@ -38,6 +38,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21) at cap 1 with a worker that runs nothing:
@@ -196,6 +197,38 @@ class JobServiceAdmissionTest {
         verify(jobWorker, never()).dispatch(eq(failed.getId()), anyInt());
         assertThat(registry.get("beside.jobs.refused").tag("op", "retry").counter().count())
                 .isEqualTo(refusedRetries + REQUESTS);
+    }
+
+    /**
+     * Review finding 2026-11-21: cancel frees the canceled job's place (JobServiceImpl.cancel), and retrying a CANCELED
+     * job goes through the cap like any retry (503 QUEUE_FULL naming it, the job stays FAILED/CANCELED).
+     */
+    @Test
+    void cancelingAWaitingJobFreesItsPlaceAndItsRetryGoesThroughTheCap() {
+        when(jobWorker.type()).thenReturn("mock");
+        Job first = jobService.submitJobV1(List.of(photo()), null);
+        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo()), null))
+                .isInstanceOfSatisfying(ApiException.class, full -> assertThat(full.getCode()).isEqualTo(ErrorCode.QUEUE_FULL));
+
+        Job canceled = jobService.cancel(first.getId());
+        assertThat(canceled.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(canceled.getErrorCode()).isEqualTo("CANCELED");
+        Job second = jobService.submitJobV1(List.of(photo()), null); // 202: the canceled job's place is free
+        assertThat(second.getStatus()).isEqualTo(JobStatus.PENDING);
+
+        assertThatThrownBy(() -> jobService.retry(first.getId())).isInstanceOfSatisfying(ApiException.class, full -> {
+            assertThat(full.getCode()).isEqualTo(ErrorCode.QUEUE_FULL);
+            assertThat(full.getJobId()).isEqualTo(first.getId());
+        });
+        Job unchanged = jobRepository.findById(first.getId()).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(unchanged.getErrorCode()).isEqualTo("CANCELED");
+        assertThat(unchanged.getAttempt()).isEqualTo(1);
+
+        jobService.cancel(second.getId());
+        Job retried = jobService.retry(first.getId());
+        assertThat(retried.getStatus()).isEqualTo(JobStatus.PENDING);
+        assertThat(retried.getAttempt()).isEqualTo(2);
     }
 
     private static Job pendingJob() {

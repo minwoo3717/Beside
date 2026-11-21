@@ -10,13 +10,17 @@ import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
- * RFC 4180 CSV for the quality and app-measurement exports and the metrics.csv import (docs/METRICS.md §3.1, §4.1).
- * Writing follows the job_runs export of AdminService (header line, CRLF, null as an empty cell, only cells with a
- * comma, quote or line break quoted). AdminService keeps its own copy for now so this slice does not touch it.
+ * RFC 4180 CSV for every admin export (job_runs, quality ratings, app measurements, e2e) and the metrics.csv import
+ * (docs/METRICS.md §1.1, §3.1, §4.1): header line, CRLF, null as an empty cell, only cells with a comma, quote or line
+ * break quoted. A text cell that starts with = + - @ tab or CR gets a leading apostrophe, so Excel and Google Sheets
+ * show it as text instead of running it as a formula (OWASP "CSV Injection"; free text such as a rater's comment or a
+ * phone's device name ends up in these files). Numbers, booleans and times are never changed.
  */
 public final class Csv {
     static final String CRLF = "\r\n";
     private static final char BOM = '﻿';
+    /** First characters a spreadsheet reads as the start of a formula (or that hide one behind a control character). */
+    private static final String FORMULA_START = "=+-@\t\r";
 
     private Csv() {
     }
@@ -50,8 +54,23 @@ public final class Csv {
             return "";
         }
         String text = value.toString();
+        if (value instanceof CharSequence && startsLikeFormula(text)) {
+            text = "'" + text;
+        }
         boolean quote = text.indexOf(',') >= 0 || text.indexOf('"') >= 0 || text.indexOf('\n') >= 0 || text.indexOf('\r') >= 0;
         return quote ? '"' + text.replace("\"", "\"\"") + '"' : text;
+    }
+
+    static boolean startsLikeFormula(String text) {
+        return !text.isEmpty() && FORMULA_START.indexOf(text.charAt(0)) >= 0;
+    }
+
+    /**
+     * A text cell as it was before {@link #cell} guarded it: an apostrophe followed by a formula character is dropped,
+     * so an exported file imported again (metrics.csv) reads the same value and is skipped as a duplicate.
+     */
+    public static String unguard(String text) {
+        return text.length() >= 2 && text.charAt(0) == '\'' && startsLikeFormula(text.substring(1)) ? text.substring(1) : text;
     }
 
     /**

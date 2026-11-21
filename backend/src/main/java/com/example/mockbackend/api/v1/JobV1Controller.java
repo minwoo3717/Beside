@@ -84,10 +84,10 @@ public class JobV1Controller {
     public ResponseEntity<JobCreatedResponse> createJob(
             @Parameter(description = "반려동물 사진 1~10장") @RequestPart("photos") List<MultipartFile> photos,
             @Parameter(name = "Idempotency-Key", in = ParameterIn.HEADER, description = "선택. 같은 키의 재요청에 같은 jobId 를 돌려준다")
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
-            @Parameter(description = "선택 텍스트 파트. 이 작업을 넣을 보관함의 반려동물(tag pets). 없는 펫이면 400 INVALID_REQUEST")
-            @RequestPart(value = "petId", required = false) String petId) {
-        Job job = jobService.submitJobV1(photos, idempotencyKey, petId);
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        // No petId part (review finding, 2026-11-21): this route is public, and every library write stays behind the team
+        // account (PUT /jobs/{id}/pet). A job made here is unassigned; the library page assigns it after the 202.
+        Job job = jobService.submitJobV1(photos, idempotencyKey);
         return accepted(job);
     }
 

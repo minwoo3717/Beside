@@ -14,7 +14,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -25,8 +27,9 @@ import java.util.stream.Stream;
  * public endpoint for deleting one job (REVIEW_CHECKLIST #11, 2026-11-21: the review branch's DELETE /api/v1/jobs/{id}
  * was not taken). Removes what belongs to the job: share links are revoked, Idempotency-Keys pointing at it are
  * released, a pet that chose it as cover forgets it, the jobs row goes, then the files (uploaded photos,
- * {storage.result.dir}/{jobId}, {storage.tmp.dir}/{jobId}). job_runs rows, events.jsonl lines, quality ratings and
- * imported app metrics stay: they are measurements of runs that happened.
+ * {storage.result.dir}/{jobId}, {storage.tmp.dir}/{jobId}, and the real worker's background-removed first photos
+ * {storage.preprocessed.dir}/{jobId}-{tag}.png, one per preprocessing version — CutoutStage). job_runs rows,
+ * events.jsonl lines, quality ratings and imported app metrics stay: they are measurements of runs that happened.
  * The mock's shared sample GLB is never touched (it is not inside the job's result folder).
  * PENDING and PROCESSING jobs are refused (409 JOB_IN_PROGRESS): a worker still holds them. A file that cannot be
  * deleted (locked on Windows, already gone) is logged; the job is deleted anyway, the leftovers are disk only.
@@ -41,12 +44,14 @@ public class JobDeletionService {
     private final JobTransitions jobTransitions;
     private final Path resultDir;
     private final Path tmpDir;
+    private final Path preprocessedDir;
     private final Logger log = LoggerFactory.getLogger(JobDeletionService.class);
 
     public JobDeletionService(JobRepository jobRepository, IdempotencyKeyRepository idempotencyKeys,
                               PetRepository petRepository, ShareService shareService, JobTransitions jobTransitions,
                               @Value("${storage.result.dir:storage/results}") String resultDir,
-                              @Value("${storage.tmp.dir:storage/tmp}") String tmpDir) {
+                              @Value("${storage.tmp.dir:storage/tmp}") String tmpDir,
+                              @Value("${storage.preprocessed.dir:storage/preprocessed}") String preprocessedDir) {
         this.jobTransitions = jobTransitions;
         this.jobRepository = jobRepository;
         this.idempotencyKeys = idempotencyKeys;
@@ -54,6 +59,7 @@ public class JobDeletionService {
         this.shareService = shareService;
         this.resultDir = Path.of(resultDir);
         this.tmpDir = Path.of(tmpDir);
+        this.preprocessedDir = Path.of(preprocessedDir);
     }
 
     /**
@@ -102,6 +108,31 @@ public class JobDeletionService {
         }
         failed += deleteFolder(jobId, resultDir.resolve(jobId)) ? 0 : 1;
         failed += deleteFolder(jobId, tmpDir.resolve(jobId)) ? 0 : 1;
+        failed += deleteCutouts(jobId);
+        return failed;
+    }
+
+    /**
+     * {storage.preprocessed.dir}/{jobId}-*.png (CutoutStage: one per preprocessing version, so a job retried after a
+     * settings change has several). Only regular files whose name starts with this job's id and a dash; a missing
+     * folder (mock profile, cutout off) is nothing to do.
+     */
+    private int deleteCutouts(String jobId) {
+        if (!Files.isDirectory(preprocessedDir)) {
+            return 0;
+        }
+        String prefix = jobId + "-";
+        int failed = 0;
+        try (DirectoryStream<Path> cutouts = Files.newDirectoryStream(preprocessedDir, prefix + "*.png")) {
+            for (Path cutout : cutouts) {
+                if (cutout.getFileName().toString().startsWith(prefix) && Files.isRegularFile(cutout, LinkOption.NOFOLLOW_LINKS)) {
+                    failed += deleteQuietly(jobId, cutout) ? 0 : 1;
+                }
+            }
+        } catch (IOException | RuntimeException e) {
+            log.warn("jobId={} could not list {}: {}", jobId, preprocessedDir, e.toString());
+            return failed + 1;
+        }
         return failed;
     }
 

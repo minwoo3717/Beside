@@ -3,6 +3,7 @@ package com.example.mockbackend;
 import com.example.mockbackend.domain.JobRun;
 import com.example.mockbackend.repository.JobRunRepository;
 import com.example.mockbackend.service.InferenceHealthMonitor;
+import com.example.mockbackend.service.RealJobWorker;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -77,6 +78,7 @@ class RealJobQueueTest {
         registry.add("inference.base-url", () -> "http://127.0.0.1:" + inference.getAddress().getPort());
         registry.add("inference.timeout-ms", () -> "20000");
         registry.add("inference.max-concurrency", () -> "1");
+        registry.add("inference.slot-recheck-ms", () -> "100");
         registry.add("storage.upload.dir", () -> storage.resolve("uploads").toString());
         registry.add("storage.result.dir", () -> storage.resolve("results").toString());
     }
@@ -121,6 +123,9 @@ class RealJobQueueTest {
 
     @Autowired
     InferenceHealthMonitor healthMonitor;
+
+    @Autowired
+    RealJobWorker worker;
 
     @BeforeEach
     void gpuIsUp() {
@@ -212,7 +217,8 @@ class RealJobQueueTest {
         gate.countDown();
         awaitStatus(running, "COMPLETED");
         awaitStatus(after, "COMPLETED");
-        // The canceled job's worker still takes its turn on the slot, finds the job FAILED and gives the slot back.
+        // The canceled job's worker leaves the slot line (or, if it got there first, finds the job FAILED and gives the
+        // slot back): /infer is never called for it.
         await().during(Duration.ofMillis(500)).atMost(Duration.ofSeconds(3)).pollInterval(Duration.ofMillis(50))
                 .untilAsserted(() -> {
                     assertThat(inferJobIds).contains(running, after).doesNotContain(canceled);
@@ -220,6 +226,35 @@ class RealJobQueueTest {
                 });
         assertThat(jobRuns.findByJobIdOrderByAttemptAsc(canceled)).extracting(JobRun::result)
                 .containsExactly("FAILED:CANCELED");
+    }
+
+    /**
+     * Review finding 2026-11-21: a canceled job used to keep its worker thread in the slot line until its turn (a plain
+     * Semaphore), so cancel and retry repeated could park dead attempts on the worker threads. Now it leaves the line
+     * within inference.slot-recheck-ms while the slot is still held, and the job behind it keeps its place.
+     */
+    @Test
+    @Order(3)
+    void aJobCanceledWhileWaitingForTheSlotLeavesTheLineWithoutWaitingForItsTurn() throws Exception {
+        gate = new CountDownLatch(1);
+        String running = create();
+        awaitStatus(running, "PROCESSING");
+        String canceled = create();
+        String after = create();
+        await().pollInterval(Duration.ofMillis(25)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(worker.waitingForSlot()).as("both wait behind the running job").isEqualTo(2));
+
+        mvc.perform(post("/api/v1/jobs/{id}/cancel", canceled)).andExpect(status().isOk());
+        await().pollInterval(Duration.ofMillis(25)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(worker.waitingForSlot()).as("the canceled one left").isEqualTo(1));
+        assertThat(readJob(running).path("status").asText()).as("the slot is still held").isEqualTo("PROCESSING");
+        assertThat(readJob(after).path("queue").path("ahead").asInt()).isEqualTo(1);
+
+        gate.countDown();
+        awaitStatus(running, "COMPLETED");
+        awaitStatus(after, "COMPLETED");
+        assertThat(inferJobIds).contains(running, after).doesNotContain(canceled);
+        assertThat(worker.waitingForSlot()).isZero();
     }
 
     private String create() throws Exception {

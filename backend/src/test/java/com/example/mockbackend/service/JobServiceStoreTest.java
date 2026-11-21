@@ -57,7 +57,7 @@ class JobServiceStoreTest {
     @Test
     void everyUploadStreamIsClosed() {
         List<TrackedStream> streams = new ArrayList<>();
-        Job job = jobService.submitJobV1(List.of(tracked("a.png", streams), tracked("b.png", streams)), null, null);
+        Job job = jobService.submitJobV1(List.of(tracked("a.png", streams), tracked("b.png", streams)), null);
         assertThat(job.getUploads()).hasSize(2);
         assertThat(streams).isNotEmpty().allMatch(stream -> stream.closed);
     }
@@ -66,7 +66,7 @@ class JobServiceStoreTest {
     void namesAFileSystemRefusesAreStoredUnderASafeNameAndKeptAsSent() throws IOException {
         String korean = "강아지".repeat(25) + ".jpg";  // 229 bytes of UTF-8: with the job id over ext4's 255
         List<String> names = List.of(korean, "a:b*c?.jpg", "dog.jpg");
-        Job job = jobService.submitJobV1(names.stream().<MultipartFile>map(JobServiceStoreTest::photo).toList(), null, null);
+        Job job = jobService.submitJobV1(names.stream().<MultipartFile>map(JobServiceStoreTest::photo).toList(), null);
         assertThat(job.getUploads()).extracting(StoredUpload::name).containsExactlyElementsOf(names);
         for (StoredUpload upload : job.getUploads()) {
             String disk = Path.of(upload.path()).getFileName().toString();
@@ -107,7 +107,7 @@ class JobServiceStoreTest {
                 throw new IOException("disk full");
             }
         };
-        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo("first.png"), broken), null, null))
+        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo("first.png"), broken), null))
                 .isInstanceOf(UncheckedIOException.class);
         assertThat(jobRepository.count()).isEqualTo(jobsBefore);
         try (Stream<Path> files = Files.list(storage.resolve("uploads"))) {
@@ -117,7 +117,7 @@ class JobServiceStoreTest {
 
     @Test
     void theLoserOfASameKeyRaceIsDroppedBeforeAnyWorkerSeesIt() throws IOException {
-        Job first = jobService.submitJobV1(List.of(photo("winner.png")), null, null);
+        Job first = jobService.submitJobV1(List.of(photo("winner.png")), null);
         idempotencyKeys.saveAndFlush(new IdempotencyKeyEntry("race-key", first.getId(), Instant.now()));
         // The second request missed the key, stored its job (not yet dispatched) and now links: it loses.
         Job loser = jobService.saveUploads(List.of(photo("loser.png")));

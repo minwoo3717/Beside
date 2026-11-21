@@ -21,7 +21,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 | 메서드·경로 | 요청 | 성공 | 오류 |
 |---|---|---|---|
-| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB(#3 확정), `image/jpeg \| image/png \| image/webp`. prod 는 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 보고, 다른 프로파일은 선언된 Content-Type 만 본다(`upload.verify-magic`, #17). 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`(없는 `petId` 포함, v1.2), 대표 사진 검사 400 7개(real·prod, §3), 413 `PAYLOAD_TOO_LARGE`, 500, 503 `QUEUE_FULL` + `Retry-After`(대기열 상한, 기본 꺼짐. 2026-11-21 #21 결정, `api-v1.1`) |
+| `POST /api/v1/jobs` | multipart `photos` 1~10장, 장당 ≤ 5 MB, 전체 ≤ 20 MB(#3 확정), `image/jpeg \| image/png \| image/webp`. prod 는 파일 앞 바이트(JPEG·PNG·WEBP 시그니처)도 보고, 다른 프로파일은 선언된 Content-Type 만 본다(`upload.verify-magic`, #17). 헤더 `Idempotency-Key`(선택, 1~128자) | **202** + `Location: /api/v1/jobs/{jobId}` + `{ "jobId" }` | 400 `NO_PHOTOS` `TOO_MANY_PHOTOS` `UNSUPPORTED_IMAGE_TYPE` `INVALID_REQUEST`, 대표 사진 검사 400 7개(real·prod, §3), 413 `PAYLOAD_TOO_LARGE`, 500, 503 `QUEUE_FULL` + `Retry-After`(대기열 상한, 기본 꺼짐. 2026-11-21 #21 결정, `api-v1.1`) |
 | `GET /api/v1/jobs/{jobId}` | 1~2초 간격 폴링 | **200** `JobResponse` | 404 `JOB_NOT_FOUND`, 500 |
 | `GET /api/v1/jobs/{jobId}/asset?variant=base` | `variant` 는 `base` 뿐, 생략 시 `base`. `hair` 는 2026-11-21 계약에서 뺐다(#4) | **200** `model/gltf-binary`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`, `Content-Length` | 409 `JOB_NOT_COMPLETED`(미완료·실패), 404 `ASSET_NOT_FOUND`(완료됐지만 GLB 파일 없음), 400 `INVALID_REQUEST`(`base` 가 아닌 variant — `hair` 포함, 작업 상태와 상관없이), 404 `JOB_NOT_FOUND`, 500 |
 | `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500, 503 `QUEUE_FULL` + `Retry-After`(작업은 FAILED 그대로, `error.jobId` 는 그 작업. 2026-11-21 #21 결정, `api-v1.1`) |
@@ -31,8 +31,9 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](api/openapi.yaml)) — [구현됨] 브랜치 `feat/api-v1.2`(검토 브랜치 2026-10-30 → 2026-11-21 #11 로 고름):
 
-- 공유 링크(tag share, 공개): `POST /api/v1/jobs/{jobId}/shares`(201, 완료 작업만), `GET /api/v1/shares/{token}`, `GET /api/v1/shares/{token}/asset`, `DELETE /api/v1/shares/{token}`(배포에서는 Basic 인증), 웹 뷰어 `/s/{token}`. 공유 쪽 오류는 404 `SHARE_NOT_FOUND` 하나이고 작업 id 를 드러내지 않는다.
-- 보관함(tag pets, 배포에서는 Basic 인증): `POST/GET /api/v1/pets`, `GET/PATCH/DELETE /api/v1/pets/{petId}`(`?withJobs=true` 면 끝난 작업도 지움, 진행 중 작업이 있으면 409 `JOB_IN_PROGRESS`), `PUT /api/v1/jobs/{jobId}/pet`, `POST /api/v1/jobs` 의 선택 텍스트 파트 `petId`(없는 펫이면 400 `INVALID_REQUEST`, 앱 요청은 그대로). 404 `PET_NOT_FOUND`.
+- 공유 링크(tag share): 만들기 `POST /api/v1/jobs/{jobId}/shares`(201, 완료 작업만, 작업당 살아 있는 링크 20개까지 — 넘으면 400 `INVALID_REQUEST`), 모두 끊기 `DELETE /api/v1/jobs/{jobId}/shares`(200 `{revoked}`, 토큰 없이 끊는 길), 하나 끊기 `DELETE /api/v1/shares/{token}` — 셋 다 웹 작업 상세 페이지가 쓰고 배포에서는 Basic 인증 뒤다(앱 공유는 [계획], 그때 공개 여부를 다시 정한다). 보기는 공개: `GET /api/v1/shares/{token}`, `GET /api/v1/shares/{token}/asset`, 웹 뷰어 `/s/{token}`. 공유 쪽 오류는 404 `SHARE_NOT_FOUND` 하나이고 작업 id 를 드러내지 않는다.
+- 보관함(tag pets, 배포에서는 Basic 인증): `POST/GET /api/v1/pets`, `GET/PATCH/DELETE /api/v1/pets/{petId}`(`?withJobs=true` 면 끝난 작업도 지움, 진행 중 작업이 있으면 409 `JOB_IN_PROGRESS`), `PUT /api/v1/jobs/{jobId}/pet`. 404 `PET_NOT_FOUND`. 보관함에 쓰는 길은 이것뿐이다: 공개 `POST /api/v1/jobs` 는 펫을 받지 않고(미분류로 만든다), 보관함 웹이 202 뒤에 `PUT /api/v1/jobs/{jobId}/pet` 을 부른다. `JobResponse.petId` 는 공개 `GET /api/v1/jobs/{jobId}` 에도 나오지만 그 UUID 로 할 수 있는 일은 모두 인증 뒤다.
+- 다른 사이트의 웹 페이지가 브라우저로 보낸 `/api/v1` 쓰기(POST·PUT·PATCH·DELETE, `Sec-Fetch-Site`·`Origin` 으로 판단)는 400 `INVALID_REQUEST`. 앱·도구(이 헤더가 없음)와 이 서버의 웹 페이지는 해당하지 않는다.
 - 관리(tag admin, `/api/v1/admin/*`·웹 `/admin`, Basic 인증)와 품질 평가(tag quality, `GET·PUT /api/v1/jobs/{jobId}/ratings[/{rater}]`·웹 `/job/?id=`, Basic 인증).
 - 받지 않은 것(#11): 작업 하나 지우기 `DELETE /api/v1/jobs/{jobId}`, `GET /api/v1/jobs/{jobId}/thumbnail`, `GET /api/v1/jobs/{jobId}/photos/{index}`, `JobResponse.thumbnailUrl`, `HealthResponse.inference`.
 
@@ -67,7 +68,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 | `uploadedFiles` | 원본 파일명(경로 제거)과 크기. 서버 경로 없음 |
 | `queue` | (v1.2) PENDING 일 때만. `ahead` = 이 작업보다 먼저 처리될 작업 수(생성 중인 작업 포함, 0 = 다음 차례). 대기열 상한을 켠 서버에서는 상한이 세는 PENDING 만 센다(`admission.stale-after-ms` 보다 오래된 행 제외). `reason` = `INFERENCE_OFFLINE`(GPU 추론 서비스가 UP 이 아님, real) 또는 `null`, 모르는 값은 무시. 그 외 상태 `null` |
 | `estimate` | (v1.2) PENDING·PROCESSING 일 때만, **추정치**. `remainingMs` = 최근 완료 실행(같은 워커, 패스스루 제외, 20건)의 processingMs 중앙값 기준 남은 시간(GPU 1장 기준), `basedOnRuns` = 근거 실행 수. 근거 실행이 없으면 객체가 `null` |
-| `petId` | (v1.2) 웹 보관함에서 넣은 반려동물. 앱에서 만든 작업은 `null`(미분류). 앱은 무시해도 된다 |
+| `petId` | (v1.2) 웹 보관함에서 넣은 반려동물. 만든 직후에는 모든 작업이 `null`(미분류)이고, 팀이 보관함에서 넣으면 그 펫의 UUID(인증 없이는 쓸 데가 없는 값). 앱은 무시해도 된다 |
 
 ### 오류 응답 봉투 (모든 v1 오류)
 
@@ -108,6 +109,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 | `JOB_NOT_FAILED` | 409 | FAILED 아닌 작업에 retry | 실패한 작업만 다시 시도할 수 있어요. |
 | `JOB_NOT_PENDING` | 409 | PENDING 아닌 작업에 cancel(PROCESSING 은 GPU 연산을 멈출 수 없음) | 이미 생성이 시작돼 취소할 수 없어요. |
 | `PET_NOT_FOUND` | 404 | 웹 보관함: 알 수 없는 petId | 반려동물을 찾을 수 없어요. 목록을 새로고침해 주세요. |
+| `SHARE_NOT_FOUND` | 404 | 공유 쪽(/shares/{token}, /asset): 없는·만료·취소된 토큰, 지워진 작업(이유 구분 없음, jobId 없음) | 공유 링크가 없거나 만료됐어요. |
 | `JOB_IN_PROGRESS` | 409 | 웹 보관함: 펫과 함께 지울 작업 중 PENDING·PROCESSING 이 있음(아무것도 지우지 않음) | 아직 만들고 있는 작업은 지울 수 없어요. 취소하거나 끝난 뒤 지워 주세요. |
 | `INTERNAL_ERROR` | 500 | 예기치 않은 서버 오류 | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. |
 | `QUEUE_FULL` | 503 | 대기 작업(PENDING)과 접수 중인 요청이 서버 상한(`admission.max-pending`, 기본 꺼짐)에 이름. `Retry-After` 초 뒤에 다시 보낸다. 2026-11-21 #21 결정, `api-v1.1` | 지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요. |

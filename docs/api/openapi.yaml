@@ -6,7 +6,7 @@ info:
     사진 기반 반려동물 3D 재현 서비스의 공개 API 계약 v1. Unity 앱이 보는 유일한 인터페이스이며
     이 파일이 단일 진실 공급원(single source of truth)이다. backend 의 계약 테스트(JobV1ContractTest)가
     springdoc 이 생성한 `/v3/api-docs` 와 이 문서를 비교한다(경로×메서드, operationId, 응답 상태 코드,
-    JobResponse 속성, enum 값, ErrorResponse 구조).
+    모든 컴포넌트 스키마의 속성 이름(allOf 펼침), 스키마·속성·파라미터의 enum 값, ErrorResponse 구조).
 
     변경 규칙
     - 응답 필드 "추가"는 PR 설명에 한 줄 기록한 뒤 자유. 클라이언트는 모르는 필드를 무시한다.
@@ -25,7 +25,10 @@ info:
     (tag pets), 관리(tag admin), 품질 평가(tag quality), 오류 코드 JOB_NOT_PENDING·JOB_IN_PROGRESS·SHARE_NOT_FOUND·
     PET_NOT_FOUND 와 Job 실패 코드 CANCELED). 모두 추가이고 기존 필드·enum·상태 코드는 그대로다. 검토 브랜치의 작업 삭제
     (DELETE /api/v1/jobs/{jobId})·썸네일·입력 사진 엔드포인트와 JobResponse.thumbnailUrl 은 받지 않았다. 이력은 docs/api/CHANGELOG.md.
-    tag share·admin·pets·quality 는 앱이 쓰지 않는 웹용이고, admin·pets·quality 는 배포에서 Caddy Basic 인증 뒤다.
+    tag share·admin·pets·quality 는 앱이 쓰지 않는 웹용이고, admin·pets·quality 와 공유 링크 만들기·끊기는 배포에서 Caddy
+    Basic 인증 뒤다(공유 링크 보기 GET /api/v1/shares/{token}… 만 공개).
+    브라우저가 다른 사이트의 페이지에서 보낸 /api/v1 쓰기(POST·PUT·PATCH·DELETE, Sec-Fetch-Site 또는 Origin 으로 판단)는
+    400 INVALID_REQUEST 로 거절한다. 앱·도구(이 헤더가 없음)와 이 서버의 웹 페이지(같은 출처)는 해당하지 않는다.
 servers:
   - url: http://localhost:8080
     description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
@@ -38,6 +41,8 @@ tags:
     description: |
       공유 링크와 공개 웹 3D/AR 뷰어. 링크는 `/s/{token}`(웹 페이지, API 가 아님)이고, 페이지는 아래 공개 API 만 부른다.
       토큰은 128비트 난수(base64url 22자)이며 작업 id 는 공유 쪽 응답·오류 어디에도 넣지 않는다.
+      링크를 만들고 끊는 것(POST·DELETE /api/v1/jobs/{jobId}/shares, DELETE /api/v1/shares/{token})은 웹 작업 상세 페이지가
+      하고 배포에서는 Caddy Basic 인증 뒤다. 앱은 아직 공유하지 않는다(앱 공유는 [계획], 그때 공개 여부를 다시 정한다).
   - name: admin
     description: 운영 대시보드(/admin)와 측정 내보내기. 팀 내부용, 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/admin/*).
   - name: quality
@@ -47,11 +52,14 @@ tags:
       입력 사진을 내주는 엔드포인트(검토 브랜치의 GET /api/v1/jobs/{jobId}/photos/{index})는 v1.2 에 넣지 않았다(2026-11-21 #11).
   - name: pets
     description: |
-      반려동물 보관함 웹(/library)용. 펫별로 생성 기록을 모으고, 앱에서 펫 없이 만든 작업(미분류, petId=null)을 펫에 넣고,
+      반려동물 보관함 웹(/library)용. 펫별로 생성 기록을 모으고, 펫 없이 만든 작업(새 작업은 모두 미분류, petId=null)을 펫에 넣고,
       펫을 지울 때 끝난 작업을 함께 지울 수 있다(withJobs). 팀 내부용이라 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤
       (/api/v1/pets*, PUT /api/v1/jobs/{jobId}/pet). 작업 하나 지우기(DELETE /api/v1/jobs/{jobId})와 썸네일
       (GET /api/v1/jobs/{jobId}/thumbnail)은 v1.2 에 넣지 않았다(2026-11-21 #11).
-      경로의 리소스가 없으면 404(PET_NOT_FOUND·JOB_NOT_FOUND), 본문·파트가 가리키는 펫이나 작업이 없거나 규칙에 맞지 않으면 400(INVALID_REQUEST)이다.
+      경로의 리소스가 없으면 404(PET_NOT_FOUND·JOB_NOT_FOUND), 본문이 가리키는 펫이나 작업이 없거나 규칙에 맞지 않으면 400(INVALID_REQUEST)이다.
+      보관함에 쓰는 길은 모두 이 인증 뒤 경로다: 공개 POST /api/v1/jobs 는 펫을 정하지 않고(미분류), 보관함 웹은 작업을 만든 뒤
+      PUT /api/v1/jobs/{jobId}/pet 을 부른다. JobResponse.petId 는 공개 GET /api/v1/jobs/{jobId} 에도 나오지만 그 UUID 로
+      할 수 있는 일은 모두 인증 뒤다.
 
 paths:
   /api/v1/jobs:
@@ -82,7 +90,7 @@ paths:
           400 을 돌려주고(코드 7개는 ERROR_CODES.md 의 '대표 사진 검사'), 거절된 요청은 아무것도 남기지 않는다.
           검사 기준값은 제안값이다(장수·용량 상한과 달리 아직 확정하지 않음).
         - 검사 순서: 용량(413) → 개수 → 사진마다 (빈 파일 → Content-Type → 시그니처) → `Idempotency-Key` 길이 →
-          같은 키의 재요청이면 그 작업(202) → `petId` 파트(없는 펫 400, 아래) → 대기열 상한(켠 경우 503, 아래) → 대표 사진 검사. 그래서 시그니처가
+          같은 키의 재요청이면 그 작업(202) → 대기열 상한(켠 경우 503, 아래) → 대표 사진 검사. 그래서 시그니처가
           없는 첫 장은 prod 에서 `UNSUPPORTED_IMAGE_TYPE`, real 에서는 대표 사진 검사의 `UNREADABLE_IMAGE` 다.
 
         대기열 상한(2026-11-21 안건 #21 결정, api-v1.1): 서버 설정 `admission.max-pending` 으로 켠 경우(기본 꺼짐)
@@ -93,8 +101,9 @@ paths:
         같은 키의 요청은 상한과 상관없이 그 키의 작업을 202 로 돌려준다. 같은 키의 요청이 아직 접수 중이면
         함께 접수해 작업은 많아야 하나만 생긴다.
 
-        선택 텍스트 파트 `petId` 를 보내면 그 반려동물의 작업으로 만든다(보관함 웹, tag pets, api-v1.2). 앱은 보내지 않는다.
-        없는 펫은 400(INVALID_REQUEST)이고, 같은 키의 재요청 뒤·대기열 상한 앞에서 본다.
+        이 공개 요청은 보관함(tag pets)의 펫을 정하지 않는다: 만든 작업은 미분류(petId=null)이고, 보관함 웹은 202 뒤에
+        인증 뒤의 PUT /api/v1/jobs/{jobId}/pet 으로 펫에 넣는다(검토 브랜치의 multipart 파트 petId 는 공개 경로로 보관함에
+        쓰게 되어 v1.2 에 넣지 않았다).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -113,13 +122,6 @@ paths:
                   items:
                     type: string
                     format: binary
-                petId:
-                  type: string
-                  format: uuid
-                  description: |
-                    선택. 이 작업을 넣을 보관함의 반려동물(텍스트 파트 하나). 생략하거나 빈 값이면 펫 없이(미분류) 만든다.
-                    없는 펫이거나 UUID 가 아니면 400 INVALID_REQUEST 이고 작업을 만들지 않는다.
-                    Idempotency-Key 재요청이면 처음 만든 작업을 그대로 돌려주고 이 값은 보지 않는다.
       responses:
         '202':
           description: 작업 접수. Location 헤더와 본문의 jobId 로 상태를 폴링한다.
@@ -284,6 +286,8 @@ paths:
         `url` 은 앱 설치 없이 여는 웹 뷰어 페이지 `/s/{token}` 이고, 서버 루트 기준 상대 경로라 클라이언트가 baseUrl 과 결합한다.
         유효 기간은 `ttlDays`(1~30일, 생략 시 서버 설정 `share.ttl-days`, 기본 7)이다. 범위 밖이면 400(INVALID_REQUEST),
         없는 작업은 404(JOB_NOT_FOUND), 완료되지 않은 작업은 409(JOB_NOT_COMPLETED), 완료됐지만 파일이 없으면 404(ASSET_NOT_FOUND).
+        작업 하나의 살아 있는(만료·취소 전) 링크는 20개까지다. 20개가 있으면 400(INVALID_REQUEST)이고, 먼저 revokeJobShares 로
+        끊는다. 웹 작업 상세 페이지(/job/?id=)가 부르며 앱은 쓰지 않는다. 배포에서는 Caddy Basic 인증 뒤(/api/v1/jobs/*/shares*).
       parameters:
         - $ref: '#/components/parameters/JobId'
         - $ref: '#/components/parameters/TtlDays'
@@ -305,6 +309,27 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [share]
+      operationId: revokeJobShares
+      summary: 작업의 살아 있는 공유 링크를 모두 끊는다
+      description: |
+        토큰을 몰라도 링크를 끊는 길이다(토큰은 만들 때 한 번만 응답하고 서버 로그에는 앞 6자만 남는다). 끊은 링크는
+        정보·에셋 모두 404(SHARE_NOT_FOUND). `revoked` 는 이번에 끊은 수이고 끊을 것이 없으면 0 이다(작업 상태와 상관없음).
+        없는 작업은 404(JOB_NOT_FOUND). 웹 작업 상세 페이지의 '공유 링크 모두 끊기' 버튼이 부른다. 배포에서는 Caddy Basic 인증 뒤.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: 끊음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SharesRevokedResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -1251,7 +1276,9 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: 이 작업이 들어 있는 보관함의 반려동물(tag pets). 펫에 넣지 않은 작업(앱에서 만든 작업 등)은 null = 미분류.
+          description: |
+            이 작업이 들어 있는 보관함의 반려동물(tag pets). 만든 직후에는 모든 작업이 null = 미분류이고, 보관함 웹이
+            PUT /api/v1/jobs/{jobId}/pet 으로 넣으면 그 펫이다. 공개 GET 에도 나오지만 이 UUID 로 할 수 있는 일은 모두 인증 뒤다.
     Timings:
       type: object
       description: |
@@ -1389,6 +1416,16 @@ components:
           type: string
           format: date-time
           description: 만료 시각 (ISO 8601, UTC). 이 시각부터 404(SHARE_NOT_FOUND).
+    SharesRevokedResponse:
+      type: object
+      description: DELETE /api/v1/jobs/{jobId}/shares 의 결과.
+      required: [revoked]
+      properties:
+        revoked:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 이번에 끊은 살아 있던 링크 수(이미 만료·취소된 링크는 세지 않는다).
     ShareInfo:
       type: object
       description: 공유 링크 정보(공개). 작업 id·서버 경로는 넣지 않는다.

@@ -108,9 +108,12 @@
       <section class="panel" aria-labelledby="share-title">
         <div class="panel-heading">
           <h2 id="share-title">공유 링크</h2>
-          <button id="share-button" class="primary-button" type="button" disabled>공유 링크 만들기</button>
+          <div class="share-actions">
+            <button id="share-revoke-button" class="secondary-button" type="button">모두 끊기</button>
+            <button id="share-button" class="primary-button" type="button" disabled>공유 링크 만들기</button>
+          </div>
         </div>
-        <p class="hint">앱 없이 폰에서 3D·AR 로 보는 공개 링크(/s/…)를 만들어요. 누를 때마다 새 링크이고 기본 7일 뒤 만료돼요.</p>
+        <p class="hint">앱 없이 폰에서 3D·AR 로 보는 공개 링크(/s/…)를 만들어요. 누를 때마다 새 링크이고 기본 7일 뒤 만료돼요(작업당 살아 있는 링크 20개까지). 링크가 생각보다 널리 퍼졌으면 '모두 끊기' 로 이 작업의 링크를 모두 닫아요.</p>
         <div id="share-result" class="share-result" hidden>
           <svg id="share-qr" class="share-qr" role="img" aria-label="공유 링크 QR 코드" xmlns="http://www.w3.org/2000/svg"></svg>
           <div class="share-text">

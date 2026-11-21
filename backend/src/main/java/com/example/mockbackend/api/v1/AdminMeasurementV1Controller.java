@@ -66,7 +66,7 @@ public class AdminMeasurementV1Controller {
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping("/ratings")
     public ResponseEntity<?> adminRatings(
-            @Parameter(description = "json(기본) | csv") @RequestParam(value = "format", required = false, defaultValue = "json") String format,
+            @Parameter(description = "json(기본) | csv, 대소문자 무시", schema = @Schema(type = "string", allowableValues = {"json", "csv"}, defaultValue = "json")) @RequestParam(value = "format", required = false, defaultValue = "json") String format,
             @Parameter(description = "updatedAt 하한(포함), ISO 8601 instant") @RequestParam(value = "from", required = false) String from,
             @Parameter(description = "updatedAt 상한(제외), ISO 8601 instant") @RequestParam(value = "to", required = false) String to,
             @Parameter(description = "패스스루 실행의 평가 포함, 기본 false") @RequestParam(value = "includePassthrough", required = false, defaultValue = "false") boolean includePassthrough) {
@@ -107,7 +107,7 @@ public class AdminMeasurementV1Controller {
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping("/client-metrics")
     public ResponseEntity<?> adminClientMetrics(
-            @Parameter(description = "json(기본) | csv") @RequestParam(value = "format", required = false, defaultValue = "json") String format) {
+            @Parameter(description = "json(기본) | csv, 대소문자 무시", schema = @Schema(type = "string", allowableValues = {"json", "csv"}, defaultValue = "json")) @RequestParam(value = "format", required = false, defaultValue = "json") String format) {
         boolean csv = Csv.isCsvFormat(format);
         List<AdminClientMetric> rows = clientMetricService.list();
         return csv ? csv("client_metrics.csv", ClientMetricService.toCsv(rows)) : json(rows);
@@ -146,7 +146,7 @@ public class AdminMeasurementV1Controller {
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping("/e2e")
     public ResponseEntity<?> adminE2e(
-            @Parameter(description = "json(기본) | csv") @RequestParam(value = "format", required = false, defaultValue = "json") String format,
+            @Parameter(description = "json(기본) | csv, 대소문자 무시", schema = @Schema(type = "string", allowableValues = {"json", "csv"}, defaultValue = "json")) @RequestParam(value = "format", required = false, defaultValue = "json") String format,
             @Parameter(description = "패스스루 실행의 행 포함, 기본 false") @RequestParam(value = "includePassthrough", required = false, defaultValue = "false") boolean includePassthrough) {
         boolean csv = Csv.isCsvFormat(format);
         List<AdminE2eRow> rows = clientMetricService.e2e(includePassthrough);

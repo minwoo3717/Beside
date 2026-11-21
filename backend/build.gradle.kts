@@ -44,6 +44,9 @@ tasks.test {
     useJUnitPlatform()
     // 계약 테스트의 문서 경로 재정의: ./gradlew.bat test -Dbeside.openapi=<path> (기본 ../docs/api/openapi.yaml)
     System.getProperty("beside.openapi")?.let { systemProperty("beside.openapi", it) }
+    // 계약 문서만 고쳐도 시험이 다시 돈다(JobV1ContractTest·ErrorCodesDocumentTest 가 읽는다. 전에는 '최신' 으로 건너뛰었다).
+    inputs.file("../docs/api/openapi.yaml").withPropertyName("contractDocument")
+    inputs.file("../docs/api/ERROR_CODES.md").withPropertyName("errorCodesDocument")
     // 모델 테스트(@Tag("models"))의 모델 폴더: -Dbeside.models=<dir> 또는 환경변수 PREPROCESS_MODELSDIR. 없으면 건너뛴다.
     System.getProperty("beside.models")?.let { systemProperty("beside.models", it) }
     System.getenv("PREPROCESS_MODELSDIR")?.let { environment("PREPROCESS_MODELSDIR", it) }

@@ -54,7 +54,7 @@ class RealJobWorkerErrorHandlingTest {
         // offline-wait-ms 0: no health check, the run goes straight to the PROCESSING save.
         worker = new RealJobWorker(jobRepository, new JobTransitions(jobRepository, jobFinisher), jobFinisher, inferenceClient,
                 healthMonitor, cutoutStage,
-                results.toString(), 1, 0, 10);
+                results.toString(), 1, 0, 10, 10);
         when(cutoutStage.prepare(any(Job.class))).thenReturn(PreparedPhoto.off());
     }
 
@@ -62,7 +62,8 @@ class RealJobWorkerErrorHandlingTest {
     void anErrorSavingProcessingFailsTheJobWithInternalError() throws Exception {
         Job queued = job(JobStatus.PENDING);
         Job reread = job(JobStatus.PENDING);
-        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued), Optional.of(reread));
+        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued), Optional.of(queued),
+                Optional.of(reread)); // cutout, slot line, PROCESSING save, failure
         when(jobRepository.save(any(Job.class))).thenThrow(new IllegalStateException("could not save"));
 
         assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
@@ -88,7 +89,7 @@ class RealJobWorkerErrorHandlingTest {
     @Test
     void aRunThatAlreadyEndedIsNotFailedAgain() throws Exception {
         Job queued = job(JobStatus.PENDING);
-        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued),
+        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued), Optional.of(queued),
                 Optional.of(job(JobStatus.FAILED)));
         when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
         when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenThrow(new IllegalStateException("bug"));
@@ -112,7 +113,7 @@ class RealJobWorkerErrorHandlingTest {
         Path notAFolder = Files.write(results.resolve("results-is-a-file"), new byte[]{0});
         RealJobWorker full = new RealJobWorker(jobRepository, new JobTransitions(jobRepository, jobFinisher), jobFinisher, inferenceClient,
                 healthMonitor, cutoutStage,
-                notAFolder.toString(), 1, 0, 10);
+                notAFolder.toString(), 1, 0, 10, 10);
         Path glb = Files.write(results.resolve("from-gpu.glb"), new byte[]{'g', 'l', 'T', 'F', 2, 0, 0, 0, 12, 0, 0, 0});
         Job queued = job(JobStatus.PENDING);
         when(jobRepository.findById(ID)).thenReturn(Optional.of(queued));

@@ -88,8 +88,8 @@ public class Job {
     @Column(length = 32)
     private String checkResult;
     /**
-     * The library pet this job belongs to (Pet.id), null = unassigned (jobs made by the app). Set when the job is created
-     * (POST /api/v1/jobs part petId) and afterwards only through JobRepository.updatePetId/unassignPet. Not updatable
+     * The library pet this job belongs to (Pet.id), null = unassigned. Every job is created unassigned (the public
+     * POST /api/v1/jobs takes no pet) and changes only through JobRepository.updatePetId/unassignPet. Not updatable
      * through entity saves on purpose: workers save the copy they loaded minutes earlier (JobFinisher), and that copy
      * must not undo a move the user made in the meantime.
      */
