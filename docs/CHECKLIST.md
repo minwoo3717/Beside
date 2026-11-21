@@ -1,6 +1,6 @@
 # 프로젝트 점검표 (CHECKLIST)
 
-기준일 **2026-10-31(토)**, 부하 시험 항목(2·5절)은 2026-11-01 추가, 2026-11-02 갱신(k6 v2.3.0 실제 실행으로 스크립트 확인·수정). 단계·기간·완료 기준(DoD)의 원본은 [PLAN.md](PLAN.md)이고, 이 문서는 "지금 무엇이 빠져 있고 누가 무엇을 해야 하나"를 한곳에 모은다. 주 1회 계약 회의 때 PLAN 과 함께 갱신한다.
+기준일 **2026-10-31(토)**, 부하 시험 항목(2·5절)은 2026-11-01 추가, 2026-11-02 갱신(k6 v2.3.0 실제 실행으로 스크립트 확인·수정). 2026-11-21: 계약 안건 #1~#23 결정(계약 회의 대신 Backend 담당)으로 닫히거나 바뀐 항목에 표시했다. v1.0 몫 결정의 문서·코드 반영은 **[구현됨]**: 브랜치 `feat/contract-v1.0`, main 병합(2026-11-21)·VM 배포 전. 태그 `api-v1.0` 은 [계획]. 단계·기간·완료 기준(DoD)의 원본은 [PLAN.md](PLAN.md)이고, 이 문서는 "지금 무엇이 빠져 있고 누가 무엇을 해야 하나"를 한곳에 모은다. 주 1회 계약 회의 때 PLAN 과 함께 갱신한다.
 
 - 표기: **[구현됨]** 코드·테스트가 리포에 있고 실행된다 / **[실험 결과]** 측정값과 조건이 기록돼 있다 / **[계획]** 아직 안 함 / **직접 할 일** 사람이 해야 함(하드웨어·계정·회의).
 - 담당: **BE** Backend · **UN** Unity · **GEN** 3D Generation · **전원**.
@@ -22,8 +22,8 @@
 
 막는 범위가 큰 것부터.
 
-1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(결정 칸 23개가 모두 비어 있음) → `CHANGELOG.md` → `git tag api-v1.0`. 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있다. 2026-11-01 에 부하·운영 안건 **#21 큐 상한(503 `QUEUE_FULL`)·#22 요청 제한(429 `RATE_LIMITED`)·#23 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
-2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 2026-11-17 Runpod A40 에 AnimalLift 설치·모델 모드 실행, 1건 시간·GPU 메모리·출력 크기를 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md) 에 기록(inferMs 약 4 s, gpuPeakMB 5,120, 표본 4건). 2026-11-18 2차 부하 시험에서 같은 사진으로 539건을 더 쟀다(exp-01 6절). 남은 것: 품질 채점, 사진 10장 이상. 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7)와 앱 최대 대기의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
+1. [ ] **계약 회의 1회** — [REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 안건 결정(~~결정 칸 23개가 모두 비어 있음~~ → 2026-11-21 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸과 CHANGELOG 에 적었다) → `CHANGELOG.md` → `git tag api-v1.0`. `api-v1.0` 반영(openapi·코드·문서)과 `JobV1ContractTest` 통과는 **[구현됨]**(`feat/contract-v1.0` → main). 남은 것 [계획]: 태그 `api-v1.0` → `api-v1.1`(큐 상한, PR #19) → `api-v1.2`(v1.1 검토 브랜치에서 고른 기능). 이것이 v1.1 병합(`review/api-v1.1`), GLB_SPEC 리깅 반영, 측정 이름 확정을 막고 있었다. 2026-11-01 에 부하·운영 안건 **#21 큐 상한(503 `QUEUE_FULL`)·#22 요청 제한(429 `RATE_LIMITED`)·#23 업로드·GLB 보존 정책**을 더했다(#15 에 `load.*` 이름 포함). (BE 주관, 전원)
+2. [ ] **GPU(Runpod Pod, 대안 GPU PC) 세팅 + exp-01** — 2026-11-17 Runpod A40 에 AnimalLift 설치·모델 모드 실행, 1건 시간·GPU 메모리·출력 크기를 [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md) 에 기록(inferMs 약 4 s, gpuPeakMB 5,120, 표본 4건). 2026-11-18 2차 부하 시험에서 같은 사진으로 539건을 더 쟀다(exp-01 6절). 남은 것: 품질 채점, 사진 10장 이상. 1건 생성 시간·VRAM·출력 형식 기록. `inference.timeout-ms`(안건 #7 — 2026-11-21 결정: 600 s → 120 s, VM 배포 전)와 앱 최대 대기(600 s 그대로)의 근거이고, 실제 E2E·품질 평가의 전제다. (GEN, 직접 할 일)
 3. [x] **`deploy/vm-4b` → main PR 열기** — CI 가 main push(`af4a747`)와 PR #4 에서 Docker 이미지 빌드·Caddy 경로 시험까지 통과했다. (BE)
 4. [ ] **VM·도메인·Tailscale 준비** — VM·도메인은 2026-11-13 GCP 로 끝남(`https://beside-team.duckdns.org`, [deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)). GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13). 2026-11-17 Runpod 크레딧 결제, VM·Pod Tailscale 연결, 공개 주소 → VM → Pod 사진 1건 성공(패스스루), 같은 날 Pod 에 AnimalLift 를 설치해 실제 모델로 3건 성공([deploy/2026-11-17_runpod-connect.md](deploy/2026-11-17_runpod-connect.md)). 남은 것: 폰 앱으로 1건. (BE+GEN)
 5. [ ] **Unity 1단계 DoD 증빙** — 실기기 Mock 전체 흐름(영상 + `adb logcat`), `fail` 사진 → FAILED → retry, `metrics.csv` 10회. (UN)
@@ -34,7 +34,7 @@
 
 | 단계 | 완료 기준 | 상태 | 빠진 것 | 담당 · 막힘 |
 |---|---|---|---|---|
-| 0 | 계약 회의 → CHANGELOG → `api-v1.0` 태그 | [ ] | 회의·결정 기록·태그 모두. `git tag -l` 결과 없음 | BE · 회의 |
+| 0 | 계약 회의 → CHANGELOG → `api-v1.0` 태그 | [ ] | 결정 기록은 2026-11-21(회의 대신 Backend 담당, 결정 칸·CHANGELOG). 반영 [구현됨](`feat/contract-v1.0` → main, `JobV1ContractTest` 통과), 태그 `api-v1.0` [계획]. `git tag -l` 결과 없음 | BE |
 | 0 | gradlew test + node test | [x] | GitHub CI 는 아직 한 번도 돌지 않았다(위 3번) | BE |
 | 0 | `e2e_mock` 이 bytes > 0 인 GLB 를 받음 | [ ] | `backend/storage/results/sample-dog.glb` 가 0 B. 리깅 GLB 는 SMAL 파생이라 커밋 금지 → 라이선스 문제없는 GLB 를 정해야 함 | BE+GEN · 라이선스 결정 |
 | 0 | 재시작 후 jobId 200 | [x] | — | — |
@@ -49,14 +49,14 @@
 | 3 | exp-01 ~ 04 기록 | [ ] | `generation/experiments/` 에 기록 0건 | GEN · GPU PC |
 | 3 | 베이스라인 수치·환경 | [ ] | 측정 0건 | GEN |
 | 3 | 품질 6항목(평가자 2명 이상) baseline vs 개선 | [ ] | 0건. 정면·측면·위 렌더 필요. 평가 입력 화면은 `review/api-v1.1` 에만 있음 | GEN+전원 |
-| 3 | GLB_SPEC 통과 GLB 3개, gltf-validator 오류 0 | [ ] | 변환기 테스트·검증 기록 없음. 실제 출력(리깅)이 GLB_SPEC("스킨 없음")과 다름 → 안건 #14 | GEN · 회의 |
+| 3 | GLB_SPEC 통과 GLB 3개, gltf-validator 오류 0 | [ ] | ~~변환기 테스트 없음~~ — 변환기·리깅 도구의 털 맵 시험(`FurMapsInGlbTest`·`RigTransferFurMapsTest`, PR #25)과 리깅 정점 순서·크기 상한 시험이 `generation/inference_service/test_app.py` 에 있다 **[구현됨]**(합성 메시, 좌표·노드 배치를 직접 보는 시험은 없음). ~~실제 출력(리깅)이 GLB_SPEC("스킨 없음")과 다름~~ → 안건 #14 2026-11-21 결정대로 GLB_SPEC 을 실제 출력에 맞췄다(스킨·클립 선택 항목, 털 맵은 base GLB 안 `extras.beside` §4.1, `feat/contract-v1.0`). 남은 것 [계획]: 실제 출력 GLB 3개의 gltf-validator 기록, glTFast 로드 | GEN |
 | 4 | real 에서 실제 생성 GLB 수신 | [x] | exp-01(2026-11-17, VM 경유 3건)과 2차 부하 시험(2026-11-18, k6 가 539건을 받음). `e2e_mock.ps1`·폰 앱으로는 아직 | BE+GEN · GPU PC |
 | 4 | 실패 경로 4종 | [x] | — | — |
 | 4 | 실기기 실제 모델 AR(영상) | [ ] | — | UN · GPU PC |
 | 4 | `events.jsonl` 10건 이상 [실험 결과] | [x] | 2차 부하 시험 539건(2026-11-18, VM 업로드 모드 + Runpod A40, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 사진 10장 이상은 exp-01 다음 [계획] | BE+GEN |
 | 4b | S1~S3 | [구현됨] | GCP VM 에서 스텁으로 실행(2026-11-13). Runpod A40 연결(2026-11-17), 실제 모델 539건(2026-11-18 2차 부하 시험) | BE |
 | 4b | S4 Docker·Caddy·CI | [구현됨] | CI 통과, GCP VM 배포·감사·재부팅 확인(2026-11-13). Caddy 강화는 `deploy/gcp` 브랜치에서 PR #5 로 main 에 병합됐다(2026-11-18). Caddyfile 로컬 수정은 되돌렸다. 2026-11-19 PR #6~#11 병합 뒤 VM 을 main `1c87da5` 로 다시 배포했다(11:04 UTC, PR #8 의 정리 재시도 포함) | BE |
-| 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 | BE · 회의 |
+| 4b | S5~S9 | 검토 브랜치 | 계약 회의 #11~#13 뒤 병합 → 2026-11-21 결정: 항목별로 받아 `api-v1.2`(작업 삭제·`thumbnail`·`photos` 는 미룸), 병합 [계획] | BE |
 | 4b | 실측 10건 이상 | [x] | VM + Runpod A40 에서 539건(2026-11-18 2차 부하 시험, 사진 1장 반복) | BE+GEN |
 | 5 | 측정표 3종 + 환경 | [ ] | 서버·추론은 2차 부하 시험(539건, 사진 1장 반복) **[실험 결과]**([perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))와 3차(2026-11-19, 슬롯 2개·장애 F1a·F1b·F2) **[실험 결과]**([perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md)), 4차(2026-11-19 UTC, 같은 Pod 의 c=1·c=2, Pod 요청별 시간, F1b 다시) **[실험 결과]**([perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 앱(기기) 측정은 0건. 백엔드 단독 성능(개발 PC 루프백)은 [perf/backend-perf-report.pdf](perf/backend-perf-report.pdf) | 전원 |
 | 5 | 리허설 1회, 보고서 초안 리뷰 | [ ] | 날짜 미정 | 전원 |
@@ -66,15 +66,15 @@
 ## 4. 트랙별 할 일
 
 ### Backend (BE)
-- [ ] 계약 회의 주관(위 2-1). 회의 뒤 `openapi.yaml` → `JobV1ContractTest` → CHANGELOG → 태그 순서.
-- [ ] `review/api-v1.1`(S5~S9) 병합 방식 결정: 전부 / 앞 조각부터 일부 / 보류. 결정 자료는 리포 루트 `OVERNIGHT_REVIEW_2026-10-31.md`(커밋 안 됨).
+- [ ] 계약 회의 주관(위 2-1). 회의 뒤 `openapi.yaml` → `JobV1ContractTest` → CHANGELOG → 태그 순서. — 2026-11-21 회의 없이 결정했다(결정 칸·CHANGELOG). `openapi.yaml`·`JobV1ContractTest`·CHANGELOG 는 **[구현됨]**(`feat/contract-v1.0` → main), 태그 `api-v1.0` 은 [계획].
+- [x] `review/api-v1.1`(S5~S9) 병합 방식 결정: 전부 / 앞 조각부터 일부 / 보류. 결정 자료는 리포 루트 `OVERNIGHT_REVIEW_2026-10-31.md`(커밋 안 됨). — 2026-11-21 #11·#12: 항목별(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가와 오류 코드 5개)로 `api-v1.2` 에. 작업 삭제·`thumbnail`·`photos` 는 미룸. 병합은 [계획].
 - [ ] 0 B `sample-dog.glb` 교체(GEN 과 함께, 라이선스 문제없는 모델).
 - [x] VM 배포 후 밖에서 `/h2-console`·`/swagger-ui.html`·`/api/jobs`·`GET /api/v1/jobs` 가 404/401 인지 확인 — 2026-11-13 GCP, 감사에서 나온 우회 4가지도 막음([deploy/2026-11-13_gcp-first-deploy.md](deploy/2026-11-13_gcp-first-deploy.md)).
-- [ ] GCP 첫 배포 감사의 남은 것 [계획]: 지금 VM 의 기본 서비스 계정 떼기·`default-allow-rdp` 지우기(사용자, Cloud Shell — deploy/README 'GCP 메인 서버'), 공개 400 메시지의 Java 예외 클래스 이름 지우기, prod 이미지에서 springdoc UI 빼기(지금은 Caddy 가 `/webjars` 를 막음), `Idempotency-Key` 가 같은 작업 id 를 돌려주는 범위(키 만료·내용 무시 — 계약 안건), Docker 수동 업데이트, 백업을 같은 디스크 밖으로(개발 PC 복사·스냅샷 일정), Caddy 정지 10초 초과(SIGKILL), 컨테이너 pids 제한. 공개 업로드 요청 수 제한은 범위 밖으로 두고 부하 시험 때 다시 본다.
+- [ ] GCP 첫 배포 감사의 남은 것 [계획]: 지금 VM 의 기본 서비스 계정 떼기·`default-allow-rdp` 지우기(사용자, Cloud Shell — deploy/README 'GCP 메인 서버'), 공개 400 메시지의 Java 예외 클래스 이름 지우기, prod 이미지에서 springdoc UI 빼기(지금은 Caddy 가 `/webjars` 를 막음), `Idempotency-Key` 가 같은 작업 id 를 돌려주는 범위(키 만료·내용 무시 — 계약 안건 #5, 2026-11-21 지금대로 유지로 결정), Docker 수동 업데이트, 백업을 같은 디스크 밖으로(개발 PC 복사·스냅샷 일정), Caddy 정지 10초 초과(SIGKILL), 컨테이너 pids 제한. 공개 업로드 요청 수 제한은 범위 밖으로 두고 부하 시험 때 다시 본다.
 - [x] `deploy/gcp` 브랜치(create_vm.sh, Caddy 강화, set_basic_auth.sh, 문서) push 와 PR 결정 — PR #5 로 main 에 병합(2026-11-18). VM 은 main `b6c0e6c` 로 바꾸고 `deploy/Caddyfile` 로컬 수정은 되돌렸다. (BE)
 - [ ] 남은 낮은 위험(10-30 검토): V2 `RealJobQueueTest` 간헐 실패 1/20(원인 미확정). 같은 목록의 retry 를 동시에 두 번 누르는 경합과 GPU 오프라인 대기가 N건이면 N×30분은 2026-11-20 전체 리뷰에서 고쳤다 **[구현됨]**: retry 는 FAILED → PENDING 을 조건부 갱신 한 번으로 바꿔 한 요청만 202 를 받고 나머지는 409 `JOB_NOT_FAILED`(`JobServiceRetryTest`·`JobServiceRetryRaceTest`), 오프라인 대기는 슬롯을 잡은 때가 아니라 작업을 받은 때부터 30분을 센다(`RealJobWorkerOfflineTest`).
 - [ ] 측정 기간에는 재배포하지 않는다(재시작하면 진행 중 작업이 `INTERNAL_ERROR`). 측정 전후 H2 백업을 개발 PC 로 복사.
-- [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
+- [ ] 대표 사진 검사·전처리(브랜치 `feat/preprocess`, [docs/preprocess/2026-11-05_photo-check.md](preprocess/2026-11-05_photo-check.md)) 남은 것 [계획]: 팀 사진(고양이·실내·어두운 곳·여러 마리)으로 폴더 도구를 돌려 기준값 재확인(안건 #19 — 2026-11-21 지금 동작·제안 기준값 확정, 이 판정표 뒤 재검토), VM 2 vCPU 에서 `checkMs`·`preprocessMs`·`docker stats`, VM 에 모델 마운트(deploy/README '띄우기'), `review/api-v1.1` 과 합칠 때 `RealJobWorker`·`JobServiceImpl`·`Job`·`JobRun` 충돌과 작업 삭제가 `storage/preprocessed/` PNG 도 지우게.
 - [ ] 전체 코드 리뷰(2026-10-31)의 [계획] 항목: real 로 쓸 때 Mock UI 의 60초·15초 제한, 측정 중 한 번 본 'COMPLETED 직후 에셋 409'(재현부터) — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md).
 
 ### Unity (UN)
@@ -84,16 +84,16 @@
 - [ ] minSdk 34 가 의도인지 확인(README 는 24).
 - [ ] 커밋 안 된 `unity/ProjectSettings` 변경 정리(URP 전역 설정 목록이 비워짐, 나머지는 줄바꿈만 다름) — 담당자가 판단.
 - [ ] DoD 증빙: 1·2·4단계 영상, logcat, `metrics.csv`, FPS, 기기 2종.
-- [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 쓴다 → 안건 #14 결정 후 한쪽에 맞춤(GEN 과 함께).
-- [ ] (v1.1 을 받으면) 진행 화면에 `queue`/`estimate`, 취소 버튼이 `POST /cancel` 호출(지금은 앱 안 코루틴만 멈춤), `CANCELED` 문구.
+- [ ] 서버 생성 모델의 털: 앱은 GLB 안 `extras.beside` 를 기대하지만 변환기는 털 맵을 별도 PNG 로 썼다 → 안건 #14 는 2026-11-21 결정: 변환기를 앱에 맞춘다. 변환기가 털 맵 두 장과 `furLength` 를 base GLB 안 `extras.beside` 에 넣고 리깅본도 옮긴다 **[구현됨]**(PR #25 브랜치 `fix/hair-maps-in-glb` 를 `feat/contract-v1.0` 에 합쳐 main 병합(2026-11-21)·Pod 반영 전, 형식은 [GLB_SPEC §4.1](asset/GLB_SPEC.md), 파이썬 시험만 있고 Unity·기기 확인 없음). 남은 것 [계획]: Pod 리포 갱신 → 실제 사진 1건으로 기기에서 털이 보이는지, GLB 의 `furLength`(리포의 AnimalLift 출력 1건을 로컬 변환해 본 값 약 0.070 — 실험 기록 아님)와 지금까지 기기에서 써 온 `Dog_Fur_Mat` 의 0.025 를 나란히 비교, `loadMs`·FPS 가 털 없을 때와 얼마나 다른지 기록(GEN 과 함께). 주의: Pod 가 새 변환기를 쓰면 이미 깔린 앱도 새 작업마다 셸 20겹 털을 GLB 의 `furLength` 로 그린다(길이·FPS 확인 전). 병합 뒤에는 Pod 를 다시 켜기만 해도(RUNBOOK 'GPU Pod 다시 세우기' 2단계가 `origin/main` 을 받음) 그렇게 된다 — 기기 확인 전에 피하려면 그 단계에서 병합 전 main 커밋에 고정한다([GLB_SPEC §4.1](asset/GLB_SPEC.md) '알려진 점'). 앱은 작업 흐름(`JobManager` → GLB 바이트)에서만 GLB 안 털 맵을 읽고, `ModelLoader` 의 Test Glb Url 경로는 읽지 않는다(GLB_SPEC §7).
+- [ ] (v1.1 을 받으면 — 2026-11-21 #11·#12 로 이 기능들은 `api-v1.2`) 진행 화면에 `queue`/`estimate`, 취소 버튼이 `POST /cancel` 호출(지금은 앱 안 코루틴만 멈춤), `CANCELED` 문구.
 - [ ] 코드 리뷰 보고 7건: 에셋 다운로드 실패 때 화면이 멈춤, 바뀐 템플릿·GltfImport 를 해제하지 않아 memMB 가 계속 오름, 재개·retry 실행도 `metrics.csv` 에 줄을 더함(METRICS §3 '작업당 한 줄') 등 — [review/2026-10-31-code-review.md](review/2026-10-31-code-review.md) 'Unity 트랙에 보고'.
 - [ ] 대표 사진 검사 문구 7개(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 2026-11-04 백엔드가 `ErrorMessages.cs` 에 넣었다(재시도 대상 아님). 실기기에서 real 서버에 두 마리 사진과 동물이 없는 사진을 올려 문구가 나오는지 확인한다. real·prod 서버에 '캡처로 테스트'를 하면 이제 400(`NO_ANIMAL_DETECTED`)이다(mock 은 그대로).
 
 ### 3D Generation (GEN)
 - [ ] Runpod Pod: AnimalLift·conda·체크포인트·리깅 템플릿을 `/workspace` 아래에 설치(컨테이너 디스크는 정지 때 지워짐), 실행은 `deploy/runpod/start_pod.sh`([deploy/README.md](../deploy/README.md) 'Runpod Pod 쪽'). 대안으로 GPU PC 면 ASCII 경로, WSL 안에서 Tailscale, `BESIDE_HOST`·`BESIDE_INFERENCE_TOKEN`.
 - [ ] exp-01(1건 시간·VRAM) → exp-02(우리 사진 3마리 이상, 실제 E2E 10건 이상, `job_runs` CSV) → exp-03·04(개선 2건 이상).
-- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교(Spring 이 크롭·배경 제거를 한다 [구현됨] 2026-11-05, 3D 비교 실험 틀 `experiments/2026-11-05_exp-03_input-preprocess.md` 를 GPU PC 에서 실행 [계획]), 털 맵을 GLB 안에 넣기.
-- [ ] gltf-validator·glTFast 로드 결과 기록, 변환기 테스트.
+- [ ] 개선 후보(가설): 비정사각 사진을 정사각으로 늘려 넣음(`animallift_runner.py` 의 Resize) → 패딩·배경 제거와 비교(Spring 이 크롭·배경 제거를 한다 [구현됨] 2026-11-05, 3D 비교 실험 틀 `experiments/2026-11-05_exp-03_input-preprocess.md` 를 GPU PC 에서 실행 [계획]), 털 맵을 GLB 안에 넣기(2026-11-21 #14 로 결정, PR #25 로 변환기·리깅 쪽 **[구현됨]**, main 병합(2026-11-21), Pod 반영·기기 확인 전 — 형식은 [GLB_SPEC §4.1](asset/GLB_SPEC.md)).
+- [ ] gltf-validator·glTFast 로드 결과 기록. 변환기 테스트는 털 맵·리깅 쪽만 있다(`test_app.py` 의 `FurMapsInGlbTest`·`RigTransferFurMapsTest` 등 **[구현됨]**). GLB_SPEC §2 배치(최장 축·원점·+Z)와 §3 노드·머티리얼을 보는 시험은 [계획].
 - [ ] `/infer/upload` 리뷰(업로드 모드, DELETE 범위). 2026-11-19 PR #11 로 `DELETE` 가 같은 jobId 의 실행 취소까지 한다. 이것도 함께 본다.
 - [ ] 끊긴 `/infer` 가 MODEL_LOCK 을 쥔 채 다음 작업의 시간 제한을 깎는 문제(GEN·BE, 코드 리뷰 보고서). 업로드 모드는 2026-11-19 PR #11 로 정리 `DELETE` 가 그 작업의 실행을 취소한다 **[구현됨]**: 잠금을 기다리던 실행은 모델을 돌리지 않고, predict 중이던 실행은 끝난 뒤 변환하지 않는다. 이미 도는 predict 와 경로 모드는 남는다(busy 신호 등 설계 결정). Pod 에는 아직 없다 **[계획]**.
 - [ ] 재현성: 리깅 템플릿과 그 생성 스크립트가 리포 밖에 있음 → 위치와 절차를 문서로.
@@ -105,10 +105,10 @@
 - [ ] 첫 배포 후 GPU PC 를 끈 채 작업 1건 → PENDING 대기 + Discord 알림 → 켜면 진행되는지 확인.
 
 ### 계약·문서 (회의 안건)
-- [ ] 안건 #1~#23 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다. #17(prod 의 사진 내용 검사)·#18(`modelVersion` 의 `+rig`)은 코드 리뷰에서, #19(대표 사진 검사의 프로파일 차이·제안 기준값)·#20(전처리 측정 이름)은 전처리(2026-11-04)에서, #21~#23(큐 상한·요청 제한·보존 정책)은 부하 시험 계획(2026-11-01)에서 나왔다.
-- [ ] 계약 파일의 상태 표기가 실제 코드보다 늦음(아래 6절) — 계약 파일이라 회의에서 함께 고친다.
-- [ ] 측정 정의 확정: `convertMs` 에 리깅 시간이 더해짐(`app.py`), 앱 `e2eMs` 가 첫 AR 배치까지(사용자 탭 포함), 앱 `downloadMs` 가 캐시 적중 때 0.
-- [ ] 백엔드 벤치마크 이름(`bench.*`)과 부하 시험 이름(k6 `load.*`)을 METRICS 에 올릴지(안건 #15).
+- [x] 안건 #1~#23 결정, #3 숫자 상한은 exp-02 수치가 있어야 정할 수 있다. #17(prod 의 사진 내용 검사)·#18(`modelVersion` 의 `+rig`)은 코드 리뷰에서, #19(대표 사진 검사의 프로파일 차이·제안 기준값)·#20(전처리 측정 이름)은 전처리(2026-11-04)에서, #21~#23(큐 상한·요청 제한·보존 정책)은 부하 시험 계획(2026-11-01)에서 나왔다. — 2026-11-21 계약 회의 대신 Backend 담당이 결정([REVIEW_CHECKLIST](api/REVIEW_CHECKLIST.md) 결정 칸). #3 은 사진 상한만 확정하고 에셋 상한은 제안값으로 두어 exp-02·기기 FPS 뒤 확정한다 [계획].
+- [x] 계약 파일의 상태 표기가 실제 코드보다 늦음(아래 6절) — 계약 파일이라 회의에서 함께 고친다. — 2026-11-21 #16 결정대로 METRICS·CONTRACT §4~§6 을 실제 상태([구현됨]·[실험 결과])로 고쳤다(`feat/contract-v1.0`, main 병합 2026-11-21). GLB_SPEC 도 #14 와 함께 실제 상태로 고쳤다(변환기·리깅 [구현됨], 털 맵 §4.1 은 PR #25 를 합친 것, 같은 브랜치).
+- [x] 측정 정의 확정: `convertMs` 에 리깅 시간이 더해짐(`app.py`), 앱 `e2eMs` 가 첫 AR 배치까지(사용자 탭 포함), 앱 `downloadMs` 가 캐시 적중 때 0. — 2026-11-21 #16: `convertMs` 는 리깅이 성공한 실행이면 리깅 시간을 포함하는 것으로 확정해 METRICS §2 에 적었다. 앱의 두 값과 재개·retry 줄은 지금 동작 그대로 METRICS §3 에 적었다(바꿀지는 UN).
+- [x] 백엔드 벤치마크 이름(`bench.*`)과 부하 시험 이름(k6 `load.*`)을 METRICS 에 올릴지(안건 #15). — 2026-11-21: (a) `docs/perf` 전용으로 유지, METRICS 에 넣지 않음.
 
 ### 보고서·발표 (전원)
 - [ ] 구성: 문제 → 구현 → 실험 → 결과 → 개선. 기록 없는 결과는 인용하지 않는다.
@@ -172,8 +172,8 @@
   - τ 가 짧을 때 버려진 predict 가 GPU 를 쓰는 것(4차 F1b 약 270 s **[계산]**)을 줄일지 정한다.
 - [ ] G1(큐 이론 검증, 스텁 T=10초)·G2(GPU 증설 c = 1, 2, 4) — 추론 스텁, 실제 GPU PC 는 쓰지 않음. (BE, 스텁 설정은 GEN 리뷰)
 - [ ] F1~F5 장애 시나리오(추론 실패·타임아웃, 추론 서비스 꺼짐·재시작, 잘못된 업로드, 다운로드 중단, 스파이크 + 한 IP 집중). F1b 는 MODEL_LOCK 문제로 실패가 예상되며 그대로 기록한다. (BE, F1·F2 는 GEN 함께)
-- [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE)
-- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산해 계약 회의 자료([perf/load/2026-11-20_queue-cap.md](perf/load/2026-11-20_queue-cap.md))에 넣고, 회의가 정한 뒤 #21 의 상한 값과 TRAFFIC_MODEL 표를 고친다([TRAFFIC_MODEL 12절](perf/load/TRAFFIC_MODEL.md)과 같은 규칙). (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 3차의 슬롯 2개(510~530건/h)면 T3 는 10~11대다 **[계산]**([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)). 4차 Pod 하나에서 잰 값으로는 슬롯 1개 415건/h 면 13대, 슬롯 2개 센 하한 495건/h 면 11대로 3차 범위(10~11대) 안이다. 슬롯 2개가 슬롯 시간 식(678~689건/h)만큼 처리하면 8대지만 넘친 실행으로 확인하지 않았다 **[계산]**([vm-4th 9절](perf/load/2026-11-20_vm-4th.md)). 표·#21 고치기는 계약 회의 뒤.
+- [ ] 보호 장치(큐 상한 #21, 요청 제한 #22) 적용 전후 비교(G3·F5) — 계약 회의 결정 뒤. (BE) — 결정은 2026-11-21: #21 N=19·`Retry-After` 165 s(`api-v1.1`, PR #19), #22 는 429 이름만 예약. 큐 상한 적용과 비교 시험(5차)은 [계획].
+- [ ] exp-01 로 생성 시간 T 를 잰 뒤 `scripts/load/model.py` 로 GPU 대수·큐 상한 표를 다시 계산해 계약 회의 자료([perf/load/2026-11-20_queue-cap.md](perf/load/2026-11-20_queue-cap.md))에 넣고, 회의가 정한 뒤 #21 의 상한 값과 TRAFFIC_MODEL 표를 고친다([TRAFFIC_MODEL 12절](perf/load/TRAFFIC_MODEL.md)과 같은 규칙). (GEN 이 T 측정, BE 가 재계산) — exp-01 표본 2건(T ≈ 10~16 s)으로 계산만 해 두었다: T2 는 GPU 1대, T3 는 15~23대, Q_max(c=1) 37~57 **[계산]**([vm-1st 7절](perf/load/2026-11-18_vm-1st.md)). 2차 부하 시험의 슬롯(8.8~11.5 s)으로 다시 계산하면 T3 는 13~17대, Q_max 51~67 이다 **[계산]**([vm-2nd 9절](perf/load/2026-11-18_vm-2nd.md)). 3차의 슬롯 2개(510~530건/h)면 T3 는 10~11대다 **[계산]**([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)). 4차 Pod 하나에서 잰 값으로는 슬롯 1개 415건/h 면 13대, 슬롯 2개 센 하한 495건/h 면 11대로 3차 범위(10~11대) 안이다. 슬롯 2개가 슬롯 시간 식(678~689건/h)만큼 처리하면 8대지만 넘친 실행으로 확인하지 않았다 **[계산]**([vm-4th 9절](perf/load/2026-11-20_vm-4th.md)). 표·#21 고치기는 계약 회의 뒤. — #21 은 2026-11-21 결정(N=19, W=180 s, c=1). TRAFFIC_MODEL 표 고치기는 `api-v1.1`(PR #19)과 함께 [계획].
 - [ ] VM 시험 전·중에 확인할 것 **[계획]** — 컨테이너 경로·실제 Prometheus 는 이 PC 에 Docker 가 없어 VM 에서, Linux k6 문구는 WSL 등 Linux 에서, 부하 PC 메모리는 이 PC 에서 VM 시험 중에 본다. (BE)
   - F3 남은 파일 확인 명령(`f3_uploads.js` 가 출력하는 'VM:' 줄)의 컨테이너 안 경로 `/app/storage/uploads`·`/tmp/tomcat.8080.*`. 로컬에서는 경로만 바꿔 같은 명령을 확인했다.
   - ~~실제 Prometheus 에 `jvm_memory_usage_after_gc_percent{area="heap",pool="long-lived"}` 시계열이 있는지~~ — 2026-11-18 VM 에서 있음을 확인했다(각 실행 `prometheus/jvm_heap_after_gc.csv`).
@@ -181,7 +181,7 @@
   - `SEED_ONLY` 의 `IDS_OUT` 검사가 기대는 k6 `open()` 오류 문구를 Linux k6 에서(Windows k6 v2.3.0 에서만 확인. 2026-11-18 VM 1차는 Linux k6(Runpod Pod)로 A2 시드를 돌렸지만 이 오류 경로를 확인한 기록은 없다).
   - 부하 PC 메모리: 초기화된 VU 하나에 약 1.1 MB(로컬 측정: 개발 PC·k6 v2.3.0, `api_staged.js` 를 `PRE_VUS`=`MAX_VUS` 20 과 300 으로 짧게(1,800명 단계 하나, 20초 유지, `BROWSE=0`, 루프백 mock jar) 돌려 k6 프로세스의 최대 작업 집합 83.9 MB·393.2 MB 를 비교한 값, VU 마다 0.4 MB 사진 사본 포함). A1 기본 `MAX_VUS` 3,300(흐름 VU. 시작 때는 사전 할당 450 만 만들고 나머지는 흐름이 길어질 때 생기므로 최악)이면 초기화만 약 3.6 GB, 흐름을 돈 VU 마다 0.8 MB 본문(실패 주입 흐름을 돈 VU 는 0.8 MB 더)이 붙어 약 6.3~8.9 GB [파생], 둘러보기 VU(최대 200)가 약 0.2 GB 더. A3 large 는 VU 마다 5 MB 사진 사본에 첫 업로드 때 20 MB 본문이 더해져 사전 할당 50 VU 면 약 1.25 GB, 업로드가 길어져 기본 `MAX_VUS` 600 까지 늘면 약 15 GB [파생]. 시험 중 k6 메모리를 CPU 와 함께 본다. 2026-11-18 VM 1차(Runpod Pod, Linux k6)에서는 A1 `PRE_VUS` 2,000(VU 2,017)에 k6 RSS 최대 6,662 MB, A2 VU 2,000 에 2,201 MB 였다 **[실험 결과]**(각 실행 `client-cpu.csv`).
 - [ ] 판정 기준 결정 — 지금 코드의 동작은 **[구현됨]**, 바꿀지는 미정. (BE, 첫째는 계약 회의)
-  - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #21·#22 와 함께 정한다.
+  - A3(`upload.js`)에서 429 `RATE_LIMITED`·503 `QUEUE_FULL` 거부를 유지 구간 실패로 볼지: 지금은 `load_rejectedCount` 로 따로 세고 기준이 없다(A3 기준은 `load_unexpectedCount == 0`, 전체·유지 구간마다). 안건 #21·#22 와 함께 정한다. — 2026-11-21 #21(D10): 503 `QUEUE_FULL` 은 A3 에서 지금처럼 따로 센다(유지 구간 실패 아님). METRICS §5.3 의 5xx 비율에서도 뺀다(D9, `api-v1.1` 때 반영 [계획]). 429 는 #22 구현 때 정한다.
   - F1a 실행에서 `load_flowOkRatio >= 0.95` 를 그대로 둘지: 스텁 실패율 0.2 면 첫 시도와 retry 가 다 실패하는 흐름이 약 4 % 라 기대값이 약 0.96 [파생] 이고, 줄인 로컬 실행에서도 통과와 실패가 둘 다 나왔다. 3차 F1a(`f1ar2`)는 0.975(40건 중 1건이 두 번 실패)로 통과했다.
   - `collect.py` 의 `http_5xx_ratio` 질의에 `or vector(0)` 을 붙일지: 서버가 뜬 뒤 5xx 를 한 번도 내지 않아 5xx 시계열이 없으면 머리줄만 있는 CSV 와 'no data: http_5xx_ratio' 가 된다(Prometheus 대역에서 봄).
 - [ ] 찾은 개선 **[계획]**. (BE)
@@ -193,11 +193,11 @@
 
 | 무엇 | 어디 | 처리 |
 |---|---|---|
-| 추론 수치·앱 `metrics.csv`·변환기가 "[계획]/리포에 없음"으로 적혀 있지만 코드는 있음 | `METRICS.md:5,57-59,72`, `CONTRACT.md:104,132-133`, `GLB_SPEC.md:5` | 계약 파일 → 회의 안건(#16) |
-| `INTERNAL_ERROR` 의 예기치 못한 오류를 "real 워커"만 적음 ↔ mock 워커도 예기치 못한 오류를 `INTERNAL_ERROR`("Mock worker error (…)")로 끝냄(2026-11-20) | `ERROR_CODES.md:44`, `CONTRACT.md:107` | 계약 파일 → 회의 안건(#16 과 함께). 설명 문구만 고치고 코드 값·상태 코드·앱 문구는 그대로 |
-| GLB_SPEC "스킨·애니메이션 없음" ↔ 실제 리깅 출력 | `GLB_SPEC.md:35` | 안건 #14 |
+| 추론 수치·앱 `metrics.csv`·변환기가 "[계획]/리포에 없음"으로 적혀 있지만 코드는 있음 | `METRICS.md:5,57-59,72`, `CONTRACT.md:104,132-133`, `GLB_SPEC.md:5` | 계약 파일 → 회의 안건(#16). **2026-11-21 결정 → METRICS·CONTRACT 고침**(`feat/contract-v1.0`). GLB_SPEC 도 #14 와 함께 같은 브랜치에서 고침 |
+| `INTERNAL_ERROR` 의 예기치 못한 오류를 "real 워커"만 적음 ↔ mock 워커도 예기치 못한 오류를 `INTERNAL_ERROR`("Mock worker error (…)")로 끝냄(2026-11-20) | `ERROR_CODES.md:44`, `CONTRACT.md:107` | 계약 파일 → 회의 안건(#16 과 함께). 설명 문구만 고치고 코드 값·상태 코드·앱 문구는 그대로. **CONTRACT §3·ERROR_CODES 모두 2026-11-21 고침**(워커 mock·real, FD4 디스크 오류 포함, `feat/contract-v1.0`) |
+| GLB_SPEC "스킨·애니메이션 없음" ↔ 실제 리깅 출력 | `GLB_SPEC.md:35` | 안건 #14 — 2026-11-21 결정: GLB_SPEC 을 실제 출력에 맞춤. **GLB_SPEC·CONTRACT §4 고침**(`feat/contract-v1.0`) |
 | `sample-dog.glb` 가 문서마다 "0바이트" / "리깅 GLB 로 교체해 씀" | 루트·backend README, `unity/README.md`, `unity/CLAUDE.md` | 교체 결정 후 한 번에 |
-| #6 업로드 모드를 PLAN 은 "결정", 체크리스트는 "제안"으로 적음. (b) 를 "GLB 바이너리 응답"이라 적었지만 구현은 JSON `glbUrl` + `GET/DELETE /artifacts` | `PLAN.md`, `REVIEW_CHECKLIST.md:12` | 회의에서 결정 기록. PLAN 위험 표는 이번에 구현에 맞춤 |
+| #6 업로드 모드를 PLAN 은 "결정", 체크리스트는 "제안"으로 적음. (b) 를 "GLB 바이너리 응답"이라 적었지만 구현은 JSON `glbUrl` + `GET/DELETE /artifacts` | `PLAN.md`, `REVIEW_CHECKLIST.md:12` | 회의에서 결정 기록. PLAN 위험 표는 이번에 구현에 맞춤. **2026-11-21 결정 (b) = JSON `glbUrl` + `GET/DELETE /artifacts`(경로 모드는 같은 호스트용) → PLAN·CONTRACT §6.1·ARCHITECTURE 고침** |
 | minSdk(README 24 ↔ 설정 34), HTTP 허용, 핀치 범위 | `unity/README.md`, `ProjectSettings.asset`, 프리팹 | UN |
 | 생성 결과 커밋 금지 규칙 ↔ `unity/Assets/Models` 의 AnimalLift 출력 | `generation/README.md`, `unity/CLAUDE.md` | 팀 결정(라이선스) |
 | 커밋 메시지 규칙 `feat:` 등 ↔ 실제 `[Backend] 무엇을 — 왜` | 루트 `CLAUDE.md` | 팀 결정 |

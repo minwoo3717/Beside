@@ -128,10 +128,9 @@ class JobV1ApiTest {
                 .andExpect(header().doesNotExist("Content-Length"))
                 .andReturn();
         assertThat(multiRange.getResponse().getContentType()).startsWith("multipart/byteranges");
-        mvc.perform(get("/api/v1/jobs/{id}/asset?variant=hair", jobId))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.error.code").value("ASSET_NOT_FOUND"))
-                .andExpect(jsonPath("$.error.jobId").value(jobId));
+        mvc.perform(get("/api/v1/jobs/{id}/asset?variant=base", jobId))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(SAMPLE_GLB));
         mvc.perform(get("/api/v1/jobs/{id}/asset?variant=fur", jobId))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
@@ -139,6 +138,39 @@ class JobV1ApiTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("JOB_NOT_FAILED"))
                 .andExpect(jsonPath("$.error.jobId").value(jobId));
+    }
+
+    /**
+     * The hair variant left API v1 on 2026-11-21 (REVIEW_CHECKLIST #4): ?variant=hair is now an unknown value like any
+     * other, refused at parameter conversion with 400 INVALID_REQUEST before the job is looked up, so the answer is the
+     * same for a completed, an unfinished and an unknown job (it used to be 404 ASSET_NOT_FOUND on a completed one).
+     */
+    @Test
+    void hairVariantIsRefusedAs400WhateverTheJobState() throws Exception {
+        String completed = json(upload(jpeg("hair-done.jpg", 3)).andExpect(status().isAccepted()).andReturn())
+                .path("jobId").asText();
+        await().pollInterval(Duration.ofMillis(50)).atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> assertThat(readJob(completed).path("status").asText()).isEqualTo("COMPLETED"));
+        // "fail" in the name: this job never completes (PENDING, PROCESSING, then FAILED); without a variant it is 409.
+        String unfinished = json(upload(jpeg("fail-hair-pending.jpg", 3)).andExpect(status().isAccepted()).andReturn())
+                .path("jobId").asText();
+        String unknown = UUID.randomUUID().toString();
+
+        for (String jobId : List.of(completed, unfinished, unknown)) {
+            JsonNode body = json(mvc.perform(get("/api/v1/jobs/{id}/asset", jobId).param("variant", "hair"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith("application/json"))
+                    .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                    .andReturn());
+            assertThat(body.path("error").path("message").asText()).as(jobId).contains("variant").contains("hair");
+            assertThat(body.path("error").path("jobId").asText(null)).as("no jobId: the job was never looked up").isNull();
+        }
+        // The same jobs without the variant answer as before: base is still the default.
+        mvc.perform(get("/api/v1/jobs/{id}/asset", completed)).andExpect(status().isOk());
+        mvc.perform(get("/api/v1/jobs/{id}/asset", unfinished)).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("JOB_NOT_COMPLETED"));
+        mvc.perform(get("/api/v1/jobs/{id}/asset", unknown)).andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("JOB_NOT_FOUND"));
     }
 
     @Test

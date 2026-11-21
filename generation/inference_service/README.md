@@ -150,7 +150,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 |---|---|---|
 | `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
-| `options.hair` | bool | 받기만 하고 지금은 무시한다. true 일 때 hair variant(`{jobId}/hair.glb`)를 만드는 것은 **[계획]**. 털 맵(`hair_length.png`·`hair_flow.png`·`hair_maps.json`)은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 옆에 쓴다 |
+| `options.hair` | bool | 받기만 하고 무시한다. Spring 은 늘 `false` 를 보낸다. hair variant(`{jobId}/hair.glb`)는 2026-11-21 안건 #4 로 API 계약에서 뺐고 만들 계획도 없다 — 이 필드는 내부 계약 모양을 지키려고 남겼다. 털 맵은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 넣는다. 옆에 쓰는 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 은 확인용 사본이고 `/artifacts` 로 내주지 않는다 |
 
 응답 200:
 
@@ -165,7 +165,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 | 응답 필드 | 타입 | 설명 |
 |---|---|---|
 | `glbPath` | string | base GLB 의 절대 경로. Spring 이 헤더를 확인하고 `storage/results/{jobId}/base.glb` 로 복사한다 |
-| `hairGlbPath` | string \| null | 지금은 항상 null. `options.hair` 일 때 hair GLB 경로를 주는 것은 **[계획]**(Spring 쪽 저장도 [계획]) |
+| `hairGlbPath` | string \| null | 항상 null. hair GLB 는 만들지 않는다(2026-11-21 안건 #4, 털은 `base.glb` 안 털 맵). 모양을 지키려고 남긴 필드이고 Spring 은 읽지 않는다 |
 | `metrics.*` | int \| null | §2 의 여섯 수치. 숫자가 아니면 Spring 이 null 로 기록한다 |
 | `passthrough` | bool | 샘플을 돌려줬으면 true. Spring 이 실행마다 저장하므로 측정표에서 거를 수 있다 |
 | `modelVersion` | string \| null | **선택**(2026-10-06 추가). GLB 를 만든 모델·가중치 버전, 예 `animallift-baseline@<커밋>`. Spring 이 실행마다 `job_runs.model_version` 에 저장해 베이스라인과 개선안을 구분한다. 패스스루는 None, 128자까지 |
@@ -272,5 +272,5 @@ Spring 의 `InferenceHealthMonitor` 는 `inference.token` 이 있으면 이 헤�
 ## 가정과 열린 결정 (계약 회의 안건)
 
 - 경로 모드는 Spring ↔ Python **파일시스템 공유**(같은 호스트 또는 NFS/SMB 볼륨)를 가정한다: 업로드 경로를 그대로 넘기고 GLB 경로를 돌려받는다. 디스크를 공유하지 않는 분리 배포는 업로드 모드(`POST /infer/upload` + `GET /artifacts/…`)로 한다(2026-10-30 결정, REVIEW_CHECKLIST #6 (b)).
-- 동기 호출: Spring 워커 스레드가 응답까지 기다린다(기본 600초). 추론이 더 길어지면 작업 큐·콜백 방식으로 바꾼다.
+- 동기 호출: Spring 워커 스레드가 응답까지 기다린다(`inference.timeout-ms` 기본 120초 — 2026-11-21 안건 #7 로 600초에서 줄임). 추론이 더 길어지면 작업 큐·콜백 방식으로 바꾼다.
 - 동시성: GPU 1장 기준 요청 1개씩. Spring 이 `inference.max-concurrency`(기본 1)건만 동시에 보내고 나머지 작업은 Spring 에서 PENDING 으로 기다린다 **[구현됨]**. 그래서 보통은 `inference.timeout-ms` 가 그 작업 자신의 추론 시간에만 걸린다. 예외: Spring 이 시간 초과(또는 재시작)로 포기한 요청도 추론 서비스에서는 끝까지 돌며 `MODEL_LOCK` 을 쥐고 있어(동기 엔드포인트는 연결이 끊겨도 취소되지 않는다), 다음 작업의 `/infer` 는 그만큼 잠금을 기다린 뒤 시작하고 그 시간도 다음 작업의 timeout·`processingMs` 에 들어간다. 업로드 모드에서는 Spring 의 정리 `DELETE /artifacts` 가 그 요청을 취소해 그 `predict` 가 끝나면 변환 없이 멈추고, 아직 잠금을 기다리던 요청은 모델을 돌리지 않는다(위 'DELETE /artifacts/{jobId}', 2026-11-19). `timeout-ms` 를 실측 추론 시간보다 넉넉히(약 3배, [backend/README.md](../../backend/README.md)) 둔다.

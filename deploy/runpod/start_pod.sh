@@ -5,7 +5,7 @@
 # In that mode tailscaled hands inbound tailnet TCP for its own 100.x address to 127.0.0.1:<same port>
 # (wgengine/netstack acceptTCP), so the VM reaches http://<pod 100.x>:8002 while the service listens only on
 # loopback: nothing on the Pod's public TCP ports and nothing behind the Runpod HTTP proxy, which cuts requests at
-# 100 s (Spring waits up to 600 s on /infer/upload). Port 8002, not 8001: the nginx in Runpod's official images
+# 100 s (Spring waits up to inference.timeout-ms on /infer/upload: 120 s since 2026-11-21, 600 s before). Port 8002, not 8001: the nginx in Runpod's official images
 # already listens on 8001 (also 3001, 7270, 7861, 8081, 9091; Jupyter 8888, sshd 22).
 #
 # First time (Pod web terminal or SSH; an exec tool can run every line except the token one, which needs a keyboard:
@@ -96,7 +96,7 @@ fi
 case "$MODE" in model|passthrough) ;; *) die "MODE must be model or passthrough (got: $MODE)" ;; esac
 if [[ "$MODE" == model && "${ALLOW_NO_GPU:-0}" != 1 ]]; then
   # A stopped Pod resumes only on its old machine; if that GPU was rented out it starts with none, and the model
-  # would load on CPU without an error and every job would hit Spring's 600 s timeout.
+  # would load on CPU without an error and every job would hit Spring's inference.timeout-ms (120 s).
   gpus="$(nvidia-smi -L 2>/dev/null || true)"
   [[ "$gpus" == *"GPU "* ]] || die "no GPU visible (nvidia-smi -L). Terminate this Pod and create a new one on the same network volume (ALLOW_NO_GPU=1 starts anyway)"
 fi

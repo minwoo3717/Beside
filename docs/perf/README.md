@@ -61,5 +61,5 @@ python scripts/perf/report.py --data docs/perf/data/2026-11-01_1257 --versions-f
 ## 읽는 법
 
 - 판정: 기준 대비 p50 변화가 10 % 이상이고, 반복별 p50 의 [최소, 최대] 범위가 기준의 범위와 겹치지 않을 때만 **개선**·**악화**, 나머지는 **차이 없음**(잡음).
-- 이름: `bench.*` 값과 `postMs`·`flowMs`·`pollMs` 같은 클라이언트 표본 이름은 이 벤치마크 전용이고 [docs/METRICS.md](../METRICS.md) 에 등록된 이름이 아니다(계약 회의 안건 [REVIEW_CHECKLIST #15](../api/REVIEW_CHECKLIST.md)). 서버 값 `uploadMs`·`queuedMs`·`processingMs`·`totalMs` 만 METRICS §1 의 뜻 그대로다.
+- 이름: `bench.*` 값과 `postMs`·`flowMs`·`pollMs` 같은 클라이언트 표본 이름은 이 벤치마크 전용이고 [docs/METRICS.md](../METRICS.md) 에 등록된 이름이 아니다([REVIEW_CHECKLIST #15](../api/REVIEW_CHECKLIST.md), 2026-11-21 결정: 이 문서 전용으로 유지). 서버 값 `uploadMs`·`queuedMs`·`processingMs`·`totalMs` 만 METRICS §1 의 뜻 그대로다.
 - 한계: 개발 PC 루프백(127.0.0.1)에서 잰 값이고, real 시나리오는 모델 없는 패스스루 스텁이라 Spring 쪽 오버헤드만 보인다. 클라우드 VM·Tailscale·GPU 의 수치가 아니다.

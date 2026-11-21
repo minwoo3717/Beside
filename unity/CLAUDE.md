@@ -17,7 +17,7 @@
 - 배치 규칙은 [docs/asset/GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기 출력은 최장 축 1 m·머리 +Z·발바닥 원점, 앱 기본값은 `normalizeMode = LongestAxis`, `targetSize = 0.6`, `modelFacing = PlusZ`. 정면이 다른 에셋은 GLB를 고치지 말고 `modelFacing`으로 맞춘다(예전 OBJ 기반 샘플은 MinusX).
 - 배치는 템플릿 `ObjectSpawner` 경로로만 한다(바닥 터치, `CenterPlacer.PlaceAtCenter` → `TrySpawnObject`). 개수 제한(기본 1, 추가 터치 무시)과 바닥 전용(법선이 수직 ±25°) 규칙은 `SpawnLimiter` 한 곳에서 지킨다. 배치된 모델 지우기도 `SpawnLimiter.ClearAll`을 쓴다.
 - 바닥 인식은 `PlaneScanGate`가 켜고 끈다(디자인 UI의 `scanOnlyInAR`): AR 화면에서만 `ARPlaneManager`를 켜고, 배치된 모델이 없을 때 진입하면 `ARSession.Reset()`으로 처음부터 인식한다. 다른 코드에서 `ARPlaneManager.enabled`를 직접 바꾸지 않는다. 배치 후 바닥 점 숨김은 `PlaneVisibility`(렌더러만 끄고 인식은 유지).
-- 리깅 GLB의 클립 이름은 `Idle`, `Walk`, `Sit`, `TailWag`, `HeadTilt`(GLB_SPEC rigged 확정 전 임시 계약). 재생은 `PetAnimationPlayer`만 한다(glTFast 레거시 `Animation`). 클립 이름이 바뀌면 `PetAnimationPlayer`와 디자인 UI 버튼만 고친다.
+- 리깅 GLB의 클립 이름은 `Idle`, `Walk`, `Sit`, `TailWag`, `HeadTilt`(GLB_SPEC §3·§3.1 — 2026-11-21 결정으로 리깅은 선택 항목, 이름은 템플릿이 정하고 앱이 이 다섯 이름으로 찾는다). 재생은 `PetAnimationPlayer`만 한다(glTFast 레거시 `Animation`). 클립 이름이 바뀌면 `PetAnimationPlayer`와 디자인 UI 버튼만 고친다.
 - 셸 퍼는 `ShellFurRenderer`가 그린다. 리깅 메시는 프레임당 한 번만 `BakeMesh`하고 모든 껍질이 공유한다(껍질마다 굽지 않는다).
 - **SMAL 파생 데이터(리깅 GLB, 웨이트, `.pkl`)는 커밋하지 않는다.** 학술용 라이선스다.
 
@@ -48,7 +48,7 @@
 ## 테스트
 
 - 에디터: Play 모드에서 `PhotoPicker.editorTestImagePaths`로 업로드 → 폴링 → 다운로드 → 미리보기 → XR Simulation 바닥 클릭 배치. 리깅 모델은 키보드 1~5(Idle/Walk/Sit/TailWag/HeadTilt).
-- 리깅 모델 털(로컬): 앱에서 "처음부터" → `ModelLoader`의 Test Glb Url + Test Hair Length/Flow Url → Play.
+- 리깅 모델 털(로컬): 앱에서 "처음부터" → `ModelLoader`의 Test Glb Url + Test Hair Length/Flow Url → Play. 이 URL 경로(`LoadAndRegister(string …)`)는 GLB 안 털 맵(`extras.beside`, [GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md))과 `furLength` 를 읽지 않는다 — 털 맵 PNG 를 따로 줘야 털이 나오고 길이는 `Dog_Fur_Mat` 값(0.025)이다. 서버 GLB 안 털 맵은 작업 흐름(`JobManager` → `LoadAndRegister(byte[] …)` → `TryReadEmbeddedHair`)에서만 읽힌다.
 - 기기: Android Logcat 패키지(`Window > Analysis > Android Logcat`) 또는 `adb logcat -s Unity`. 검색어 `BesideMetric`, `RuntimeModelLoader`, `JobManager`, `SpawnLimiter`, `PlaneScanGate`.
 - `metrics.csv` 회수: `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` (배치 후 30초가 지나야 한 줄이 써진다).
 - 시나리오 표(정상·바닥 인식 시점·배치 제한·벽 차단·바닥 점·애니메이션·서버 변경·실패+재시도·복원·캐시·서버 종료·AR 안내)는 [README.md](README.md) "테스트 시나리오".

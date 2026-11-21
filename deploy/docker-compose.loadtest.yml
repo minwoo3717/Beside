@@ -41,7 +41,8 @@ services:
       INFERENCE_BASEURL: ${LOADTEST_INFERENCE_BASE_URL:-http://127.0.0.1:9}
       INFERENCE_TOKEN: ${LOADTEST_INFERENCE_TOKEN:-}
       INFERENCE_TRANSFER: upload
-      # 운영(10분 / 30분)보다 짧게. F1b(타임아웃) 는 20000, F2(GPU 꺼짐) 는 운영과 같은 1800000 으로 바꿔 띄운다.
+      # 시간 초과는 운영 기본값(2분, 2026-11-21 #7 로 10분에서 줄임)과 같고, 오프라인 대기는 운영(30분)보다 짧게.
+      # F1b(타임아웃) 는 20000, F2(GPU 꺼짐) 는 운영과 같은 1800000 으로 바꿔 띄운다.
       INFERENCE_TIMEOUTMS: ${LOADTEST_INFERENCE_TIMEOUT_MS:-120000}
       INFERENCE_OFFLINEWAITMS: ${LOADTEST_INFERENCE_OFFLINE_WAIT_MS:-300000}
       # 동시에 보내는 /infer 수(G2 의 c = 1, 2, 4). 스텁의 BESIDE_PASSTHROUGH_SLOTS 와 같게 둔다.

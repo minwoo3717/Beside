@@ -8,6 +8,7 @@
 - 새 기능은 `/api/v1`(`api/v1/JobV1Controller`)에만 추가한다. 응답 DTO는 `api/v1/dto/`, 클래스 이름은 [docs/api/openapi.yaml](../docs/api/openapi.yaml)의 컴포넌트 스키마 이름과 같아야 한다(계약 테스트가 비교).
 - 계약을 바꿀 때 순서: `docs/api/openapi.yaml` 수정 → 코드 수정 → `JobV1ContractTest` 통과 → `docs/api/CHANGELOG.md` 기록. 계약 테스트가 실패하면 코드가 아니라 문서가 맞는지 먼저 확인한다.
 - 오류 응답: v1은 `{ "error": { "code", "message", "jobId?" } }`, 코드는 `exception/ErrorCode`와 [docs/api/ERROR_CODES.md](../docs/api/ERROR_CODES.md)가 1:1. v0는 기존 평면 `{ "error": "문자열" }` 유지. 분기는 `GlobalExceptionHandler`가 요청 경로(`/api/v1/` 접두사)로 한다.
+- 클라이언트가 보는 프로파일 차이(파일 시그니처 검사 `upload.verify-magic` 은 prod 만, 대표 사진 검사 `preprocess.check.enabled` 는 real·prod)와 `inference.timeout-ms`(real 120000, prod 물려받음 — REVIEW_CHECKLIST #7)는 계약 문서(openapi createJob, ERROR_CODES '프로파일 차이')에 적혀 있다. 바꿀 때는 그 문서를 먼저 고치고 `ProfileContractSettingsTest` 를 맞춘다.
 - 서버 내부 경로(`resultPath`, 업로드 저장 경로)는 v1 응답에 넣지 않는다. `error.message` 도 마찬가지다: real 워커는 경로·내부 주소·추론 서비스의 원문 메시지를 서버 로그에만 남긴다(`InferenceFailure` 의 message 와 logDetail).
 - Discord 알림(`WebhookNotifier`)은 큐 둘(GPU 먼저)과 실패 뒤 쉬기(`notify.retry-base-ms`)로 보낸다(장애 훈련 FD9). 보내는 곳은 `send` 한 곳이고, 리스너는 큐에 넣기만 한다.
 - 실행을 끝낼 때(COMPLETED/FAILED)는 항상 `JobFinisher.complete/fail` 을 쓴다. 상태와 메타데이터를 한 번에 저장하고, 그 뒤 `job_runs` 행과 `events.jsonl` 줄을 같은 `JobRun` 객체로 남기는 곳이 여기뿐이다. `setStatus(COMPLETED|FAILED)` 를 다른 곳에서 직접 부르지 않는다. 측정 기록(행 insert·파일 append)이 실패해도 로그만 남기고 작업 결과는 바꾸지 않는다. real 워커는 `/infer` 가 돌려준 수치를 `RunDetails` 로 `complete` 에 넘기고, mock 은 `RunDetails.NONE` 을 넘긴다.
