@@ -9,6 +9,10 @@ Model mode (set BESIDE_ANIMALLIFT_DIR, run in the AnimalLift Python env):
             BESIDE_WORK_DIR (default ./work), BESIDE_VAE_LOCAL_PATH
   Spring on Windows, this service in WSL2 Ubuntu: BESIDE_PATH_MAP='C:\\=/mnt/c/' and BESIDE_WORK_DIR=/mnt/c/beside/work
   rigging: BESIDE_RIG_TEMPLATE=<rigged template .glb> -> skeleton + Idle/Walk/Sit/TailWag/HeadTilt on every result
+  fur maps (GLB_SPEC §4.1): on by default; BESIDE_EMBED_HAIR=0 leaves them out of the GLB (no extras.beside)
+  converter extras, opt-in (default off: the GLB stays as GLB_SPEC §4/§4.1 describe, tools/convert_asset.py docstring):
+            BESIDE_HAIR_META=<AnimalLift>/assets/hair_map_meta_uvanchor.npz (fur maps from guide texels, bare nose/pads),
+            BESIDE_PAD_TEXTURE=1 (uv.png green background filled; the rigged GLB then gets texture_padded.png too)
   swapping the model (no Spring/Unity change):
             BESIDE_MODEL_DIR (alias of BESIDE_ANIMALLIFT_DIR), BESIDE_MODEL_NAME (modelVersion label, default animallift-baseline),
             BESIDE_RUNNER (module:Class, default animallift_runner:AnimalLiftRunner), BESIDE_FORWARD_AXIS (+x for SMAL/AnimalLift)
@@ -73,6 +77,12 @@ FORWARD_AXIS = os.environ.get("BESIDE_FORWARD_AXIS", "+x")                   # h
 # (tools/rig_transfer.py). If the transfer fails or the rigged GLB is over the GLB_SPEC §1 size limit, the static GLB
 # is delivered, the job does not fail.
 RIG_TEMPLATE = os.environ.get("BESIDE_RIG_TEMPLATE")
+# Fur maps inside the GLB (GLB_SPEC §4.1) whenever the model writes hair.npz; "0" turns them off (the app then draws
+# no server fur). Off-switch for a device problem without changing the Pod's code (GLB_SPEC §4.1 '알려진 점').
+EMBED_HAIR = (os.environ.get("BESIDE_EMBED_HAIR") or "1").strip() != "0"
+# Opt-in converter extras from the branch Unity (2d2e235); unset = convert's defaults, so the GLB does not change.
+HAIR_META = (os.environ.get("BESIDE_HAIR_META") or "").strip() or None
+PAD_TEXTURE = (os.environ.get("BESIDE_PAD_TEXTURE") or "").strip() == "1"
 
 # Spring on Windows + this service in WSL2 Ubuntu on the same PC: translate paths both ways.
 #   BESIDE_PATH_MAP="C:\\=/mnt/c/"   (several pairs separated by ';')
@@ -772,10 +782,16 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
 
     _stop_if_cancelled(attempt, "before conversion")
     glb = job_dir / "base.glb"
+    extras = {}   # only what is switched on: with nothing set the call (and the GLB) is the same as before
+    if HAIR_META:
+        extras["hair_meta"] = HAIR_META   # unreadable: convert warns and keeps the raw fur maps
+    if PAD_TEXTURE:
+        extras["padded_texture"] = True
     try:
         # make_dirs=False: a job folder that DELETE removed during the conversion is not recreated
         m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
-                    hair_npz=str(pred.hair_npz) if pred.hair_npz else None, forward_axis=FORWARD_AXIS, make_dirs=False)
+                    hair_npz=str(pred.hair_npz) if pred.hair_npz and EMBED_HAIR else None, forward_axis=FORWARD_AXIS,
+                    make_dirs=False, **extras)
     except ConversionError as e:
         _stop_if_cancelled(attempt, "after a conversion error")
         raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": str(e)})
@@ -792,9 +808,11 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
         _stop_if_cancelled(attempt, "before rigging")
         rig_started = time.perf_counter()
         tmp = job_dir / "base.rigged.glb"
+        padded = job_dir / "texture_padded.png"   # convert wrote it only with BESIDE_PAD_TEXTURE=1
+        texture = padded if PAD_TEXTURE and padded.is_file() else pred.uv_png
         try:
-            info = transfer(str(glb), str(pred.uv_png), RIG_TEMPLATE, str(tmp))
-            # the rigged file (template skin + clips + raw uv.png) never went through convert's size check
+            info = transfer(str(glb), str(texture), RIG_TEMPLATE, str(tmp))
+            # the rigged file (template skin + clips + uv.png) never went through convert's size check
             if info["bytes"] > MAX_GLB_BYTES:
                 raise RigError(f"rigged GLB {info['bytes']} bytes > limit {MAX_GLB_BYTES}")
             os.replace(tmp, glb)
