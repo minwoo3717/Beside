@@ -9,7 +9,7 @@ Spring·Unity 는 코드 변경 없이 그대로 동작한다. 이 문서는 GPU
 |---|---|
 | `inference_service/animallift_runner.py` | AnimalLift 를 한 번만 불러 두고 사진 1장 → `mesh.obj`, `uv.png`, `hair.npz` (원본 `test.py` 와 같은 코드 경로) |
 | `inference_service/app.py` | `BESIDE_ANIMALLIFT_DIR` 가 있으면 시작 시 백그라운드로 모델 로드, `/infer` 에서 추론 → 변환 → `glbPath`·metrics·modelVersion 응답 |
-| `tools/convert_asset.py` | GLB_SPEC 변환: 머리 +X → **+Z**, 최장 축 1 m, 발바닥 y = 0, 노드 `base`, 텍스처 임베드, `base.metrics.json`. 털 지도 PNG 도 같이 만든다(API 미포함) |
+| `tools/convert_asset.py` | GLB_SPEC 변환: 머리 +X → **+Z**, 최장 축 1 m, 발바닥 y = 0, 노드 `base`, 텍스처 임베드, `base.metrics.json`. 털 지도 두 장은 `base.glb` 안(`extras.beside`, GLB_SPEC §4.1)에 넣고, 확인용 PNG 사본을 옆에 쓴다(사본은 API 로 내주지 않음) |
 | `scripts/run_real.ps1 -AnimalLiftDir` | 위 환경 변수를 넣어 두 서버를 띄운다 |
 
 출력 위치: `generation/inference_service/work/<jobId>/` (`raw/` = AnimalLift 원본, `base.glb`, `base.metrics.json`, `hair_*.png`). Spring 이 `base.glb` 를 `backend/storage/results/<jobId>/base.glb` 로 복사한다. `work/` 는 커밋하지 않는다(.gitignore 에 추가).
@@ -61,7 +61,7 @@ cd C:\beside\Beside
 - 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 2026-11 부터 Spring(real·prod)이 한다: 첫 사진 자리에 개를 가운데 둔 정사각 RGBA PNG(`*-cutout.png`, 투명한 곳은 `load_rgb` 가 흰색으로)가 온다. 끄는 법과 비교 실험은 [backend/README.md](../../backend/README.md) '대표 사진 검사·전처리'.
 - 같은 사진은 같은 결과(시드 고정).
 - 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
-- 털: `hair_length.png`/`hair_flow.png`/`hair_maps.json` 이 GLB 옆에 생기지만 API 로 내려주지는 않는다(계약 미정).
+- 털: 털 맵 두 장이 `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 들어가 앱의 셸 털이 그것을 쓴다. GLB 옆의 `hair_length.png`/`hair_flow.png`/`hair_maps.json` 은 확인용 사본이고 API 로 내려주지 않는다.
 - 라이선스: AnimalLift 리포에 라이선스 파일이 없다. 학습·연구 목적 사용은 저자 안내를 따르고, 결과물·가중치를 공개 배포하기 전에 확인한다.
 
 ## 모델 교체 (개선 모델로 바꿀 때)

@@ -143,7 +143,7 @@ public class RuntimeModelLoader : MonoBehaviour
     }
 
     /// <summary>
-    /// Reads the hair maps convert_to_ar_assets.py embeds in the GLB: extras.beside.{hairLengthImage, hairFlowImage, furLength}
+    /// Reads the hair maps generation/tools/convert_asset.py embeds in the GLB (GLB_SPEC 4.1): extras.beside.{hairLengthImage, hairFlowImage, furLength}
     /// point at images whose bufferViews live in the binary chunk.
     /// </summary>
     public static bool TryReadEmbeddedHair(byte[] glb, out byte[] lengthPng, out byte[] flowPng, out float furLength)

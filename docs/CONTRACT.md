@@ -26,7 +26,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `GET /api/v1/jobs/{jobId}/asset?variant=base` | `variant` 는 `base` 뿐, 생략 시 `base`. `hair` 는 2026-11-21 계약에서 뺐다(#4) | **200** `model/gltf-binary`, `Content-Disposition: attachment; filename="{jobId}-{variant}.glb"`, `Content-Length` | 409 `JOB_NOT_COMPLETED`(미완료·실패), 404 `ASSET_NOT_FOUND`(완료됐지만 GLB 파일 없음), 400 `INVALID_REQUEST`(`base` 가 아닌 variant — `hair` 포함, 작업 상태와 상관없이), 404 `JOB_NOT_FOUND`, 500 |
 | `POST /api/v1/jobs/{jobId}/retry` | 본문 없음 | **202** + `Location` + `{ "jobId" }`, 작업은 PENDING 으로 | 409 `JOB_NOT_FAILED`(FAILED 가 아님), 404, 500 |
 | `GET /api/v1/jobs?limit=&cursor=` | `limit` 1~100(기본 20), `cursor` = 이전 `nextCursor` | **200** `{ items: JobResponse[], nextCursor: string\|null }` 최신순 | 400 `INVALID_REQUEST`, 500 |
-| `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile: "mock"\|"real", workerType: "mock"\|"real" }` | — |
+| `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile, workerType: "mock"\|"real" }`. `profile` 은 활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음, 예 `mock`·`real`, 공개 서버는 `real,prod`, 활성 프로파일이 없으면 `mock`). 앱은 `mock`\|`real` 둘 중 하나라고 가정하지 않는다(워커 종류는 `workerType`) | — |
 
 ### JobResponse
 
@@ -112,7 +112,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 
 ## 4. GLB 에셋 계약 — [구현됨: 변환기·리깅] / [실험 결과: 삼각형·파일 크기] / [계획: gltf-validator·유효 샘플]
 
-요약이다. 원본은 [asset/GLB_SPEC.md](asset/GLB_SPEC.md)(스킨·클립·털 맵 형식 포함). 변환기 `generation/tools/convert_asset.py` 와 리깅 `rig_transfer.py` 는 #1(2026-10-14)로 들어와 추론 서비스가 작업마다 부른다 **[구현됨]**(변환기만 보는 자동 테스트는 없고, 추론 서비스 시험이 합성 출력으로 `convert()` 를 돌린다 — [generation/tools/README.md](../generation/tools/README.md)).
+요약이다. 원본은 [asset/GLB_SPEC.md](asset/GLB_SPEC.md)(스킨·클립·털 맵 형식 포함). 변환기 `generation/tools/convert_asset.py` 와 리깅 `rig_transfer.py` 는 #1(2026-10-14)로 들어와 추론 서비스가 작업마다 부른다 **[구현됨]**. 두 도구의 자동 시험은 `generation/inference_service/test_app.py` 에 있다(합성 메시·합성 템플릿, 모델·GPU 없음): 털 맵을 GLB 안에 넣기·리깅본으로 옮기기(`FurMapsInGlbTest`·`RigTransferFurMapsTest`, PR #25), 업로드 → 내려받은 GLB 의 털 맵(`RealConversionCancelTest`), 리깅의 정점 순서·크기 상한(`RigTransferVertexOrderTest`·`RiggedResultTest`·`OversizeRiggedResultTest`). 좌표·노드 배치(GLB_SPEC §2·§3)를 직접 보는 시험은 없다 — [generation/tools/README.md](../generation/tools/README.md).
 
 | 항목 | 값 |
 |---|---|
@@ -120,12 +120,12 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | 좌표계 | **Y-up**, 오른손. **1 unit = 1 m**. 원점 = 네 발바닥 중심(최저점 y = 0). 정면 **+Z** |
 | 크기 정규화 | 바운딩 박스 최장 축 1.0 m (제안값) |
 | variant | `base` 하나. `hair` variant·hair GLB 는 없다(2026-11-21 #4) |
-| 노드·스킨 | 메시 노드 `base`. 스킨(36 joints)과 애니메이션 클립 5개(`Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt`)는 선택 항목이다 — 리깅 템플릿이 있을 때만 붙고, 리깅이 실패하면 리깅 없는 GLB 를 준다(#14) |
+| 노드·스킨 | 정적(기본): 노드 1개 `base`, 스킨·클립 없음. 리깅(선택, 추론 서비스에 리깅 템플릿이 있을 때만): 리깅 템플릿의 노드(메시 + 관절, 이름은 템플릿이 정함)·스킨 1개·클립 5개(`Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt`). 관절 36개는 안건 #14 기록의 값이고 템플릿이 리포 밖이라 리포 시험으로 세지 않는다. 리깅이 실패하거나 크기 상한을 넘으면 정적 GLB 를 준다(#14, GLB_SPEC §3·§3.1) |
 | 삼각형 상한 | ≤ 20,000 (제안값, exp-02·기기 FPS 측정 뒤 확정 — #3). 실제 출력 7,774 **[실험 결과]**(exp-01·2차 부하 시험) |
-| 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0` 필수, `TANGENT` 선택, 인덱스 uint16/uint32 |
+| 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0`, 리깅본은 + `JOINTS_0`·`WEIGHTS_0`(템플릿 것). 인덱스 uint16/uint32 |
 | 머티리얼 | PBR metallic-roughness, baseColorTexture = `uv.png`, metallic 0, roughness 0.8~1.0 (제안값) |
-| 텍스처 | ≤ 2048² (제안값, #3), PNG/JPEG, sRGB. base 1장 |
-| 털 맵 | 앱 셸 털용 길이·흐름 맵은 base GLB 안 `extras.beside` 에 싣는다(2026-11-21 #14). 형식과 변환기 반영 상태는 GLB_SPEC |
+| 텍스처 | ≤ 2048² (제안값, #3), PNG 임베드, sRGB. base color 1장(+ 아래 털 맵 2장은 linear 데이터, 같은 해상도 상한) |
+| 털 맵 | 앱 셸 털용 길이·결 맵 두 장(PNG, BIN 청크)과 `furLength` 를 base GLB 루트 `extras.beside` = `{ hairLengthImage, hairFlowImage, furLength }` 에 싣는다(2026-11-21 #14). 변환기가 넣고 리깅본도 옮긴다 **[구현됨: PR #25, main 병합(2026-11-21)·Pod 반영 전]**. 앱은 작업 흐름으로 받은 GLB 에서만 읽는다. 기기 확인 **[계획]**. 형식은 GLB_SPEC §4.1 |
 | 파일 크기 | ≤ 10 MB (제안값, #3). 실제 출력 1,310,876~1,327,400 B **[실험 결과]**(exp-01 — 리깅 없고 털 맵을 GLB 에 넣기 전의 출력) |
 | 검증 | gltf-validator 오류 0 **[계획]**(exp-02), Unity glTFast 로드, 바닥 접지·정면 확인. 변환기는 삼각형·텍스처·파일 크기 상한을 넘으면 `CONVERSION_FAILED` 로 끝낸다 **[구현됨]** |
 | 변환기 출력 | `base.glb` + `base.metrics.json { vertices, triangles, textureSize, bytes, convertMs }`(리깅한 GLB 를 쓰면 `bytes`·`convertMs` 를 그 기준으로 다시 씀) |

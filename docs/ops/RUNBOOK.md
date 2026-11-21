@@ -85,6 +85,7 @@
 ### GPU Pod 다시 세우기 (FD16a: 98 s)
 1. 멈춘 Pod 를 start 한다. "not enough free GPUs" 면 같은 볼륨 `z4kgw4v5zi`, EU-SE-1, A40, `minVcpuCountPerGpu 4`, `minRamPerGpu 24`, Secret 토큰으로 새 Pod 를 만든다.
 2. Pod 에서 `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main origin/main`, 그다음 `nohup bash /workspace/beside-bootstrap.sh > /workspace/beside-logs/start.log 2>&1 &`.
+   - 털 맵 주의(PR #25, main 병합 2026-11-21): 이 단계로 main 을 받으면 변환기가 `base.glb` 안에 털 맵을 넣고, 이미 깔린 앱도 새 작업마다 셸 20겹 털을 GLB 의 `furLength` 로 그린다(리포의 AnimalLift 출력 1건을 로컬 변환한 값 약 0.070 — 지금까지 기기에서 쓴 `Dog_Fur_Mat` 는 0.025). 변환기·추론 서비스에 이것을 끄는 스위치는 없다. 기기 확인([GLB_SPEC §4.1](../asset/GLB_SPEC.md) '알려진 점') 전에 피하려면 `origin/main` 대신 병합 전 main 커밋에 고정한다: `git -C /workspace/Beside fetch -q origin && git -C /workspace/Beside checkout -q -B main 24bce92`(2026-11-21 기준 병합 전 main). Pod 를 켤 때마다 이 단계에서 다시 고른다. 기기 확인이 끝나면 위 원래 명령으로 돌아간다.
 3. 볼륨의 Tailscale 상태로 같은 `100.83.86.62` 에 붙는다. VM `.env` 는 바꾸지 않는다. 같은 볼륨의 Pod 를 둘 켜지 않는다.
 4. 1차 훈련 때는 정지 직후 보낸 작업이 최대 600 s 동안 슬롯을 잡았다(FD16b). 이제는 내려받기가 60 s 동안 멈추면 끊기고, 새 서비스의 `instanceId` 를 본 뒤에는 그 전 요청을 바로 포기한다(backend [적용] 2026-11-20 15:53, PR #22). 2단계로 main 을 받아 켠 서비스는 `instanceId` 를 낸다. 옛 서비스(`instanceId` 없음)면 60 s 제한만 동작하고 POST 중이던 요청은 `inference.timeout-ms`(120 s, 2026-11-21 #7 — 배포 전 운영 VM 은 600 s)까지 기다리므로, 급할 때 backend 를 재시작해 대기열을 넘긴다. 이때 PENDING 은 `INTERNAL_ERROR` 가 되므로 앱에서 다시 시도해야 한다.
 

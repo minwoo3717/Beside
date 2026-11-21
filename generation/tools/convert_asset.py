@@ -12,14 +12,18 @@ GLB_SPEC §1~§4 applied here:
   * PBR metallic 0, roughness 0.9
 Violations exit with code 2 and a reason (the inference service reports CONVERSION_FAILED).
 
-With --hair, also writes hair_length.png / hair_flow.png / hair_maps.json next to the GLB for the app's shell fur
-(not part of the v1 API yet — see GLB_SPEC 'hair').
+With --hair, the fur maps for the app's shell fur go inside the GLB (GLB_SPEC §4.1): two PNG images in the binary
+chunk, named by the root extras.beside = {hairLengthImage, hairFlowImage, furLength} that the app reads
+(RuntimeModelLoader.TryReadEmbeddedHair). They are images only, no glTF texture uses them. The same maps are also
+written next to the GLB as hair_length.png / hair_flow.png / hair_maps.json for inspection.
 """
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
+import struct
 import sys
 import time
 
@@ -91,6 +95,7 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
         raise ConversionError(f"cannot read texture: {e}") from e
     if max(texture.size) > max_texture:
         raise ConversionError(f"texture {texture.size} > limit {max_texture}")
+    hair = hair_maps(hair_npz, max_texture) if hair_npz else None   # (length PNG, flow PNG, fur length in OBJ units)
 
     # --- orientation, scale, origin (GLB_SPEC §2)
     v = np.asarray(mesh.vertices, dtype=np.float64).copy()
@@ -116,6 +121,9 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
     data = scene.export(file_type="glb")
     if not data[:4] == b"glTF":
         raise ConversionError("exporter did not produce a glTF binary")
+    fur_length = round(hair[2] * scale, 6) if hair else None   # metres in the GLB, like the vertices
+    if hair:
+        data = embed_hair(data, hair[0], hair[1], fur_length)
     if len(data) > max_bytes:
         raise ConversionError(f"GLB {len(data)} bytes > limit {max_bytes}")
     out_dir = _out_dir(out_path, make_dirs)   # checked right before the write
@@ -130,10 +138,12 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
         "convertMs": 0,
     }
 
-    if hair_npz:
-        fur = hair_to_maps(hair_npz, os.path.join(out_dir, "hair_length.png"), os.path.join(out_dir, "hair_flow.png"))
+    if hair:   # copies of what the GLB carries, for looking at the maps
+        for name, png in (("hair_length.png", hair[0]), ("hair_flow.png", hair[1])):
+            with open(os.path.join(out_dir, name), "wb") as f:
+                f.write(png)
         with open(os.path.join(out_dir, "hair_maps.json"), "w") as f:
-            json.dump({"furLength": round(fur * scale, 6), "lengthMap": "hair_length.png", "flowMap": "hair_flow.png"}, f)
+            json.dump({"furLength": fur_length, "lengthMap": "hair_length.png", "flowMap": "hair_flow.png"}, f)
 
     metrics["convertMs"] = int((time.perf_counter() - started) * 1000)
     if metrics_path:
@@ -143,10 +153,18 @@ def convert(obj_path: str, texture_path: str, out_path: str, metrics_path: str |
     return metrics
 
 
-def hair_to_maps(npz_path: str, length_path: str, flow_path: str) -> float:
-    """hair.npz (per-texel strand offsets, local frame z = normal) -> length / flow PNGs. Returns max fur length."""
-    d = np.load(npz_path)
-    off = d["hair_offsets_local_q"].astype(np.float32) / 127.0 * d["offset_scale"]
+def hair_maps(npz_path: str, max_size: int = 2048) -> tuple[bytes, bytes, float]:
+    """hair.npz (per-texel strand offsets, local frame z = normal) -> (length PNG, flow PNG, max fur length).
+    The length is in the OBJ's units; convert scales it with the mesh."""
+    try:
+        with np.load(npz_path) as d:
+            off = d["hair_offsets_local_q"].astype(np.float32) / 127.0 * d["offset_scale"]
+    except Exception as e:  # noqa: BLE001  missing file, other keys, not an npz
+        raise ConversionError(f"cannot read hair: {e}") from e
+    if off.ndim != 4 or off.shape[-1] != 3:
+        raise ConversionError(f"hair offsets have shape {off.shape}, expected (height, width, points, 3)")
+    if max(off.shape[:2]) > max_size:
+        raise ConversionError(f"hair maps {off.shape[1]}x{off.shape[0]} > limit {max_size}")
     tip = off[:, :, -1]
     length = np.linalg.norm(tip, axis=-1)
     ref = float(np.percentile(length, 99.5)) or 1e-6
@@ -159,10 +177,46 @@ def hair_to_maps(npz_path: str, length_path: str, flow_path: str) -> float:
     flow = flow[::-1].copy()
     flow[..., 1] *= -1
     lift = lift[::-1]
-    Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L").save(length_path)
     rgb = np.concatenate([flow * 0.5 + 0.5, lift * 0.5 + 0.5], axis=-1)
-    Image.fromarray((rgb * 255 + 0.5).astype(np.uint8), "RGB").save(flow_path)
-    return ref
+    return (_png(Image.fromarray((length01 * 255 + 0.5).astype(np.uint8), "L")),
+            _png(Image.fromarray((rgb * 255 + 0.5).astype(np.uint8), "RGB")), ref)
+
+
+def _png(image: Image.Image) -> bytes:
+    out = io.BytesIO()
+    image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def embed_hair(glb: bytes, length_png: bytes, flow_png: bytes, fur_length: float) -> bytes:
+    """Adds the fur maps to a single-buffer GLB as the app reads them (RuntimeModelLoader.TryReadEmbeddedHair): two
+    PNG images whose bufferViews sit in the binary chunk, and root extras.beside = {hairLengthImage, hairFlowImage,
+    furLength}. No texture or material points at them, so texture 0 stays the body texture."""
+    json_len = struct.unpack_from("<I", glb, 12)[0]
+    gltf = json.loads(glb[20:20 + json_len])
+    bin_at = 20 + json_len
+    bin_len, kind = struct.unpack_from("<I4s", glb, bin_at)
+    if kind != b"BIN\x00" or len(gltf.get("buffers", [])) != 1:
+        raise ConversionError("cannot add fur maps: the GLB has no single binary buffer")
+    binary = bytearray(glb[bin_at + 8:bin_at + 8 + bin_len])
+    views, images = gltf.setdefault("bufferViews", []), gltf.setdefault("images", [])
+    beside = {}
+    for key, name, png in (("hairLengthImage", "hair_length", length_png), ("hairFlowImage", "hair_flow", flow_png)):
+        binary += b"\0" * (-len(binary) % 4)
+        views.append({"buffer": 0, "byteOffset": len(binary), "byteLength": len(png)})
+        binary += png
+        images.append({"name": name, "mimeType": "image/png", "bufferView": len(views) - 1})
+        beside[key] = len(images) - 1
+    beside["furLength"] = fur_length
+    binary += b"\0" * (-len(binary) % 4)
+    gltf["buffers"][0]["byteLength"] = len(binary)
+    extras = gltf.get("extras") if isinstance(gltf.get("extras"), dict) else {}
+    extras["beside"] = beside
+    gltf["extras"] = extras
+    js = json.dumps(gltf, separators=(",", ":")).encode()
+    js += b" " * (-len(js) % 4)
+    return (struct.pack("<4sII", b"glTF", 2, 12 + 8 + len(js) + 8 + len(binary))
+            + struct.pack("<I4s", len(js), b"JSON") + js + struct.pack("<I4s", len(binary), b"BIN\x00") + bytes(binary))
 
 
 def main(argv=None) -> int:

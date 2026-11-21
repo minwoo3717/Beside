@@ -61,7 +61,7 @@ gantt
 | 브라우저 Mock UI `app.js` → v1 전환 | **[구현됨]** 2026-10-04 | Node 테스트 18개(실제 서버 라이브 포함) 통과. 오류 문구는 ERROR_CODES, GIF 거부. v0 API 는 동결 유지 |
 
 완료 기준(DoD):
-- [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0` — 결정은 2026-11-21 계약 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸·CHANGELOG 에 적었다. 결정 반영(openapi·코드·문서)과 태그는 [계획]
+- [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0` — 결정은 2026-11-21 계약 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸·CHANGELOG 에 적었다. v1.0 몫의 결정 반영(openapi·코드·문서)은 [구현됨](`feat/contract-v1.0` → main, `JobV1ContractTest` 통과), 태그 `api-v1.0` 은 [계획]
 - [x] `cd backend; .\gradlew.bat test` 전부 통과, `node --test backend/src/test/js/mock-mvp.test.cjs` 통과 (2026-10-04 확인)
 - [ ] `scripts/e2e_mock.ps1` 이 bytes > 0 인 GLB 를 받는다 (샘플 교체 후)
 - [x] 서버 재시작 후 기존 jobId 조회가 200 (H2) — 2026-10-04 jar 강제 종료·재시작으로 확인. 같은 Idempotency-Key 도 같은 jobId

@@ -282,9 +282,10 @@ def _startup() -> None:
 
 
 class InferOptions(BaseModel):
-    hair: bool = Field(default=False, description="Hair variant ({jobId}/hair.glb) is [계획]: accepted but ignored today. "
-                       "The hair_length/flow PNGs are written next to base.glb whenever the model writes hair.npz "
-                       "(AnimalLift: every job), whatever this flag")
+    hair: bool = Field(default=False, description="Accepted and ignored; Spring always sends false. Kept for the shape "
+                       "of this internal contract: the hair variant ({jobId}/hair.glb) left API v1 (REVIEW_CHECKLIST #4, "
+                       "2026-11-21) and is not planned. The shell fur maps go inside base.glb (extras.beside, GLB_SPEC 4.1) whenever the model writes "
+                       "hair.npz (AnimalLift: every job), whatever this flag")
 
 
 class InferRequest(BaseModel):
@@ -308,8 +309,9 @@ class InferMetrics(BaseModel):
 
 class InferResponse(BaseModel):
     glbPath: str = Field(..., description="Absolute path of {jobId}/base.glb (same host as Spring, which copies it to storage/results/{jobId}/base.glb)")
-    hairGlbPath: Optional[str] = Field(default=None, description="Always null today: the hair variant GLB "
-                                       "({jobId}/hair.glb for options.hair) is [계획]")
+    hairGlbPath: Optional[str] = Field(default=None, description="Always null, kept for the shape of this internal "
+                                       "contract: no hair variant GLB is made (REVIEW_CHECKLIST #4, 2026-11-21); the "
+                                       "fur maps are inside base.glb (extras.beside)")
     metrics: InferMetrics
     passthrough: bool = Field(default=False, description="True when the sample GLB was returned instead of a real result")
     modelVersion: Optional[str] = Field(
@@ -851,7 +853,7 @@ def infer(request: InferRequest) -> InferResponse:
     return InferResponse(
         # passthrough answers the sample's own path, a model result the path Spring can open (BESIDE_PATH_MAP)
         glbPath=str(result.glb) if result.passthrough else _to_remote(str(result.glb)),
-        hairGlbPath=None,   # hair variant GLB is [계획]; hair_length/flow PNGs are written next to base.glb
+        hairGlbPath=None,   # no hair variant GLB (REVIEW_CHECKLIST #4); the shell fur maps are inside base.glb (extras.beside)
         metrics=result.metrics,
         passthrough=result.passthrough,
         modelVersion=result.model_version,

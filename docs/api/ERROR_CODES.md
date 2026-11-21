@@ -1,6 +1,6 @@
 # API v1 오류 코드 (`error.code`)
 
-모든 v1 오류 응답은 `{ "error": { "code", "message", "jobId?" } }` 봉투를 쓴다([openapi.yaml](openapi.yaml)의 `ErrorResponse`). 앱은 **`code`로 문구를 고르고** `message`(개발자용 영문)는 로그에만 남긴다. 목록에 없는 코드를 받으면 "일반 오류" 문구를 쓰고 크래시하지 않는다. 코드는 backend `exception/ErrorCode`와 1:1이며, 추가는 자유·변경/삭제는 계약 회의 결정 사항이다([CLAUDE.md](../../CLAUDE.md) 계약 변경 규칙).
+모든 v1 오류 응답은 `{ "error": { "code", "message", "jobId?" } }` 봉투를 쓴다([openapi.yaml](openapi.yaml)의 `ErrorResponse`). 앱은 **`code`로 문구를 고르고** `message`(개발자용 영문)는 로그에만 남긴다. 목록에 없는 코드를 받으면 "일반 오류" 문구를 쓰고 크래시하지 않는다. 아래 두 표의 코드는 backend `exception/ErrorCode`와 1:1이다. 맨 아래 '예약된 코드'(`RATE_LIMITED`)는 이름만 정한 것이라 따로 적었고 `ErrorCode` 에 없다. 추가는 자유·변경/삭제는 계약 회의 결정 사항이다([CLAUDE.md](../../CLAUDE.md) 계약 변경 규칙).
 
 ## HTTP 오류 코드 (`ErrorResponse.error.code`)
 
@@ -55,7 +55,7 @@
 | `INFERENCE_TIMEOUT` | real 워커 | 추론 서비스 응답이 `inference.timeout-ms`(real·prod 120 s, 2026-11-21 에 600 s 에서 줄임)를 넘김. PENDING 으로 기다린 시간은 들어가지 않는다 | 생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요. | 예 |
 | `INFERENCE_UNAVAILABLE` | real 워커 | 추론 서비스에 연결할 수 없음(꺼짐·연결 끊김), 또는 모델이 없거나 준비되지 않음(501~504) | 생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. | 잠시 후 |
 | `CONVERSION_FAILED` | 추론 서비스·워커 | OBJ/PNG → GLB 변환 실패 또는 GLB_SPEC 검증 실패. real 워커가 받은 GLB 가 없거나 glTF 2.0 바이너리가 아닐 때도 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
-| `INTERNAL_ERROR` | 서버 | 서버 재시작·워커 중단으로 작업이 끊김(재시작 때 PENDING/PROCESSING 이던 작업), 또는 real 워커의 예기치 못한 오류 (HTTP 오류 코드와 같은 이름) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
+| `INTERNAL_ERROR` | 서버 | 서버 재시작·워커 중단으로 작업이 끊김(재시작 때 PENDING/PROCESSING 이던 작업), 워커(mock·real)의 예기치 못한 오류, 또는 이 서버가 받은 GLB 를 디스크에 쓰거나 결과 폴더로 복사하지 못함(디스크 가득 참 등, 장애 훈련 FD4 — 전에는 `CONVERSION_FAILED`) (HTTP 오류 코드와 같은 이름) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 
 ## 예약된 코드 (구현 없음)
 
