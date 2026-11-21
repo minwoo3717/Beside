@@ -41,7 +41,7 @@ services:
       PREPROCESS_MODELSDIR: /app/models
       PREPROCESS_CHECK_ENABLED: ${PREPROCESS_CHECK_ENABLED:-true}
       PREPROCESS_CUTOUT_ENABLED: ${PREPROCESS_CUTOUT_ENABLED:-true}
-      # (선택) 대기열 상한 — 안건 #21 [제안값], 계약 회의 전(상한 코드는 검토 브랜치에만). admission.max-pending ↔
+      # (선택) 대기열 상한 — 안건 #21, 2026-11-21 결정(api-v1.1). 운영 .env 는 두지 않는다(꺼 둠). admission.max-pending ↔
       # ADMISSION_MAXPENDING, admission.retry-after-seconds ↔ ADMISSION_RETRYAFTERSECONDS. 기본 0 = 꺼짐(지금과 같다).
       # 켜는 법·값 규칙·형식 확인·되돌리기는 deploy/.env.example. 165 는 application.properties 의 기본값과 같게 둔다.
       ADMISSION_MAXPENDING: ${ADMISSION_MAX_PENDING:-0}

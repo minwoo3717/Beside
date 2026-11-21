@@ -35,7 +35,7 @@ const ERROR_MESSAGES = Object.freeze({
   INFERENCE_TIMEOUT: "생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요.",
   INFERENCE_UNAVAILABLE: "생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.",
   CONVERSION_FAILED: "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요.",
-  // Queue cap draft: [제안값] 안건 #21, 계약 회의 전. Sent as 503 with a Retry-After header (seconds).
+  // Queue cap (안건 #21, 2026-11-21 결정, API v1.1). Sent as 503 with a Retry-After header (seconds).
   QUEUE_FULL: "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요."
 });
 let selectedFiles = [];

@@ -19,8 +19,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The count the queue cap reads on every v1 create and retry while it is on (REVIEW_CHECKLIST #21, proposal before
- * the contract meeting): PENDING jobs queued after a cutoff, and the stale ones at or before it. The jobs table has no
+ * The count the queue cap reads on every v1 create and retry while it is on (REVIEW_CHECKLIST #21, decided
+ * 2026-11-21): PENDING jobs queued after a cutoff, and the stale ones at or before it. The jobs table has no
  * retention yet (#23), so the count must come from idx_jobs_status_queued_at_id (status, queuedAt, id), not a scan;
  * ddl-auto=update adds the index to existing database files. The index is the one review/api-v1.1 defines for its
  * queue position, so either branch can merge first.

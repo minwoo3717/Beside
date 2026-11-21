@@ -54,7 +54,7 @@ k6 값 이름은 `load_` 접두사다(§11 의 `load.*`, k6 는 점을 못 쓴�
 | `asset` | 첫 바이트(`http_req_waiting`) RTT + 150 ms, 전체 3,000 ms | 전체 6,000 ms |
 
 - §8 의 서버 `uploadMs` p95 ≤ 300 ms(0.8 MB `create`)는 k6 가 볼 수 없다(API 응답에 없다). A1·A3 small 실행 폴더의 `vm/events.jsonl` 에서 그 실행에 접수된 작업(`attempt` 1 줄, 접수 시각 = `finishedAt` − `totalMs`)의 `uploadMs` 로 본다. 줄은 작업이 끝날 때 생기므로(mock 은 처리 60초 뒤, `@Async` 풀이 차면 기다린 만큼 더 뒤) 업로드만 하는 A3 은 서버 대기열(`beside_jobs_queue`)이 빈 뒤에 VM 파일을 가져온다.
-- `load_errorRatio`(5xx + 연결 오류) < 0.5 %. 429 `RATE_LIMITED`·503 `QUEUE_FULL`([계획] R1~R3, 아직 계약에 없음)은 `load_rejectedCount` 로 따로 세고 기준을 걸지 않는다. 이런 거부가 유지 구간(특히 A3)을 실패로 만들어야 하는지는 정하지 않았다: 계약 안건 #21(큐 상한·503)·#22(요청 제한·429)와 함께 정한다.
+- `load_errorRatio`(5xx + 연결 오류) < 0.5 %. 429 `RATE_LIMITED`·503 `QUEUE_FULL` 은 `load_rejectedCount` 로 따로 세고 기준을 걸지 않는다. 503 `QUEUE_FULL`(안건 #21, 2026-11-21 결정, `api-v1.1`)은 유지 구간(특히 A3)의 실패로 세지 않는다(D10). 429 `RATE_LIMITED`(#22, 이름만 예약)는 구현할 때 정한다.
 - **상태 계열**(판정 없음, 보고만): `lib/flow.js` 의 `call()` 이 모든 응답을 실제 상태 코드의 계열로 센다. `load_status0Count` 는 응답 없음(연결 거부·리셋, k6 요청 시간 초과, TLS·HTTP/2 오류 — 이유는 k6 가 경고 줄로 남긴다), `load_status4xxCount`, `load_status5xxCount` 이고, 표본마다 `status=<코드>` 와 요청의 태그(`endpoint`, 단계)가 붙는다. 2xx·3xx 는 세지 않는다. 그 요청이 기대한 상태인지와 상관없이 세므로 F3 이 일부러 받는 413 도 4xx 에 들어간다(판정은 위의 `load_errorRatio`·`load_unexpectedCount` 가 한다). `load_errorRatio` 가 "몇 건 실패했는가"라면 이것은 "무엇이 돌아왔는가"다: 2026-11-18 VM 1차 A2 의 붕괴 단계 오류 7,298건은 상태 코드가 남지 않아, 연결 오류인지 앞단 프록시의 502·504 인지 가르지 못했다 [실험 결과].
   - `errorThresholds` 가 같은 범위(실행 전체, 단계마다 유지 구간)에 빈 기준(`count>=0`)을 같이 걸어, 오류를 판정하는 모든 스크립트의 요약에 남는다. `verdict.httpStatus` = `{ "0", "4xx", "5xx", "5xxByCode": { "500", "502", "503", "504", "other" } }`(실행 전체; 카운터가 없는 예전 데이터나 A2 `SEED_ONLY` 는 null), `verdict.stages[].httpStatus` = `{ "0", "4xx", "5xx" }`(단계 유지 구간; `not_run` 은 null).
   - 5xx 코드별 수는 실행 전체만 있다. k6 는 기준이 이름을 댄 하위 지표만 요약에 남기므로, 단계마다 코드를 다 남기려면 기준이 너무 많아진다. 단계별 코드가 필요하면 `k6 run --out json=<파일>` 의 `load_status5xxCount` 표본(`status`·`stage` 태그)을 본다.
@@ -293,7 +293,7 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
 
 ### 큐 상한을 켠 실행 [계획]
 
-서버의 큐 상한(안건 #21: 대기 작업이 N 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 계약 회의 전이라 main 에 없고, 검토 브랜치에만 기본 꺼짐으로 있다 **[제안값]**. 상한을 켠 VM 실행은 **[계획]** 이다(VM 쪽 값은 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
+서버의 큐 상한(안건 #21: 대기 작업이 N 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 2026-11-21 에 정했고(N 19·`Retry-After` 165 s, `api-v1.1`) 서버 코드는 PR #19 에 기본 꺼짐으로 있다. 운영 서버는 Unity 새 빌드와 5차 부하 시험 전까지 꺼 둔다. 상한을 켠 VM 실행(5차)은 **[계획]** 이다(VM 쪽 값은 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
 
 - `-e QUEUE_CAP=<N>` 으로 서버에 건 상한을 요약 `meta.queueCap` 에 남긴다. 주지 않으면 null, 0 은 상한을 끈 서버다. `-e QUEUE_RETRY_AFTER=<R>`(공통, `lib/config.js`)을 주면 `meta.queueRetryAfterS` 에 남는다.
 - 거절 수: 503 `QUEUE_FULL` 은 `load_rejectedCount` 에 더해 `load_queueFullCount` 로 엔드포인트별로 센다. `meta.measuredRefused` 는 거절된 생성, `meta.measuredRefusedRetries` 는 거절된 retry 다. 거절된 생성은 작업을 만들지 않아 `meta.measuredCreates` 에 들지 않는다. 지연(`load_postMs`)과 `meta.measuredCreatePosts` 에는 든다.
@@ -304,12 +304,12 @@ newrun f4r1; python scripts/load/failure/f4_abort.py --base-url $BASE_URL --job-
   - 거절된 흐름은 `load_flowOkRatio` 에서 0 이다. gpu_queue 는 ρ < 1 일 때만 `load_flowOkRatio >= 0.95` 를 건다. 그래서 ρ < 1 실행에서 거절이 흐름의 5 % 를 넘으면 이 기준이 실패한다(k6 종료 코드 99). ρ ≥ 1 실행(G3 등)에는 흐름 기준이 없다. A1(`api_staged.js`)은 같은 기준을 단계마다 걸어, 거절이 많은 단계는 fail 이 된다. 거절을 흐름 실패로 볼지는 계약 회의에서 정한다.
   - 생성 지연 기준(`http_req_duration{endpoint:create}`)에 거절된 POST 도 들어간다.
   - `create 202` check 는 거절마다 실패하므로 `verdict.checksFailed` 에 거절 수가 들어간다. 503 은 `verdict.httpStatus` 의 5xx(`5xxByCode` 의 503)에도 든다(보고만).
-- 서버 쪽 5xx 비율은 의도한 503 `QUEUE_FULL` 을 뺀다(안건 #21 [제안값], 회의 안건 D9(결정 전), 계약 회의 전): 가드(`PROM_URL`)와 `collect.py` 의 `http_5xx_ratio` 는 5xx 에서 서버의 거절 카운터 `beside_jobs_refused_total`([docs/METRICS.md](../../docs/METRICS.md) §5.1, 상한이 503 으로 답한 것만 센다)의 비율을 빼고 0 아래는 0 으로 둔다. 카운터가 없는 서버(상한 코드 없음)는 `or vector(0)` 으로 아무것도 빼지 않아 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수 자체는 `collect.py` 의 `jobs_refused_rate`(op별)이고, 503 원래 수는 `http_rps_by_status` 에 남는다. 이름은 METRICS.md 행과 같아야 한다(`test_collect.py` 가 확인). k6 의 `load_queueFullCount{endpoint:create}`·`{endpoint:retry}` 와 맞춰 볼 때 `jobs_refused_rate` 는 비율이라 개수로 쓰지 않는다(`increase()` 도 보간해 정수가 아니다). 개수는 실행 시작·끝에 서버 카운터의 순간값을 남겨 `op` 별로 뺀다(VM 절차는 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
+- 서버 쪽 5xx 비율은 의도한 503 `QUEUE_FULL` 을 뺀다(안건 #21 2026-11-21 결정 D9): 가드(`PROM_URL`)와 `collect.py` 의 `http_5xx_ratio` 는 5xx 에서 서버의 거절 카운터 `beside_jobs_refused_total`([docs/METRICS.md](../../docs/METRICS.md) §5.1, 상한이 503 으로 답한 것만 센다)의 비율을 빼고 0 아래는 0 으로 둔다. 카운터가 없는 서버(상한 코드 없음)는 `or vector(0)` 으로 아무것도 빼지 않아 전과 같다. 분모(전체 요청)에는 거절도 든다. 거절 수 자체는 `collect.py` 의 `jobs_refused_rate`(op별)이고, 503 원래 수는 `http_rps_by_status` 에 남는다. 이름은 METRICS.md 행과 같아야 한다(`test_collect.py` 가 확인). k6 의 `load_queueFullCount{endpoint:create}`·`{endpoint:retry}` 와 맞춰 볼 때 `jobs_refused_rate` 는 비율이라 개수로 쓰지 않는다(`increase()` 도 보간해 정수가 아니다). 개수는 실행 시작·끝에 서버 카운터의 순간값을 남겨 `op` 별로 뺀다(VM 절차는 [deploy/loadtest/README.md](../../deploy/loadtest/README.md)).
 - 서버 쪽 성공률 주의: 실패한 실행은 항상 `passthrough="false"` 로 붙는다(backend 는 스텁의 주입 실패와 모델 실패를 구분하지 못한다). 그래서 `passthrough="false"` 로 거른 성공률은 추론 서비스가 실제 모델을 돌릴 때만 맞다. G·F 스텁 실행에서는 거르지 않은 성공률(`beside_jobs_finished_total` 의 result 비율, `collect.py` 의 `jobs_finished_rate` CSV)이나 k6 의 `load_flowOkRatio` 를 쓴다.
 
 ### 큐 상한 모형 (`cap_model.py`, 안건 #21)
 
-큐 상한(대기 작업이 N 건 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 **[계획]** 이다. 서버 코드는 main 에 없다. `cap_model.py` 는 계약 회의 자료([docs/perf/load/2026-11-20_queue-cap.md](../../docs/perf/load/2026-11-20_queue-cap.md))의 숫자를 다시 낼 수 있게 계산만 한다 **[계산]**. 표준 라이브러리만 쓴다. 출력은 `docs/perf/load/data/2026-11-20_queue-cap/cap_model-output.txt` 이고, 난수를 쓰지 않는 1~4절은 `test_cap_model.py` 가 지금 스크립트 출력과 같은지 확인한다.
+큐 상한(대기 작업이 N 건 이상이면 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 거절)은 2026-11-21 에 N 19·R 165 로 정했다(서버 코드는 PR #19, 운영에서 켜기는 **[계획]**). 5차 부하 시험에서 S_busy 를 다시 재면 이 스크립트로 N·R 을 다시 계산한다. `cap_model.py` 는 계약 회의 자료([docs/perf/load/2026-11-20_queue-cap.md](../../docs/perf/load/2026-11-20_queue-cap.md))의 숫자를 다시 낼 수 있게 계산만 한다 **[계산]**. 표준 라이브러리만 쓴다. 출력은 `docs/perf/load/data/2026-11-20_queue-cap/cap_model-output.txt` 이고, 난수를 쓰지 않는 1~4절은 `test_cap_model.py` 가 지금 스크립트 출력과 같은지 확인한다.
 
 ```powershell
 python scripts/load/cap_model.py formula                                     # W → N·최악 대기·Retry-After (c=1, c=2)

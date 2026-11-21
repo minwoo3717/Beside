@@ -18,8 +18,8 @@ export const GUARD_ABORT = { errors: 1, disk: 2, blind: 3 };
 export const GUARD_FAIL = { noResponse: 0, notPrometheus: -1, noDiskSeries: -2 };
 
 // The server's count of v1 creates and retries the queue cap answered 503 QUEUE_FULL (docs/METRICS.md §5.1, Micrometer
-// beside.jobs.refused{op}). Those 503s are intended, so the 5xx ratio leaves them out: REVIEW_CHECKLIST #21 [제안값],
-// meeting item D9, undecided, before the contract meeting. "or vector(0)": a server without the counter (no cap code) takes
+// beside.jobs.refused{op}). Those 503s are intended, so the 5xx ratio leaves them out: REVIEW_CHECKLIST #21
+// decision D9 (2026-11-21). "or vector(0)": a server without the counter (no cap code) takes
 // nothing out. clamp_min(.., 0): the refusal is counted before the 503 is recorded in http_server_requests, so a 1m
 // window can hold one more refusal than 503s. scripts/load/test_collect.py checks the name against the METRICS.md row.
 export const REFUSED_METRIC = 'beside_jobs_refused_total';

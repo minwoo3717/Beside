@@ -57,7 +57,7 @@ public class JobServiceImpl implements JobService {
     private final JobMetrics jobMetrics;
     /** First-photo check before the 202 (off unless preprocess.check.enabled). */
     private final UploadCheck uploadCheck;
-    /** Queue cap for v1 create and retry (REVIEW_CHECKLIST #21 proposal; off unless admission.max-pending > 0). */
+    /** Queue cap for v1 create and retry (REVIEW_CHECKLIST #21, decided 2026-11-21; off unless admission.max-pending > 0). */
     private final AdmissionGate admissionGate;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
@@ -137,7 +137,7 @@ public class JobServiceImpl implements JobService {
                 return replay.get();
             }
         }
-        // Queue cap (ERROR_CODES.md "대기열 상한", REVIEW_CHECKLIST #21 proposal): after validation and the key replay,
+        // Queue cap (ERROR_CODES.md "대기열 상한", REVIEW_CHECKLIST #21 D6): after validation and the key replay,
         // so a bad request stays 400 and a replay always gets its job, and before the photo check, so a full queue
         // costs no check slot. The place is held until saveUploads has committed the PENDING row the gate counts and
         // the key is linked, and given back on every way out (refused photo, failed copy or save). A same-key request
@@ -205,7 +205,7 @@ public class JobServiceImpl implements JobService {
             throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
                     "Only FAILED jobs can be retried; current status is " + found.getStatus());
         }
-        // Queue cap (REVIEW_CHECKLIST #21 proposal): after the 404 and 409 above, around the update below, whose commit
+        // Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): after the 404 and 409 above, around the update below, whose commit
         // makes the job one of the PENDING rows the gate counts. Refused, the job stays FAILED (503 naming it), unless
         // another retry of the same job holds a place or already re-queued it: that one wins and this gets 409.
         try (AdmissionGate.Permit admitted = admissionGate.admitRetry(id, () -> noLongerFailed(id))) {

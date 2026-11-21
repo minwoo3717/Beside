@@ -38,7 +38,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting) at cap 1 with a worker that runs nothing:
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21) at cap 1 with a worker that runs nothing:
  * a dispatch the executor rejects (shutdown) gives its place back, and simultaneous retries of one FAILED job still end
  * as one 202 and 409s, never a 503 for a job another retry is re-queuing (the cap-on twin of JobServiceRetryRaceTest),
  * while with the queue already full they all get 503 and the job stays FAILED.

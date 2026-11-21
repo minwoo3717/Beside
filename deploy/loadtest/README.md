@@ -46,8 +46,8 @@ backend 서비스만 바꾼다. caddy·`caddy_data`(인증서)·prometheus·graf
 | `LOADTEST_INFERENCE_TIMEOUT_MS` | `INFERENCE_TIMEOUTMS` → `inference.timeout-ms` | `120000` | 운영 기본값(`application-real.properties`, 2026-11-21 #7 로 600000 에서 줄임)과 같다. F1b 는 `20000` |
 | `LOADTEST_INFERENCE_OFFLINE_WAIT_MS` | `INFERENCE_OFFLINEWAITMS` → `inference.offline-wait-ms` | `300000` | 운영 1800000 보다 짧게. F2 는 운영과 같은 `1800000` |
 | `LOADTEST_INFERENCE_MAX_CONCURRENCY` | `INFERENCE_MAXCONCURRENCY` → `inference.max-concurrency` | `1` | G2 의 c(1·2·4). 스텁 `BESIDE_PASSTHROUGH_SLOTS` 와 같게 |
-| `LOADTEST_ADMISSION_MAX_PENDING` | `ADMISSION_MAXPENDING` → `admission.max-pending` | `0` | 대기열 상한(안건 #21 **[제안값]**, 계약 회의 전 — 상한 코드는 검토 브랜치에만) 끔. 운영 `deploy/.env` 의 `ADMISSION_MAX_PENDING` 은 읽지 않는다. A2 는 PENDING 1,000건을 시드하므로 켜면 시드가 503 이 된다. 아래 '상한을 켠 G3' 만 준다 |
-| `LOADTEST_ADMISSION_RETRY_AFTER_SECONDS` | `ADMISSION_RETRYAFTERSECONDS` → `admission.retry-after-seconds` | `165` | 상한이 거절할 때의 `Retry-After` 초. N 과 함께 다시 계산한다(c=1·N 19 의 추천 **[제안값]**) |
+| `LOADTEST_ADMISSION_MAX_PENDING` | `ADMISSION_MAXPENDING` → `admission.max-pending` | `0` | 대기열 상한(안건 #21, 2026-11-21 결정, `api-v1.1`) 끔. 운영 `deploy/.env` 의 `ADMISSION_MAX_PENDING` 은 읽지 않는다. A2 는 PENDING 1,000건을 시드하므로 켜면 시드가 503 이 된다. 아래 '상한을 켠 G3' 만 준다 |
+| `LOADTEST_ADMISSION_RETRY_AFTER_SECONDS` | `ADMISSION_RETRYAFTERSECONDS` → `admission.retry-after-seconds` | `165` | 상한이 거절할 때의 `Retry-After` 초. N 과 함께 다시 계산한다(c=1·N 19 가 2026-11-21 #21 결정 값) |
 | (볼륨) | `beside-loadtest-storage:/app/storage` | — | 부하 작업·사진·`events.jsonl` 은 여기에만 쌓인다. 운영 `beside-storage` 는 붙지 않는다. 전처리 모델 `/app/models`(읽기 전용)는 기본 파일 그대로 붙는다 |
 
 ### 시리즈별 값
@@ -253,13 +253,13 @@ k6 run -e BASE_URL=https://<도메인> -e RUN_ID=$RUN_ID -e RTT_BASE_MS=<A0 의 
 - 스텁은 Spring 이 끊은 뒤에도 30초를 다 채우며 슬롯을 쥔다. 그래서 바로 뒤 작업이 그만큼 기다렸다가 같이 시간 초과될 수 있다(TRAFFIC_MODEL 의 'MODEL_LOCK 문제로 실패가 예상'). 그러면 그대로 기록한다.
 - **곧바로 보통 G1 을 한 번** 돌린다. backend·스텁은 그대로 두고 `newrun g1postf1b1` 로 새 RUN_ID 와 새 결과 폴더를 정해 `-e RHO=0.7 -e SLOTS=1 -e T_SEC=10` 을 준다(FAIL_TOKEN·FAIL_RATIO 없이). 이름에 `slow` 가 없으므로 모두 10초 작업이다. 모든 흐름이 COMPLETED 이고 `INFERENCE_TIMEOUT` 이 0 이며 retry 가 없으면(`meta.measuredRetries` 0) F1b 뒤에 연쇄 실패가 남지 않은 것이다. retry 가 있으면 요약이 큐 재계산을 빼고 `N retries: ...` 줄을 남긴다.
 
-### 상한을 켠 G3 (안건 #21) — [제안값], 계약 회의 전. VM 실행은 [계획]
+### 상한을 켠 G3 (안건 #21, 2026-11-21 결정) — VM 실행은 [계획]
 
-대기열 상한(대기 작업 + 접수 중 요청이 N 이상이면 v1 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 바로 거절)을 켠 과부하 실행이다. 상한 코드는 아직 검토 브랜치에만 있다. 그래서 **회의 뒤 main 에 들어가 VM 에 배포된 이미지에서만** 돌린다. VM 에서 검토 브랜치를 빌드하지 않는다(compose 프로젝트 이름이 고정이라 운영 컨테이너를 바꾼다). 값과 근거는 회의 자료 [docs/perf/load/2026-11-20_queue-cap.md](../../docs/perf/load/2026-11-20_queue-cap.md).
+대기열 상한(대기 작업 + 접수 중 요청이 N 이상이면 v1 생성·retry 를 503 `QUEUE_FULL` + `Retry-After` 로 바로 거절)을 켠 과부하 실행이다. 상한 코드는 PR #19(`api-v1.1`)로 main 에 들어간다. 그래서 **그 main 이 VM 에 배포된 이미지에서만** 돌린다. VM 에서 다른 브랜치를 빌드하지 않는다(compose 프로젝트 이름이 고정이라 운영 컨테이너를 바꾼다). 이 실행이 5차 부하 시험이고, 운영에서 상한을 켜는 것은 이 시험과 Unity 새 빌드 뒤다. 값과 근거·결정은 [docs/perf/load/2026-11-20_queue-cap.md](../../docs/perf/load/2026-11-20_queue-cap.md) 9절.
 
 - **짝 실행**: 같은 Pod·같은 `RHO` 로 상한 0(B1) 실행과 상한 N 실행을 한 번씩 돈다. 포화 구간의 처리량이 상한 0 실행과 ±5 % 안이어야 한다(상한이 GPU 처리량을 깎으면 안 된다).
 - **길이**: 실제 도착률로 정한다. 4차 `g3c1` 은 요청 517건/h 에 실제 471건/h, 용량 약 415건/h 였다. 순증 약 56건/h 라 N 19 가 차는 데 약 20분이 걸린다 [계산]. 그래서 `DURATION_S=2400`(40분)이다.
-- **값**: N 과 R 은 함께 정한다. c=1 추천은 N 19·R 165 다 **[제안값]**. B2(c=2)로 돌리면 다시 계산한다(c=2 는 N 23·R 167 **[제안값]**).
+- **값**: N 과 R 은 함께 정한다. c=1 은 N 19·R 165 로 정했다(2026-11-21 #21, W=180 s 규칙). 털 맵이 든 GLB 로 상한 0 실행의 S_busy 가 4차(8.67 s)와 다르면 같은 규칙으로 다시 계산해 그 값으로 돌린다. B2(c=2)로 돌리면 다시 계산한다(c=2 는 N 23·R 167 **[계산]**, 4차 값).
 - 셸 변수로만 켠다. 덮어쓰기는 운영 `deploy/.env` 의 `ADMISSION_*` 를 읽지 않는다.
 
 ```bash

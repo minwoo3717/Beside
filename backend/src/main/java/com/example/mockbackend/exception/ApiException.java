@@ -44,9 +44,9 @@ public class ApiException extends RuntimeException {
     }
 
     /**
-     * 503 QUEUE_FULL with Retry-After (REVIEW_CHECKLIST #21, proposal before the contract meeting).
+     * 503 QUEUE_FULL with Retry-After (REVIEW_CHECKLIST #21, decided 2026-11-21, API v1.1).
      *
-     * @param jobId the job of a refused retry (ERROR_CODES.md jobId rule, D7 proposal); null for a refused create
+     * @param jobId the job of a refused retry (ERROR_CODES.md jobId rule, decision D7); null for a refused create
      */
     public static ApiException queueFull(String jobId, int retryAfterSeconds) {
         return new ApiException(HttpStatus.SERVICE_UNAVAILABLE, ErrorCode.QUEUE_FULL,

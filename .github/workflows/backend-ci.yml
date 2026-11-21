@@ -161,7 +161,7 @@ jobs:
           "${compose[@]}" config --format json > compose-base.json
           "${compose[@]}" --profile monitoring config --format json > compose-monitoring.json
           "${compose[@]}" "${loadtest[@]}" config --format json > compose-loadtest.json
-          # a VM deploy/.env with the queue cap on (#21 proposal): .env.example has those lines commented out, so render
+          # a VM deploy/.env with the queue cap on (#21, decided 2026-11-21): .env.example has those lines commented out, so render
           # base and overlay once more with an env file that sets them (values unlike the defaults 0 and 165)
           { cat deploy/.env.example; echo; echo ADMISSION_MAX_PENDING=19; echo ADMISSION_RETRY_AFTER_SECONDS=300; } > capped.env
           capped=(docker compose -f deploy/docker-compose.yml --env-file capped.env)
@@ -184,7 +184,7 @@ jobs:
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
           assert mon["services"]["backend"]["environment"]["PREPROCESS_CHECK_ENABLED"] == "true"
-          # queue cap (REVIEW_CHECKLIST #21 proposal, before the contract meeting): off unless deploy/.env turns it on,
+          # queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21, off in production for now): off unless deploy/.env turns it on,
           # and the compose default Retry-After is the server's own default (application.properties)
           props = dict(line.split("=", 1) for line in open("backend/src/main/resources/application.properties", encoding="utf-8")
                        .read().splitlines() if "=" in line and not line.startswith("#"))
@@ -244,8 +244,8 @@ jobs:
           }
           for key, value in want.items():
               assert env.get(key) == value, f"{key}={env.get(key)!r}, want {value!r}"
-          # queue cap off and the server's Retry-After whatever deploy/.env says: A2 seeds 1,000 PENDING jobs (#21 proposal,
-          # before the meeting). Checked with the cap on in the env file too, else the base's own default 0 would pass
+          # queue cap off and the server's Retry-After whatever deploy/.env says: A2 seeds 1,000 PENDING jobs (#21,
+          # decided 2026-11-21). Checked with the cap on in the env file too, else the base's own default 0 would pass
           # an overlay that lost these lines
           for label, doc in (("deploy/.env cap off", lt), ("deploy/.env cap on", lt_capped)):
               got = {k: doc["services"]["backend"]["environment"].get(k) for k in ("ADMISSION_MAXPENDING", "ADMISSION_RETRYAFTERSECONDS")}

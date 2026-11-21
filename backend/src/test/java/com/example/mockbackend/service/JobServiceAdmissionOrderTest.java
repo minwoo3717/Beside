@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting): a request keeps its place until the write
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): a request keeps its place until the write
  * that makes its job PENDING is committed (the INSERT of a create, the FAILED → PENDING update of a retry). Given back
  * before, the gate would count neither the place nor the row for a moment and admit past the cap (under-counting,
  * which the design rules out; counting both for a moment is fine). The gate's own tests only imitate that order, so

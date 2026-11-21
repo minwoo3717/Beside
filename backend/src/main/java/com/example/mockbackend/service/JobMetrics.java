@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  *       totalMs (the same numbers as job_runs and events.jsonl) as timers with fixed SLO buckets.</li>
  *   <li>{@code beside.jobs.created}, {@code beside.jobs.retried}: JobServiceImpl calls these after a dispatch succeeded.</li>
  *   <li>{@code beside.jobs.refused} (op = create | retry): AdmissionGate calls it for every v1 request it answers 503
- *       QUEUE_FULL (queue cap, REVIEW_CHECKLIST #21 proposal). Both series exist from startup.</li>
+ *       QUEUE_FULL (queue cap, REVIEW_CHECKLIST #21, decided 2026-11-21). Both series exist from startup.</li>
  * </ul>
  * The finish listener runs inside JobFinisher on the worker thread, so it never throws: a failure here would skip the
  * other listeners (the webhook). Metrics never change a job.

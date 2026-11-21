@@ -467,7 +467,7 @@ test('guard: guardLoop returns once the load is over, and keeps guarding the dra
   assert.ok(Date.now() >= 50000 && Date.now() < 51000, `returned at ${Date.now()} ms`);
 });
 
-test('guard: the 5xx ratio leaves out the intended 503 QUEUE_FULL refusals of the queue cap (#21 proposal)', async () => {
+test('guard: the 5xx ratio leaves out the intended 503 QUEUE_FULL refusals of the queue cap (#21 D9)', async () => {
   const { mod } = await guardModule();
   // the server counter of refusals answered 503 (docs/METRICS.md §5.1; test_collect.py checks the name against that row)
   assert.equal(mod.REFUSED_METRIC, 'beside_jobs_refused_total');

@@ -58,7 +58,7 @@ unity/
 - **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식.
 - **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
 - **[미검증]** 2026-11-20 코드 리뷰 수정(다운로드 오류 응답 처리, 업로드 실패 재시도, 취소한 로드 버림, 이전 모델·확인 화면 썸네일 해제, 기본 UI "새로 만들기" 의 배치 모델 지우기)은 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다(오류 0, 경고는 main 과 같은 36개). 에디터 Play·기기 확인 전이다.
-- **[미검증]** 대기열 상한 초안(503 `QUEUE_FULL` + `Retry-After`, **[제안값] 안건 #21, 계약 회의 전** — [ERROR_CODES.md](../docs/api/ERROR_CODES.md) '대기열 상한') 대응: 문구, 다시 시도 대상, `Retry-After`(양의 정수 초) 동안 "다시 시도" 와 새 사진 생성("처음부터" 뒤) 잠금과 남은 시간 표시, 자동 재전송 없음. 거절된 생성은 같은 사진·같은 `Idempotency-Key` 로, 거절된 `/retry` 는 `/retry` 로 다시 보낸다. Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 39줄(CS0618 36 + UAC1001 3), 같은 방법으로 컴파일한 main 과 같음(줄 번호만 다름). 에디터 Play·기기 확인은 [계획](아래 "대기열 상한" 시나리오).
+- **[미검증]** 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, 안건 #21 2026-11-21 결정·`api-v1.1`, 운영 서버는 이 대응이 든 새 빌드를 깐 뒤에 켠다 — [ERROR_CODES.md](../docs/api/ERROR_CODES.md) '대기열 상한') 대응: 문구, 다시 시도 대상, `Retry-After`(양의 정수 초) 동안 "다시 시도" 와 새 사진 생성("처음부터" 뒤) 잠금과 남은 시간 표시, 자동 재전송 없음. 거절된 생성은 같은 사진·같은 `Idempotency-Key` 로, 거절된 `/retry` 는 `/retry` 로 다시 보낸다. Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 39줄(CS0618 36 + UAC1001 3), 같은 방법으로 컴파일한 main 과 같음(줄 번호만 다름). 에디터 Play·기기 확인은 [계획](아래 "대기열 상한" 시나리오).
 - **[미검증]** 리깅 모델 털(셸 퍼 BakeMesh), Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
 - **[계획]** 리깅 다음 단계(아래 "리깅 GLB" 참고): 바닥 위 걷기, GLB_SPEC rigged 계약, 추론 → 리깅 연결, 실제 사진 E2E 측정, 자세 따라하기. 그 밖에 터치 상호작용, 분류 모델(Jev) 연동, 크래시 수집(Sentry/Crashlytics).
 
@@ -183,9 +183,9 @@ APK 만 만들려면 **Build** 로 `.apk` 를 저장해 `adb install -r 파일.a
 | 서버 종료 | 서버 끄고 요청 | `NETWORK_ERROR` 문구 + 다시 시도 |
 | AR 안내 | 카메라 권한 거부 / AR 화면에서 12초 이상 바닥 미인식 | 안내, 권한은 "설정 열기" |
 
-### 대기열 상한 (`QUEUE_FULL`) — [제안값] 안건 #21, 계약 회의 전
+### 대기열 상한 (`QUEUE_FULL`) — 안건 #21, 2026-11-21 결정(`api-v1.1`)
 
-서버 기본값은 상한 꺼짐(`admission.max-pending=0`)이라 지금 서버에서는 `QUEUE_FULL` 을 받지 않는다. 아래 시나리오는 모두 **[계획]** 이다(에디터 Play·기기에서 아직 하지 않았다). 로컬 서버를 mock 프로필, 상한 1, 작업마다 120초 PENDING 으로 띄운다:
+서버 기본값은 상한 꺼짐(`admission.max-pending=0`)이고 운영 서버도 이 대응이 든 새 빌드를 팀·시연 기기에 깔고 5차 부하 시험을 한 뒤에야 켠다. 그래서 지금 서버에서는 `QUEUE_FULL` 을 받지 않는다. 아래 시나리오는 모두 **[계획]** 이다(에디터 Play·기기에서 아직 하지 않았다). 로컬 서버를 mock 프로필, 상한 1, 작업마다 120초 PENDING 으로 띄운다:
 
 ```powershell
 cd backend
@@ -239,7 +239,7 @@ real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GP
 - 폴링 2초 간격(`pollingIntervalSeconds`), 최대 대기 600초(`maxWaitSeconds`).
 - `COMPLETED` → `asset.url` 을 `baseUrl` 과 결합해 `DownloadHandlerFile` 로 `{jobId}-base.glb` 저장 → 매직 바이트 검증 → glTFast 로드. 같은 jobId 는 다시 받지 않는다.
 - `FAILED` → `ErrorMessages.ForCode(error.code)` 문구, 재시도 가능하면 `POST /retry`.
-- 503 `QUEUE_FULL`(**[제안값] 안건 #21, 계약 회의 전**): `Retry-After`(초) 전에는 다시 보내지 않는다(`JobManager.RetryAvailableAt`, 그 전의 `Retry()`·`StartJob()` 은 아무것도 하지 않는다. "처음부터"(`ClearSavedJob`)는 이 시각을 남기고, 서버 주소를 바꾸면 지운다). 자동 재전송은 없고 사용자가 "다시 시도" 를 누른다. 생성 거절은 같은 사진·같은 `Idempotency-Key`, `/retry` 거절은 `/retry` 로 다시 보낸다.
+- 503 `QUEUE_FULL`(안건 #21, 2026-11-21 결정, `api-v1.1`): `Retry-After`(초) 전에는 다시 보내지 않는다(`JobManager.RetryAvailableAt`, 그 전의 `Retry()`·`StartJob()` 은 아무것도 하지 않는다. "처음부터"(`ClearSavedJob`)는 이 시각을 남기고, 서버 주소를 바꾸면 지운다). 자동 재전송은 없고 사용자가 "다시 시도" 를 누른다. 생성 거절은 같은 사진·같은 `Idempotency-Key`, `/retry` 거절은 `/retry` 로 다시 보낸다.
 - 모든 오류 응답은 `ErrorResponse` 봉투. 알 수 없는 `code`·`status` 는 일반 문구/`Unknown`.
 - 배치 규칙은 [GLB_SPEC.md](../docs/asset/GLB_SPEC.md) §7: 생성기가 최장 축 1 m·머리 +Z·발바닥 원점으로 정규화하고, 앱은 최장 축 0.6 m 로 표시한다(`RuntimeModelLoader` 기본값). 털은 `base.glb` 안 털 맵(`extras.beside`, GLB_SPEC §4.1)으로 받는다 — 2026-11-21 결정(#4·#14)으로 `variant=hair` 는 계약에서 빠졌고 서버는 `hair` 를 400 `INVALID_REQUEST` 로 거절한다. 앱 코드의 `AssetVariant.Hair` 는 남아 있지만 쓰지 않는다.
 

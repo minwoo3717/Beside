@@ -42,7 +42,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting) at cap 1: a request with the Idempotency-Key
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21) at cap 1: a request with the Idempotency-Key
  * of a request that is still being accepted gets that request's job, as it does without the cap, instead of a 503
  * while the first one holds the only place; and a key linked while a request asked for a place answers with its job.
  * The contract text says a same-key request gets the existing job "상한과 상관없이". Its own class because @MockBean

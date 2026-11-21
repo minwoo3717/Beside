@@ -157,7 +157,7 @@ test("v1 error envelope shows the ERROR_CODES copy, not the developer message", 
   } finally { await app.clear(); }
 });
 
-// Queue cap draft (docs/api/ERROR_CODES.md QUEUE_FULL, [제안값] 안건 #21, 계약 회의 전): 503 + Retry-After seconds.
+// Queue cap (docs/api/ERROR_CODES.md QUEUE_FULL, 안건 #21 2026-11-21 결정, API v1.1): 503 + Retry-After seconds.
 test("QUEUE_FULL shows its copy and locks generating for Retry-After without sending again", async () => {
   let posts = 0;
   const app = setup(async (_url, options) => {

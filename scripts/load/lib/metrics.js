@@ -34,7 +34,7 @@ export const rejectedCount = new Counter('load_rejectedCount');
 // POST /api/v1/jobs answered 202, a job the server created (load_postMs counts every POST sent, refused or not), tagged
 // like the request. gpu_queue.js meta.measuredCreates.
 export const createdCount = new Counter('load_createdCount');
-// The [계획] queue cap (agenda #21): every 503 QUEUE_FULL (a part of load_rejectedCount), tagged like the request
+// The queue cap (agenda #21, decided 2026-11-21): every 503 QUEUE_FULL (a part of load_rejectedCount), tagged like the request
 // (endpoint create or retry), and per 503 QUEUE_FULL 1 when its Retry-After is a whole number of seconds >= 1 (equal to
 // QUEUE_RETRY_AFTER when set), else 0 (lib/flow.js retryAfterOk). No threshold judges either.
 export const queueFullCount = new Counter('load_queueFullCount');

@@ -1,6 +1,6 @@
-# 큐 상한 로컬 동작 확인 (안건 #21, 계약 회의 전)
+# 큐 상한 로컬 동작 확인 (안건 #21, 결정 전 2026-11-20 기록)
 
-작성 2026-11-20. 검토 브랜치 `review/queue-cap-2` 의 큐 상한이 의도대로 거절·회복하는지 개발 PC 에서 본 기록이다.
+작성 2026-11-20. 검토 브랜치 `review/queue-cap-2` 의 큐 상한이 의도대로 거절·회복하는지 개발 PC 에서 본 기록이다. 안건 #21 은 다음 날(2026-11-21) 도입·N 19·`Retry-After` 165 s 로 정했다([2026-11-20_queue-cap.md](2026-11-20_queue-cap.md) 9절). 이 기록은 작성 때 그대로 둔다.
 
 **[실험 결과] 로컬 — 동작 확인, 용량 아님.** mock 워커(GPU 없음)와 루프백만 썼다. 처리량·대기 시간·상한 값의 근거로 인용하지 않는다. 그 숫자는 [회의 자료](2026-11-20_queue-cap.md) 의 [계산] 과 5차 부하 시험 [계획] 몫이다. k6 는 쓰지 않았다.
 
@@ -11,7 +11,7 @@
 | 코드 | `review/queue-cap-2` `6be749c`(통합 검토 반영 뒤), `gradlew bootJar` 로 만든 jar |
 | JDK | Microsoft OpenJDK 17.0.17 |
 | 서버 | `--spring.profiles.active=mock --server.port=18080 --admission.max-pending=3 --admission.retry-after-seconds=30 --mock.worker.pending-ms=20000 --mock.worker.processing-ms=1000`, 저장소는 임시 폴더 |
-| 시작 줄 | `Queue admission: on, max-pending=3 retry-after-seconds=30 stale-after-ms=4200000`(mock 은 오프라인 대기 0 이라 기본식이 2 × ⌈3/1⌉ × 10분 + 10분 = 70분) |
+| 시작 줄 | `Queue admission: on, max-pending=3 retry-after-seconds=30 stale-after-ms=4200000`(mock 은 오프라인 대기 0 이라 기본식이 2 × ⌈3/1⌉ × 10분 + 10분 = 70분. 2026-11-21 뒤 코드는 `inference.timeout-ms` 를 정하지 않은 프로파일에서도 120 s 로 계산해 같은 설정이면 2 × 3 × 2분 + 10분 = 22분(1320000) [계산]) |
 | 확인 스크립트 | [scripts/queue_cap_local.ps1](../../../scripts/queue_cap_local.ps1)(curl.exe, PowerShell 5.1) |
 | 사진 | `backend/src/test/resources/photos/dog.jpg`, 실패 작업은 같은 파일을 `fail-dog.jpg` 로(mock 의 실패 이름) |
 

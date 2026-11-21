@@ -29,7 +29,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, a proposal before the contract meeting; off by default): v1 create and retry are
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21, API v1.1; off by default and kept off in production until a new
+ * Unity build is installed and the 5th load test confirms N): v1 create and retry are
  * refused with 503 QUEUE_FULL and Retry-After while the PENDING jobs plus the requests being admitted reach
  * admission.max-pending. v0 is frozen and never asks.
  * <ul>
@@ -103,7 +104,8 @@ public class AdmissionGate implements MeterBinder {
      * default, as when the setting is absent; anything else must be a whole number of milliseconds. The default is
      * worked out from the worker's settings: the inference slots (inference.max-concurrency), the worker threads
      * (spring.task.execution.pool.core-size, Spring's default 8 with an unbounded queue), the offline wait and the
-     * /infer timeout.
+     * /infer timeout. The fallbacks match the workers' own (InferenceClient: inference.timeout-ms 120000, 2026-11-21
+     * REVIEW_CHECKLIST #7), so the gate never assumes a longer wait than a worker allows.
      */
     @Autowired
     public AdmissionGate(JobRepository jobs, JobMetrics metrics,
@@ -111,7 +113,7 @@ public class AdmissionGate implements MeterBinder {
                          @Value("${admission.retry-after-seconds:165}") int retryAfterSeconds,
                          @Value("${admission.stale-after-ms:}") String staleAfterMs,
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
-                         @Value("${inference.timeout-ms:600000}") long inferenceTimeoutMs,
+                         @Value("${inference.timeout-ms:120000}") long inferenceTimeoutMs,
                          @Value("${inference.max-concurrency:1}") int inferenceSlots,
                          @Value("${spring.task.execution.pool.core-size:8}") int workerThreads) {
         this(pendingJobs(jobs), metrics::jobRefused, Clock.systemUTC(), maxPending, retryAfterSeconds,

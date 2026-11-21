@@ -45,8 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting) with the first-photo check on, as in real and
- * prod: a full queue answers 503 before the photo is checked (D6 proposal: the cap before the check, so a refused
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21) with the first-photo check on, as in real and
+ * prod: a full queue answers 503 before the photo is checked (decision D6: the cap before the check, so a refused
  * request costs no check slot and no ONNX run), and a photo the check refuses gives its place back. Cap 1, fake
  * detector (the JobV1PhotoCheckTest pattern); its own class because @MockBean and @SpyBean change the whole context.
  */

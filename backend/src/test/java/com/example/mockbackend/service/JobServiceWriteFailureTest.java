@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting): a request whose job row is already written
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): a request whose job row is already written
  * but which fails before the job reaches a worker leaves no PENDING row behind. With the cap on, such a row would be
  * counted for admission.stale-after-ms (hours in prod) while no worker ever runs it: the request-side twin of the
  * worker fix (RealJobWorker/MockJobWorker failUnended). Two ways in: the Idempotency-Key link of a create fails with an

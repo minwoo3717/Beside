@@ -15,7 +15,7 @@ public class OpenApiConfig {
     public OpenAPI besideOpenApi() {
         return new OpenAPI().info(new Info()
                 .title("Beside API")
-                .version("1.0.0")
+                .version("1.1.0")
                 .description("Generated from the running server. The contract of record is docs/api/openapi.yaml; "
                         + "JobV1ContractTest compares the two."));
     }

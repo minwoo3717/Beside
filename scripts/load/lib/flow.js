@@ -31,7 +31,7 @@ export function makeContext(opts) {
   };
 }
 
-// The Retry-After of a 503 QUEUE_FULL ([계획] queue cap, agenda #21): the draft contract sends whole seconds >= 1
+// The Retry-After of a 503 QUEUE_FULL (queue cap, agenda #21, API v1.1): the contract sends whole seconds >= 1
 // (openapi minimum 1), so an HTTP-date, a fraction, 0 or a missing header fail; wantS (QUEUE_RETRY_AFTER, null when
 // not set) is the value the server was set to send. k6 gives the header under its canonical name.
 export function retryAfterOk(value, wantS) {

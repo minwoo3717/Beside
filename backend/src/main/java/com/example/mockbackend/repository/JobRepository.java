@@ -41,7 +41,7 @@ public interface JobRepository extends JpaRepository<Job, String> {
 
     /**
      * Jobs in the given state queued after the cutoff: AdmissionGate's count, once per v1 create and retry while the
-     * queue cap is on (REVIEW_CHECKLIST #21, proposal before the contract meeting). One range of
+     * queue cap is on (REVIEW_CHECKLIST #21, decided 2026-11-21). One range of
      * idx_jobs_status_queued_at_id, so its cost does not grow with the finished jobs the table keeps (no retention, #23).
      */
     long countByStatusAndQueuedAtAfter(JobStatus status, Instant cutoff);

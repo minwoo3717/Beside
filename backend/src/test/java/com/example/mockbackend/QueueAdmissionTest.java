@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Queue cap (REVIEW_CHECKLIST #21, proposal before the contract meeting; admission.max-pending, here 2): while that
+ * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21; admission.max-pending, here 2): while that
  * many jobs are PENDING, POST /api/v1/jobs and POST /api/v1/jobs/{id}/retry answer 503 QUEUE_FULL with Retry-After and
  * create or change nothing; everything else answers as without the cap. The queue is filled with PENDING rows written
  * straight to the database, so no worker sleeps through the test. A test that gets a 202 waits for the mock worker to
@@ -125,7 +125,7 @@ class QueueAdmissionTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "45"))
                 .andExpect(jsonPath("$.error.code").value("QUEUE_FULL"))
-                .andExpect(jsonPath("$.error.jobId").value(failed.getId())); // D7 proposal: the job it refused
+                .andExpect(jsonPath("$.error.jobId").value(failed.getId())); // decision D7: the job it refused
 
         Job after = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(after.getStatus()).isEqualTo(JobStatus.FAILED);
@@ -207,7 +207,7 @@ class QueueAdmissionTest {
     @Test
     void pendingRowsOlderThanStaleAfterDoNotHoldPlaces() throws Exception {
         // admission.stale-after-ms unset: the longest a job can wait as PENDING here (cap 2, no offline wait, default
-        // /infer timeout: 2 x 2 x 10 min + 10 min = 50 min). Rows a day old are taken as lost, not as waiting.
+        // /infer timeout 2 min: 2 x 2 x 2 min + 10 min = 18 min). Rows a day old are taken as lost, not as waiting.
         for (int i = 0; i < 2; i++) {
             Job lost = job(JobStatus.PENDING);
             lost.setQueuedAt(Instant.now().minus(Duration.ofDays(1)));

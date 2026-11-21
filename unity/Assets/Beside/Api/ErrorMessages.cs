@@ -13,7 +13,7 @@ namespace Beside.Api
         public const string FileCorrupt = "FILE_CORRUPT";
         public const string LoadFailed = "LOAD_FAILED";
         public const string WaitTimeout = "WAIT_TIMEOUT";
-        /// <summary>Server code of the queue cap draft (503 + Retry-After, [제안값] 안건 #21, 계약 회의 전).</summary>
+        /// <summary>Server code of the queue cap (503 + Retry-After, 안건 #21, 2026-11-21 결정, API v1.1).</summary>
         public const string QueueFull = "QUEUE_FULL";
 
         static readonly Dictionary<string, string> Text = new Dictionary<string, string>
@@ -38,7 +38,7 @@ namespace Beside.Api
             { "JOB_NOT_COMPLETED", "아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요." },
             { "JOB_NOT_FAILED", "실패한 작업만 다시 시도할 수 있어요." },
             { "INTERNAL_ERROR", "서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요." },
-            // Queue cap draft: POST /jobs and /retry refused with 503 + Retry-After. Retry waits for Retry-After.
+            // Queue cap (API v1.1): POST /jobs and /retry refused with 503 + Retry-After. Retry waits for Retry-After.
             { QueueFull, "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요." },
             // Job failures (status = FAILED)
             { "INFERENCE_FAILED", "3D 모델을 만들지 못했어요. 얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요." },

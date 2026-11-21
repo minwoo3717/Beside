@@ -107,7 +107,7 @@ def retry_after(n: int, mu_per_h: float) -> float:
 
 
 def retry_after_header(n: int, mu_per_h: float) -> int:
-    """The Retry-After header value: whole seconds, at least 1 (the draft contract's minimum), rounded half up."""
+    """The Retry-After header value: whole seconds, at least 1 (the contract's minimum), rounded half up."""
     return max(1, math.floor(retry_after(n, mu_per_h) + 0.5))
 
 

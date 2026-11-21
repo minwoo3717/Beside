@@ -70,7 +70,7 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void queueFullCarriesRetryAfterOnV1OnlyAndIsLoggedByTheGateNotHere() {
-        // REVIEW_CHECKLIST #21 (proposal before the contract meeting): 503 + Retry-After, jobId of a refused retry.
+        // REVIEW_CHECKLIST #21 (decided 2026-11-21): 503 + Retry-After, jobId of a refused retry.
         ResponseEntity<?> retry = handler.handleApi(ApiException.queueFull("job-1", 45),
                 new MockHttpServletRequest("POST", "/api/v1/jobs/job-1/retry"));
         assertThat(retry.getStatusCode().value()).isEqualTo(503);

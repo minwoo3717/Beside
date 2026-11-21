@@ -93,7 +93,7 @@ class QueryListTest(unittest.TestCase):
             self.assertNotIn("{}", q)
 
     def test_5xx_ratio_leaves_out_the_intended_queue_full_refusals(self):
-        # REVIEW_CHECKLIST #21 [제안값] (D9, before the contract meeting): the queue cap's 503 QUEUE_FULL are intended, so
+        # REVIEW_CHECKLIST #21 decision D9 (2026-11-21): the queue cap's 503 QUEUE_FULL are intended, so
         # the 5xx numerator takes out the server's refusal counter, the same as lib/guard.js (summary_abort.test.mjs);
         # "or vector(0)" when the server has no such counter, clamped at 0. The raw 503 rate stays in http_rps_by_status.
         qs = dict(collect.queries("loadtest"))
@@ -108,7 +108,7 @@ class QueryListTest(unittest.TestCase):
 
 class RefusedMetricNameTest(unittest.TestCase):
     """The refusal counter the load tooling takes out of the 5xx ratio is the one docs/METRICS.md §5.1 names (the row
-    added with the Java counter on the queue-cap branch, #21). If the contract meeting renames it, "or vector(0)" would
+    added with the Java counter on the queue-cap branch, #21). If a later contract decision renames it, "or vector(0)" would
     quietly subtract nothing and the new CSV would come back empty, so the name is pinned to that row here."""
 
     NAME = re.compile(r"beside_jobs_refused\w*")

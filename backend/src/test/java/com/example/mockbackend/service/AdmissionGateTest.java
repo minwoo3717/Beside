@@ -14,6 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -21,6 +23,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -38,7 +41,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * The queue cap's counting (REVIEW_CHECKLIST #21, proposal before the contract meeting) without Spring or a database:
+ * The queue cap's counting (REVIEW_CHECKLIST #21, decided 2026-11-21) without Spring or a database:
  * PENDING rows come from a list of queuedAt instants, the clock is set by the test. Off means no query at all; on, the
  * rows plus the places held by requests being admitted never pass the cap, also with many threads admitting and
  * closing at once, and every place comes back exactly once.
@@ -400,20 +403,21 @@ class AdmissionGateTest {
         JobRepository jobs = mock(JobRepository.class);
         JobMetrics metrics = new JobMetrics(new SimpleMeterRegistry());
 
-        // prod: N 19, offline wait 30 min, /infer timeout 10 min, one inference slot, 8 worker threads (Spring default).
-        AdmissionGate prod = new AdmissionGate(jobs, metrics, 19, 165, "", 1_800_000, 600_000, 1, 8);
+        // prod: N 19, offline wait 30 min, /infer timeout 2 min (REVIEW_CHECKLIST #7, 2026-11-21), one inference slot,
+        // 8 worker threads (Spring default).
+        AdmissionGate prod = new AdmissionGate(jobs, metrics, 19, 165, "", 1_800_000, 120_000, 1, 8);
         assertThat(prod.maxPending()).isEqualTo(19);
         assertThat(prod.retryAfterSeconds()).isEqualTo(165);
-        assertThat(prod.staleAfterMs()).as("3 offline waits + 2 x 19 timeouts + 10 min = 8 h").isEqualTo(28_800_000);
-        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "", 0, 600_000, 1, 8).staleAfterMs())
-                .as("real without the offline wait: 2 x 19 timeouts + 10 min").isEqualTo(23_400_000);
-        assertThat(new AdmissionGate(jobs, metrics, 19, 165, " ", 1_800_000, 600_000, 1, 8).staleAfterMs())
-                .as("blank is unset").isEqualTo(28_800_000);
-        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "5000", 1_800_000, 600_000, 1, 8).staleAfterMs())
+        assertThat(prod.staleAfterMs()).as("3 offline waits + 2 x 19 timeouts + 10 min = 2 h 56 min").isEqualTo(10_560_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "", 0, 120_000, 1, 8).staleAfterMs())
+                .as("real without the offline wait: 2 x 19 timeouts + 10 min").isEqualTo(5_160_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, " ", 1_800_000, 120_000, 1, 8).staleAfterMs())
+                .as("blank is unset").isEqualTo(10_560_000);
+        assertThat(new AdmissionGate(jobs, metrics, 19, 165, "5000", 1_800_000, 120_000, 1, 8).staleAfterMs())
                 .isEqualTo(5_000);
         assertThat(lines(Level.INFO)).first().isEqualTo(
-                "Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=28800000");
-        assertThatThrownBy(() -> new AdmissionGate(jobs, metrics, 19, 165, "10m", 0, 600_000, 1, 8))
+                "Queue admission: on, max-pending=19 retry-after-seconds=165 stale-after-ms=10560000");
+        assertThatThrownBy(() -> new AdmissionGate(jobs, metrics, 19, 165, "10m", 0, 120_000, 1, 8))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("admission.stale-after-ms");
         verifyNoInteractions(jobs); // nothing is counted before the first request
     }
@@ -427,18 +431,22 @@ class AdmissionGateTest {
      */
     @Test
     void theDefaultStaleAfterIsTheLongestAQueuedJobCanWait() {
-        long prod = AdmissionGate.defaultStaleAfterMs(19, 1, 8, 1_800_000, 600_000);
+        // prod since 2026-11-21: inference.timeout-ms 120 s (REVIEW_CHECKLIST #7).
+        long prod = AdmissionGate.defaultStaleAfterMs(19, 1, 8, 1_800_000, 120_000);
         // GPU off (review of 2026-11-20): jobs 17-19 get a thread after two rounds of 8 have each waited 30 min.
         assertThat(prod).isGreaterThan(Duration.ofMinutes(90).toMillis());
         // Hung /infer: 19 jobs ahead, each holding the slot up to the timeout for the upload and again for the GLB.
-        assertThat(prod).isGreaterThan(19 * 2 * 600_000L);
+        assertThat(prod).isGreaterThan(19 * 2 * 120_000L);
         assertThat(prod).as("the old default, offline wait + 10 min, dropped waiting jobs")
                 .isGreaterThan(2_400_000L);
-        assertThat(prod).isEqualTo(3 * 1_800_000L + 2 * 19 * 600_000L + AdmissionGate.STALE_SLACK_MS);
+        assertThat(prod).isEqualTo(3 * 1_800_000L + 2 * 19 * 120_000L + AdmissionGate.STALE_SLACK_MS)
+                .as("2 h 56 min").isEqualTo(Duration.ofMinutes(176).toMillis());
+        assertThat(AdmissionGate.defaultStaleAfterMs(19, 1, 8, 1_800_000, 600_000))
+                .as("8 h while inference.timeout-ms was 600 s").isEqualTo(Duration.ofHours(8).toMillis());
 
         // Two slots share the timeouts; 400 worker threads (load test) take every job at once; 0 and less mean 1.
-        assertThat(AdmissionGate.defaultStaleAfterMs(19, 2, 8, 1_800_000, 600_000))
-                .isEqualTo(3 * 1_800_000L + 2 * 10 * 600_000L + AdmissionGate.STALE_SLACK_MS);
+        assertThat(AdmissionGate.defaultStaleAfterMs(19, 2, 8, 1_800_000, 120_000))
+                .isEqualTo(3 * 1_800_000L + 2 * 10 * 120_000L + AdmissionGate.STALE_SLACK_MS);
         assertThat(AdmissionGate.defaultStaleAfterMs(19, 1, 400, 300_000, 120_000))
                 .isEqualTo(300_000L + 2 * 19 * 120_000L + AdmissionGate.STALE_SLACK_MS);
         assertThat(AdmissionGate.defaultStaleAfterMs(3, 0, 0, 0, 600_000))
@@ -452,21 +460,66 @@ class AdmissionGateTest {
                 .withBean(JobRepository.class, () -> mock(JobRepository.class))
                 .withBean(JobMetrics.class, () -> new JobMetrics(new SimpleMeterRegistry()))
                 .withBean(AdmissionGate.class)
-                .withPropertyValues("admission.max-pending=19", "inference.offline-wait-ms=1800000",
-                        "inference.timeout-ms=600000");
+                .withPropertyValues("admission.max-pending=19", "inference.offline-wait-ms=1800000");
 
-        server.withPropertyValues("admission.stale-after-ms=").run(context -> {
+        server.withPropertyValues("admission.stale-after-ms=", "inference.timeout-ms=120000").run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(28_800_000);
+            assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(10_560_000);
         });
-        server.withPropertyValues("admission.stale-after-ms=", "spring.task.execution.pool.core-size=400",
-                "inference.max-concurrency=2").run(context ->
+        // inference.timeout-ms unset: the gate falls back to the same 120 s as InferenceClient, not to a longer wait.
+        server.withPropertyValues("admission.stale-after-ms=").run(context ->
+                assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(10_560_000));
+        server.withPropertyValues("admission.stale-after-ms=", "inference.timeout-ms=600000").run(context ->
+                assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(28_800_000));
+        server.withPropertyValues("admission.stale-after-ms=", "inference.timeout-ms=120000",
+                "spring.task.execution.pool.core-size=400", "inference.max-concurrency=2").run(context ->
                 assertThat(context.getBean(AdmissionGate.class).staleAfterMs())
-                        .isEqualTo(AdmissionGate.defaultStaleAfterMs(19, 2, 400, 1_800_000, 600_000)));
+                        .isEqualTo(AdmissionGate.defaultStaleAfterMs(19, 2, 400, 1_800_000, 120_000)));
         server.withPropertyValues("admission.stale-after-ms=900000").run(context ->
                 assertThat(context.getBean(AdmissionGate.class).staleAfterMs()).isEqualTo(900_000));
         server.withPropertyValues("admission.stale-after-ms=30m").run(context ->
                 assertThat(context).getFailure().rootCause().hasMessageContaining("admission.stale-after-ms"));
+    }
+
+    /**
+     * The production numbers, read from the server's own property files (not the test overrides in config/): the cap is
+     * off in every profile file (REVIEW_CHECKLIST #21, decided 2026-11-21: production keeps it off until a new Unity
+     * build is installed and the 5th load test confirms N), Retry-After defaults to the decided 165 s, and with the
+     * decided N 19 the stale-after default of real,prod is 2 h 56 min (inference.timeout-ms 120 s since #7, offline wait
+     * 30 min, one inference slot, Spring's 8 worker threads). docs/api/ERROR_CODES.md '대기열 상한' states that number.
+     */
+    @Test
+    void theStaleAfterDefaultOfRealProdIsTwoHoursFiftySixMinutes() throws IOException {
+        Properties base = load("application.properties");
+        Properties real = load("application-real.properties");
+        Properties prod = load("application-prod.properties");
+        for (Properties file : List.of(base, load("application-mock.properties"), real, prod)) {
+            assertThat(file.getProperty("admission.max-pending", "0")).as("the cap is never on in a profile file")
+                    .isEqualTo("0");
+            assertThat(file.getProperty("admission.stale-after-ms")).as("unset: the default below").isNull();
+        }
+        assertThat(base.getProperty("admission.retry-after-seconds")).isEqualTo("165");
+
+        Properties realProd = new Properties(); // spring.profiles.active=real,prod: prod over real over the base file
+        realProd.putAll(base);
+        realProd.putAll(real);
+        realProd.putAll(prod);
+        long staleAfterMs = AdmissionGate.defaultStaleAfterMs(19,
+                Integer.parseInt(realProd.getProperty("inference.max-concurrency", "1")),
+                Integer.parseInt(realProd.getProperty("spring.task.execution.pool.core-size", "8")),
+                Long.parseLong(realProd.getProperty("inference.offline-wait-ms", "0")),
+                Long.parseLong(realProd.getProperty("inference.timeout-ms", "120000")));
+        assertThat(staleAfterMs).isEqualTo(10_560_000L).isEqualTo(Duration.ofMinutes(2 * 60 + 56).toMillis());
+    }
+
+    /** The server's own file on the classpath root; the test overrides live in config/ and are not read here. */
+    private static Properties load(String name) throws IOException {
+        Properties properties = new Properties();
+        try (InputStream in = AdmissionGateTest.class.getResourceAsStream("/" + name)) {
+            assertThat(in).as(name).isNotNull();
+            properties.load(in);
+        }
+        return properties;
     }
 
     private AdmissionGate gate(int maxPending) {
