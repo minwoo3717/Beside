@@ -236,6 +236,8 @@ cd backend
 | 시나리오 | 방법 | 기대 결과 |
 |---|---|---|
 | 열기·컴파일 | Unity 6000.6.0f1 로 `unity/` 열기 | Console 에 빨간 오류 없음, Missing Script 없음(씬의 `FurLab`·`FpsOverlay`·`ShadowCatcher_Mat` 연결) |
+| Android 빌드 | Unity Hub 에서 6000.6.0f1 에 Android Build Support 를 더한 뒤 Android(OpenGLES3 + Vulkan) 빌드 | 셰이더 오류 없음(`Loader/ShellFur`·`ShadowCatcher`, FurLab 의 `ShellFurV1`·`StrandFur`·`FinFur`). 포트를 확인한 PC 에는 Android 모듈이 없어, 이 셰이더들은 가져오기만 했고(오류 없음) 변형을 컴파일한 적이 없다 |
+| 미리보기 털 | 생성 → 미리보기 화면(AR 배치 전) | 털이 AR 화면과 비슷하게 촘촘함. 미리보기 RenderTexture 도 URP 에셋의 MSAA 수를 쓴다(`ModelPreview`, 2026-11-21) — 털이 듬성하면 MSAA 가 빠진 것 |
 | 에디터 털 | `ModelLoader` 의 Test Glb Url + Test Hair Length/Flow Url(로컬 PNG)로 Play | 털이 몸 크기에 맞게 보임(리깅 GLB 는 다리 사이에 작게 그려지지 않음). TANGENT 없는 GLB 는 털이 결 없이 섬 |
 | 서버 털 | 작업 흐름(사진 → 생성 → 미리보기 → 배치), 털 맵이 든 서버 GLB(GLB_SPEC §4.1) | GLB 의 `furLength` 로 털이 그려짐. `Dog_Fur_Mat` 0.025 와 길이가 다를 수 있음(GLB_SPEC §4.1 '알려진 점') |
 | 그림자 바닥면 | 배치 → 바닥 점이 숨은 뒤 | 펫 아래 그림자가 남음, 사각형이 터치·잡기를 막지 않음 |
