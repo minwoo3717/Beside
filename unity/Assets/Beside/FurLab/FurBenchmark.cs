@@ -198,7 +198,7 @@ namespace Beside.FurLab
             if (uncapFrameRate) { QualitySettings.vSyncCount = 0; Application.targetFrameRate = refresh; }
             var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
             int prevMsaa = urp != null ? urp.msaaSampleCount : 1;
-            var session = FindFirstObjectByType<ARSession>();
+            var session = FindAnyObjectByType<ARSession>();
             bool prevMatch = session != null && session.matchFrameRateRequested;
             if (unlockArFrameRate && session != null && prevMatch)
             {
@@ -209,7 +209,7 @@ namespace Beside.FurLab
             bool arLocked = session != null && session.matchFrameRateRequested;
             var repeaters = AddRepeaters(pet);
 
-            var anim = FindFirstObjectByType<PetAnimationPlayer>();
+            var anim = FindAnyObjectByType<PetAnimationPlayer>();
             if (anim != null && !string.IsNullOrEmpty(animationClip)) anim.Play(animationClip);
 
             string runId = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -482,9 +482,9 @@ namespace Beside.FurLab
 
         GameObject FindPet()
         {
-            var limiter = FindFirstObjectByType<SpawnLimiter>();
+            var limiter = FindAnyObjectByType<SpawnLimiter>();
             if (limiter != null && limiter.PlacedModels.Count > 0) return limiter.PlacedModels[0];
-            var spawner = FindFirstObjectByType<ObjectSpawner>();
+            var spawner = FindAnyObjectByType<ObjectSpawner>();
             if (spawner != null)
                 foreach (Transform c in spawner.transform) if (c.gameObject.activeInHierarchy) return c.gameObject;
             return null;

@@ -62,7 +62,6 @@ public class ShellFurRenderer : MonoBehaviour
     MeshFilter meshFilter;
     SkinnedMeshRenderer skinned;
     Mesh bakedMesh;
-    int bakedFrame = -1;
     Renderer baseRenderer;
     MaterialPropertyBlock[] blocks;
     readonly System.Collections.Generic.Dictionary<int, MaterialPropertyBlock[]> blocksByCount =

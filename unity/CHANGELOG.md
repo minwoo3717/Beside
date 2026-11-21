@@ -8,7 +8,8 @@ Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연
 - 털 맵 형식은 main 의 GLB_SPEC §4.1(`extras.beside`, 변환기 `convert_asset.py`) 그대로. 브랜치 서버의 TANGENT 추가·결 맵 G 부호 변경은 계약 결정 전이라 옮기지 않음 → main 서버 GLB 에는 TANGENT 가 없어 쉘 털 v2 는 털 결(빗질)을 끄고 법선 방향으로 그림
 - `ShellFurRenderer.OnDestroy` 가 `FurPose.Release` 를 불러 지워진 모델의 굽기 메시를 바로 해제
 - `UniversalRenderPipelineGlobalSettings.asset`: Unity 6000.6.0f1 편집기가 비운 런타임 목록 커밋
-- 확인: Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일 오류 0(경고 44, main 39 + FurLab 의 FindFirstObjectByType 4 + 쓰이지 않는 필드 1). 에디터 Play·기기 확인은 [계획]
+- 포트 리뷰 뒤 고침: AR 배치 전 미리보기의 RenderTexture 에 URP 에셋의 MSAA 수를 줌(`ModelPreview` — 없으면 alpha-to-coverage 인 쉘 털 v2 가 미리보기에서만 듬성해진다), 결과 화면 삼각형 수에서 그림자 바닥면 Quad 를 빼고 리깅 메시(`SkinnedMeshRenderer`)도 셈(`DesignedUIController.FillStats`), 포트가 더한 경고 5개(FurLab 의 `FindFirstObjectByType` → `FindAnyObjectByType`, 쓰이지 않는 `ShellFurRenderer.bakedFrame` 삭제)
+- 확인: Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일 오류 0, 경고 39(같은 방법으로 컴파일한 main 과 같은 경고, 줄 번호만 다름). 에디터 Play·기기 확인은 [계획]
 
 ## 2026-11-17
 

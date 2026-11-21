@@ -70,7 +70,7 @@ unity/
 - **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
 - **[검증됨]** (연구용 프로젝트 Beside_Reserch, 브랜치 `Unity` 코드, 2026-11-01~03, SM-S947N) 리깅 모델 털(애니메이션 중 크기·위치), 그림자 바닥면, 그 프로젝트의 서버(`embed_hair.py`: TANGENT 있음, 결 맵 G 부호 뒤집기 없음)가 넣은 GLB 털 맵 적용. **main 에 합친 코드와 main 변환기(PR #25) GLB 로는 확인하지 않았다.**
 - **[실험 결과]** 털 렌더링 성능(브랜치 코드, SM-S947N 1대, MSAA 4x): [experiments/2026-11-03_fur-benchmark.md](experiments/2026-11-03_fur-benchmark.md). 앱 기본값(쉘 20겹 + 자동 조절)은 펫이 화면 87% 일 때 13.5 ms, 20% 일 때 4.2 ms.
-- **[미검증]** 브랜치 `Unity` 포트(2026-11-21: 쉘 털 v2·FurLab·그림자 바닥면·FpsOverlay·씬, MSAA 4x, Graphics API OpenGLES3 + Vulkan)는 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 44(main 39 + FurLab 의 `FindFirstObjectByType` 4 + `ShellFurRenderer.bakedFrame` 미사용 1). 정의 기호 `BESIDE_NATIVEGALLERY` 를 더하거나 Android 처럼 `UNITY_EDITOR` 를 빼고 `UNITY_ANDROID` 를 더해도 오류 0. 에디터 Play·기기 확인은 [계획](아래 "브랜치 Unity 포트 다시 시험").
+- **[미검증]** 브랜치 `Unity` 포트(2026-11-21: 쉘 털 v2·FurLab·그림자 바닥면·FpsOverlay·씬, MSAA 4x, Graphics API OpenGLES3 + Vulkan)는 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 39 — 같은 방법으로 컴파일한 main 과 같은 경고다(줄 번호만 다름. 포트가 처음 더한 FurLab 의 `FindFirstObjectByType` 4·`ShellFurRenderer.bakedFrame` 미사용 1 은 리뷰 뒤 고침). 정의 기호 `BESIDE_NATIVEGALLERY` 를 더하거나 Android 처럼 `UNITY_EDITOR` 를 빼고 `UNITY_ANDROID` 를 더해도 오류 0. 에디터 Play·기기 확인은 [계획](아래 "브랜치 Unity 포트 다시 시험").
 - **[미검증]** 2026-11-20 코드 리뷰 수정(다운로드 오류 응답 처리, 업로드 실패 재시도, 취소한 로드 버림, 이전 모델·확인 화면 썸네일 해제, 기본 UI "새로 만들기" 의 배치 모델 지우기)은 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다(오류 0, 경고는 main 과 같은 36개). 에디터 Play·기기 확인 전이다.
 - **[미검증]** 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, 안건 #21 2026-11-21 결정·`api-v1.1`, 운영 서버는 이 대응이 든 새 빌드를 깐 뒤에 켠다 — [ERROR_CODES.md](../docs/api/ERROR_CODES.md) '대기열 상한') 대응: 문구, 다시 시도 대상, `Retry-After`(양의 정수 초) 동안 "다시 시도" 와 새 사진 생성("처음부터" 뒤) 잠금과 남은 시간 표시, 자동 재전송 없음. 거절된 생성은 같은 사진·같은 `Idempotency-Key` 로, 거절된 `/retry` 는 `/retry` 로 다시 보낸다. Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 39줄(CS0618 36 + UAC1001 3), 같은 방법으로 컴파일한 main 과 같음(줄 번호만 다름). 에디터 Play·기기 확인은 [계획](아래 "대기열 상한" 시나리오).
 - **[미검증]** main 병합 코드의 리깅 모델 털·쉘 털 v2·서버 GLB 털 맵(기기), 중저가 기기 FPS, Cloudflare 터널 경유 전체 흐름, 실패 시나리오(fail.jpg, 서버 종료, 생성 중 앱 종료), 기기 `metrics.csv` 회수. [PLAN.md](../docs/PLAN.md) 3·4단계.
@@ -246,7 +246,7 @@ cd backend
 | 모델 교체 | "처음부터" 로 여러 번 생성 | 메모리가 계속 늘지 않음(지워진 모델의 털 굽기 메시 해제) |
 | 서버 털 끔 | 로컬 추론 서비스를 `BESIDE_EMBED_HAIR=0` 으로 띄워 생성 | 털 없는 모델(앱은 털을 그리지 않음) |
 
-에디터 없이 컴파일만 보려면(2026-11-21 포트 확인 방법): Unity 가 만든 `unity/Library/Bee/artifacts/*/Assembly-CSharp.rsp` 의 참조로 에디터 동봉 Roslyn(`<Unity 6000.6.0f1>/Editor/Data/DotNetSdk/dotnet.exe exec .../DotNetSdk/sdk/8.0.318/Roslyn/bincore/csc.dll @rsp`)을 돌린다. rsp 의 소스 목록은 `Assets/` 의 `.cs`(Samples·TextMesh Pro·Plugins·XR 제외)로 바꾸고 `-out` 은 임시 폴더로 바꾼다(`Library/` 를 덮어쓰지 않게). 2026-11-21 기준 오류 0·경고 44.
+에디터 없이 컴파일만 보려면(2026-11-21 포트 확인 방법): Unity 가 만든 `unity/Library/Bee/artifacts/*/Assembly-CSharp.rsp` 의 참조로 에디터 동봉 Roslyn(`<Unity 6000.6.0f1>/Editor/Data/DotNetSdk/dotnet.exe exec .../DotNetSdk/sdk/8.0.318/Roslyn/bincore/csc.dll @rsp`)을 돌린다. rsp 의 소스 목록은 `Assets/` 의 `.cs`(Samples·TextMesh Pro·Plugins·XR 제외)로 바꾸고 `-out` 은 임시 폴더로 바꾼다(`Library/` 를 덮어쓰지 않게). 2026-11-21 기준 오류 0·경고 39(main 과 같음).
 
 ## 리깅 GLB (SMAL 기반)
 
