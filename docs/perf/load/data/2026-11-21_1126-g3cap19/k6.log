@@ -1,0 +1,12 @@
+== beside load: gpu_queue.js (G3) run=g3cap19 base=https://beside-team.duckdns.org
+requests 19778 (7.8/s), dropped_iterations 0, vus_max 173
+data sent 0.195 Mbps (whole-run average), received 1.774 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 154.62 ms
+checks: 51 failed of 20114
+responses by status (load_status*Count): 0 (no response) 0, 4xx 0, 5xx 51 (503 51)
+thresholds: 1 failed
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+queue G3: 286 jobs created in 2400 s = 429/h (requested 517/h), 0 retries; mean slot (server processingMs) 8235 ms, mean queuedMs 130362 ms
+  QUEUE_CAP=19: 51 of 337 creates refused with 503 QUEUE_FULL, so no recompute (the queue model assumes no job is refused)
+  Retry-After on 503 QUEUE_FULL: 51 passed, 0 failed (want whole seconds >= 1, = QUEUE_RETRY_AFTER 167)
+time="2026-11-21T03:09:02Z" level=error msg="thresholds on metrics 'http_req_duration{endpoint:asset}' have been crossed"

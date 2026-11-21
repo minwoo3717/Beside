@@ -1,0 +1,4 @@
+total 5909
+drwxrwxrwx  2 root root 2000100 Nov 20 04:24 .
+drwxrwxrwx 14 root root 3000915 Nov 21 01:16 ..
+-rw-rw-rw-  1 root root 1048576 Nov 21  2026 .ioprobe

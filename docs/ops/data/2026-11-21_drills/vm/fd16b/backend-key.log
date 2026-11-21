@@ -1,0 +1,8 @@
+2026-11-21T03:13:43.807Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 27.352 seconds (process running for 30.991)
+2026-11-21T03:13:44.578Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+2026-11-21T03:17:04.899Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UP -> DOWN (HttpTimeoutException)
+2026-11-21T03:17:36.012Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service DOWN -> LOADING (no model loaded)
+2026-11-21T03:17:36.247Z  WARN 1 --- [         task-9] c.e.mockbackend.service.RealJobWorker    : jobId=c9bca430-4259-4b1c-b7fa-5b83a90c97fe stage=FAILED code=INFERENCE_UNAVAILABLE The inference service restarted while this run was in flight [POST http://100.83.86.62:8002/infer/upload: inference ser
+2026-11-21T03:17:37.116Z  INFO 1 --- [        task-10] c.e.mockbackend.service.RealJobWorker    : jobId=3ebf3cf2-984e-465c-96aa-2125f1a244b2 waits as PENDING: inference service LOADING (no model loaded), up to 1766 s
+2026-11-21T03:18:03.526Z  INFO 1 --- [        task-10] c.e.m.service.InferenceHealthMonitor     : inference service LOADING -> UP (ok)
+2026-11-21T03:18:03.530Z  INFO 1 --- [        task-10] c.e.mockbackend.service.RealJobWorker    : jobId=3ebf3cf2-984e-465c-96aa-2125f1a244b2 inference service is UP again, starting

@@ -1,0 +1,5 @@
+total 7866
+drwxrwxrwx  3 root root 2002103 Nov 21 03:26 .
+drwxrwxrwx 14 root root 3000918 Nov 21 01:16 ..
+-rw-rw-rw-  1 root root 1048576 Nov 21 03:16 .ioprobe
+drwxrwxrwx  4 root root 2002003 Nov 21 02:25 207d1dce-3726-436e-bcee-b6e065a200cf

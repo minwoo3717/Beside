@@ -1,0 +1,6 @@
+2026-11-21T01:21:16Z
+NVIDIA A40, 595.112.07, 46068 MiB
+repo main fe10683
+animallift 5d364cf
+{"status":"ok","device":"cuda","modelLoaded":true,"passthrough":false,"tokenOk":null,"busyForMs":0,"loadError":null,"instanceId":"6dace9b6991e"}
+765000

@@ -1,0 +1,5 @@
+== Monte Carlo: Poisson arrivals, (cutout, processing) pairs drawn from g3cap19 (286 jobs), h 0.281 + g 0.281 s, slots 1 (capacity about 409/h), start empty, 400 runs per row, seed 1
+  row: refused share median (5-95 %); runs with any refusal; first refusal median (5-95 %) of the runs that refused; admitted max wait per run median / p95; admitted mean wait median
+  505.5/h 40 min N 19: refused 14.5 % (6.8-21.4); any 99.8 %; first 602 s (264-1330); max wait 175.8 / 176.9 s; mean wait 136.4 s
+  steady state: one 100 h run per row, first 1 h not counted, seed 1; fluid refusal 1 - capacity/arrivals
+  505.5/h N 19: refused 18.6 % (fluid 19.1 %), admitted 409/h, admitted wait mean 154.1 p95 174.4 max 177.9 s

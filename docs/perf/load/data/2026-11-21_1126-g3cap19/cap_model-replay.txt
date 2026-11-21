@@ -1,0 +1,9 @@
+== trace replay: docs/perf/load/data/2026-11-21_1126-g3cap19 (window 2026-11-21T02:26:49+00:00 - 2026-11-21T03:09:02+00:00; docs/perf/load/data/2026-11-21_1126-g3cap19/attachments/events.jsonl lines 690, created outside the window 404, retries 0, never processed 0; jobs 286, 429/h over the 2400 s arrival window; times below are seconds after the window start)
+  measured: handover p50 0.562 s -> h 0.281 + g 0.281 s; S_busy 8.81 s -> 409/h; peak PENDING found by an arrival 18; slots 1
+  measured wait (created -> COMPLETED) n 286 mean 138.6 p50 157.7 p95 173.1 max 176.3 s
+  measured PENDING (created -> processing start) n 286 mean 130.4 p50 149.5 p95 164.8 max 168.1 s
+  uncapped replay wait n 286 mean 137.4 p50 156.2 p95 171.8 max 174.2 s; PENDING n 286 mean 129.1 p50 147.9 p95 163.6 max 165.9 s; peak PENDING found 18
+  uncapped replay - measured, per job: wait n 286 mean -1.24 p50 -1.18 p95 -0.29 max -0.00 s; mean wait -0.9 %
+  cap N 12: refused 7 of 286 (2.4 %), first at 449 s; admitted wait mean 89.9 p95 111.5 max 113.3 s (bound (N+1)*S_busy 114.5 s); most PENDING an admitted job found 11
+  cap N 19: refused 0 of 286 (0.0 %); admitted wait mean 137.4 p95 171.8 max 174.2 s (bound (N+1)*S_busy 176.2 s); most PENDING an admitted job found 18
+  any cap N > 18 refuses nothing in this trace

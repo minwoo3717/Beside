@@ -1,0 +1,6 @@
+2026-11-21T03:28:45.023Z  INFO 1 --- [           main] c.e.mockbackend.MockBackendApplication   : Started MockBackendApplication in 23.421 seconds (process running for 26.963)
+2026-11-21T03:28:45.230Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service UNKNOWN -> UP (ok)
+2026-11-21T03:31:00.393Z  WARN 1 --- [         task-1] c.e.mockbackend.service.RealJobWorker    : jobId=120c4948-53f9-4a02-880c-85e5aa8bd1b1 stage=FAILED code=INFERENCE_TIMEOUT No answer from the inference service within inference.timeout-ms=120000 [POST http://beside-stub-drill:8001/infer/upload: n
+2026-11-21T03:31:00.423Z  WARN 1 --- [         task-2] c.e.m.service.InferenceHealthMonitor     : inference service has been busy with one run for 120046 ms (healthz busyForMs, limit 120000 ms): inference may be stuck
+2026-11-21T03:32:04.432Z  WARN 1 --- [         task-2] c.e.mockbackend.service.RealJobWorker    : jobId=b45f3f4f-7e19-4e35-b78d-e99d62d8ad26 stage=COMPLETED with the passthrough sample GLB: not an inference result, leave it out of measurements (job_runs.passthrough = true)
+2026-11-21T03:32:15.334Z  INFO 1 --- [   scheduling-1] c.e.m.service.InferenceHealthMonitor     : inference service is no longer stuck (healthz busyForMs=0)
