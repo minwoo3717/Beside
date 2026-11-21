@@ -20,7 +20,7 @@
 - DB 파일 하나는 서버 하나만 연다(AUTO_SERVER 없음). 다른 인스턴스를 띄울 때는 `--storage.db.path=...` 로 다른 파일을 쓴다.
 - prod 는 H2 DB 파일이 없으면 시작하지 않는다(`config/DatabaseFileGuard`, `storage.db.create-if-missing=false`, 장애 훈련 FD5). 새 서버의 첫 시작과 부하·훈련 덮어쓰기만 true 로 둔다. 테스트는 인메모리 URL 이라 검사하지 않는다.
 - 서버가 시작될 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다(`InterruptedJobRecovery`). 워커 스레드는 재시작을 넘지 못하기 때문이다.
-- 작업 삭제(`DELETE /api/v1/jobs/{id}`, 펫과 함께 삭제)는 `JobDeletionService` 한 곳이다. 끝난 작업(COMPLETED/FAILED)만 지우고, 사진·`storage.result.dir/{jobId}`·썸네일·공유 링크(취소)·Idempotency-Key 를 정리하지만 **`job_runs`·`events.jsonl`·`job_ratings`(품질 평가)·`client_metrics`(앱 측정)는 측정이라 남긴다**(평가 CSV 의 modelVersion 은 남은 `job_runs` 에서 온다, 지운 작업의 `GET …/ratings` 는 404). 작업에 딸린 테이블을 새로 만들면 측정인지 아닌지 정해 여기서 함께 정리한다.
+- 작업 삭제는 `JobDeletionService` 한 곳이고, API v1.2 에서는 펫과 함께 삭제(`DELETE /api/v1/pets/{id}?withJobs=true`)만 부른다. 작업 하나를 지우는 공개 엔드포인트·썸네일·입력 사진 엔드포인트는 검토 브랜치에 있었지만 v1.2 에 받지 않았다(REVIEW_CHECKLIST #11, `JobDeleteTest` 가 응답하지 않는 것을 확인). 끝난 작업(COMPLETED/FAILED)만 지우고, 사진·`storage.result.dir/{jobId}`·공유 링크(취소)·Idempotency-Key 를 정리하지만 **`job_runs`·`events.jsonl`·`job_ratings`(품질 평가)·`client_metrics`(앱 측정)는 측정이라 남긴다**(평가 CSV 의 modelVersion 은 남은 `job_runs` 에서 온다, 지운 작업의 `GET …/ratings` 는 404). 작업에 딸린 테이블을 새로 만들면 측정인지 아닌지 정해 여기서 함께 정리한다.
 - `Job.petId`(보관함)는 `@Column(updatable = false)` 다. 워커가 몇 분 전에 읽은 Job 사본을 저장해도 사용자가 그동안 옮긴 펫을 되돌리지 않도록, 바꿀 때는 `JobRepository.updatePetId/unassignPet`(JPQL update)만 쓴다.
 - 테스트는 `src/test/resources/config/application.properties` 덕분에 컨텍스트마다 인메모리 H2 를 쓴다. `spring.datasource.url` 을 프로파일 파일(application-mock.properties)에 두지 않는다: 프로파일 파일이 이 오버라이드를 이긴다.
 
@@ -44,7 +44,7 @@ cd backend
 - Mock 지연: `mock.worker.pending-ms`(기본 2000), `mock.worker.processing-ms`(기본 3000).
 - DB 보기: http://localhost:8080/h2-console (mock·real, 이 PC 에서 직접 연 요청만. 터널·프록시를 거친 요청은 `H2ConsoleGuardFilter` 가 404). JDBC URL `jdbc:h2:file:./storage/db/beside-mock` 또는 `beside-real`, 사용자 `sa`, 비밀번호 빈칸. 비우려면 서버를 끄고 `storage/db/` 삭제. 측정표는 `GET /api/v1/admin/runs?format=csv`(관리 페이지 `/admin` 의 버튼, 헤더 = METRICS §1.1)로 뽑는다. 개발 PC 에서는 `job_runs` 에서 `CALL CSVWRITE(...)` 도 된다([README.md](README.md) '측정 내보내기').
 - 관리 API `/api/v1/admin/*` 와 `/admin` 페이지에는 Spring 인증 코드가 없다. 배포에서는 Caddy Basic 인증이 막는다. 작업 상태를 바꾸지 않는다(쓰기는 앱 `metrics.csv` 가져오기 `POST /api/v1/admin/client-metrics` 뿐, `client_metrics` 테이블).
-- 작업 상세 페이지 `/job/?id=` 와 그 API(태그 quality: `GET /api/v1/jobs/{id}/photos/{index}`, `GET·PUT /api/v1/jobs/{id}/ratings[/{rater}]`)도 인증 코드가 없고 배포에서는 Caddy Basic 인증 뒤다(앱은 쓰지 않는다). 사진은 저장 파일명 확장자가 jpg·jpeg·png·webp 일 때만 이미지 타입으로 내준다(그 밖 octet-stream + nosniff). 평가 6항목·앱 측정 열 이름은 [docs/METRICS.md](../docs/METRICS.md) §3·§4 그대로, CSV 열 순서는 §3.1·§4.1(이름 변경은 계약 회의).
+- 작업 상세 페이지 `/job/?id=` 와 그 API(태그 quality: `GET·PUT /api/v1/jobs/{id}/ratings[/{rater}]`)도 인증 코드가 없고 배포에서는 Caddy Basic 인증 뒤다(앱은 쓰지 않는다). 페이지는 입력 사진의 이름·크기만 보여 준다(사진을 내주는 엔드포인트는 v1.2 에 없다). 평가 6항목·앱 측정 열 이름은 [docs/METRICS.md](../docs/METRICS.md) §3·§4 그대로, CSV 열 순서는 §3.1·§4.1(이름 변경은 계약 회의).
 - GPU 없이 real 시험: 추론 서비스를 패스스루(`BESIDE_SAMPLE_GLB`)로 띄우고 real 로 bootRun → `e2e_mock.ps1`. 절차는 [README.md](README.md) '프로파일 real'. 업로드 모드는 같은 절차에 `--inference.transfer=upload`(+ 양쪽 같은 토큰), [README.md](README.md) '업로드 모드'.
 
 ## 테스트
@@ -58,6 +58,7 @@ node --test src/test/js/admin-format.test.cjs                    # 관리 페이
 node --test src/test/js/admin-measurement.test.cjs               # 관리 페이지 보고서 패널(평가 요약·metrics.csv 결과 문구·CSV 주소)
 node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs   # 작업 상세 페이지 규칙(평가자 이름·점수 본문)과 QR 인코더(다시 읽어 확인)
 node --test src/test/js/library-core.test.cjs                    # 보관함 페이지 순수 함수(경로·라벨·대기 문구·사진 검사)
+node --test src/test/js/share-viewer.test.cjs                    # 공유 뷰어(/s/{token})의 토큰·동작 칩·만료 문구
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL
