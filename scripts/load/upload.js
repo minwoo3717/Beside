@@ -6,9 +6,10 @@
 // Every upload is valid, so any answer but 202 is a failed upload. lib/classify.js counts a 4xx (413/400 from Spring or
 // the proxy, a proxy 404, a 429 without the RATE_LIMITED code) only in load_unexpectedCount, not in load_errorRatio,
 // and a fast refusal even passes the latency limit: load_unexpectedCount must stay 0 overall and in every hold.
-// 5xx and connection errors (status 0) stay in load_errorRatio with the §8 budget, and a 429 RATE_LIMITED / 503
-// QUEUE_FULL ([계획] R1~R3 codes the backend does not send yet) only in load_rejectedCount, counted apart as §8 says;
-// so no answer is counted twice. Whether a 429/503 refusal should fail an A3 hold is a criteria question, not decided.
+// 5xx and connection errors (status 0) stay in load_errorRatio with the §8 budget, and a 503 QUEUE_FULL (API v1.1,
+// #21 decided 2026-11-21, server default off) and a 429 RATE_LIMITED (#22, name reserved) only in load_rejectedCount,
+// counted apart as §8 says; so no answer is counted twice. A 503 QUEUE_FULL does not fail an A3 hold (#21 D10);
+// whether a 429 should is decided with #22.
 // Each level (rate) is its own ramping-arrival-rate scenario lvl0, lvl1, ... (lib/stages.js levelScenarios), so k6
 // ties dropped iterations to their level: a level that drops reads "fail", the earlier ones keep their verdict.
 //
