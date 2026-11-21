@@ -105,6 +105,7 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 - 작업 흐름만 읽는다: `JobManager` 가 내려받은 GLB 바이트로 `LoadAndRegister(byte[] …)` 를 부르고, 그 안에서 `TryReadEmbeddedHair` 가 맵과 `furLength` 를 꺼낸다. 맵이 없거나 읽지 못하면 Inspector 의 대체 맵(`fallbackHairLength`·`fallbackHairFlow`, `SampleScene` 에서는 비어 있음)을 쓰고, 그것도 없으면 털을 그리지 않는다.
 - URL·파일 경로로 여는 `LoadAndRegister(string glbUrl, …)`(Inspector 의 Test Glb Url)는 `TryReadEmbeddedHair` 를 부르지 않는다. 그 경로는 Test Hair Length/Flow Url 로 따로 준 PNG 만 쓰고 `furLength` 도 읽지 않는다(템플릿 값). 그래서 서버가 만든 GLB 를 Test Glb Url 로만 열면 털이 없다.
 - 셸 수는 `furShellCount`(`SampleScene` 20). 정적 `MeshFilter`·리깅 `SkinnedMeshRenderer` 모두에 셸을 붙인다.
+- 결 맵은 메시에 `TANGENT` 가 있을 때만 쓴다(셸 털 v2, 2026-11-21 브랜치 Unity 포트로 들어옴 — 그 전 v1 은 `TANGENT` 가 없으면 임시 접선을 만들어 R·G 를 썼다). 이 변환기와 `rig_transfer.py` 는 `TANGENT` 를 쓰지 않으므로 지금 서버 GLB 에서는 R·G(위의 G 부호 맞춤 포함)로 털을 눕히지 않고 법선 쪽으로 세운다. 그러면 B 도 방향에 영향이 없어 결 맵 전체가 효과가 없다. 형식은 그대로이고, `TANGENT` 를 넣을지(서버 또는 앱)와 G 부호는 결정 전이다 **[계획]**([unity/docs/FUR_RENDERING.md](../../unity/docs/FUR_RENDERING.md) §1). 기기에서 확인하지 않았다.
 
 상태:
 
