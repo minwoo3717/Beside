@@ -244,6 +244,8 @@ cd backend
 | 모델 교체 | "처음부터" 로 여러 번 생성 | 메모리가 계속 늘지 않음(지워진 모델의 털 굽기 메시 해제) |
 | 서버 털 끔 | 로컬 추론 서비스를 `BESIDE_EMBED_HAIR=0` 으로 띄워 생성 | 털 없는 모델(앱은 털을 그리지 않음) |
 
+에디터 없이 컴파일만 보려면(2026-11-21 포트 확인 방법): Unity 가 만든 `unity/Library/Bee/artifacts/*/Assembly-CSharp.rsp` 의 참조로 에디터 동봉 Roslyn(`<Unity 6000.6.0f1>/Editor/Data/DotNetSdk/dotnet.exe exec .../DotNetSdk/sdk/8.0.318/Roslyn/bincore/csc.dll @rsp`)을 돌린다. rsp 의 소스 목록은 `Assets/` 의 `.cs`(Samples·TextMesh Pro·Plugins·XR 제외)로 바꾸고 `-out` 은 임시 폴더로 바꾼다(`Library/` 를 덮어쓰지 않게). 2026-11-21 기준 오류 0·경고 44.
+
 ## 리깅 GLB (SMAL 기반)
 
 AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입힌 GLB. 현재 샘플은 `backend/storage/results/sample-dog.glb` 로 Mock 서버가 내려준다.

@@ -54,7 +54,6 @@
 - 에디터: Play 모드에서 `PhotoPicker.editorTestImagePaths`로 업로드 → 폴링 → 다운로드 → 미리보기 → XR Simulation 바닥 클릭 배치. 리깅 모델은 키보드 1~5(Idle/Walk/Sit/TailWag/HeadTilt).
 - 리깅 모델 털(로컬): 앱에서 "처음부터" → `ModelLoader`의 Test Glb Url + Test Hair Length/Flow Url → Play. 이 URL 경로(`LoadAndRegister(string …)`)는 GLB 안 털 맵(`extras.beside`, [GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md))과 `furLength` 를 읽지 않는다 — 털 맵 PNG 를 따로 줘야 털이 나오고 길이는 `Dog_Fur_Mat` 값(0.025)이다. 서버 GLB 안 털 맵은 작업 흐름(`JobManager` → `LoadAndRegister(byte[] …)` → `TryReadEmbeddedHair`)에서만 읽힌다.
 - 털 성능: 기기에서 펫 배치 → 네 손가락 탭 → 묶음·거리 선택 → 빠른 측정 → 정식 측정 → 전체 공유. 분석은 루트 `scripts/analyze_fur_bench.py`. 절차는 [Assets/Beside/FurLab/README.md](Assets/Beside/FurLab/README.md).
-- 컴파일 확인(에디터 없이): main 체크아웃의 `Library/Bee/artifacts/*/Assembly-CSharp.rsp`(Unity 6000.6.0f1 이 만든 것)의 참조로 에디터 동봉 Roslyn(`DotNetSdk/sdk/8.0.318/Roslyn/bincore/csc.dll`)을 `dotnet exec` 로 돌린다. 소스 목록은 `Assets/` 의 `.cs`(Samples·TextMesh Pro·Plugins·XR 제외)로 바꾸고 출력은 임시 폴더로 보낸다. 2026-11-21 포트 기준 오류 0·경고 44.
 - 기기: Android Logcat 패키지(`Window > Analysis > Android Logcat`) 또는 `adb logcat -s Unity`. 검색어 `BesideMetric`, `RuntimeModelLoader`, `JobManager`, `SpawnLimiter`, `PlaneScanGate`.
 - `metrics.csv` 회수: `adb pull /sdcard/Android/data/<패키지명>/files/metrics/metrics.csv .` (배치 후 30초가 지나야 한 줄이 써진다).
 - 시나리오 표(정상·바닥 인식 시점·배치 제한·벽 차단·바닥 점·애니메이션·서버 변경·실패+재시도·복원·캐시·서버 종료·AR 안내)는 [README.md](README.md) "테스트 시나리오", 털 v2·그림자 바닥면·FurLab 은 같은 문서 "브랜치 Unity 포트 다시 시험".
