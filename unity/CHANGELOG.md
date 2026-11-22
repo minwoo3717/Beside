@@ -2,6 +2,16 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-22
+
+- 디자인 UI를 시안 E("Beside 앱 UI 개선 시안")로 바꿈: 홈·사진 확인·진행·미리보기·AR(찾는 중/배치 전/배치 후)·오류·서버 설정 7개 화면. `DesignKit` 토큰·위젯 교체, `DesignedUIController` 다시 작성(같은 GUID, 같은 이벤트·공개 메서드만 사용)
+- 홈: 이어보기 카드("만들던 모델이 있어요", 작업 첫 사진 썸네일, 완료 여부 표시)와 좋은 사진 예시 3장(○○✕). 서버 설정은 홈 아래 줄(연결 상태 점, 30초마다 healthz)
+- `JobManager.resumeOnStart`(기본 켬)·`ResumeOnStart`·`SavedJobId` 추가. 디자인 UI가 켜져 있으면 시작 때 자동 복원 대신 홈 카드에서 이어 감. 기본 UI 동작은 그대로
+- `ModelPreview.SetBackground` 추가: 미리보기 3D 배경을 흰 카드색으로
+- 진행 단계 표시: `DesignKit.Spin`을 `DesignKit.Spinner`로 바꿈 — 시안대로 4분의 1 호가 0.9초에 한 바퀴 일정하게 돌고, 끝은 둥글게(점 두 개). 각도를 시계에서 계산해 다음 단계로 넘어가도 이어서 돈다. 호가 늘었다 줄어드는 안드로이드식은 멈칫거려 보여서 쓰지 않음(웹 재현 `.spin`과 같은 움직임)
+- 리소스: Noto Sans KR Regular/Bold(OFL, 가변 글꼴에서 400·700 굵기로 뽑고 한글·영문·기호만 남긴 부분 글꼴, 각 2.4MB), 흰색 선 아이콘 14개(128px), 예시 사진 3장(512px) — `Assets/Beside/UI/Resources/BesideUI/`
+- 확인: Unity 2021.3 참조 DLL + uGUI 2018.3 + 외부 패키지 대체 스텁으로 Assets/Beside 전체 컴파일 — 바꾼 코드 오류 0, 남은 8개는 그 참조에 없는 Unity 6 API(기존 코드 포함). Unity 6 편집기 컴파일·에디터 Play·기기 확인은 [계획]
+
 ## 2026-11-21 (main 병합)
 
 - 브랜치 `Unity`(4e6f190·2d2e235·0811aae)를 main 에 옮김(`feat/unity-branch-port`). Unity 프로젝트는 `unity/` 그대로 두고(브랜치의 `unity/BesideApp/` 이동은 따르지 않음) 쉘 털 v2·FurLab·그림자 바닥면·FpsOverlay·씬·문서·측정 기록을 그 경로로 합침. main 이 그 뒤 고친 앱 코드(QUEUE_FULL, 다시 시도, 모델 해제 등 6개 파일)는 main 것을 유지하고, `RuntimeModelLoader` 에는 그림자 바닥면만 더함
