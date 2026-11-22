@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beside 디자인 UI 미리보기</title>
+<meta name="description" content="Unity 디자인 UI(시안 E) 7개 화면을 웹으로 옮겨 눌러 보는 미리보기">
+<meta property="og:title" content="Beside 디자인 UI 미리보기">
+<meta property="og:description" content="Unity 디자인 UI(시안 E) 7개 화면을 웹으로 옮겨 눌러 보는 미리보기">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <h1>Beside 디자인 UI 미리보기</h1>
+  <p>Unity 코드(DesignedUIController)의 문구·색·크기·아이콘·예시 사진을 웹으로 옮겼어요. 화면 안 버튼을 눌러 흐름대로 넘어가고, 아래 버튼으로 바로 갈 수 있어요. 3D 모델과 카메라는 그림으로 대신했어요.</p>
+  <nav class="jump" aria-label="화면 바로 가기">
+    <button data-go="home">홈</button>
+    <button data-go="confirm">사진 확인</button>
+    <button data-go="progress">만드는 중</button>
+    <button data-go="preview">미리보기</button>
+    <button data-go="ar-scan">AR 찾는 중</button>
+    <button data-go="ar-found">AR 배치 전</button>
+    <button data-go="ar-placed">AR 배치 후</button>
+    <button data-go="error">오류</button>
+    <button data-go="settings">서버 설정</button>
+  </nav>
+</header>
+
+<main class="stage">
+<div class="phone-wrap" id="wrap">
+<div class="phone" id="phone">
+  <div class="statusbar" id="statusbar"><span>9:41</span><span class="dots"><i></i><i></i></span></div>
+
+  <!-- ===== 홈 ===== -->
+  <section class="screen" id="home" aria-label="홈">
+    <div class="scroll">
+      <div class="title"><h2>Beside</h2><p>사진으로 만드는 우리 아이 3D</p></div>
+
+      <div class="card" style="gap:4px">
+        <h3 style="font-size:18px">새로 만들기</h3>
+        <p class="muted" style="margin:0;font-size:14px">얼굴과 몸이 잘 보이는 사진을 골라 주세요</p>
+        <div class="tiles">
+          <button class="tile accent" data-act="pick"><i class="ic" data-i="gallery"></i><span>갤러리에서 고르기</span></button>
+          <button class="tile gray" data-act="shoot"><i class="ic" data-i="camera"></i><span>지금 촬영하기</span></button>
+        </div>
+      </div>
+
+      <button class="resume" id="resume" data-act="resume">
+        <span class="thumb"><i class="ic" data-i="cube" style="--s:26px;--c:var(--accent)"></i><img id="resumeImg" alt="" hidden></span>
+        <span class="txt"><b>만들던 모델이 있어요</b><small id="resumeSub">생성 완료 · 이어서 AR로 보기</small></span>
+        <i class="ic" data-i="chevron_right" style="--c:var(--ink-muted)"></i>
+      </button>
+
+      <div class="card">
+        <h3>이런 사진이 잘 나와요</h3>
+        <div class="examples">
+          <figure><div class="pic"><img src="/res/Examples/example_1.jpg" alt="몸 전체가 보이는 예시 사진"><span class="badge good"><i class="ic" data-i="check" style="--s:12px;--c:#fff"></i></span></div><figcaption>몸 전체가 보여요</figcaption></figure>
+          <figure><div class="pic"><img src="/res/Examples/example_2.jpg" alt="밝고 선명한 예시 사진"><span class="badge good"><i class="ic" data-i="check" style="--s:12px;--c:#fff"></i></span></div><figcaption>밝고 선명해요</figcaption></figure>
+          <figure><div class="pic"><img src="/res/Examples/example_3.jpg" alt="몸이 잘린 예시 사진"><span class="badge bad"><i class="ic" data-i="close" style="--s:11px;--c:#fff"></i></span></div><figcaption>몸이 잘렸어요</figcaption></figure>
+        </div>
+      </div>
+
+      <button class="server" data-act="settings">
+        <i class="ic" data-i="server" style="--c:var(--ink-soft)"></i>
+        <span class="lbl">서버 설정</span>
+        <span class="state"><span class="dot" id="serverDot"></span><span id="serverText">확인 중</span></span>
+        <i class="ic" data-i="chevron_right" style="--s:18px;--c:var(--ink-muted)"></i>
+      </button>
+    </div>
+  </section>
+
+  <!-- ===== 사진 확인 ===== -->
+  <section class="screen" id="confirm" aria-label="사진 확인">
+    <div class="scroll">
+      <div class="bar"><button class="iconbtn" data-act="home" aria-label="뒤로"><i class="ic" data-i="chevron_left" style="--s:22px"></i></button></div>
+      <div class="title"><h2>사진 확인</h2><p id="confirmCount">선택한 사진 2장 · 최대 10장</p></div>
+      <div class="card" style="padding:16px"><div class="grid" id="thumbs"></div></div>
+      <div class="card tips">
+        <h3>좋은 결과를 위한 사진</h3>
+        <div class="tip"><span class="mark good"><i class="ic" data-i="check" style="--s:12px;--c:#fff"></i></span>얼굴과 몸 전체가 한 장에 들어와요</div>
+        <div class="tip"><span class="mark good"><i class="ic" data-i="check" style="--s:12px;--c:#fff"></i></span>밝은 곳에서 찍은 선명한 사진이 좋아요</div>
+        <div class="tip"><span class="mark bad"><i class="ic" data-i="close" style="--s:11px;--c:#fff"></i></span>여러 마리가 함께 있거나 가려진 사진은 피해 주세요</div>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="limits">JPG · PNG · WEBP, 장당 5MB 이하</div>
+      <button class="btn primary" data-act="start">이 사진으로 만들기</button>
+      <button class="btn ghost" data-act="pick">다시 고르기</button>
+    </div>
+  </section>
+
+  <!-- ===== 만드는 중 ===== -->
+  <section class="screen" id="progress" aria-label="만드는 중">
+    <div class="scroll">
+      <div class="bar"><span class="fill"></span><button class="textbtn" data-act="cancel">취소</button></div>
+      <div class="title"><h2>만드는 중</h2><p>보통 2~3분 걸려요</p></div>
+      <div class="card job">
+        <div class="photo"><i class="ic" data-i="cube" style="--s:50px;--c:var(--accent)"></i><img id="progressImg" alt="선택한 첫 사진" hidden><span class="pill" id="progressPill"></span></div>
+        <div class="steps" id="steps"></div>
+      </div>
+      <div class="card" style="gap:6px;padding-bottom:18px">
+        <b style="font-size:13px;color:var(--accent)">기다리는 동안</b>
+        <p style="margin:0;font-size:14px;line-height:1.65">AR은 무늬가 적고 밝은 바닥에서 잘 인식돼요. 배치한 뒤 두 손가락으로 크기를 바꿀 수 있어요.</p>
+      </div>
+    </div>
+    <div class="bottom"><div class="note">앱을 닫아도 계속 만들어요</div></div>
+  </section>
+
+  <!-- ===== 미리보기 ===== -->
+  <section class="screen" id="preview" aria-label="미리보기">
+    <div class="col">
+      <div class="bar"><span class="fill"></span><button class="chipbtn" data-act="fur" id="furBtn">털 표현 켜짐</button></div>
+      <div class="title"><h2>미리보기</h2><p>드래그해서 돌려 보세요</p></div>
+      <div class="view fur-on" id="view" aria-label="3D 미리보기 (예시)">
+        <div class="scene3d"><div class="cube" id="cube"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        <small>앱에서는 만든 3D 모델이 보여요</small>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>높이</span><b>36cm</b></div>
+        <div class="stat"><span>폴리곤</span><b>48,210</b></div>
+        <div class="stat"><span>파일</span><b>3.2 MB</b></div>
+      </div>
+      <button class="btn primary" data-act="ar">AR로 배치하기</button>
+      <button class="btn ghost" data-act="new">다른 사진으로 다시 만들기</button>
+    </div>
+  </section>
+
+  <!-- ===== AR ===== -->
+  <section class="screen" id="ar" aria-label="AR 배치">
+    <div class="camera" id="camera">
+      <div class="plane"></div>
+      <div class="pet" id="pet"><div class="scene3d"><div class="cube"><i></i><i></i><i></i><i></i><i></i><i></i></div></div><div class="shadow"></div></div>
+    </div>
+    <div class="ar-ui">
+      <button class="iconbtn ar-back shadowed" data-act="preview" aria-label="뒤로"><i class="ic" data-i="chevron_left" style="--s:22px"></i></button>
+      <span class="pill ar-status shadowed"><span class="dot" id="arDot"></span><span id="arStatus">바닥 찾는 중</span></span>
+      <div class="ar-hint shadowed" id="arHint"><span id="arHintText"></span><button data-act="dismiss" aria-label="안내 닫기"><i class="ic" data-i="close_thin" style="--s:14px;--c:var(--ink-soft)"></i></button></div>
+
+      <div class="sheet">
+        <div class="head">
+          <span class="thumb"><i class="ic" data-i="cube" style="--c:var(--accent)"></i><img id="arImg" alt="" hidden></span>
+          <span class="name">우리 아이</span><span class="size">높이 36cm</span>
+          <button class="hide" data-act="toggle" aria-label="버튼 숨기기"><i class="ic" data-i="chevron_down" style="--s:18px;--c:var(--ink-soft)"></i></button>
+        </div>
+        <button class="btn primary unplaced-only" data-act="center">화면 가운데에 바로 놓기</button>
+        <div class="acts placed-only" id="acts">
+          <button data-clip="walk">걷기</button><button data-clip="sit">앉기</button><button data-clip="wag">꼬리</button><button data-clip="tilt">갸웃</button><button data-clip="idle">기본</button>
+        </div>
+        <div class="vtiles placed-only">
+          <button class="vtile" data-act="replace"><i class="ic" data-i="refresh" style="--s:22px"></i>다시 배치</button>
+          <button class="vtile accent" data-act="snap"><i class="ic" data-i="camera" style="--s:22px"></i>사진 찍기</button>
+          <button class="vtile" data-act="new"><i class="ic" data-i="plus" style="--s:22px"></i>새로 만들기</button>
+        </div>
+      </div>
+      <button class="showbtn shadowed" data-act="toggle"><i class="ic" data-i="chevron_up" style="--s:18px"></i>버튼 보기</button>
+      <div class="toast" id="toast" role="status"></div>
+    </div>
+  </section>
+
+  <!-- ===== 오류 ===== -->
+  <section class="screen" id="error" aria-label="오류">
+    <div class="scroll">
+      <div style="height:44px;flex:none"></div>
+      <div class="title"><h2>만들지 못했어요</h2><p>작업 번호 7f3a92c1</p></div>
+      <div class="card reason">
+        <span class="alert"><i class="ic" data-i="alert" style="--s:26px;--c:var(--danger)"></i></span>
+        <b>3D 모델을 만들지 못했어요.</b>
+        <p>얼굴과 몸 전체가 잘 보이는 사진으로 다시 시도해 주세요.</p>
+      </div>
+      <div class="card info">
+        <div class="kv"><span>오류 코드</span><b>INFERENCE_FAILED</b></div>
+        <div class="kv"><span>다시 시도</span><b style="color:var(--accent)">가능</b></div>
+      </div>
+    </div>
+    <div class="bottom">
+      <button class="btn primary" data-act="retry">같은 사진으로 다시 시도</button>
+      <button class="btn secondary" data-act="new">다른 사진 고르기</button>
+    </div>
+  </section>
+
+  <!-- ===== 서버 설정 ===== -->
+  <section class="screen" id="settings" aria-label="서버 설정">
+    <div class="scroll">
+      <div class="bar"><button class="iconbtn" data-act="home" aria-label="뒤로"><i class="ic" data-i="chevron_left" style="--s:22px"></i></button></div>
+      <div class="title"><h2>서버 설정</h2><p>생성 서버 주소를 넣어 주세요. 터널(Cloudflare, ngrok)이나 클라우드 서버 주소를 넣으면 다른 네트워크에서도 쓸 수 있어요.</p></div>
+      <div class="card addr">
+        <label for="url">서버 주소</label>
+        <input id="url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://example.trycloudflare.com">
+        <div class="row">
+          <button class="btn gray small" data-act="paste">붙여넣기</button>
+          <button class="btn gray small" data-act="clear">지우기</button>
+        </div>
+        <div class="status" id="settingsStatus" role="status"></div>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="row"><button class="btn secondary" data-act="test">연결 확인</button><button class="btn primary" data-act="save">저장</button></div>
+      <button class="btn ghost" data-act="default">기본 주소로 되돌리기</button>
+    </div>
+  </section>
+</div>
+</div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

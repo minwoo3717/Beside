@@ -30,6 +30,9 @@
 - UI 컨트롤러는 `JobManager` 이벤트(`StateChanged`, `JobFailed`, `ModelReady`, `ModelPlaced`)와 위 AR 컴포넌트의 공개 메서드만 쓰고 API를 직접 호출하지 않는다. 기본 UI(`MainUIController`)와 디자인 UI(`DesignedUIController`)는 같은 오브젝트에 두고 **하나만 켠다**.
 - 화면 상태(버튼·강조)는 이벤트 한 번이 아니라 **실제 상태**(배치된 모델 유무, 재생 중인 클립)를 보고 맞춘다. 이벤트는 작업당 한 번만 오는 것이 있다(`ModelPlaced`).
 - 템플릿 UI(Create/Options/Object Menu/Greeting 등)는 디자인 UI가 실행 시 숨긴다(`hideTemplateObjects`). Coaching UI는 남긴다.
+- 디자인 UI의 색·크기·위젯은 `DesignKit`(시안 E, 기준 해상도 1080×1920 = 시안 CSS px × 2.6)에만 둔다. 글꼴·아이콘·예시 사진은 `Assets/Beside/UI/Resources/BesideUI/`(`Fonts`, `Icons` 흰색 128px PNG — 색은 코드에서 입힘, `Examples`)에서 읽는다. 둥근 모서리·원·링은 코드로 만든다.
+- 저장된 작업 이어보기는 디자인 UI 홈 카드가 맡는다(`offerResumeOnHome`이 `OnEnable`에서 `JobManager.ResumeOnStart`를 끔). 작업 첫 사진은 `persistentDataPath/ui/photo_{jobId}.jpg` 하나만 두고, "새로 만들기"·취소·서버 주소 변경 때 지운다.
+- `unity/docs/ui-preview/`는 디자인 UI의 웹 재현이다(루트 `baze.json`이 이 서버를 띄움). 디자인 UI 문구·색·화면을 바꾸면 여기의 `index.html`·`style.css`·`app.js`도 맞춘다. 3D·AR·서버는 대체물이라 Unity 동작의 근거가 되지 않는다.
 
 ### 프로젝트
 - 플랫폼 플러그인에 의존하는 코드는 Scripting Define Symbol로 감싼다: NativeGallery → `BESIDE_NATIVEGALLERY`, NativeShare(FurLab 결과 공유, 선택) → `BESIDE_NATIVESHARE`. 심볼이 없어도 컴파일되고 대체 경로(화면 캡처)가 동작해야 한다.

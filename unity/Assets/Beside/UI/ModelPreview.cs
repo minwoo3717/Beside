@@ -85,6 +85,13 @@ namespace Beside.UI
             cam.enabled = false;
         }
 
+        /// <summary>Background of the preview texture (the designed UI matches its card color).</summary>
+        public void SetBackground(Color color)
+        {
+            background = color;
+            if (cam != null) cam.backgroundColor = color;
+        }
+
         /// <summary>Call from the UI drag handler with the horizontal drag delta in pixels.</summary>
         public void Drag(float deltaX)
         {

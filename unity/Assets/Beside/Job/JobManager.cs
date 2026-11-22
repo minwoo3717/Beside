@@ -25,6 +25,8 @@ namespace Beside.Job
         [SerializeField] private string baseUrl = "http://192.168.0.10:8080";
         [SerializeField] private float pollingIntervalSeconds = 2f;
         [SerializeField] private float maxWaitSeconds = 600f;
+        [Tooltip("Continue the saved job as soon as the app starts. The designed UI turns this off and offers the job on its home screen instead.")]
+        [SerializeField] private bool resumeOnStart = true;
 
         [Header("References")]
         [SerializeField] private RuntimeModelLoader modelLoader;   // puts the GLB into the AR scene
@@ -43,6 +45,10 @@ namespace Beside.Job
         public float RetryWaitSeconds => RetryAvailableAt.HasValue
             ? Mathf.Max(0f, (float)(RetryAvailableAt.Value - DateTime.UtcNow).TotalSeconds)
             : 0f;
+        /// <summary>Read in Start: set it before then (OnEnable of a UI controller) to keep the saved job waiting.</summary>
+        public bool ResumeOnStart { get => resumeOnStart; set => resumeOnStart = value; }
+        /// <summary>Job saved from an earlier run (or the current one), empty when none. ResumeJob(SavedJobId) continues it.</summary>
+        public string SavedJobId => PlayerPrefs.GetString(JobIdPrefKey, "");
         public string BaseUrl => baseUrl;
         /// <summary>The URL set in the Inspector (build default). The app can override it at runtime.</summary>
         public string DefaultBaseUrl { get; private set; }
@@ -108,6 +114,7 @@ namespace Beside.Job
 
         void Start()
         {
+            if (!resumeOnStart) return;
             string saved = PlayerPrefs.GetString(JobIdPrefKey, "");
             if (!string.IsNullOrEmpty(saved)) ResumeJob(saved);
         }
