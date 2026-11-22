@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Beside.UI
 {
@@ -26,7 +28,10 @@ namespace Beside.UI
 
         void Awake()
         {
-            Texture = new RenderTexture(textureSize, textureSize, 24) { name = "ModelPreviewRT" };
+            // Shell fur v2 uses alpha-to-coverage, so it needs MSAA. For a camera with a target texture URP takes the
+            // MSAA count from that texture, not from the URP asset: give the texture the asset's count (set before first use).
+            int msaa = GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset urp ? Mathf.Max(1, urp.msaaSampleCount) : 4;
+            Texture = new RenderTexture(textureSize, textureSize, 24) { name = "ModelPreviewRT", antiAliasing = msaa };
 
             var camGo = new GameObject("ModelPreviewCamera");
             camGo.transform.SetParent(transform, false);

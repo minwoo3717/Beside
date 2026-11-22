@@ -13,6 +13,7 @@ using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 ///  - optional height normalization, feet placed on the floor (pivot at the bottom)
 ///  - BoxCollider generated from the mesh bounds
 ///  - optional shell fur from hair length / flow maps
+///  - optional shadow catcher quad under the pet (the AR floor planes are hidden after placement)
 /// After loading, the next tap on a detected plane spawns the new model.
 /// </summary>
 public class RuntimeModelLoader : MonoBehaviour
@@ -46,6 +47,13 @@ public class RuntimeModelLoader : MonoBehaviour
              "with the GLB texture. Avoids pink models in builds when glTFast shaders are stripped.")]
     public Material baseMaterialTemplate;
 
+    [Header("Shadow")]
+    [Tooltip("Material with the Custom/ShadowCatcher shader. A transparent quad under the pet shows its shadow, " +
+             "because the AR floor planes that used to receive it are hidden after placement. Empty = no floor shadow.")]
+    public Material shadowCatcherMaterial;
+    [Tooltip("Shadow quad size relative to the model's longest side.")]
+    public float shadowQuadScale = 1.6f;
+
     [Header("Fur (optional)")]
     [Tooltip("Material with the Custom/ShellFur shader. Leave empty to skip fur.")]
     public Material furMaterialTemplate;
@@ -63,6 +71,9 @@ public class RuntimeModelLoader : MonoBehaviour
 
     /// <summary>Called when a model has been loaded and registered. Argument: the template object.</summary>
     public event Action<GameObject> ModelReady;
+
+    /// <summary>Name of the template child that holds the GLB scene (the ShadowCatcher quad is its sibling).</summary>
+    public const string ModelRootName = "LoadedModel";
 
     Transform templateRoot;                               // inactive holder: templates never run or render
     readonly List<GltfImport> imports = new List<GltfImport>(); // keep alive: spawned copies share their meshes/textures
@@ -198,7 +209,7 @@ public class RuntimeModelLoader : MonoBehaviour
         GameObject template = Instantiate(shellPrefab, templateRoot);
         template.name = "Runtime_" + name;
 
-        var modelRoot = new GameObject("LoadedModel").transform;
+        var modelRoot = new GameObject(ModelRootName).transform;
         modelRoot.SetParent(template.transform, false);
 
         if (!await gltf.InstantiateMainSceneAsync(modelRoot))
@@ -230,6 +241,7 @@ public class RuntimeModelLoader : MonoBehaviour
             return null;
         }
 
+        AddShadowCatcher(template.transform, modelRoot);   // child of the template: Free() destroys it with the template
         loaded[template] = model;
         Register(template);
         Debug.Log($"[RuntimeModelLoader] Ready: {template.name}");
@@ -284,6 +296,33 @@ public class RuntimeModelLoader : MonoBehaviour
         col.center = inv * b.center;
         col.size = new Vector3(Mathf.Abs(size.x), Mathf.Abs(size.y), Mathf.Abs(size.z));
         return true;
+    }
+
+    // ---------- shadow ----------
+
+    void AddShadowCatcher(Transform shell, Transform model)
+    {
+        if (shadowCatcherMaterial == null) return;
+
+        // Make sure the pet itself casts a shadow
+        foreach (var r in model.GetComponentsInChildren<Renderer>(true))
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+
+        var col = model.GetComponent<BoxCollider>();
+        Vector3 s = col != null ? Vector3.Scale(col.size, model.localScale) : Vector3.one * targetSize;
+        float size = Mathf.Max(s.x, s.y, s.z) * shadowQuadScale;
+
+        var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        quad.name = "ShadowCatcher";
+        Destroy(quad.GetComponent<Collider>());            // must not block taps / grabbing
+        quad.transform.SetParent(shell, false);
+        quad.transform.localPosition = new Vector3(0f, 0.002f, 0f);   // just above the floor (feet are at y = 0)
+        quad.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // face up
+        quad.transform.localScale = new Vector3(size, size, 1f);
+        var mr = quad.GetComponent<MeshRenderer>();
+        mr.sharedMaterial = shadowCatcherMaterial;           // shared scene asset and built-in Quad mesh: not in model.owned
+        mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        mr.receiveShadows = true;
     }
 
     static Quaternion FacingToPlusZ(ModelFacing f) => f switch

@@ -868,9 +868,13 @@ namespace Beside.UI.Designed
 
         void FillStats(GameObject template, string path)
         {
+            // Count the GLB only (not the loader's ShadowCatcher quad); rigged models have SkinnedMeshRenderers, no MeshFilter
+            Transform model = template.transform.Find(RuntimeModelLoader.ModelRootName);
+            if (model == null) model = template.transform;
             long tris = 0;
-            foreach (var mf in template.GetComponentsInChildren<MeshFilter>(true))
-                if (mf.sharedMesh != null) for (int s = 0; s < mf.sharedMesh.subMeshCount; s++) tris += (long)mf.sharedMesh.GetIndexCount(s) / 3;
+            void Count(Mesh m) { if (m != null) for (int s = 0; s < m.subMeshCount; s++) tris += (long)m.GetIndexCount(s) / 3; }
+            foreach (var mf in model.GetComponentsInChildren<MeshFilter>(true)) Count(mf.sharedMesh);
+            foreach (var smr in model.GetComponentsInChildren<SkinnedMeshRenderer>(true)) Count(smr.sharedMesh);
             var box = template.GetComponentInChildren<BoxCollider>(true);
             float height = box != null ? box.size.y * box.transform.lossyScale.y : 0f;
             statSize.text = height > 0 ? $"높이 {Mathf.RoundToInt(height * 100)}cm" : "–";

@@ -24,6 +24,8 @@ WORK = tempfile.mkdtemp(prefix="beside-infer-test-")
 os.environ.setdefault("BESIDE_WORK_DIR", WORK)
 os.environ.pop("BESIDE_INFERENCE_TOKEN", None)
 os.environ.pop("BESIDE_REQUEST_TIMING", None)   # RequestTimingTest wraps the app itself
+for _switch in ("EMBED_HAIR", "HAIR_META", "PAD_TEXTURE"):   # converter switches: the tests patch them on the module
+    os.environ.pop("BESIDE_" + _switch, None)
 KNOBS = ("DELAY_MS", "JITTER_MS", "SLOTS", "FAIL_RATE", "FAIL_TOKEN", "SLOW_TOKEN", "SLOW_MS")
 for _knob in KNOBS:   # each test sets the passthrough knobs it needs
     os.environ.pop("BESIDE_PASSTHROUGH_" + _knob, None)
@@ -625,17 +627,24 @@ f 2/2 4/4 3/3
 
 def _fake_convert_module(calls):
     """convert_asset stand-in (no numpy): writes a GLB stub and its metrics file and, like the real one, creates the
-    folder only when make_dirs (otherwise the write fails on a deleted folder). Each call is appended to calls."""
+    folder only when make_dirs (otherwise the write fails on a deleted folder). Each call is appended to calls.
+    hair_meta / padded_texture: the converter's opt-in extras (app.py passes them only when switched on); with
+    padded_texture it writes texture_padded.png next to the GLB like the real one."""
     module = types.ModuleType("convert_asset")
     module.ConversionError = type("ConversionError", (Exception,), {})
     module.MAX_GLB_BYTES = 10 * 1024 * 1024
 
-    def convert(obj, texture, out, metrics=None, hair_npz=None, forward_axis="+x", make_dirs=True):
-        calls.append({"out": out, "make_dirs": make_dirs})
+    def convert(obj, texture, out, metrics=None, hair_npz=None, forward_axis="+x", make_dirs=True,
+                hair_meta=None, padded_texture=False):
+        calls.append({"out": out, "make_dirs": make_dirs, "hair_npz": hair_npz, "hair_meta": hair_meta,
+                      "padded_texture": padded_texture})
         if make_dirs:
             os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, "wb") as glb:
             glb.write(GLB_STUB)
+        if padded_texture:
+            with open(os.path.join(os.path.dirname(out), "texture_padded.png"), "wb") as png:
+                png.write(b"padded")
         result = {"vertices": 4, "triangles": 4, "textureSize": 8, "bytes": len(GLB_STUB), "convertMs": 1}
         if metrics:
             with open(metrics, "w") as f:
@@ -646,12 +655,15 @@ def _fake_convert_module(calls):
     return module
 
 
-def _fake_rig_module(size):
-    """rig_transfer stand-in: writes a 'rigged' GLB of size bytes (GLB_STUB, zero padded) and reports it."""
+def _fake_rig_module(size, textures=None):
+    """rig_transfer stand-in: writes a 'rigged' GLB of size bytes (GLB_STUB, zero padded) and reports it. The texture
+    path of each call is appended to textures when given."""
     module = types.ModuleType("rig_transfer")
     module.RigError = type("RigError", (Exception,), {})
 
     def transfer(base, texture, template, out):
+        if textures is not None:
+            textures.append(texture)
         data = GLB_STUB + b"\0" * (size - len(GLB_STUB))
         with open(out, "wb") as glb:
             glb.write(data)
@@ -1156,6 +1168,244 @@ class OversizeRiggedResultTest(_RiggedCase):
         skipped = self.warnings("rig transfer skipped")
         self.assertEqual(len(skipped), 1)
         self.assertIn("> limit 10485760", skipped[0])
+
+
+def _has_scipy():
+    try:
+        import scipy.ndimage  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class ConverterSwitchTest(_ModelModeCase):
+    """BESIDE_EMBED_HAIR / BESIDE_HAIR_META / BESIDE_PAD_TEXTURE reach convert (port of the branch Unity 2d2e235, 2026-11-21).
+    Unset, the call is the one from before the port: hair.npz in, no extras."""
+
+    def run_job(self, **switches):
+        with contextlib.ExitStack() as stack:
+            for name, value in switches.items():
+                stack.enter_context(mock.patch.object(service, name, value))
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(len(self.converted), 1)
+        return self.converted[0]
+
+    def test_by_default_the_fur_maps_go_in_and_no_extra_is_passed(self):
+        call = self.run_job()
+        self.assertTrue(call["hair_npz"].endswith("hair.npz"), call)
+        self.assertIsNone(call["hair_meta"])
+        self.assertFalse(call["padded_texture"])
+
+    def test_embed_hair_0_converts_without_the_hair_file(self):
+        self.assertIsNone(self.run_job(EMBED_HAIR=False)["hair_npz"])
+
+    def test_the_opt_in_extras_reach_the_converter(self):
+        call = self.run_job(HAIR_META="assets/hair_map_meta_uvanchor.npz", PAD_TEXTURE=True)
+        self.assertEqual(call["hair_meta"], "assets/hair_map_meta_uvanchor.npz")
+        self.assertTrue(call["padded_texture"])
+        self.assertTrue(call["hair_npz"].endswith("hair.npz"))
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class PaddedTextureRigTest(_RiggedCase):
+    """With BESIDE_PAD_TEXTURE=1 the rigged GLB gets the filled texture_padded.png instead of the raw uv.png."""
+
+    def converter_patches(self):
+        self.rig_textures = []
+        return [mock.patch.dict(sys.modules, {"convert_asset": _fake_convert_module(self.converted)}),
+                mock.patch.object(service, "RIG_TEMPLATE", "template-rigged.glb"),
+                mock.patch.dict(sys.modules, {"rig_transfer": _fake_rig_module(self.rigged_size, self.rig_textures)})]
+
+    def test_the_rig_gets_the_padded_texture(self):
+        with mock.patch.object(service, "PAD_TEXTURE", True):
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(answer.json()["modelVersion"], "fake@test:ckpt+rig")
+        self.assertEqual([Path(t).name for t in self.rig_textures], ["texture_padded.png"])
+
+    def test_without_the_switch_the_rig_gets_uv_png(self):
+        answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual([Path(t).name for t in self.rig_textures], ["uv.png"])
+
+
+@unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")
+class RealEmbedHairOffTest(_ModelModeCase):
+    """BESIDE_EMBED_HAIR=0 with the real converter: the served GLB has no extras.beside, so the app draws no server fur
+    (the off switch GLB_SPEC §4.1 '알려진 점' asked for)."""
+
+    write_raw = staticmethod(_write_real_raw)
+
+    def converter_patches(self):
+        return []
+
+    def test_the_served_glb_has_no_fur_maps(self):
+        with mock.patch.object(service, "EMBED_HAIR", False):
+            answer = self.upload()
+        self.assertEqual(answer.status_code, 200, answer.text)
+        served = self.client.get(answer.json()["glbUrl"]).content
+        self.assertEqual(served[:4], b"glTF")
+        self.assertIsNone(_app_reads_fur(served))
+        self.assertFalse((self.job_dir / "hair_length.png").exists())
+
+
+def _write_green_texture(path, size=16):
+    """uv.png like AnimalLift's: pure green background, one brown UV island in the middle."""
+    from PIL import Image
+
+    image = Image.new("RGB", (size, size), (0, 255, 0))
+    image.paste((150, 90, 40), (4, 4, 12, 12))
+    image.save(path)
+
+
+def _glb_base_color(glb):
+    """The base colour image (textures[0]) of a GLB, decoded."""
+    import struct
+
+    from PIL import Image
+
+    json_len = struct.unpack_from("<I", glb, 12)[0]
+    root = json.loads(glb[20:20 + json_len])
+    view = root["bufferViews"][root["images"][root["textures"][0]["source"]]["bufferView"]]
+    start = 20 + json_len + 8 + view.get("byteOffset", 0)
+    return Image.open(io.BytesIO(glb[start:start + view["byteLength"]])).convert("RGB")
+
+
+@unittest.skipIf(not _has_converter_deps() or not _has_scipy(), "numpy/trimesh/pillow/scipy not installed")
+class PadTextureTest(unittest.TestCase):
+    """convert(padded_texture=True) / --pad-texture (branch Unity 2d2e235): uv.png's green background takes the nearest
+    island colour in the GLB and in texture_padded.png. Off by default, so GLB_SPEC §4 stays true as written."""
+
+    def setUp(self):
+        import convert_asset
+
+        self.convert_asset = convert_asset
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.raw = Path(folder.name) / "raw"
+        self.raw.mkdir()
+        _write_real_raw(self.raw)
+        _write_green_texture(self.raw / "uv.png")
+        self.out = Path(folder.name) / "out"
+
+    def convert(self, out=None, **options):
+        out = out or self.out
+        return self.convert_asset.convert(str(self.raw / "mesh.obj"), str(self.raw / "uv.png"), str(out / "base.glb"),
+                                          hair_npz=str(self.raw / "hair.npz"), **options)
+
+    @staticmethod
+    def green_pixels(image):
+        return sum(1 for pixel in image.getdata() if pixel == (0, 255, 0))
+
+    def test_the_glb_and_the_copy_have_no_green_background(self):
+        from PIL import Image
+
+        self.convert(padded_texture=True)
+        copy = Image.open(self.out / "texture_padded.png").convert("RGB")
+        self.assertEqual(set(copy.getdata()), {(150, 90, 40)})   # every background pixel took the island colour
+        glb = (self.out / "base.glb").read_bytes()
+        self.assertEqual(list(_glb_base_color(glb).getdata()), list(copy.getdata()))
+        self.assertIsNotNone(_app_reads_fur(glb))   # the fur maps are still there
+
+    def test_off_by_default(self):
+        self.convert()
+        self.assertFalse((self.out / "texture_padded.png").exists())
+        self.assertGreater(self.green_pixels(_glb_base_color((self.out / "base.glb").read_bytes())), 0)
+
+    def test_a_missing_output_folder_is_still_not_created(self):
+        gone = self.out.parent / "gone"
+        with self.assertRaisesRegex(self.convert_asset.ConversionError, "output folder is gone"):
+            self.convert(out=gone, padded_texture=True, make_dirs=False)
+        self.assertFalse(gone.exists())
+
+    def test_a_texture_without_background_is_left_alone(self):
+        from PIL import Image
+
+        image = Image.new("RGB", (8, 8), (200, 150, 100))
+        self.assertEqual(list(self.convert_asset.pad_texture(image).getdata()), list(image.getdata()))
+
+
+@unittest.skipIf(not _has_converter_deps() or not _has_scipy(), "numpy/trimesh/pillow/scipy not installed")
+class HairMetaTest(unittest.TestCase):
+    """convert(hair_meta=...) / --hair-meta / BESIDE_HAIR_META (branch Unity 2d2e235): fur maps rebuilt from AnimalLift's
+    guide texels, zero where the guides do not reach, plus hair_region.png. Off by default; a meta file that cannot be
+    used keeps the raw maps byte for byte."""
+
+    def setUp(self):
+        import numpy as np
+
+        import convert_asset
+
+        self.np = np
+        self.convert_asset = convert_asset
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.dir = Path(folder.name)
+        self.raw = self.dir / "raw"
+        self.raw.mkdir()
+        _write_real_raw(self.raw)
+        np.savez(self.raw / "hair.npz", hair_offsets_local_q=np.full((16, 16, 2, 3), 20, np.int8),
+                 offset_scale=np.float32(0.01))
+
+    def convert(self, name, **options):
+        out = self.dir / name
+        self.convert_asset.convert(str(self.raw / "mesh.obj"), str(self.raw / "uv.png"), str(out / "base.glb"),
+                                   hair_npz=str(self.raw / "hair.npz"), **options)
+        return out, _app_reads_fur((out / "base.glb").read_bytes())
+
+    def meta(self, shape=(16, 16), uv_columns=8):
+        """Guides on every texel of the left uv_columns columns (one UV island), nothing to the right of it."""
+        np = self.np
+        group = np.full(shape, -1, np.int32)
+        group[:, :uv_columns] = np.arange(shape[0] * uv_columns).reshape(shape[0], uv_columns) % 7
+        faces = np.full(shape, -1, np.int32)
+        faces[:, :uv_columns] = 1
+        path = self.dir / "assets" / "hair_map_meta_uvanchor.npz"
+        path.parent.mkdir(exist_ok=True)
+        np.savez(path, guide_group_id_map=group, uv_face_index_map=faces)
+        return path
+
+    def pixels(self, png):
+        from PIL import Image
+
+        return self.np.asarray(Image.open(io.BytesIO(png)))
+
+    def test_fur_only_where_the_guides_reach(self):
+        out, fur = self.convert("meta", hair_meta=str(self.meta()))
+        length = self.pixels(fur[0])
+        self.assertTrue((length[:, :8] > 0).all())     # the island
+        self.assertTrue((length[:, 11:] == 0).all())   # 4 texels past it and further: no fur (3 texels of seam padding)
+        self.assertGreater(fur[2], 0)
+        region = self.pixels((out / "hair_region.png").read_bytes())
+        self.assertTrue((region[:, :8] < 7).all())
+        self.assertTrue((region[:, 11:] == 255).all())
+
+    def test_a_meta_file_that_cannot_be_used_keeps_the_raw_maps(self):
+        _, raw = self.convert("raw")
+        with self.assertLogs("convert_asset", "WARNING"):
+            out, missing = self.convert("missing", hair_meta=str(self.dir / "nope.npz"))
+        self.assertEqual(missing, raw)
+        self.assertFalse((out / "hair_region.png").exists())
+        with self.assertLogs("convert_asset", "WARNING"):
+            _, other_grid = self.convert("grid", hair_meta=str(self.meta(shape=(8, 8), uv_columns=4)))
+        self.assertEqual(other_grid, raw)
+
+    def test_nose_and_paw_pads_are_bare_when_base_texture_is_there(self):
+        from PIL import Image
+
+        np = self.np
+        assets = self.dir / "assets"
+        assets.mkdir(exist_ok=True)
+        texture = np.full((512, 512, 3), 255, np.uint8)
+        texture[180:200, 250:270] = 0   # dark skin inside the nose box (x 232..290, y 166..218)
+        texture[20:40, 20:40] = 0       # dark but outside every box: keeps its fur
+        Image.fromarray(texture).save(assets / "base_texture.png")
+        mask = self.convert_asset._hairless_mask(str(assets), (512, 512))[::-1]   # back to image rows
+        self.assertTrue(mask[185:195, 255:265].all())
+        self.assertFalse(mask[20:40, 20:40].any())
+        self.assertFalse(self.convert_asset._hairless_mask(str(self.dir), (512, 512)).any())   # no base_texture.png
 
 
 def _write_glb(path, gltf, arrays):

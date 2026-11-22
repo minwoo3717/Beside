@@ -46,10 +46,10 @@ Beside/
 │  ├─ api/REVIEW_CHECKLIST.md     # 계약 회의 검토 안건
 │  └─ asset/GLB_SPEC.md           # GLB 에셋 계약
 ├─ backend/                       # Spring Boot 3.2 / Java 17 — v0(/api/jobs, 동결) + v1(/api/v1) + Mock/Real 워커
-├─ unity/                         # Unity 6 Android AR 앱 프로젝트 (앱 코드는 Assets/Beside/)
+├─ unity/                         # Unity 6 Android AR 앱 프로젝트 (앱 코드는 Assets/Beside/, 털 측정 전용 Assets/Beside/FurLab/). docs/·experiments/·CHANGELOG.md = Unity 트랙 문서(Assets 밖)
 ├─ generation/                    # 3D 트랙: inference_service/(FastAPI + AnimalLift), tools/(convert_asset.py·rig_transfer.py), experiments/(실험 기록)
 ├─ deploy/                        # VM 배포: docker-compose.yml, Caddyfile, .env.example, 절차 README
-└─ scripts/                       # e2e_mock.ps1 / e2e_mock.sh(curl 전체 흐름), run_real.*, start_inference_wsl.sh, deploy_vm.sh
+└─ scripts/                       # e2e_mock.ps1 / e2e_mock.sh(curl 전체 흐름), run_real.*, start_inference_wsl.sh, deploy_vm.sh, analyze_fur_bench.py·make_rating_set.py(털 측정 분석)
 ```
 
 ## 계약 변경 규칙 (API v1)
