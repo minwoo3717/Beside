@@ -1522,6 +1522,58 @@ class RigTransferVertexOrderTest(_RigCase):
         self.assertIn("RIG_FAILED: vertex order differs", stderr.getvalue())
 
 
+@unittest.skipIf(TestClient is None or not _has_numpy(), "fastapi/httpx or numpy not installed")
+class ReorderRigTemplateTest(_RigCase):
+    """tools/reorder_rig_template.py renumbers a template's vertices to a converter output's numbering once, so the
+    real SMAL-derived template (np.unique numbering) passes rig_transfer's vertex-order check (2026-11-21)."""
+
+    ORDER = [0, 4, 2, 3, 1]   # reference vertex k is template vertex ORDER[k]; faces keep the template's order
+
+    def reference(self, scale=1.0):
+        renumber = {old: new for new, old in enumerate(self.ORDER)}
+        faces = [[renumber[v] for v in face] for face in PYRAMID_FACES]
+        return self.base(self.np.array(PYRAMID)[self.ORDER] * scale, faces)
+
+    def test_a_renumbered_template_rigs_a_base_the_original_template_refuses(self):
+        import reorder_rig_template
+
+        np = self.np
+        base = self.reference(scale=1.2)
+        out = self.folder / "rigged.glb"
+        with self.assertRaisesRegex(self.rig.RigError, "vertex order differs"):
+            self.rig.transfer(str(base), None, str(self.template), str(out))
+        fixed = self.folder / "template-rigged.glb"
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+            code = reorder_rig_template.main(["--template", str(self.template), "--reference", str(base),
+                                              "--out", str(fixed)])
+        self.assertEqual(code, 0)
+        self.assertIn("2 of 5 vertices renumbered", stdout.getvalue())
+        info = self.rig.transfer(str(base), None, str(fixed), str(out))
+        self.assertEqual((info["joints"], info["clips"]), (2, ["Idle"]))
+        rigged = self.rig.Glb(str(out))
+        positions = rigged.read(rigged.json["meshes"][0]["primitives"][0]["attributes"]["POSITION"])
+        np.testing.assert_allclose(positions, np.array(PYRAMID)[self.ORDER] * 1.2, atol=1e-6)
+        # the skin follows its vertex: renumbered template vertex k carries original template vertex ORDER[k]
+        tpl, new = self.rig.Glb(str(self.template)), self.rig.Glb(str(fixed))
+        attrs = tpl.json["meshes"][0]["primitives"][0]["attributes"]
+        for name in ("POSITION", "NORMAL", "JOINTS_0", "WEIGHTS_0"):
+            np.testing.assert_array_equal(new.read(attrs[name]), tpl.read(attrs[name])[self.ORDER])
+
+    def test_a_reference_with_another_face_order_is_refused_and_nothing_is_written(self):
+        import reorder_rig_template
+
+        renumber = {old: new for new, old in enumerate(self.ORDER)}
+        faces = [[renumber[v] for v in face] for face in PYRAMID_FACES[::-1]]   # same mesh, faces listed reversed
+        base = self.base(self.np.array(PYRAMID)[self.ORDER], faces)
+        fixed = self.folder / "template-rigged.glb"
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            code = reorder_rig_template.main(["--template", str(self.template), "--reference", str(base),
+                                              "--out", str(fixed)])
+        self.assertEqual(code, 2)
+        self.assertIn("REORDER_FAILED", stderr.getvalue())
+        self.assertFalse(fixed.exists())
+
+
 @unittest.skipIf(TestClient is None or not _has_converter_deps(), "fastapi/httpx or numpy/trimesh/pillow not installed")
 class RigTransferFurMapsTest(_RigCase):
     """The rigged GLB is rebuilt from the template's JSON, so the base GLB's fur maps (extras.beside) have to be
