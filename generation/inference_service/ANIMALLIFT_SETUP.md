@@ -60,7 +60,7 @@ cd C:\beside\Beside
 
 - 사진은 **첫 장만** 쓴다(AnimalLift 는 단일 이미지). 배경이 단순하고 동물 전신이 보이는 사진이 결과가 좋다. 배경 제거·크롭 전처리는 2026-11 부터 Spring(real·prod)이 한다: 첫 사진 자리에 개를 가운데 둔 정사각 RGBA PNG(`*-cutout.png`, 투명한 곳은 `load_rgb` 가 흰색으로)가 온다. 끄는 법과 비교 실험은 [backend/README.md](../../backend/README.md) '대표 사진 검사·전처리'.
 - 같은 사진은 같은 결과(시드 고정).
-- 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
+- 리깅: `BESIDE_RIG_TEMPLATE`(리깅된 SMAL 템플릿 .glb)이 있으면 모든 결과에 뼈대·동작 클립을 옮겨 리깅 GLB 를 낸다(`modelVersion` 끝에 `+rig`, 옮기기에 실패하면 정적 GLB 그대로, `convertMs` 에 리깅 시간 포함). 템플릿이 없으면 정적 메시이고 앱은 동작 버튼을 숨긴다. 리포 밖 `rigging/output/animallift_template_rigged.glb` 는 정점 번호가 변환기 출력과 달라 그대로 두면 모든 작업이 거절되므로, 먼저 [tools/reorder_rig_template.py](../tools/reorder_rig_template.py) 로 한 번 번호를 맞춘 파일을 템플릿 자리에 둔다([tools/README](../tools/README.md)). `scripts/start_inference_wsl.sh` 는 `~/beside-rig/template-rigged.glb` 가 있으면 자동으로 켠다 — 베이스라인처럼 정적 결과를 재야 하면 `RIG_TEMPLATE=/nonexistent` 처럼 없는 경로를 준다.
 - 털: 털 맵 두 장이 `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 들어가 앱의 셸 털이 그것을 쓴다. GLB 옆의 `hair_length.png`/`hair_flow.png`/`hair_maps.json` 은 확인용 사본이고 API 로 내려주지 않는다.
 - 라이선스: AnimalLift 리포에 라이선스 파일이 없다. 학습·연구 목적 사용은 저자 안내를 따르고, 결과물·가중치를 공개 배포하기 전에 확인한다.
 

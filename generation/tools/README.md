@@ -30,6 +30,17 @@ python tools/rig_transfer.py --base work/<jobId>/base.glb --texture work/<jobId>
 - 표준 출력: `{ "joints", "fitErrorM", "heightRatio", "clips", "bytes" }`. 위상이 다르면 종료 코드 2(`RIG_FAILED`) — 추론 서비스는 그때 리깅 없는 GLB 를 그대로 돌려준다. 위상 확인은 정점 수·삼각형 수, 그리고 삼각형의 정점 번호다(2026-11-20): 수가 같아도 정점 순서가 다르면 삼각형의 정점 번호가 달라 거절한다. 면 순서·시작 꼭짓점은 따지지 않고 UV 값은 비교하지 않는다.
 - 추론 서비스는 리깅한 GLB 도 GLB_SPEC §1 크기 상한(10 MB, `convert_asset.MAX_GLB_BYTES`)으로 다시 본다. 넘으면 리깅 없는 GLB 를 돌려준다(2026-11-20). 리깅한 GLB 를 쓰면 `base.metrics.json` 의 `bytes`·`convertMs` 를 그 파일 기준으로 다시 쓴다. 리깅 시간은 `convertMs` 에 더해진다(2026-11-21 안건 #16 으로 METRICS 의 정의도 그렇게 고쳤다: 리깅이 성공한 실행의 `convertMs` 는 변환 + 리깅).
 - 털 맵: 리깅본은 템플릿 JSON 으로 다시 만들어지므로, `base.glb` 의 `extras.beside` 와 털 맵 이미지 두 장을 그대로 옮긴다. 템플릿에 있던 `extras.beside`(다른 동물의 털)는 버린다([GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md)).
+
+## `reorder_rig_template.py` — 템플릿 정점 번호를 변환기 출력에 맞추기 (한 번, 리포 밖 파일)
+
+```bash
+python tools/reorder_rig_template.py --template <리포 밖>/animallift_template_rigged.glb \
+  --reference work/<jobId>/base.glb --out <리포 밖>/template-rigged.glb
+```
+
+- 왜: 리포 밖 `rigging/tools/rig_animallift.py` 가 만든 템플릿은 UV 이음매 정점을 `np.unique` 순서로 번호 매기고, `convert_asset.py`(trimesh)는 다른 순서로 매긴다. 메시는 같아서(면 순서·UV 같음) 위의 정점 순서 확인(2026-11-20)만 걸린다. 그래서 2026-11-21 까지 이 템플릿을 올려도 모든 작업이 `vertex order differs` 로 정적 GLB 가 되었다.
+- 무엇을: `--reference`(변환기가 쓴 아무 `base.glb`)와 면 순서대로 꼭짓점을 맞춰 정점 번호표를 구하고, 템플릿의 정점별 값(위치·법선·UV·`JOINTS_0`·`WEIGHTS_0`·모프)과 삼각형 번호를 그 번호로 다시 쓴다. 뼈대·클립·머티리얼은 그대로다. UV 가 1e-4 넘게 다르거나 면 순서가 다르면 종료 코드 2(`REORDER_FAILED`)이고 아무것도 쓰지 않는다.
+- 2026-11-21 실제 템플릿(4310 정점)에서 417개 정점 번호가 바뀌었고, 바꾼 템플릿으로 그날 VM 결과 3건이 모두 리깅되었다(뼈 36개, 클립 5개, 털 맵 유지, 1.76~1.78 MB — `--texture` 없이 잰 값). 시험: `ReorderRigTemplateTest`(합성 피라미드).
 - 앱(`unity/Assets/Beside/Pet/PetAnimationPlayer.cs`)은 GLB 안의 클립 `Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt` 를 칩으로 보여 준다.
 
 ## 검증 ([계획])
