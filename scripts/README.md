@@ -12,6 +12,8 @@
 | `test_deploy_vm.sh`, `test_watchdog.sh`, `test_offsite_backup.sh`, `test_block_metadata.sh`, `test_gcp_ops.sh` | Linux·WSL (bash, GNU coreutils, python3) | VM·GCP 없이 가짜 `ssh`·`docker`·`curl`·`gcloud`·`iptables`·`df` 로 `deploy_vm.sh` 와 운영 대응 스크립트([deploy/README.md](../deploy/README.md) '운영 대응 설치')의 판단을 시험한다. 뒤의 넷은 CI(backend-ci)도 돌린다 |
 | `fetch_models.ps1` / `fetch_models.sh` | Windows / Linux·VM | 대표 사진 검사·전처리 모델(YOLOX-S, U2Net, 약 210 MB)을 공식 릴리스에서 받아 `backend/models/SHA256SUMS` 로 확인한다. 이미 있으면 그대로. `run_real.*`·`deploy_vm.sh` 가 부른다 |
 | `run_real.ps1` | Windows PowerShell 5.1+ (GPU PC) | 추론 서비스(uvicorn, 127.0.0.1:8001)와 Spring real 을 새 창 두 개로 띄우고 두 healthz 를 확인한다. `-SampleGlb` 를 주면 패스스루(연동 확인용, 측정 아님). 절차는 [backend/README.md](../backend/README.md) 'GPU PC 에 real 배치' |
+| `analyze_fur_bench.py` | Python 3 (+ matplotlib, 그래프용) | Unity FurLab 측정 결과(폰에서 공유한 텍스트·CSV) → 표(`summary.csv`·`summary.md`·`unit_costs.md`)·그래프. 유지 담당: Unity 트랙 |
+| `make_rating_set.py` | Python 3 (+ Pillow, board.png 용) | 털 조건별 스크린샷으로 블라인드 화질 평가 세트 만들기(`prepare`)·점수 집계(`score`). 유지 담당: Unity 트랙 |
 | `perf/` | Python 3.10+ 표준 라이브러리 (Windows·Linux·macOS) | 백엔드 버전(커밋)별 jar 를 만들어 같은 시나리오로 재고 한국어 A4 PDF 보고서를 만든다. 서버를 직접 띄우므로 실행 중인 서버가 필요 없다. 버전 목록 [docs/perf/versions.json](../docs/perf/versions.json), 사용법 [perf/README.md](perf/README.md) |
 
 ```powershell
@@ -37,3 +39,15 @@ GPU PC 에서 real 프로파일(실제 모델 E2E):
 ```
 
 종료 코드 0은 COMPLETED와 다운로드 성공, 1은 FAILED·타임아웃·HTTP 오류다. 다운로드한 GLB가 0바이트이면 경고를 출력한다(`backend/storage/results/sample-dog.glb` 교체 필요).
+
+털 측정 분석 (Unity 트랙, [unity/experiments/2026-11-03_fur-benchmark.md](../unity/experiments/2026-11-03_fur-benchmark.md)):
+
+```bash
+pip install matplotlib   # 그래프만 필요, 없으면 표만 쓴다
+python scripts/analyze_fur_bench.py unity/experiments/2026-11-03_fur-benchmark/data/method_*.csv \
+       unity/experiments/2026-11-03_fur-benchmark/data/optim_*.csv --out fur_report
+python scripts/make_rating_set.py prepare <스크린샷 폴더> --out rating --distance near
+python scripts/make_rating_set.py score rating
+```
+
+위 첫 명령은 기록된 원본 CSV 4개로 `data/summary.csv`·`data/unit_costs.md` 를 같은 내용으로 다시 만든다(2026-11-21 확인, 줄 끝 제외). `fur_report/`, `rating/`, `fur_bench/` 은 커밋하지 않는다(.gitignore).

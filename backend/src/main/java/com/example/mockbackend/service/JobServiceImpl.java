@@ -59,6 +59,10 @@ public class JobServiceImpl implements JobService {
     private final UploadCheck uploadCheck;
     /** Queue cap for v1 create and retry (REVIEW_CHECKLIST #21, decided 2026-11-21; off unless admission.max-pending > 0). */
     private final AdmissionGate admissionGate;
+    /** PENDING-leaving and retry transitions under one lock (cancel, worker start, retry, pet deletion with jobs). */
+    private final JobTransitions jobTransitions;
+    /** queuedAt of new and retried jobs: strictly increasing, so queue order (JobResponse.queue) = arrival order. */
+    private final QueueClock queueClock;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -202,36 +206,26 @@ public class JobServiceImpl implements JobService {
     public Job retry(String id) {
         Job found = getJobOrThrow(id); // the FAILED attempt as this request found it
         if (found.getStatus() != JobStatus.FAILED) {
-            throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                    "Only FAILED jobs can be retried; current status is " + found.getStatus());
+            throw notFailed(found);
         }
-        // Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): after the 404 and 409 above, around the update below, whose commit
-        // makes the job one of the PENDING rows the gate counts. Refused, the job stays FAILED (503 naming it), unless
-        // another retry of the same job holds a place or already re-queued it: that one wins and this gets 409.
-        try (AdmissionGate.Permit admitted = admissionGate.admitRetry(id, () -> noLongerFailed(id))) {
-            // FAILED -> PENDING in one conditional update: when two retries of the same FAILED job overlap, both pass
-            // the check above but only one changes the row, so the attempt is dispatched once and the other gets 409.
-            if (jobRepository.startRetry(id, Instant.now(), JobStatus.FAILED, JobStatus.PENDING) == 0) {
-                throw ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                        "Only FAILED jobs can be retried; current status is " + getJobOrThrow(id).getStatus());
-            }
-        }
+        // Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21): after the 404 and 409 above, around the update below,
+        // whose commit makes the job one of the PENDING rows the gate counts. Refused, the job stays FAILED (503 naming
+        // it), unless another retry of the same job holds a place or already re-queued it: that one wins and this gets
+        // 409. Inside, the job is re-read and changed under JobTransitions' lock with one conditional update: of two
+        // overlapping retries only one changes the row (the other gets 409), a run that already started is never
+        // overwritten, and a job deleted in between (a pet deleted with its jobs) is not inserted again.
         Job job;
-        try {
-            job = getJobOrThrow(id);
-        } catch (RuntimeException readFailed) {
-            // The update is committed but nothing will dispatch the attempt: back to the FAILED attempt this request
-            // found, as when dispatch is refused below. Left PENDING, the job would hold a queue place with no worker.
-            restoreAfter(readFailed, found);
-            throw readFailed;
+        try (AdmissionGate.Permit admitted = admissionGate.admitRetry(id, () -> noLongerFailed(id))) {
+            job = jobTransitions.retry(id, found.getAttempt(), queueClock.next()) // queue order = arrival order
+                    .orElseThrow(() -> notFailed(getJobOrThrow(id)));
         }
         try {
-            jobWorker.dispatch(id);
+            jobWorker.dispatch(id, job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
             // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
-            // attempt, so the job goes back to the FAILED attempt this request found. Nothing else writes the row in
-            // between: the UPDATE above made this request its only retry and no worker took it.
-            jobRepository.save(found);
+            // attempt, so the job goes back to the FAILED attempt this request found (under the lock, and only while
+            // it is still PENDING in the attempt this retry made).
+            jobTransitions.undoRetry(found, job.getAttempt());
             throw shuttingDown;
         }
         jobMetrics.jobRetried();
@@ -246,10 +240,33 @@ public class JobServiceImpl implements JobService {
             return ApiException.jobNotFound(id);
         }
         if (now.get().getStatus() != JobStatus.FAILED) {
-            return ApiException.conflict(ErrorCode.JOB_NOT_FAILED, id,
-                    "Only FAILED jobs can be retried; current status is " + now.get().getStatus());
+            return notFailed(now.get());
         }
         return null;
+    }
+
+    private static ApiException notFailed(Job job) {
+        return ApiException.conflict(ErrorCode.JOB_NOT_FAILED, job.getId(),
+                "Only FAILED jobs can be retried; current status is " + job.getStatus());
+    }
+
+    /**
+     * PENDING → FAILED(CANCELED) (REVIEW_CHECKLIST #11·#12, API v1.2). Not behind the queue cap: it only frees a place
+     * (the row stops being PENDING, so AdmissionGate counts one fewer and the jobs behind it move up in queue.ahead).
+     */
+    @Override
+    public Job cancel(String id) {
+        getJobOrThrow(id);
+        // Under the same lock as the worker's start: either this sees PENDING and the worker then finds FAILED, or the
+        // worker started first and this sees PROCESSING. The run is measured like any other (job_runs FAILED:CANCELED).
+        Job canceled = jobTransitions.failPending(id, null, ErrorCode.CANCELED,
+                "Canceled by the client while PENDING (POST /cancel)", jobWorker.type()).orElse(null);
+        if (canceled == null) {
+            throw ApiException.conflict(ErrorCode.JOB_NOT_PENDING, id, "Only PENDING jobs can be canceled (a started "
+                    + "GPU run cannot be stopped); current status is " + getJobOrThrow(id).getStatus());
+        }
+        log.info("Job canceled: {} attempt={}", id, canceled.getAttempt());
+        return canceled;
     }
 
     @Override
@@ -352,12 +369,12 @@ public class JobServiceImpl implements JobService {
 
     /**
      * Same, recording the first-photo check: checkMs and checkResult, and uploadMs without the check's time so that
-     * uploadMs keeps its meaning (receive + parse + store, docs/METRICS.md §1).
+     * uploadMs keeps its meaning (receive + parse + store, docs/METRICS.md §1). The job is unassigned (petId null).
      */
     Job saveUploads(List<MultipartFile> photos, UploadCheck.Outcome check) throws IOException {
         Job job = new Job();
         String jobId = UUID.randomUUID().toString();
-        Instant now = Instant.now();
+        Instant now = queueClock.next(); // never ties with the job submitted just before (queue order)
         job.setId(jobId);
         job.setStatus(JobStatus.PENDING);
         job.setCreatedAt(now);
@@ -402,7 +419,7 @@ public class JobServiceImpl implements JobService {
     private void dispatch(Job job) {
         try {
             // Invoke another Spring bean so @Async runs through its proxy.
-            jobWorker.dispatch(job.getId());
+            jobWorker.dispatch(job.getId(), job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
             discard(job);
             throw shuttingDown;
@@ -423,17 +440,6 @@ public class JobServiceImpl implements JobService {
             failure.addSuppressed(notDropped);
             log.error("jobId={} could not be dropped after a failed write ({}); it stays PENDING until the next startup",
                     job.getId(), notDropped.toString());
-        }
-    }
-
-    /** Puts back the FAILED attempt a retry found, after a failure that leaves its new attempt undispatched. */
-    private void restoreAfter(RuntimeException failure, Job found) {
-        try {
-            jobRepository.save(found);
-        } catch (RuntimeException notRestored) {
-            failure.addSuppressed(notRestored);
-            log.error("jobId={} could not go back to FAILED after a failed retry ({}); it stays PENDING until the next"
-                    + " startup", found.getId(), notRestored.toString());
         }
     }
 

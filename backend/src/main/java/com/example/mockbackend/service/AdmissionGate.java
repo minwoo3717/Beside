@@ -309,6 +309,15 @@ public class AdmissionGate implements MeterBinder {
         }
     }
 
+    /**
+     * The queuedAt after which a PENDING row counts toward the cap at {@code now}: now minus admission.stale-after-ms
+     * while the cap is on, null while it is off (every row would count, and none is refused). QueueEstimator counts
+     * JobResponse.queue.ahead over the same rows, so the place a job sees and the queue the cap guards agree.
+     */
+    public Instant countedAfter(Instant now) {
+        return maxPending == 0 ? null : now.minusMillis(staleAfterMs);
+    }
+
     /** Places held by requests being admitted (tests). */
     synchronized int reserved() {
         return reserved;

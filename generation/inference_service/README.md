@@ -150,7 +150,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 |---|---|---|
 | `jobId` | string | Spring 작업 ID(`[A-Za-z0-9-]{1,64}`, Spring 은 UUID — 아니면 422). `{BESIDE_WORK_DIR}/{jobId}` 폴더와 로그에 사용 |
 | `imagePaths` | string[1..10] | 이 서비스가 읽을 수 있는 **절대 경로**. Spring 과 같은 호스트 또는 공유 볼륨을 가정한다 |
-| `options.hair` | bool | 받기만 하고 무시한다. Spring 은 늘 `false` 를 보낸다. hair variant(`{jobId}/hair.glb`)는 2026-11-21 안건 #4 로 API 계약에서 뺐고 만들 계획도 없다 — 이 필드는 내부 계약 모양을 지키려고 남겼다. 털 맵은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 넣는다. 옆에 쓰는 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 은 확인용 사본이고 `/artifacts` 로 내주지 않는다 |
+| `options.hair` | bool | 받기만 하고 무시한다. Spring 은 늘 `false` 를 보낸다. hair variant(`{jobId}/hair.glb`)는 2026-11-21 안건 #4 로 API 계약에서 뺐고 만들 계획도 없다 — 이 필드는 내부 계약 모양을 지키려고 남겼다. 털 맵은 이 값과 관계없이 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) `base.glb` 안(`extras.beside`, [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md))에 넣는다. 단 서비스를 `BESIDE_EMBED_HAIR=0` 으로 띄우면 넣지 않는다(`extras.beside` 도, 확인용 사본도 없음). 옆에 쓰는 `hair_length.png`·`hair_flow.png`·`hair_maps.json` 은 확인용 사본이고 `/artifacts` 로 내주지 않는다 |
 
 응답 200:
 
@@ -257,7 +257,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 ### `GET /healthz`
 
 ```json
-{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0, "loadError": null, "instanceId": "3f9c0a1b2d4e" }
+{ "status": "ok", "device": "cuda", "modelLoaded": false, "passthrough": false, "tokenOk": null, "busyForMs": 0, "loadError": null, "instanceId": "3f9c0a1b2d4e", "modelVersion": null }
 ```
 
 토큰 없이 열려 있고, 서비스가 응답하는 한 늘 200 이다. `tokenOk`·`busyForMs`·`loadError`·`instanceId` 는 2026-11-20 에 더한 필드다 **[구현됨]**(`test_app.py` 의 `HealthzTokenTest`·`BusyClockTest`·`HealthzBusyModelTest`·`HealthzLoadErrorTest`, `PassthroughKnobTest` 의 busy 시험). 모르는 필드를 무시하는 옛 Spring 에는 영향이 없다.
@@ -268,6 +268,8 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 - `loadError`: 모델을 불러오지 못했을 때 그 이유 한 줄이다. 예외 이름과 짧은 메시지이고, 경로는 `<path>`, 토큰은 `<token>` 으로 바꾸며 200자에서 자른다. FD18 처럼 체크포인트 파일이 없으면 `animallift_runner.py` 가 낸 메시지 그대로 `FileNotFoundError: missing checkpoint (hf download <path> --local-dir ckpt): <path>` 다(`HealthzLoadErrorTest` 가 실제 러너로 확인). 슬래시가 든 것은 모두 경로로 보므로 받는 방법의 Hugging Face 저장소 이름 `Chunyi99/AnimalLift` 도 `<path>` 가 된다 — 모양만으로는 `ckpt/latest.pt` 같은 상대 경로와 가를 수 없어 일부러 그대로 둔다. 불러오는 도중 다른 파일이 없으면 `FileNotFoundError: [Errno 2] No such file or directory: '<path>'` 꼴이다. 전체 메시지(경로·받는 방법)와 traceback 은 서비스 로그의 `model failed to load` 와 토큰이 필요한 `/infer` 의 503 메시지에만 있다. 불러오는 중·불러온 뒤·패스스루·모델 미설정이면 `null` 이다. 장애 훈련 FD18(2026-11-20, 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 `FileNotFoundError`)에서 `modelLoaded=false` 만으로는 "아직 불러오는 중"과 "불러오기 실패"를 가를 수 없어서 더했다. 서비스는 다시 불러오지 않으므로 고친 뒤 서비스를 다시 띄울 때까지 이 값이 남는다. `status`·`modelLoaded`, 그리고 `/infer` 의 503 `INFERENCE_UNAVAILABLE` 은 그대로다.
 
 Spring 의 `InferenceHealthMonitor` 는 `inference.token` 이 있으면 이 헤더를 붙여 15초마다(`inference.health-poll-ms`) 부른다. `tokenOk=false`(장애 FD17: 모든 작업이 바로 `INFERENCE_UNAVAILABLE`)와 `busyForMs` 가 `inference.stuck-alert-ms`(기본 120000)를 넘는 것(FD13: healthz 는 UP 인데 추론만 멈춤), `loadError` 가 생긴 것(FD18: LOADING 이 끝나지 않음. 메시지에는 예외 이름만, 🧩)을 Discord 로 시작할 때 한 번, 풀릴 때 한 번 알린다 **[구현됨]**(`InferenceHealthMonitorTest`·`WebhookNotifierTest`·`InferenceAlertIntegrationTest`). 필드가 없거나(옛 서비스) 응답이 없으면 모름으로 보고 알리지 않는다. 작업을 보낼지 정하는 UP/LOADING/DOWN 판정은 이 세 필드를 보지 않는다(모델을 불러오지 못한 서비스에도 작업은 지금처럼 `inference.offline-wait-ms` 까지 PENDING 으로 기다린다). 2026-11-20 장애 훈련 2차 확인에서 받았다 **[실험 결과]**: 🔑·🐢 는 VM 의 훈련 스텁(패스스루)으로, 🧩 는 실제 A40 Pod 를 틀린 `BESIDE_ANIMALLIFT_CKPT` 로 띄워([docs/ops/2026-11-20_failure-drills.md](../../docs/ops/2026-11-20_failure-drills.md) '2차 확인'). 실제 모델이 멈춘 경우의 🐢 는 **[계획]**. 운영 대응은 [deploy/README.md](../../deploy/README.md) '문제 해결'.
+
+- `modelVersion`: 로드된 모델의 버전(예 `animallift@3f2a1c9:latest`), 모델이 없으면(불러오는 중·실패·패스스루·미설정) null 이다. 선택 필드로 검토 브랜치 `review/api-v1.1`(2026-10-30)에서 더했고 API v1.2 병합(2026-11-21)에 들어왔다 **[구현됨]**(`RiggedResultTest.test_healthz_model_version_never_carries_rig`). `+rig` 는 붙이지 않는다: `+rig` 는 `/infer` 가 **그 작업의 리깅이 성공했을 때만** 붙인다(REVIEW_CHECKLIST #18 결정, 2026-11-21). Spring 은 이 값을 기억했다가 모델이 돌다 실패한 실행(서비스가 직접 답한 실패·결과 형식 오류·시간 초과)의 `job_runs.model_version` 에 남긴다 — 실패도 그 모델의 성공률에 들어간다. 그래서 같은 모델의 실패와 리깅 없는 성공은 같은 이름으로, 리깅이 성공한 실행만 `+rig` 로 따로 집계된다.
 
 ## 가정과 열린 결정 (계약 회의 안건)
 

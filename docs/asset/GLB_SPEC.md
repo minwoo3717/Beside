@@ -97,7 +97,7 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 - 두 맵 모두 색이 아닌 데이터다: 앱은 linear 텍스처로 읽는다. UV 는 몸 메시 `TEXCOORD_0` 과 같은 배치이고, PNG 위쪽 행 = glTF v 0(몸 텍스처와 같은 관례)이다. `hair.npz` 배열은 행 0 = v 0 으로 저장돼 있어 변환기가 행을 뒤집어 넣고 결 맵 G 의 부호도 그에 맞춘다(변환기 주석: UV seam 으로 확인).
 - 해상도: `hair.npz` 격자(높이 × 너비) 그대로(AnimalLift 의 실제 크기는 기록 없음). 긴 변이 §4 텍스처 상한을 넘거나, `hair.npz` 를 읽지 못하거나 모양이 (높이, 너비, 점, 3) 이 아니면 `CONVERSION_FAILED` 다. GLB 크기 상한(§1)은 털 맵을 넣은 뒤에 본다.
 - 리깅본: `rig_transfer.py` 가 정적 `base.glb` 의 `extras.beside` 와 두 이미지 바이트를 템플릿 JSON 에 붙여 옮긴다(이미지 번호는 다시 매긴다). 템플릿에 있던 `extras.beside`(템플릿 동물의 털)는 버린다. 정적 GLB 에 털 맵이 없으면 리깅본에도 없다.
-- `hair.npz` 가 없으면(모델이 내지 않거나 변환기 CLI 에 `--hair` 를 주지 않으면) `extras.beside` 가 없다. 추론 서비스는 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) 내부 요청의 `options.hair` 와 상관없이 넘긴다.
+- `hair.npz` 가 없으면(모델이 내지 않거나 변환기 CLI 에 `--hair` 를 주지 않으면) `extras.beside` 가 없다. 추론 서비스는 모델이 `hair.npz` 를 내면(AnimalLift 는 매번) 내부 요청의 `options.hair` 와 상관없이 넘긴다. 단 환경 변수 `BESIDE_EMBED_HAIR=0` 이면 넘기지 않아 `extras.beside` 가 없다(기본은 넘김, `ConverterSwitchTest`·`RealEmbedHairOffTest`).
 - 확인용 사본: 변환기는 같은 맵을 GLB 옆에 `hair_length.png`·`hair_flow.png`·`hair_maps.json`(`furLength`, 맵 파일 이름)으로도 쓴다. 서빙하지 않는다(추론 서비스 `/artifacts` 는 `base.glb` 만 내주고, Spring 은 GLB 하나만 받는다).
 
 앱이 읽는 방식(지금 Unity 코드 기준):
@@ -105,13 +105,14 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 - 작업 흐름만 읽는다: `JobManager` 가 내려받은 GLB 바이트로 `LoadAndRegister(byte[] …)` 를 부르고, 그 안에서 `TryReadEmbeddedHair` 가 맵과 `furLength` 를 꺼낸다. 맵이 없거나 읽지 못하면 Inspector 의 대체 맵(`fallbackHairLength`·`fallbackHairFlow`, `SampleScene` 에서는 비어 있음)을 쓰고, 그것도 없으면 털을 그리지 않는다.
 - URL·파일 경로로 여는 `LoadAndRegister(string glbUrl, …)`(Inspector 의 Test Glb Url)는 `TryReadEmbeddedHair` 를 부르지 않는다. 그 경로는 Test Hair Length/Flow Url 로 따로 준 PNG 만 쓰고 `furLength` 도 읽지 않는다(템플릿 값). 그래서 서버가 만든 GLB 를 Test Glb Url 로만 열면 털이 없다.
 - 셸 수는 `furShellCount`(`SampleScene` 20). 정적 `MeshFilter`·리깅 `SkinnedMeshRenderer` 모두에 셸을 붙인다.
+- 결 맵은 메시에 `TANGENT` 가 있을 때만 쓴다(셸 털 v2, 2026-11-21 브랜치 Unity 포트로 들어옴 — 그 전 v1 은 `TANGENT` 가 없으면 임시 접선을 만들어 R·G 를 썼다). 이 변환기와 `rig_transfer.py` 는 `TANGENT` 를 쓰지 않으므로 지금 서버 GLB 에서는 R·G(위의 G 부호 맞춤 포함)로 털을 눕히지 않고 법선 쪽으로 세운다. 그러면 B 도 방향에 영향이 없어 결 맵 전체가 효과가 없다. 형식은 그대로이고, `TANGENT` 를 넣을지(서버 또는 앱)와 G 부호는 결정 전이다 **[계획]**([unity/docs/FUR_RENDERING.md](../../unity/docs/FUR_RENDERING.md) §1). 기기에서 확인하지 않았다.
 
 상태:
 
 - **[구현됨]** 쓰기 `convert_asset.py` 의 `hair_maps`·`embed_hair`, 옮기기 `rig_transfer.py` 의 `_copy_fur_maps`. 시험(`generation/inference_service/test_app.py`): `FurMapsInGlbTest`(앱 방식으로 읽힘·사본과 같은 바이트·texture 1개·`hair.npz` 없으면 항목 없음·읽지 못하는 `hair.npz`·해상도 상한), `RealConversionCancelTest.test_the_conversion_writes_into_the_existing_job_folder`(업로드 → `/artifacts` 로 내려받은 `base.glb` 에 털 맵), `RigTransferFurMapsTest`(이 GLB 의 털 맵은 옮기고 템플릿 것은 버림). 셋 다 앱의 `TryReadEmbeddedHair` 를 같은 순서로 옮긴 파이썬 함수 `_app_reads_fur` 로 읽어 확인한다.
 - 앱의 읽기 코드는 PR #25 전부터 있었다(#25 는 그 주석만 고쳤다). Unity 쪽 자동 시험은 없다.
 - **[계획]** 서버에서 만든 GLB 로 기기에서 털이 그려지는지, GLB 의 `furLength`(아래 '알려진 점'의 로컬 확인 값 약 0.070)와 지금까지 기기에서 써 온 `Dog_Fur_Mat` 의 `_FurLength` 0.025 를 같은 모델로 나란히 비교, 털 맵을 넣은 GLB 의 크기와 `loadMs`·FPS.
-- 알려진 점: Pod 가 새 변환기를 쓰기 시작하면 이미 깔린 앱도 새 작업마다(작업 흐름) 셸 20겹 털을 GLB 의 `furLength` 로 그린다. 변환기·추론 서비스에는 털 맵 넣기를 끄는 스위치가 없고, [RUNBOOK](../ops/RUNBOOK.md) 'GPU Pod 다시 세우기' 2단계는 Pod 를 켤 때마다 `checkout -B main origin/main` 을 한다. 그래서 main 병합 뒤에는 장애 복구로 Pod 를 한 번 다시 켜기만 해도 털이 켜진다. 기기 확인 전에 그것을 피하려면 그 단계에서 Pod 리포를 병합 전 main 커밋(2026-11-21 기준 `24bce92` — 그 뒤 Pod 에서 도는 코드의 동작 차이는 PR #25 의 변환기·리깅뿐이고 나머지는 주석·문서다)에 고정한다(명령은 RUNBOOK 같은 단계).
+- 알려진 점: Pod 가 새 변환기를 쓰기 시작하면 이미 깔린 앱도 새 작업마다(작업 흐름) 셸 20겹 털을 GLB 의 `furLength` 로 그린다. [RUNBOOK](../ops/RUNBOOK.md) 'GPU Pod 다시 세우기' 2단계는 Pod 를 켤 때마다 `checkout -B main origin/main` 을 한다. 그래서 main 병합 뒤에는 장애 복구로 Pod 를 한 번 다시 켜기만 해도 털이 켜진다. 추론 서비스에 털 맵 넣기를 끄는 스위치 `BESIDE_EMBED_HAIR=0` 이 생겼다 **[구현됨]**(브랜치 Unity 포트, 2026-11-21 — 위 `hair.npz` 항목). Pod 를 켤 때 그 값을 넣는 것은 [계획]이다. 기기 확인 전에 털이 켜지는 것을 피하려면 Pod 를 켤 때 그 값을 주거나, 그 단계에서 Pod 리포를 병합 전 main 커밋(2026-11-21 기준 `24bce92` — 그 뒤 Pod 에서 도는 코드의 동작 차이는 PR #25 의 변환기·리깅뿐이고 나머지는 주석·문서다)에 고정한다(명령은 RUNBOOK 같은 단계).
 - 알려진 점(로컬 확인 1건, 실험 기록 아님): 리포의 AnimalLift 출력 `unity/Assets/Models/n02085782_186 (1)_{mesh.obj,uv.png,hair.npz}` 를 이 변환기(`convert()`, `forward_axis="+x"`)로 2026-11-21 에 로컬 변환하니 `hair.npz` 격자 512×512, 털 맵 PNG 135,776 B(길이) + 444,118 B(결), GLB 2,120,640 B(§1 상한 안), `furLength` 0.069799 였다. `Dog_Fur_Mat` 의 0.025 의 약 2.8배라 기기에서 털 모양이 눈에 띄게 달라질 수 있다. 그 길이가 화면에서 맞는지, 20겹의 FPS·메모리는 재지 않았다 **[계획]** — Unity·3D 담당이 기기에서 확인한다.
 
 ## 5. 변환기 출력 (`generation/tools/convert_asset.py`)

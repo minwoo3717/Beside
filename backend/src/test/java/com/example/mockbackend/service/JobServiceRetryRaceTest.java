@@ -86,7 +86,7 @@ class JobServiceRetryRaceTest {
         } finally {
             pool.shutdownNow();
         }
-        verify(jobWorker, times(1)).dispatch(failed.getId());
+        verify(jobWorker, times(1)).dispatch(failed.getId(), 2);
 
         Job retried = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(retried.getStatus()).isEqualTo(JobStatus.PENDING);
@@ -103,7 +103,7 @@ class JobServiceRetryRaceTest {
         assertThatThrownBy(() -> jobService.retry(failed.getId()))
                 .isInstanceOfSatisfying(ApiException.class,
                         refused -> assertThat(refused.getCode()).isEqualTo(ErrorCode.JOB_NOT_FAILED));
-        verify(jobWorker, times(1)).dispatch(failed.getId());
+        verify(jobWorker, times(1)).dispatch(failed.getId(), 2);
     }
 
     private Job savedFailedJob() {

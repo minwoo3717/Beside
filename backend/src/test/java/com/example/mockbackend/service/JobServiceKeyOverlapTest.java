@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -113,7 +114,7 @@ class JobServiceKeyOverlapTest {
         assertThat(firstJob.getId()).isEqualTo(resend.getId());
         assertThat(jobRepository.count()).as("one job comes out of one key").isEqualTo(1);
         assertThat(jobRepository.findById(resend.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.PENDING);
-        verify(jobWorker, times(1)).dispatch(anyString());
+        verify(jobWorker, times(1)).dispatch(anyString(), anyInt());
         assertThat(refusedCreates()).as("only the request without the key was refused").isEqualTo(refusedCreates + 1);
     }
 
@@ -133,7 +134,7 @@ class JobServiceKeyOverlapTest {
         assertThat(jobRepository.count()).isEqualTo(1);
         assertThat(refusedCreates()).as("answered 202, not refused").isEqualTo(refusedCreates);
         verify(uploadCheck, never()).check(any());
-        verify(jobWorker, never()).dispatch(anyString());
+        verify(jobWorker, never()).dispatch(anyString(), anyInt());
     }
 
     @Test

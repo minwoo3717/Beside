@@ -1,10 +1,8 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.Job;
-import com.example.mockbackend.domain.JobStatus;
 import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
-import com.example.mockbackend.repository.JobRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +17,8 @@ import java.util.Locale;
 /**
  * Profile "mock" (default): no GPU. PENDING for pending-ms, PROCESSING for processing-ms, then COMPLETED
  * with the sample GLB, or FAILED (INFERENCE_FAILED) when an uploaded filename contains the fail token.
+ * After the PENDING time it starts the job only if it is still PENDING in the dispatched attempt (JobTransitions),
+ * so a job canceled (or canceled and retried) meanwhile is not touched.
  * Separate bean so calls from JobServiceImpl pass through Spring's async proxy. Runs end through JobFinisher; an
  * interrupted worker (shutdown) or an unexpected error ends the run with INTERNAL_ERROR.
  */
@@ -26,7 +26,7 @@ import java.util.Locale;
 @Profile("mock")
 @RequiredArgsConstructor
 public class MockJobWorker implements JobWorker {
-    private final JobRepository jobRepository;
+    private final JobTransitions jobTransitions;
     private final JobFinisher jobFinisher;
     private final Logger log = LoggerFactory.getLogger(MockJobWorker.class);
 
@@ -49,18 +49,15 @@ public class MockJobWorker implements JobWorker {
 
     @Async
     @Override
-    public void dispatch(String jobId) {
+    public void dispatch(String jobId, int attempt) {
         Instant start = Instant.now();
         try {
-            Job job = jobRepository.findById(jobId)
-                    .orElseThrow(() -> new IllegalStateException("Job not found: " + jobId));
             Thread.sleep(pendingMs);
-            Instant processingStarted = Instant.now();
-            job.setProcessingStartedAt(processingStarted);
-            job.setProgress(0.5);
-            job.setUpdatedAt(processingStarted);
-            job.setStatus(JobStatus.PROCESSING);
-            jobRepository.save(job);
+            Job job = jobTransitions.start(jobId, attempt, 0.5).orElse(null);
+            if (job == null) {
+                log.info("jobId={} attempt={} not started: no longer PENDING (canceled or retried)", jobId, attempt);
+                return;
+            }
             log.info("jobId={} stage=PROCESSING", jobId);
 
             Thread.sleep(processingMs);
@@ -75,7 +72,7 @@ public class MockJobWorker implements JobWorker {
         } catch (InterruptedException e) {
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
             try {
-                markInterrupted(jobId);
+                markInterrupted(jobId, attempt);
             } catch (RuntimeException databaseClosing) {
                 log.warn("jobId={} interrupted during shutdown; InterruptedJobRecovery fails it at the next startup", jobId);
             } finally {
@@ -83,29 +80,24 @@ public class MockJobWorker implements JobWorker {
             }
         } catch (RuntimeException unexpected) {
             // Escaping the @Async method would leave the job PENDING or PROCESSING until the next restart.
-            failUnended(jobId, unexpected);
+            failUnended(jobId, attempt, unexpected);
         }
     }
 
     /**
-     * Ends the run INTERNAL_ERROR, reading the job again (the copy the run held may be ahead of the database when its
-     * save failed). A run that already ended stays as it is. One attempt: when the failure cannot be written either
-     * (database down) this only logs, and InterruptedJobRecovery fails the job at the next startup.
+     * Ends the run INTERNAL_ERROR, reading the job again under JobTransitions' lock (the copy the run held may be ahead
+     * of the database when its save failed). A run that already ended, a canceled job and a newer attempt stay as they
+     * are. One attempt: when the failure cannot be written either (database down) this only logs, and
+     * InterruptedJobRecovery fails the job at the next startup.
      */
-    private void failUnended(String jobId, RuntimeException unexpected) {
+    private void failUnended(String jobId, int attempt, RuntimeException unexpected) {
         log.error("jobId={} mock worker error", jobId, unexpected);
         try {
-            Job job = jobRepository.findById(jobId).orElse(null);
-            if (job == null) {
-                log.warn("jobId={} not found for mock worker", jobId);
+            if (jobTransitions.failUnfinished(jobId, attempt, ErrorCode.INTERNAL_ERROR,
+                    "Mock worker error (" + unexpected.getClass().getSimpleName() + ")", type()).isEmpty()) {
+                log.warn("jobId={} attempt={} already ended, gone or retried; left as it is", jobId, attempt);
                 return;
             }
-            if (job.getStatus() != JobStatus.PENDING && job.getStatus() != JobStatus.PROCESSING) {
-                log.warn("jobId={} already {}; left as it is", jobId, job.getStatus());
-                return;
-            }
-            jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR,
-                    "Mock worker error (" + unexpected.getClass().getSimpleName() + ")", type());
             log.warn("jobId={} stage=FAILED code=INTERNAL_ERROR ({})", jobId, unexpected.getClass().getSimpleName());
         } catch (RuntimeException notRecorded) {
             log.error("jobId={} could not record the failure ({}); InterruptedJobRecovery fails it at the next startup",
@@ -113,13 +105,12 @@ public class MockJobWorker implements JobWorker {
         }
     }
 
-    private void markInterrupted(String jobId) {
-        Job job = jobRepository.findById(jobId).orElse(null);
-        if (job == null) {
-            return;
+    /** Only this attempt, and only if it has not ended: a canceled job keeps its CANCELED. */
+    private void markInterrupted(String jobId, int attempt) {
+        if (jobTransitions.failUnfinished(jobId, attempt, ErrorCode.INTERNAL_ERROR,
+                "Mock worker interrupted (server shutting down)", type()).isPresent()) {
+            log.warn("jobId={} stage=FAILED (mock worker interrupted)", jobId);
         }
-        jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, "Mock worker interrupted (server shutting down)", type());
-        log.warn("jobId={} stage=FAILED (mock worker interrupted)", jobId);
     }
 
     private boolean shouldFail(Job job) {

@@ -11,11 +11,31 @@ import com.example.mockbackend.exception.ErrorCode;
 public class InferenceFailure extends Exception {
     private final ErrorCode code;
     private final String logDetail;
+    private final boolean modelRan;
 
+    /** A failure before or around the model: transport, auth, availability, or Spring's own handling of the result. */
     public InferenceFailure(ErrorCode code, String message, String logDetail) {
+        this(code, message, logDetail, false);
+    }
+
+    private InferenceFailure(ErrorCode code, String message, String logDetail, boolean modelRan) {
         super(message);
         this.code = code;
         this.logDetail = logDetail;
+        this.modelRan = modelRan;
+    }
+
+    /**
+     * A failure the inference service produced while handling the job itself (its own error answer, a malformed
+     * result, no answer within inference.timeout-ms): the run counts against the model it has loaded.
+     */
+    public static InferenceFailure modelRan(ErrorCode code, String message, String logDetail) {
+        return new InferenceFailure(code, message, logDetail, true);
+    }
+
+    /** Whether the model ran (or was asked to and failed by itself): job_runs.modelVersion is then the loaded model. */
+    public boolean modelRan() {
+        return modelRan;
     }
 
     public ErrorCode code() {

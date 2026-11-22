@@ -12,9 +12,10 @@ import java.nio.file.Path;
  * saw it and say in this tag how to turn it. Reads only the first APP1 "Exif" segment before the image data and never
  * throws; anything unexpected is orientation 1 (as stored).
  * <p>
- * Same parser as the thumbnail code of the review branch (review/api-v1.1, service/ExifOrientation); when the two
- * meet, the thumbnails use this public copy. The Python inference service applies the same tag with
- * {@code ImageOps.exif_transpose}, so a photo this server turns upright must be written without the tag.
+ * Same parser as the thumbnail code of the review branch (review/api-v1.1, service/ExifOrientation); API v1.2 left the
+ * thumbnails out (REVIEW_CHECKLIST #11, 2026-11-21), so this is the only copy. The Python inference service applies
+ * the same tag with {@code ImageOps.exif_transpose}, so a photo this server turns upright must be written without the
+ * tag.
  */
 public final class ExifOrientation {
     public static final int NORMAL = 1;

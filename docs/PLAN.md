@@ -151,7 +151,7 @@ DoD:
 | S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e, GCP VM 의 backend ↔ VM 안 스텁 컨테이너로 공개 주소 e2e(2026-11-13). Pod 쪽 `deploy/runpod/start_pod.sh`(WSL 시험 65개)·`install_animallift.sh` 로 VM ↔ Runpod Pod 연결과 AnimalLift 모델 모드 공개 주소 e2e 3건 [구현됨](2026-11-17, A40 EU-SE-1, [기록](deploy/2026-11-17_runpod-connect.md)) |
 | S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | **[구현됨]** 테스트 + 로컬에서 GPU 끔 → PENDING → 켬 → COMPLETED 확인 |
 | S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | **[구현됨]** CI(main push·PR #4) 통과, GCP VM 배포 2026-11-13(`https://beside-team.duckdns.org`, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 첫 배포 감사로 Caddy 규칙 강화(`deploy/gcp` 브랜치, 이 브랜치의 PR 로 main 병합) |
-| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합). → 2026-11-21 #11·#12: S5~S9 는 항목별로 받아 `api-v1.2` 로(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가, 오류 코드 5개). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 병합 **[계획]** |
+| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합). → 2026-11-21 #11·#12: S5~S9 는 항목별로 받아 `api-v1.2` 로(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가, 오류 코드 5개). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 브랜치 `feat/api-v1.2` 에 반영 **[구현됨]**(2026-11-21), main 병합·태그 **[계획]** |
 | S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
 | S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |

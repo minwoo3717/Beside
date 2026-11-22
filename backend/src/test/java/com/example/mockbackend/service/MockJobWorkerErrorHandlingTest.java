@@ -32,7 +32,7 @@ class MockJobWorkerErrorHandlingTest {
 
     private final JobRepository jobRepository = mock(JobRepository.class);
     private final JobFinisher jobFinisher = mock(JobFinisher.class);
-    private final MockJobWorker worker = new MockJobWorker(jobRepository, jobFinisher);
+    private final MockJobWorker worker = new MockJobWorker(new JobTransitions(jobRepository, jobFinisher), jobFinisher);
 
     @Test
     void anErrorSavingProcessingFailsTheJobWithInternalError() {
@@ -40,7 +40,7 @@ class MockJobWorkerErrorHandlingTest {
         when(jobRepository.findById(ID)).thenReturn(Optional.of(job(JobStatus.PENDING)), Optional.of(reread));
         when(jobRepository.save(any(Job.class))).thenThrow(new IllegalStateException("could not save"));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         verify(jobFinisher).fail(same(reread), eq(ErrorCode.INTERNAL_ERROR),
                 eq("Mock worker error (IllegalStateException)"), eq("mock"));
@@ -51,7 +51,7 @@ class MockJobWorkerErrorHandlingTest {
     void whenTheDatabaseIsDownTheWorkerLogsOnceAndDoesNotThrow() {
         when(jobRepository.findById(ID)).thenThrow(new IllegalStateException("database closed"));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         // Once to start, once to record the failure; then it gives up (InterruptedJobRecovery at the next start).
         verify(jobRepository, times(2)).findById(ID);
@@ -67,7 +67,7 @@ class MockJobWorkerErrorHandlingTest {
         doThrow(new IllegalStateException("after the save")).when(jobFinisher)
                 .complete(any(Job.class), any(), any(Instant.class), anyString(), any(RunDetails.class));
 
-        assertThatCode(() -> worker.dispatch(ID)).doesNotThrowAnyException();
+        assertThatCode(() -> worker.dispatch(ID, 1)).doesNotThrowAnyException();
 
         verify(jobFinisher, never()).fail(any(), any(), any(), any());
         verify(jobFinisher, times(1)).complete(any(), any(), any(), any(), any());

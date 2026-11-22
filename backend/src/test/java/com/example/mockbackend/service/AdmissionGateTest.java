@@ -423,6 +423,23 @@ class AdmissionGateTest {
     }
 
     /**
+     * JobResponse.queue.ahead (QueueEstimator, REVIEW_CHECKLIST #11) counts the rows the cap counts: those queued after
+     * now minus admission.stale-after-ms while the cap is on, every row (null) while it is off.
+     */
+    @Test
+    void countedAfterIsTheCutoffTheCapCountsFrom() {
+        JobRepository jobs = mock(JobRepository.class);
+        JobMetrics metrics = new JobMetrics(new SimpleMeterRegistry());
+        Instant now = Instant.parse("2026-11-21T03:00:00Z");
+
+        AdmissionGate on = new AdmissionGate(jobs, metrics, 19, 165, "5000", 1_800_000, 120_000, 1, 8);
+        assertThat(on.countedAfter(now)).isEqualTo(now.minusMillis(5_000));
+        AdmissionGate off = new AdmissionGate(jobs, metrics, 0, 165, "5000", 1_800_000, 120_000, 1, 8);
+        assertThat(off.countedAfter(now)).as("cap off: every PENDING row counts").isNull();
+        verifyNoInteractions(jobs);
+    }
+
+    /**
      * The default of admission.stale-after-ms is the longest a job can legitimately wait as PENDING while the cap
      * holds, so the safety net never drops a job that is only waiting. The real worker starts a job's offline wait when
      * an executor thread takes it, and holds the one inference slot during that wait and during /infer, so with the GPU

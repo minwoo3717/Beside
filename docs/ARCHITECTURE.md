@@ -79,6 +79,7 @@ stateDiagram-v2
     PROCESSING --> COMPLETED: GLB 준비됨 (asset)
     PROCESSING --> FAILED: error.code (서버 재시작 시 INTERNAL_ERROR)
     PENDING --> FAILED: 서버 재시작·종료·워커 오류 (INTERNAL_ERROR), 추론 서비스 대기 초과 (INFERENCE_UNAVAILABLE)
+    PENDING --> FAILED: POST /cancel (CANCELED)
     FAILED --> PENDING: POST /retry (queuedAt 갱신)
     COMPLETED --> [*]
 ```

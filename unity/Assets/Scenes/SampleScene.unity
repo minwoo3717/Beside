@@ -1183,7 +1183,10 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 2512387470890420967, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
       insertIndex: 0
       addedObject: {fileID: 436358034}
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2512387469002778309, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1900948043}
   m_SourcePrefab: {fileID: 100100000, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
 --- !u!114 &331264286 stripped
 MonoBehaviour:
@@ -3585,6 +3588,189 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 947247389}
   m_CullTransparentMesh: 1
+--- !u!1 &958625290
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 958625292}
+  - component: {fileID: 958625291}
+  m_Layer: 0
+  m_Name: FurLab
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &958625291
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958625290}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d36ad283aeb8887459e27042500c2cdd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Beside.FurLab.FurBenchmark
+  assets:
+    shellMaterial: {fileID: 2100000, guid: 59332edc582932c409d4b5c70dafae40, type: 2}
+    shellV1Material: {fileID: 2100000, guid: 9705f863741a1184b8aac1348deefb74, type: 2}
+    strandMaterial: {fileID: 2100000, guid: b6a6003aa3091c746831a027415e564d, type: 2}
+    finMaterial: {fileID: 2100000, guid: 437a53b5cd4c06c45abec4c96d2d1c63, type: 2}
+    normalMappedMaterial: {fileID: 0}
+    hairLength: {fileID: 2800000, guid: 93b1107c8ef189b41859a7969e8d866d, type: 3}
+    hairFlow: {fileID: 2800000, guid: 0d655da6834052e4886e04e0f8456c71, type: 3}
+    furLength: 0.065
+    flipHairMaps: 0
+  conditions:
+  - name: none
+    sets: method
+    mode: 0
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: texture
+    sets: method
+    mode: 1
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell8
+    sets: method
+    mode: 2
+    shells: 8
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell16
+    sets: method,optim
+    mode: 2
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell24
+    sets: method
+    mode: 2
+    shells: 24
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell16+fins
+    sets: method
+    mode: 4
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: strand5k
+    sets: method
+    mode: 3
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell16_v1
+    sets: optim
+    mode: 2
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 1
+    adaptive: 0
+    msaa: -1
+  - name: shell20_fixed
+    sets: optim
+    mode: 2
+    shells: 20
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: -1
+  - name: shell20_adapt
+    sets: optim
+    mode: 2
+    shells: 20
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 1
+    msaa: -1
+  - name: shell16_aa1
+    sets: optim
+    mode: 2
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: 1
+  - name: shell16_aa2
+    sets: optim
+    mode: 2
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: 2
+  - name: shell16_aa4
+    sets: optim
+    mode: 2
+    shells: 16
+    strands: 5000
+    segments: 4
+    version: 0
+    adaptive: 0
+    msaa: 4
+  rounds: 3
+  warmupSeconds: 5
+  measureSeconds: 30
+  quickWarmupSeconds: 3
+  quickMeasureSeconds: 12
+  animationClip: Idle
+  uncapFrameRate: 1
+  maxCoverageSpreadPct: 30
+  captureScreenshots: 1
+  showPanelOnStart: 0
+  fourFingerToggle: 1
+--- !u!4 &958625292
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 958625290}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 47.32438, y: 0, z: 10.34459}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &967280984
 GameObject:
   m_ObjectHideFlags: 0
@@ -5480,6 +5666,8 @@ MonoBehaviour:
   targetSize: 0.6
   modelFacing: 0
   baseMaterialTemplate: {fileID: 2100000, guid: 92dae8500cdb30c40b93806c36e00f7f, type: 2}
+  shadowCatcherMaterial: {fileID: 2100000, guid: 04d9f327405df08438aa07609a852443, type: 2}
+  shadowQuadScale: 1.6
   furMaterialTemplate: {fileID: 2100000, guid: 59332edc582932c409d4b5c70dafae40, type: 2}
   furShellCount: 20
   fallbackHairLength: {fileID: 0}
@@ -6592,6 +6780,55 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1859417367}
   m_CullTransparentMesh: 1
+--- !u!1 &1900948036 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2512387469002778309, guid: 48cb3fb68c91eb94999fd99957eb0cae, type: 3}
+  m_PrefabInstance: {fileID: 331264285}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1900948043
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1900948036}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalCameraData
+  m_RenderShadows: 1
+  m_RequiresDepthTextureOption: 2
+  m_RequiresOpaqueTextureOption: 2
+  m_CameraType: 0
+  m_Cameras: []
+  m_RendererIndex: -1
+  m_VolumeLayerMask:
+    serializedVersion: 2
+    m_Bits: 1
+  m_VolumeTrigger: {fileID: 0}
+  m_VolumeFrameworkUpdateModeOption: 2
+  m_RenderPostProcessing: 0
+  m_Antialiasing: 0
+  m_AntialiasingQuality: 2
+  m_StopNaN: 0
+  m_Dithering: 0
+  m_ClearDepth: 1
+  m_AllowXRRendering: 1
+  m_AllowHDROutput: 1
+  m_UseScreenCoordOverride: 0
+  m_ScreenSizeOverride: {x: 0, y: 0, z: 0, w: 0}
+  m_ScreenCoordScaleBias: {x: 0, y: 0, z: 0, w: 0}
+  m_RequiresDepthTexture: 0
+  m_RequiresColorTexture: 0
+  m_TaaSettings:
+    m_Quality: 3
+    m_FrameInfluence: 0.1
+    m_JitterScale: 1
+    m_MipBias: 0
+    m_VarianceClampScale: 0.9
+    m_ContrastAdaptiveSharpening: 0
+  m_Version: 2
 --- !u!1 &1905935980
 GameObject:
   m_ObjectHideFlags: 0
@@ -7311,6 +7548,7 @@ GameObject:
   - component: {fileID: 2046210317}
   - component: {fileID: 2046210318}
   - component: {fileID: 2046210319}
+  - component: {fileID: 2046210320}
   m_Layer: 0
   m_Name: Beside
   m_TagString: Untagged
@@ -7446,6 +7684,7 @@ MonoBehaviour:
   heroImage: {fileID: 0}
   showARInstructions: 1
   reshowOnNewMessage: 0
+  scanOnlyInAR: 1
   hideTemplateObjects:
   - Create Button
   - Delete Button
@@ -7483,6 +7722,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Beside.AR.PlaneVisibility
   hideWhenPlaced: 1
+--- !u!114 &2046210320
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2046210309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b15a5fe2ad4713641b0ab9f338968b57, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Beside.Metrics.FpsOverlay
+  show: 1
+  threeFingerToggle: 1
 --- !u!1 &2047503719
 GameObject:
   m_ObjectHideFlags: 0
@@ -8609,3 +8862,4 @@ SceneRoots:
   - {fileID: 331264285}
   - {fileID: 1388690564}
   - {fileID: 2046210313}
+  - {fileID: 958625292}
