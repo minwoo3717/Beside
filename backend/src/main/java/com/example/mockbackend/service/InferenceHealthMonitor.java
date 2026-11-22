@@ -40,16 +40,21 @@ import java.time.Instant;
  * model still loading, and jobs waited out inference.offline-wait-ms with nobody told. It stays LOADING and jobs wait
  * as before; {@link Alert#MODEL_LOAD_FAILED} is published once when the field turns to a text and once when it turns
  * back to null (the service was restarted). Missing, or neither text nor null, is unknown.
- * API v1 does not expose it yet; a healthz field is a contract addition for the meeting (REVIEW_CHECKLIST #11).
+ * The admin overview (GET /api/v1/admin/overview, inference) shows the latest reading; API v1 healthz does not
+ * (REVIEW_CHECKLIST #11: HealthResponse.inference was not taken into v1.2).
  * <p>
  * A fourth, {@code instanceId} (failure drill FD16b), is random per service process. RealJobWorker gives up on a
  * request still in flight to an earlier instance once a reading shows another one: a stopped and restarted Pod never
  * answers it, and it used to hold the only inference slot until inference.timeout-ms. A new instance between two
  * readings of the same state is only logged; the state, {@link Status#ready()} and the alerts do not change.
+ * <p>
+ * A fifth, {@code modelVersion} (API v1.2, from review/api-v1.1), names the loaded model. RealJobWorker records it on
+ * runs the model failed (job_runs.modelVersion, so a failure counts against that model). A trailing {@code +rig} is
+ * dropped: +rig means that job's rigging succeeded (REVIEW_CHECKLIST #18), which no failed run did.
  */
 @Component
 @Profile("real")
-public class InferenceHealthMonitor {
+public class InferenceHealthMonitor implements InferenceStatusSource {
     static final Duration CHECK_TIMEOUT = Duration.ofSeconds(2);
     /** inference.stuck-alert-ms default: about 14 normal A40 runs (8.7 s each, load test round 4). */
     static final long DEFAULT_STUCK_ALERT_MS = 120_000;
@@ -57,6 +62,10 @@ public class InferenceHealthMonitor {
     static final int MAX_LOAD_ERROR = 200;
     /** Characters of instanceId kept (the service sends 12). */
     static final int MAX_INSTANCE_ID = 64;
+    /** Characters of modelVersion kept (job_runs.model_version, the service sends at most 128). */
+    static final int MAX_MODEL_VERSION = 128;
+    /** What /infer appends when that job's rigging succeeded (REVIEW_CHECKLIST #18). */
+    static final String RIG_SUFFIX = "+rig";
 
     public enum State { UNKNOWN, UP, LOADING, DOWN }
 
@@ -66,10 +75,12 @@ public class InferenceHealthMonitor {
      * older service, or no token sent); they are not part of {@link #ready()}. So is {@code loadFailed}: true when
      * /healthz named a model load error, false when it said loadError null, null when it said nothing usable; then
      * {@code loadError} is the service's text on one line (null unless loadFailed). {@code instanceId} is the
-     * service process that answered (null when nothing answered or an older service sent none).
+     * service process that answered (null when nothing answered or an older service sent none). {@code modelVersion}
+     * is the loaded model as /healthz names it, without +rig (null when none, not reported or nothing answered).
      */
     public record Status(State state, String device, Instant checkedAt, Instant since, String detail,
-                         Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError, String instanceId) {
+                         Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError, String instanceId,
+                         String modelVersion) {
         public Status(State state, String device, Instant checkedAt, Instant since, String detail) {
             this(state, device, checkedAt, since, detail, null, null);
         }
@@ -82,6 +93,11 @@ public class InferenceHealthMonitor {
         public Status(State state, String device, Instant checkedAt, Instant since, String detail,
                       Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError) {
             this(state, device, checkedAt, since, detail, tokenOk, busyForMs, loadFailed, loadError, null);
+        }
+
+        public Status(State state, String device, Instant checkedAt, Instant since, String detail,
+                      Boolean tokenOk, Long busyForMs, Boolean loadFailed, String loadError, String instanceId) {
+            this(state, device, checkedAt, since, detail, tokenOk, busyForMs, loadFailed, loadError, instanceId, null);
         }
 
         public boolean ready() {
@@ -150,6 +166,16 @@ public class InferenceHealthMonitor {
         return status;
     }
 
+    /**
+     * GET /api/v1/admin/overview: the latest reading as it is (state, device, checkedAt, since, detail and the fields
+     * /healthz added: tokenOk, busyForMs, loadFailed, loadError, instanceId, modelVersion). Behind Basic auth in
+     * deployment; loadError is the service's text with paths and the token already left out.
+     */
+    @Override
+    public Object inferenceStatus() {
+        return status;
+    }
+
     /** Checks now; the scheduler calls it every inference.health-poll-ms, starting at startup. */
     @Scheduled(fixedDelayString = "${inference.health-poll-ms:15000}")
     public synchronized Status refresh() {
@@ -157,7 +183,8 @@ public class InferenceHealthMonitor {
         Status reading = check();
         if (reading.state() == previous.state()) {
             status = new Status(reading.state(), reading.device(), reading.checkedAt(), previous.since(), reading.detail(),
-                    reading.tokenOk(), reading.busyForMs(), reading.loadFailed(), reading.loadError(), reading.instanceId());
+                    reading.tokenOk(), reading.busyForMs(), reading.loadFailed(), reading.loadError(), reading.instanceId(),
+                    reading.modelVersion());
             if (reading.instanceId() != null && previous.instanceId() != null
                     && !reading.instanceId().equals(previous.instanceId())) {
                 // Restarted between two readings (R7's supervisor brings a killed service back within seconds).
@@ -237,11 +264,13 @@ public class InferenceHealthMonitor {
             Boolean loadFailed = loadError.isNull() ? Boolean.FALSE : error != null ? Boolean.TRUE : null;
             JsonNode instance = body.path("instanceId");
             String instanceId = instance.isTextual() ? oneLine(instance.asText(), MAX_INSTANCE_ID) : null;
+            JsonNode model = body.path("modelVersion");
+            String modelVersion = model.isTextual() ? withoutRig(oneLine(model.asText(), MAX_MODEL_VERSION)) : null;
             return new Status(ready ? State.UP : State.LOADING, device, now, now, ready ? "ok" : "no model loaded",
                     !token.isEmpty() && tokenOk.isBoolean() ? Boolean.valueOf(tokenOk.booleanValue()) : null,
                     busy.isIntegralNumber() && busy.canConvertToLong() && busy.longValue() >= 0
                             ? Long.valueOf(busy.longValue()) : null,
-                    loadFailed, error, instanceId);
+                    loadFailed, error, instanceId, modelVersion);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Status(State.DOWN, null, now, now, "check interrupted");
@@ -263,5 +292,18 @@ public class InferenceHealthMonitor {
         }
         return line.codePointCount(0, line.length()) <= max ? line
                 : line.substring(0, line.offsetByCodePoints(0, max)).strip();
+    }
+
+    /**
+     * The model without a trailing +rig: an inference service from the review branch appended it whenever a rig
+     * template was set, but +rig belongs only to runs whose rigging succeeded (REVIEW_CHECKLIST #18). Null stays null;
+     * a value that was only "+rig" is null.
+     */
+    static String withoutRig(String modelVersion) {
+        if (modelVersion == null || !modelVersion.endsWith(RIG_SUFFIX)) {
+            return modelVersion;
+        }
+        String model = modelVersion.substring(0, modelVersion.length() - RIG_SUFFIX.length()).strip();
+        return model.isEmpty() ? null : model;
     }
 }

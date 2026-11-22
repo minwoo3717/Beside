@@ -85,7 +85,7 @@ class JobServiceRetryTest {
                 assertThat(results).as("round %d", round).containsOnlyOnce("ACCEPTED")
                         .filteredOn(result -> !result.equals("ACCEPTED"))
                         .containsOnly(ErrorCode.JOB_NOT_FAILED.name());
-                verify(jobWorker, times(1)).dispatch(id);
+                verify(jobWorker, times(1)).dispatch(id, 2);
                 Job after = jobRepository.findById(id).orElseThrow();
                 assertThat(after.getStatus()).isEqualTo(JobStatus.PENDING);
                 assertThat(after.getAttempt()).as("round %d", round).isEqualTo(2);

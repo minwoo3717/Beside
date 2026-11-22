@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5f0">
+  <meta name="robots" content="noindex">
+  <title>작업 상세 · Beside</title>
+  <link rel="icon" href="data:,">
+  <!-- Absolute paths: this page is served at /job and /job/. Caddy Basic auth guards /job* in deployment. -->
+  <link rel="stylesheet" href="/job/job.css">
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.5.0/dist/model-viewer.min.js" integrity="sha256-iSNznIwbSgLdnIz2baXCpEgjXLXknkOd17u6lEuk++E=" crossorigin="anonymous"></script>
+  <script src="/admin/admin-format.js" defer></script>
+  <script src="/share.js" defer></script>
+  <script src="/job/qr.js" defer></script>
+  <script src="/job/job-format.js" defer></script>
+  <script src="/job/job.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/admin/" aria-label="운영 대시보드로"><span class="brand-mark" aria-hidden="true">b.</span> Beside Again</a>
+    <a class="back-link" href="/admin/">← 운영 대시보드</a>
+  </header>
+
+  <main>
+    <section class="intro">
+      <p class="eyebrow">JOB DETAIL</p>
+      <h1>작업 상세</h1>
+      <p id="page-status" class="page-status" role="status" aria-live="polite">불러오는 중…</p>
+    </section>
+
+    <section id="missing-view" class="panel empty-state" hidden>
+      <h2>작업을 찾을 수 없어요</h2>
+      <p>주소의 <code>?id=</code> 가 없거나, 이 서버(프로파일)에 없는 작업이에요. 운영 대시보드의 최근 작업에서 다시 열어 주세요.</p>
+    </section>
+
+    <div id="job-view" hidden>
+      <section class="panel" aria-labelledby="summary-title">
+        <div class="panel-heading">
+          <h2 id="summary-title" class="visually-hidden">요약</h2>
+          <span id="status-badge" class="badge" data-status="UNKNOWN">—</span>
+          <code id="job-id" class="job-id"></code>
+        </div>
+        <dl class="facts-grid">
+          <div><dt>접수</dt><dd id="created-at">—</dd></div>
+          <div><dt>시도</dt><dd id="attempt">—</dd></div>
+          <div><dt>대기</dt><dd id="queued">—</dd></div>
+          <div><dt>생성</dt><dd id="processing">—</dd></div>
+          <div><dt>전체</dt><dd id="total">—</dd></div>
+          <div><dt>GLB</dt><dd id="glb-bytes">—</dd></div>
+          <div class="wide"><dt>모델 버전</dt><dd id="model-version">—</dd></div>
+        </dl>
+        <div id="failure" class="failure" role="alert" hidden>
+          <p><strong id="failure-code"></strong> <span id="failure-text"></span></p>
+          <p id="failure-message" class="dev-message"></p>
+        </div>
+      </section>
+
+      <section class="compare" aria-label="입력 사진과 3D 모델">
+        <div class="panel" aria-labelledby="photos-title">
+          <h2 id="photos-title">입력 사진 <small id="photo-count"></small></h2>
+          <p class="note">서버는 올린 사진을 다시 보여 주지 않아요(사진 보기 API 는 v1.2 에 없음). 평가할 때는 올린 원본 사진을 옆에 두고 봐 주세요.</p>
+          <ol id="photos" class="photo-list"></ol>
+        </div>
+        <div class="panel" aria-labelledby="model-title">
+          <h2 id="model-title">3D 모델</h2>
+          <p id="model-placeholder" class="placeholder">작업이 완료되면 여기에 모델이 보여요.</p>
+          <model-viewer id="viewer" camera-controls autoplay shadow-intensity="1" alt="생성된 반려동물 3D 모델" hidden></model-viewer>
+          <div id="animation-chips" class="chips" role="group" aria-label="동작 고르기" hidden></div>
+          <p id="viewer-message" class="note error" role="alert" hidden></p>
+          <p class="note">웹 보기에는 앱의 털 셰이더가 없어요. 털·무늬는 입력 사진과 앱 화면으로도 확인해 주세요.</p>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="rating-title">
+        <div class="panel-heading">
+          <h2 id="rating-title">품질 평가</h2>
+          <span class="hint">docs/METRICS.md §4 · 1 = 전혀 다름, 3 = 종을 알아볼 수 있음, 5 = 그 개체로 알아볼 수 있음</span>
+        </div>
+        <form id="rating-form" class="rating-form" novalidate>
+          <fieldset id="rating-fields" class="rating-fields">
+            <label class="field rater-field">평가자 이름
+              <input id="rater" name="rater" type="text" autocomplete="nickname" placeholder="예: 민우" required>
+            </label>
+            <div id="score-items" class="score-items"></div>
+            <label class="field">코멘트 (선택, 500자까지)
+              <textarea id="comment" name="comment" rows="3" maxlength="500" placeholder="예: 귀가 실제보다 작고 등의 반점이 번짐"></textarea>
+            </label>
+            <div class="form-actions">
+              <button id="rating-submit" class="primary-button" type="submit">평가 저장</button>
+              <span class="hint">같은 이름으로 다시 저장하면 덮어써요. 이름은 이 브라우저에 기억돼요.</span>
+            </div>
+          </fieldset>
+          <p id="rating-disabled" class="note" hidden>완료된 작업만 평가할 수 있어요.</p>
+          <p id="rating-message" class="form-message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="table-wrap">
+          <table>
+            <thead id="ratings-head"></thead>
+            <tbody id="ratings-body"></tbody>
+            <tfoot id="ratings-foot"></tfoot>
+          </table>
+        </div>
+        <p id="ratings-empty" class="empty">아직 평가가 없어요.</p>
+        <p id="ratings-note" class="hint" hidden>보고서에는 평가자 2명 이상의 평균을 써요.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="share-title">
+        <div class="panel-heading">
+          <h2 id="share-title">공유 링크</h2>
+          <div class="share-actions">
+            <button id="share-revoke-button" class="secondary-button" type="button">모두 끊기</button>
+            <button id="share-button" class="primary-button" type="button" disabled>공유 링크 만들기</button>
+          </div>
+        </div>
+        <p class="hint">앱 없이 폰에서 3D·AR 로 보는 공개 링크(/s/…)를 만들어요. 누를 때마다 새 링크이고 기본 7일 뒤 만료돼요(작업당 살아 있는 링크 20개까지). 링크가 생각보다 널리 퍼졌으면 '모두 끊기' 로 이 작업의 링크를 모두 닫아요.</p>
+        <div id="share-result" class="share-result" hidden>
+          <svg id="share-qr" class="share-qr" role="img" aria-label="공유 링크 QR 코드" xmlns="http://www.w3.org/2000/svg"></svg>
+          <div class="share-text">
+            <div class="share-row">
+              <input id="share-url" class="share-url" type="text" readonly aria-label="공유 링크">
+              <button id="copy-button" class="secondary-button" type="button">복사</button>
+            </div>
+            <p id="share-expiry" class="hint"></p>
+          </div>
+        </div>
+        <p id="share-message" class="form-message" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span>Beside Again · 작업 상세</span>
+    <span>진행 중인 작업은 2초마다 갱신</span>
+  </footer>
+</body>
+</html>

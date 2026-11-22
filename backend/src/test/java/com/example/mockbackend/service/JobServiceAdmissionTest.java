@@ -31,11 +31,14 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Queue cap (REVIEW_CHECKLIST #21, decided 2026-11-21) at cap 1 with a worker that runs nothing:
@@ -81,7 +84,7 @@ class JobServiceAdmissionTest {
 
     @Test
     void aCreateWhoseDispatchIsRejectedGivesItsPlaceBack() {
-        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString(), anyInt());
 
         assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo()), "late-key"))
                 .isInstanceOf(TaskRejectedException.class);
@@ -96,7 +99,7 @@ class JobServiceAdmissionTest {
     @Test
     void aRetryWhoseDispatchIsRejectedGivesItsPlaceBack() {
         Job failed = savedFailedJob();
-        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString());
+        doThrow(new TaskRejectedException("executor shut down")).doNothing().when(jobWorker).dispatch(anyString(), anyInt());
 
         assertThatThrownBy(() -> jobService.retry(failed.getId())).isInstanceOf(TaskRejectedException.class);
         assertThat(jobRepository.findById(failed.getId()).orElseThrow().getStatus()).isEqualTo(JobStatus.FAILED);
@@ -137,7 +140,7 @@ class JobServiceAdmissionTest {
         } finally {
             pool.shutdownNow();
         }
-        verify(jobWorker, times(1)).dispatch(failed.getId());
+        verify(jobWorker, times(1)).dispatch(eq(failed.getId()), anyInt());
         Job retried = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(retried.getStatus()).isEqualTo(JobStatus.PENDING);
         assertThat(retried.getAttempt()).isEqualTo(2);
@@ -191,9 +194,41 @@ class JobServiceAdmissionTest {
         Job unchanged = jobRepository.findById(failed.getId()).orElseThrow();
         assertThat(unchanged.getStatus()).isEqualTo(JobStatus.FAILED);
         assertThat(unchanged.getAttempt()).isEqualTo(1);
-        verify(jobWorker, never()).dispatch(failed.getId());
+        verify(jobWorker, never()).dispatch(eq(failed.getId()), anyInt());
         assertThat(registry.get("beside.jobs.refused").tag("op", "retry").counter().count())
                 .isEqualTo(refusedRetries + REQUESTS);
+    }
+
+    /**
+     * Review finding 2026-11-21: cancel frees the canceled job's place (JobServiceImpl.cancel), and retrying a CANCELED
+     * job goes through the cap like any retry (503 QUEUE_FULL naming it, the job stays FAILED/CANCELED).
+     */
+    @Test
+    void cancelingAWaitingJobFreesItsPlaceAndItsRetryGoesThroughTheCap() {
+        when(jobWorker.type()).thenReturn("mock");
+        Job first = jobService.submitJobV1(List.of(photo()), null);
+        assertThatThrownBy(() -> jobService.submitJobV1(List.of(photo()), null))
+                .isInstanceOfSatisfying(ApiException.class, full -> assertThat(full.getCode()).isEqualTo(ErrorCode.QUEUE_FULL));
+
+        Job canceled = jobService.cancel(first.getId());
+        assertThat(canceled.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(canceled.getErrorCode()).isEqualTo("CANCELED");
+        Job second = jobService.submitJobV1(List.of(photo()), null); // 202: the canceled job's place is free
+        assertThat(second.getStatus()).isEqualTo(JobStatus.PENDING);
+
+        assertThatThrownBy(() -> jobService.retry(first.getId())).isInstanceOfSatisfying(ApiException.class, full -> {
+            assertThat(full.getCode()).isEqualTo(ErrorCode.QUEUE_FULL);
+            assertThat(full.getJobId()).isEqualTo(first.getId());
+        });
+        Job unchanged = jobRepository.findById(first.getId()).orElseThrow();
+        assertThat(unchanged.getStatus()).isEqualTo(JobStatus.FAILED);
+        assertThat(unchanged.getErrorCode()).isEqualTo("CANCELED");
+        assertThat(unchanged.getAttempt()).isEqualTo(1);
+
+        jobService.cancel(second.getId());
+        Job retried = jobService.retry(first.getId());
+        assertThat(retried.getStatus()).isEqualTo(JobStatus.PENDING);
+        assertThat(retried.getAttempt()).isEqualTo(2);
     }
 
     private static Job pendingJob() {

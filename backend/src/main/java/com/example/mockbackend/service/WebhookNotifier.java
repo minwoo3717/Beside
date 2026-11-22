@@ -1,6 +1,7 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.service.InferenceHealthMonitor.Alert;
 import com.example.mockbackend.service.InferenceHealthMonitor.AlertChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.State;
@@ -192,9 +193,15 @@ public class WebhookNotifier {
         return webhook != null;
     }
 
+    /**
+     * A run that ended, except one the client canceled while it waited (FAILED with CANCELED): that is a user's choice,
+     * not news for the team, and POST /cancel is public, so cancel and retry repeated on one job would fill the channel
+     * and the bounded job queue ({@link #MAX_JOBS}) with ⏹️ lines and push real results out (review finding,
+     * 2026-11-21). The admin stats count cancellations (canceled).
+     */
     @EventListener
     public void onJobFinished(JobFinishedEvent event) {
-        if (enabled()) {
+        if (enabled() && !isCanceled(event)) {
             queue(new Note(jobMessage(event, linkFor(event.jobId())), false, event.status(), System.nanoTime(),
                     clock.instant()));
         }
@@ -571,11 +578,17 @@ public class WebhookNotifier {
         return hasAdminPage ? publicBaseUrl + "/admin/" : "";
     }
 
+    static boolean isCanceled(JobFinishedEvent event) {
+        return event.status() == JobStatus.FAILED && ErrorCode.CANCELED.name().equals(event.errorCode());
+    }
+
     /** {@code link} is appended on its own line when not empty. */
     public static String jobMessage(JobFinishedEvent event, String link) {
         StringBuilder text = new StringBuilder();
         if (event.status() == JobStatus.COMPLETED) {
             text.append("✅ 3D 모델 완성 · 작업 `").append(shortId(event.jobId())).append('`');
+        } else if ("CANCELED".equals(event.errorCode())) {
+            text.append("⏹️ 대기 중 취소 · 작업 `").append(shortId(event.jobId())).append('`');
         } else {
             text.append("⚠️ 3D 생성 실패 · 작업 `").append(shortId(event.jobId())).append("` · ")
                     .append(event.errorCode() == null ? "INTERNAL_ERROR" : event.errorCode());
