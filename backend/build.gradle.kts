@@ -23,6 +23,11 @@ dependencies {
     // 운영 지표 (docs/METRICS.md §5): Actuator 는 관리 포트(management.server.port, 기본 8081)에만, Prometheus 형식으로.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // 분산 추적 (W8, 2026-11-26): 작업 한 건이 Spring 과 GPU 서비스 사이에서 어디에 시간을 쓰는지 Tempo 에서 본다.
+    // 버전은 Spring Boot 3.2 BOM 이 정한다(Micrometer Tracing 1.2, OpenTelemetry 1.31). 내보내기는 OTLP HTTP 이고
+    // management.otlp.tracing.endpoint 가 있을 때만 켜진다(compose 의 tempo:4318, application.properties).
+    implementation("io.micrometer:micrometer-tracing-bridge-otel")
+    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     // prod 로그를 한 줄에 JSON 하나로(logback-spring.xml). 7.4 는 Logback 1.3·1.4(Spring Boot 3.2 는 1.4.11)용이다.
     // 8.x 는 Logback 1.5 가 필요해 Boot 3.2 와 맞지 않는다.
     runtimeOnly("net.logstash.logback:logstash-logback-encoder:7.4")
@@ -37,6 +42,8 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     // 계약 테스트에서 openapi.yaml 을 읽는다.
     testImplementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
+    // 추적 테스트(TracingPropagationTest)가 끝난 span 을 메모리에 모은다(InMemorySpanExporter). 버전은 Boot BOM.
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing")
 }
 
 tasks.withType(JavaCompile::class.java) {
