@@ -16,7 +16,9 @@ import java.util.function.BooleanSupplier;
  * in dispatch order, which is the accepted-or-retried order the contract (JobQueue) and QueueEstimator promise. When
  * the place was taken only after the cutout, a retry whose cutout was reused (no CPU wait) got ahead of new jobs
  * accepted before it that were still in the cutout, so their queue.ahead and estimate came out one job short
- * (review finding, 2026-11-25).
+ * (review finding, 2026-11-25). The cost, accepted as a low risk: a cutout that never returned (a native ONNX Runtime
+ * hang; the cutout has a permit wait, preprocess.cutout.wait-ms, but no time limit of its own) would hold the head of
+ * the line, and the jobs behind it would wait as PENDING with the slot free. RealJobQueueOrderTest covers the order.
  */
 final class InferenceSlots {
     private final ArrayDeque<Object> line = new ArrayDeque<>();
