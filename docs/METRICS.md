@@ -196,6 +196,12 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `beside.asset.downloads` | `beside_asset_downloads_total` | counter | `outcome`(아래) | `GET /api/v1/jobs/{id}/asset` 한 번마다 하나 | `AssetDownloadMetricsFilter` |
 | `beside.asset.download` | `beside_asset_download_seconds_*` | timer | `outcome` | 요청 도착 → 마지막 바이트를 쓴 때 | 같은 곳 |
 | `beside.api.errors` | `beside_api_errors_total` | counter | `status`(HTTP 상태 코드), `code`(응답의 `error.code`. Spring 이 직접 답한 오류 — 잘못된 method·Content-Type 등 — 는 `FRAMEWORK`) | [구현됨] 2026-11-26. 서버가 답한 오류 응답 수. v1·v0·웹 페이지 모두 센다(v0 는 응답에 code 가 없어도 같은 code 로). 알 수 없는 경로의 404(스캐너 포함)는 `code="NOT_FOUND"` 로 따로 보인다. `QUEUE_FULL`(503)도 세므로 5xx 비율에서는 §5.3 처럼 뺀다. 연결이 끊겨 답하지 못한 다운로드와 필터가 직접 답한 오류(다른 사이트 쓰기 400 등)는 세지 않는다. HTTP 오류 코드([api/ERROR_CODES.md](api/ERROR_CODES.md))는 기동할 때 그 상태로 0 부터 있고, `FRAMEWORK` 는 첫 오류 때 생긴다. 로그: 5xx 는 ERROR(method·경로·code·requestId·스택), 4xx 는 WARN 한 줄, `QUEUE_FULL` 과 알 수 없는 경로의 404 는 DEBUG | `GlobalExceptionHandler` |
+| `beside.inference.request` | `beside_inference_request_seconds_{bucket,sum,count,max}` | timer | `call`(`infer`\|`download`\|`cleanup`\|`health`), `outcome`(아래) | real 서버가 Python 추론 서비스에 보낸 HTTP 요청 한 번의 시간. 보낸 때 → 답을 다 받은 때 또는 포기한 때. `infer` = `POST /infer`·`/infer/upload`, `download` = 업로드 모드의 GLB `GET`, `cleanup` = `DELETE /artifacts/{jobId}`(다시 보낸 것도 하나씩), `health` = `GET /healthz`(15초마다). 서버 종료로 끊긴 요청은 세지 않는다. 왜: 생성 시간(`beside.job.processing`)만으로는 느린 곳이 GPU 인지 GLB 전송인지 연결인지 모른다. JDK HttpClient 라 자동 계측이 없어 직접 잰다. 16개 조합 모두 기동 때 0 으로 등록한다(mock 에도 있고 늘 0). 2026-11-26 **[구현됨]** | `InferenceClient`, `InferenceHealthMonitor`(둘 다 `InferenceMetrics` 로) |
+| `beside.inference.state` | `beside_inference_state` | gauge | `state`(`UP`\|`LOADING`\|`DOWN`\|`UNKNOWN`) | 마지막 `/healthz` 판정. 지금 상태만 1, 나머지는 0. 첫 확인 전에는 `UNKNOWN` 이 1. 왜: GPU 가 꺼지거나 모델이 안 올라온 것을 작업이 실패하기 전에 대시보드에서 바로 본다(지금까지는 관리 페이지와 Discord 알림뿐). real 프로파일에만 있다. 2026-11-26 **[구현됨]** | `InferenceHealthMonitor` |
+| `beside.inference.busy.seconds` | `beside_inference_busy_seconds` | gauge | — | 마지막 `/healthz` 의 `busyForMs / 1000`: GPU 에서 가장 오래 돌고 있는 실행의 나이(초). 쉬고 있으면 0. 모르면(DOWN, 이 필드가 없는 옛 서비스) `NaN`. 왜: STUCK 알림(`inference.stuck-alert-ms`, 기본 120초, 장애 훈련 FD13) 전에 실행이 길어지는 것을 본다. real 프로파일에만 있다. 2026-11-26 **[구현됨]** | `InferenceHealthMonitor` |
+| `beside.jobs.upload.rejected` | `beside_jobs_upload_rejected_total` | counter | `code`(아래 12개) | `POST /api/v1/jobs` 가 업로드 자체를 거절(400·413)한 수. `QUEUE_FULL` 은 여기가 아니라 `beside.jobs.refused` 다. Idempotency-Key 재요청, 다른 사이트에서 온 쓰기 거절(`CrossSiteWriteFilter`), v0 `/api/jobs` 는 세지 않는다. 왜: 사진을 올렸는데 작업이 만들어지지 않은 사용자가 얼마나 되는지, 어떤 이유가 많은지 본다(대표 사진 검사 기준값과 앱 안내 문구를 고칠 근거). 12개 모두 기동 때 0. 2026-11-26 **[구현됨]** | `JobServiceImpl`(검증·대표 사진 검사), `UploadRejectionCounter`(컨트롤러 전에 나는 413·`photos` 파트 없음·깨진 multipart) |
+| `beside.share.created` | `beside_share_created_total` | counter | — | 만든 공유 링크 수(`POST /api/v1/jobs/{id}/shares` 의 201). 왜: 제품 퍼널의 '공유' 단계. 2026-11-26 **[구현됨]** | `ShareService` |
+| `beside.share.views` | `beside_share_views_total` | counter | `outcome`(`ok`\|`not_found`\|`expired`\|`revoked`) | 공유 뷰어가 링크를 연 수(`GET /api/v1/shares/{token}` 한 번에 하나). 응답은 모두 404 `SHARE_NOT_FOUND` 로 같지만 여기서는 이유를 나눈다: `revoked` 취소된 링크(만료됐어도), `expired` 만료된 링크, `not_found` 없거나 형식이 틀린 토큰, 작업·파일이 없어진 링크. 토큰은 태그에 넣지 않는다. GLB 받기(`/asset`)·취소(`DELETE`)·서버 오류(500)는 세지 않는다. 왜: 공유한 링크가 실제로 열리는지, 유효 기간(기본 7일)이 짧지 않은지 본다. 네 값 모두 기동 때 0. 2026-11-26 **[구현됨]** | `ShareService.view` |
 
 `beside.asset.downloads` 의 `outcome`:
 
@@ -207,9 +213,24 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `not_completed` | 409 (`JOB_NOT_COMPLETED`, 완료 전에 받으려 함) |
 | `error` | 5xx, 처리 중 예외, 그 밖의 상태(400 잘못된 variant) |
 
-바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 와 `beside_jobs_refused_total` 의 `op` 두 값, `beside_jobs_pending_stale` 도 처음부터 있다. `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
+바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 와 `beside_jobs_refused_total` 의 `op` 두 값, `beside_jobs_pending_stale` 도 처음부터 있다. `beside_inference_request_seconds` 16개, `beside_jobs_upload_rejected_total` 12개, `beside_share_created_total`, `beside_share_views_total` 4개도 처음부터 있다(real 은 `beside_inference_state` 4개와 `beside_inference_busy_seconds` 도). `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
 
-버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30.
+`beside.inference.request` 의 `outcome` (HTTP 요청 기준이다. 작업 결과는 `beside_jobs_finished_total`, healthz 판정은 `beside_inference_state` 로 본다):
+
+| 값 | 뜻 |
+|---|---|
+| `ok` | 기대한 상태 코드로 답했다: `infer`·`download`·`health` 는 200, `cleanup` 은 2xx. 본문이 쓸 만한지는 보지 않는다(200 인데 `glbPath` 가 없으면 작업은 `CONVERSION_FAILED`, healthz 본문이 JSON 이 아니면 `DOWN`) |
+| `error` | 다른 상태 코드로 답했다(401·403·4xx·5xx), 또는 이 서버 쪽 오류(GLB 를 디스크에 못 씀, FD4) |
+| `timeout` | 시간 안에 답이 끝나지 않았다: `inference.timeout-ms`(infer·download), GLB 데이터가 `inference.download-idle-ms` 동안 없음, cleanup 10초, health 2초 |
+| `unavailable` | 답이 없었다: 연결 거절, 연결 5초(health 2초) 초과, 답 없이 끊긴 연결, 또는 요청 중 `/healthz` 의 `instanceId` 가 바뀌어 포기(FD16b) |
+
+`infer` 의 `error`·`timeout`·`unavailable` 은 작업 코드 `INFERENCE_FAILED`·`INFERENCE_TIMEOUT`·`INFERENCE_UNAVAILABLE` 과 거의 맞지만 같지는 않다. 401·403·501~504 응답은 작업 코드로는 `INFERENCE_UNAVAILABLE` 이고 여기서는 `error` 다(서비스가 답은 했다).
+
+`beside.jobs.upload.rejected` 의 `code`(docs/api/ERROR_CODES.md 와 같은 이름): `INVALID_REQUEST`(빈 파일, 깨진 multipart, 128자 넘는 Idempotency-Key), `NO_PHOTOS`(`photos` 파트 없음 포함), `TOO_MANY_PHOTOS`, `UNSUPPORTED_IMAGE_TYPE`, `PAYLOAD_TOO_LARGE`, 대표 사진 검사 7개 `UNREADABLE_IMAGE`·`IMAGE_TOO_SMALL`·`NO_ANIMAL_DETECTED`·`TOO_MANY_ANIMALS`·`ANIMAL_TOO_SMALL`·`IMAGE_TOO_DARK`·`IMAGE_TOO_BLURRY`(검사가 켜진 real·prod 에서만 0 이 아니다). 업로드 시도는 `beside_jobs_created_total + beside_jobs_upload_rejected_total + beside_jobs_refused_total{op="create"}` 로 본다(`created` 에는 v0 도 들어 있다).
+
+추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽 기록은 [계획]). `health` 에는 붙지 않는다.
+
+버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30. 추론 요청 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600(health 는 수십 ms, A40 한 실행은 8.7초, `inference.timeout-ms` 는 real 120초).
 
 주의: 재시작으로 끊긴 실행(`code="INTERNAL_ERROR"`, §1 주의)도 `FAILED` 로 세어지고 시간에는 서버가 꺼져 있던 시간이 들어간다. 패스스루 실행은 `passthrough="true"` 로 거른다. Mock 실행은 `worker="mock"` 이다. 단, `passthrough="true"` 가 붙는 것은 **성공한** 패스스루 실행뿐이다. 추론 서비스의 실패 응답에는 패스스루 여부가 없어서 백엔드는 스텁(패스스루)의 실패와 모델의 실패를 구별하지 못하고, FAILED 실행은 늘 `passthrough="false"` 로 남는다(§1 `passthrough` 가 null → 태그 `false`). 그래서 `passthrough="false"` 로 거른 성공률은 스텁의 성공만 빼고 스텁의 실패는 남긴다. 이 성공률은 추론 서비스가 실제 모델을 돌리는 동안에만 맞다(§5.3 아래).
 
@@ -245,3 +266,5 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 표 안의 `\|` 는 표 구분자를 피하려고 쓴 것이고, PromQL 에는 `|` 로 쓴다.
 
 확인 범위 **[구현됨]**: §5.1 의 이름·태그·버킷, 관리 포트 분리(공개 포트 `/actuator*` 404), 실제 Tomcat 연결을 RST 로 끊은 다운로드의 `client_abort` 는 backend 테스트(`ObservabilityEndpointTest`, `JobMetricsTest`, `OperationalMetricsFlowTest`, `AssetDownloadMetricsFilterTest`, `RealJobWorkerTest` 의 패스스루)로 확인했다. §5.2 중 스크레이프에 있는지 테스트가 보는 것은 `http_server_requests_seconds_bucket`(SLO 버킷·`env`), `jvm_memory_used_bytes`, `jvm_gc_memory_allocated_bytes_total`, `process_cpu_usage`, `tomcat_threads_busy_threads`, `hikaricp_connections`, `executor_active_threads`, `disk_free_bytes` 이고 나머지는 Spring Boot 3.2 기본 이름이다. **[계획]**: 위 PromQL 을 실제 Prometheus·Grafana 에 넣어 보는 것과 VM 에서 잰 값(PLAN 4b 부하 시험).
+
+2026-11-26 에 더한 이름(추론 요청·GPU 상태·업로드 거절·공유)은 `InferenceClientTest`(헤더·call·outcome), `InferenceHealthMonitorTest`(게이지·health), `ProductMetricsTest`, `ProductFunnelMetricsTest`(API 로 거절 코드·공유 결과), `JobV1PhotoCheckTest`(대표 사진 검사 7개 코드), `ObservabilityEndpointTest`(스크레이프에 0 으로 있음, 실제 Tomcat 의 413) 로 확인했다 **[구현됨]**. Grafana `beside-ops` 에 'GPU·추론' 줄(상태·바쁜 시간·요청 p95·실패)과 '제품 퍼널(서버)' 줄(퍼널·거절 코드·거절률·공유)을 더했다. JSON 만 고쳤고 실제 Grafana 에 띄워 보지 않았다 **[계획]**(운영 VM 배포 전).

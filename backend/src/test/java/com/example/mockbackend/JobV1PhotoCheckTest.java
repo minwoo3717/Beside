@@ -9,6 +9,7 @@ import com.example.mockbackend.repository.IdempotencyKeyRepository;
 import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.service.preprocess.PreprocessModels;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +74,9 @@ class JobV1PhotoCheckTest {
 
     @MockBean
     PreprocessModels models;
+
+    @Autowired
+    MeterRegistry meters;
 
     private volatile List<Detection> found = List.of(dog(SUBJECT));
     private volatile PreprocessException failure;
@@ -206,10 +210,17 @@ class JobV1PhotoCheckTest {
                 .andExpect(status().is2xxSuccessful());
     }
 
+    /** Also counted once under its code in beside.jobs.upload.rejected (docs/METRICS.md §5.1). */
     private void refused(String code, MockMultipartFile file) throws Exception {
+        double before = rejected(code);
         upload(file).andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value(code))
                 .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("photos[0]")));
+        assertThat(rejected(code) - before).as("beside.jobs.upload.rejected{code=%s}", code).isEqualTo(1.0);
+    }
+
+    private double rejected(String code) {
+        return meters.get("beside.jobs.upload.rejected").tag("code", code).counter().count();
     }
 
     private ResultActions upload(MockMultipartFile... files) throws Exception {

@@ -2,6 +2,7 @@ package com.example.mockbackend.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Gauge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,11 @@ import java.time.Instant;
  * A fifth, {@code modelVersion} (API v1.2, from review/api-v1.1), names the loaded model. RealJobWorker records it on
  * runs the model failed (job_runs.modelVersion, so a failure counts against that model). A trailing {@code +rig} is
  * dropped: +rig means that job's rigging succeeded (REVIEW_CHECKLIST #18), which no failed run did.
+ * <p>
+ * Metrics (docs/METRICS.md §5.1): every check is a {@code health} request in beside.inference.request, and the latest
+ * reading is the gauges {@code beside.inference.state} (state = UP | LOADING | DOWN | UNKNOWN, 1 for the current one,
+ * 0 for the others) and {@code beside.inference.busy.seconds} (busyForMs / 1000, NaN when not reported), so Grafana
+ * shows a GPU that went away or a run that is getting long before any job fails.
  */
 @Component
 @Profile("real")
@@ -132,6 +138,7 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher events;
     private final HttpClient http;
+    private final InferenceMetrics metrics;
     private final Logger log = LoggerFactory.getLogger(InferenceHealthMonitor.class);
     private volatile Status status = new Status(State.UNKNOWN, null, null, Instant.now(), "not checked yet");
     /** Whether each alert was last published as active. Guarded by this. */
@@ -144,21 +151,39 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
         this(baseUrl, token, DEFAULT_STUCK_ALERT_MS, objectMapper, events);
     }
 
-    /** {@code stuckAlertMs} 0 or below turns the STUCK alert off. */
+    /** {@code stuckAlertMs} 0 or below turns the STUCK alert off. Metered into a registry of its own. */
+    public InferenceHealthMonitor(String baseUrl, String token, long stuckAlertMs, ObjectMapper objectMapper,
+                                  ApplicationEventPublisher events) {
+        this(baseUrl, token, stuckAlertMs, objectMapper, events, InferenceMetrics.detached());
+    }
+
     @Autowired
     public InferenceHealthMonitor(@Value("${inference.base-url:http://localhost:8001}") String baseUrl,
                                   @Value("${inference.token:}") String token,
                                   @Value("${inference.stuck-alert-ms:" + DEFAULT_STUCK_ALERT_MS + "}") long stuckAlertMs,
-                                  ObjectMapper objectMapper, ApplicationEventPublisher events) {
+                                  ObjectMapper objectMapper, ApplicationEventPublisher events, InferenceMetrics metrics) {
         this.healthUri = URI.create(baseUrl.replaceAll("/+$", "") + "/healthz");
         this.token = token == null ? "" : token.trim();
         this.stuckAlertMs = Math.max(0, stuckAlertMs);
         this.objectMapper = objectMapper;
         this.events = events;
+        this.metrics = metrics;
         this.http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(CHECK_TIMEOUT)
                 .build();
+        for (State state : State.values()) {
+            Gauge.builder("beside.inference.state", this, monitor -> monitor.status.state() == state ? 1 : 0)
+                    .description("Latest /healthz reading of the inference service: 1 for the current state, 0 otherwise")
+                    .tag("state", state.name())
+                    .register(metrics.registry());
+        }
+        Gauge.builder("beside.inference.busy.seconds", this, monitor -> {
+                    Long busy = monitor.status.busyForMs();
+                    return busy == null ? Double.NaN : busy / 1000.0;
+                })
+                .description("Age of the oldest model run on the GPU (healthz busyForMs); NaN when not reported")
+                .register(metrics.registry());
     }
 
     /** The latest reading (UNKNOWN until the first check). */
@@ -241,14 +266,27 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
         }
     }
 
+    /** One GET /healthz, timed as call=health (the HTTP exchange: a 200 with a body that is not JSON is still ok). */
     private Status check() {
         Instant now = Instant.now();
         HttpRequest.Builder request = HttpRequest.newBuilder(healthUri).timeout(CHECK_TIMEOUT).GET();
         if (!token.isEmpty()) {
             request.header("X-Inference-Token", token);
         }
+        long started = System.nanoTime();
+        HttpResponse<String> response;
         try {
-            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+            response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new Status(State.DOWN, null, now, now, "check interrupted");
+        } catch (IOException | RuntimeException e) {
+            metrics.record(InferenceMetrics.Call.HEALTH, InferenceMetrics.outcomeOf(e), started);
+            return new Status(State.DOWN, null, now, now, e.getClass().getSimpleName());
+        }
+        metrics.record(InferenceMetrics.Call.HEALTH,
+                response.statusCode() == 200 ? InferenceMetrics.Outcome.OK : InferenceMetrics.Outcome.ERROR, started);
+        try {
             if (response.statusCode() != 200) {
                 return new Status(State.DOWN, null, now, now, "healthz HTTP " + response.statusCode());
             }
@@ -271,9 +309,6 @@ public class InferenceHealthMonitor implements InferenceStatusSource {
                     busy.isIntegralNumber() && busy.canConvertToLong() && busy.longValue() >= 0
                             ? Long.valueOf(busy.longValue()) : null,
                     loadFailed, error, instanceId, modelVersion);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return new Status(State.DOWN, null, now, now, "check interrupted");
         } catch (IOException | RuntimeException e) {
             return new Status(State.DOWN, null, now, now, e.getClass().getSimpleName());
         }
