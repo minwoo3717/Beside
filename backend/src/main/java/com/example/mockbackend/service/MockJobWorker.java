@@ -3,10 +3,10 @@ package com.example.mockbackend.service;
 import com.example.mockbackend.domain.Job;
 import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
@@ -25,11 +25,24 @@ import java.util.Locale;
  */
 @Service
 @Profile("mock")
-@RequiredArgsConstructor
 public class MockJobWorker implements JobWorker {
     private final JobTransitions jobTransitions;
     private final JobFinisher jobFinisher;
+    /** Each run is a trace of its own, as in the real worker: beside.job.run with the two waits as stages. */
+    private final JobTracing tracing;
     private final Logger log = LoggerFactory.getLogger(MockJobWorker.class);
+
+    /** Without tracing (tests that build the worker themselves). */
+    public MockJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher) {
+        this(jobTransitions, jobFinisher, JobTracing.NOOP);
+    }
+
+    @Autowired
+    public MockJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher, JobTracing tracing) {
+        this.jobTransitions = jobTransitions;
+        this.jobFinisher = jobFinisher;
+        this.tracing = tracing;
+    }
 
     @Value("${storage.result.sample:storage/results/sample-dog.glb}")
     private String sampleResultPath;
@@ -52,28 +65,37 @@ public class MockJobWorker implements JobWorker {
     @Override
     public void dispatch(String jobId, int attempt) {
         Instant start = Instant.now();
+        JobTracing.Run trace = tracing.startRun(jobId, attempt, type());
         // Every line of this run carries the job (MDC does not follow @Async; the pool thread must not keep it).
         MDC.put(RealJobWorker.MDC_JOB_ID, jobId);
         MDC.put(RealJobWorker.MDC_ATTEMPT, String.valueOf(attempt));
         try {
-            Thread.sleep(pendingMs);
+            try (JobTracing.Scoped pending = tracing.stage("beside.job.mock-pending")) {
+                Thread.sleep(pendingMs);
+            }
             Job job = jobTransitions.start(jobId, attempt, 0.5).orElse(null);
             if (job == null) {
+                trace.notStarted();
                 log.info("jobId={} attempt={} not started: no longer PENDING (canceled or retried)", jobId, attempt);
                 return;
             }
-            log.info("jobId={} stage=PROCESSING", jobId);
+            log.info("jobId={} stage=PROCESSING traceId={}", jobId, trace.traceId());
 
-            Thread.sleep(processingMs);
+            try (JobTracing.Scoped processing = tracing.stage("beside.job.mock-processing")) {
+                Thread.sleep(processingMs);
+            }
             if (shouldFail(job)) {
                 jobFinisher.fail(job, ErrorCode.INFERENCE_FAILED,
                         "Mock failure: an uploaded filename contains '" + failToken + "'", type());
+                trace.failed(ErrorCode.INFERENCE_FAILED.name(), null);
                 log.info("jobId={} stage=FAILED (mock trigger)", jobId);
                 return;
             }
             jobFinisher.complete(job, sampleResultPath, start, type(), RunDetails.NONE);
+            trace.completed();
             log.info("jobId={} stage=COMPLETED durationMs={}", jobId, job.getDurationMs());
         } catch (InterruptedException e) {
+            trace.failed(ErrorCode.INTERNAL_ERROR.name(), e);
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
             try {
                 markInterrupted(jobId, attempt);
@@ -84,10 +106,12 @@ public class MockJobWorker implements JobWorker {
             }
         } catch (RuntimeException unexpected) {
             // Escaping the @Async method would leave the job PENDING or PROCESSING until the next restart.
+            trace.failed(ErrorCode.INTERNAL_ERROR.name(), unexpected);
             failUnended(jobId, attempt, unexpected);
         } finally {
             MDC.remove(RealJobWorker.MDC_JOB_ID);
             MDC.remove(RealJobWorker.MDC_ATTEMPT);
+            trace.close();
         }
     }
 
