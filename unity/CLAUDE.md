@@ -50,7 +50,7 @@
   - 외부 네트워크: `cloudflared tunnel --url http://localhost:8080` → 출력된 `https://…trycloudflare.com`을 앱 서버 설정에 저장(실행마다 주소가 바뀐다, 테스트 후 `Ctrl+C`).
 - 서버 종료: 서버 창에서 `Ctrl+C`. 포트가 남아 있으면 `netstat -ano | findstr :8080` → `taskkill /PID <pid> /F`.
 - 실패 흐름 테스트: 파일명에 `fail`이 들어간 사진을 업로드하면 Mock 서버가 FAILED를 돌려준다(기본 UI의 "실패 테스트" 버튼). `POST /api/v1/jobs/{id}/retry`로 재시도 흐름까지 확인한다.
-- 리깅 샘플: `backend/storage/results/sample-dog.glb`(로컬 교체본, `git update-index --assume-unchanged`로 커밋 제외).
+- 리깅 샘플: Mock 서버가 내려주는 `backend/storage/results/sample-dog.glb` 는 리포에서는 0 B 빈 파일이다(2026-11-25 확인: blob `e69de29`, 2026-10-01부터 그대로). 리깅 GLB(SMAL 파생)는 각자 PC에서 이 파일 자리에 덮어 쓰고 `git update-index --assume-unchanged`로 커밋에서 뺀다.
 
 ## 테스트
 
