@@ -49,22 +49,22 @@ groups:
         labels:
           severity: warning
       - uid: beside-poll-latency
-        title: "작업 조회 응답 p95 > 1 s"
+        title: "작업 조회 응답 p95 > 0.5 s"
         condition: C
         data:
           - refId: A
-            relativeTimeRange: {from: 600, to: 0}
+            relativeTimeRange: {from: 300, to: 0}
             datasourceUid: beside-prometheus
-            model: {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"prod\",method=\"GET\",uri=\"/api/v1/jobs/{id}\"}[5m])))", "instant": true, "range": false}
+            model: {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"prod\",method=\"GET\",uri=\"/api/v1/jobs/{jobId}\"}[2m])))", "instant": true, "range": false}
           - refId: C
             datasourceUid: __expr__
-            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [1]}}]}
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0.5]}}]}
         noDataState: OK
         execErrState: Error
-        for: 10m
+        for: 2m
         isPaused: false
         annotations:
-          summary: "작업 조회(폴링) p95 가 1 s 를 넘은 지 10분. 평소 약 0.024 s 다. CPU·Caddy 를 본다(1차 부하 시험에서 1,200 요청/s 에 무너졌다)."
+          summary: "작업 조회(폴링) p95 가 0.5 s 를 넘은 지 2분(목표 0.3 s, docs/ops/SLO.md). 평소 약 0.01~0.02 s 다. CPU·Caddy·backend 앞 네트워크를 본다. 2026-11-26 스테이징 훈련 S1·S2 에서 옛 규칙(라벨 {id}, 1 s 10분)은 한 번도 울리지 않았다."
         labels:
           severity: warning
       - uid: beside-upload-latency
@@ -80,10 +80,10 @@ groups:
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [5]}}]}
         noDataState: OK
         execErrState: Error
-        for: 10m
+        for: 5m
         isPaused: false
         annotations:
-          summary: "업로드(POST /api/v1/jobs) p95 가 5 s 를 넘은 지 10분. 사진 검사·배경 제거를 포함해 평소 약 2 s 다."
+          summary: "업로드(POST /api/v1/jobs) p95 가 5 s 를 넘은 지 5분. 사진 검사·배경 제거를 포함해 평소 약 2 s 다."
         labels:
           severity: warning
       - uid: beside-queue-wait
@@ -200,6 +200,25 @@ groups:
           summary: "🔴 추론 서비스(GPU)가 DOWN 인데 기다리는 작업이 있는 지 5분. 작업은 최대 30분 기다린 뒤 INFERENCE_UNAVAILABLE 로 끝난다. RUNBOOK 'GPU Pod 다시 세우기'."
         labels:
           severity: critical
+      - uid: beside-edge-latency
+        title: "앞단(Caddy) 응답 p95 > 1 s"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: beside-loki
+            model: {"refId": "A", "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | status=~\".+\" | unwrap duration | __error__=\"\" [2m]) by (service)", "queryType": "instant"}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        isPaused: false
+        annotations:
+          summary: "앞단(Caddy) 응답 p95 가 1 s 를 넘은 지 2분. Spring 지표에는 backend 앞 네트워크·Caddy 대기열 지연이 안 보인다(2026-11-26 스테이징 훈련 S2: 앞단 17.8 s 동안 Spring 0.025 s). Grafana 'Beside 로그' 의 Caddy 응답 시간과 'Beside 운영' 의 CPU 를 본다."
+        labels:
+          severity: warning
       - uid: beside-backend-errors
         title: "backend ERROR 로그"
         condition: C
