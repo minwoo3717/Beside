@@ -1,6 +1,7 @@
 # Grafana 알림 보낼 곳: Discord 웹훅 하나.
-# 주소는 compose 가 넘기는 GRAFANA_ALERT_WEBHOOK_URL 이다(deploy/.env). 비어 있으면 compose 가 backend 의
-# NOTIFY_WEBHOOK_URL(같은 팀 채널)을 쓰고, 그것도 비면 보내지 않는 자리 주소가 들어간다(Grafana 가 뜨기는 한다).
+# 2026-11-26 사용자 결정: 기존 팀 채널로 보낸다. 그래서 deploy/.env 에 따로 넣지 않으면 compose 가 backend 알림과 같은
+# NOTIFY_WEBHOOK_URL 을 GRAFANA_ALERT_WEBHOOK_URL 로 넘긴다. 채널을 나누려면 deploy/.env 에 GRAFANA_ALERT_WEBHOOK_URL 만
+# 넣으면 된다. 둘 다 비면 보내지 않는 자리 주소가 들어간다(Grafana 가 뜨기는 한다).
 # 비밀값이라 리포에 두지 않는다. Grafana 가 '$VAR' 를 환경 변수로 바꾼다.
 apiVersion: 1
 
