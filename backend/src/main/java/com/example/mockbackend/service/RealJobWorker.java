@@ -32,7 +32,8 @@ import java.util.List;
  *   <li>Preprocesses the first photo (CutoutStage: crop, background removal, square PNG) while still PENDING and
  *       before the slot, so the CPU work overlaps the GPU run of the job ahead; a failed cutout sends the original.</li>
  *   <li>Waits for an inference slot (inference.max-concurrency, 1 = one GPU), first come first served
- *       ({@link InferenceSlots}). The job stays PENDING meanwhile, so queuedMs measures the queue and
+ *       ({@link InferenceSlots}; the place in line is taken at dispatch, before the cutout, so the order is the
+ *       accepted-or-retried order even when a retry reuses its cutout). The job stays PENDING meanwhile, so queuedMs measures the queue and
  *       inference.timeout-ms only counts the job's own inference. A job that stops being PENDING in this attempt while
  *       it waits (canceled) leaves the line within inference.slot-recheck-ms (1 s) and gives its worker thread back.</li>
  *   <li>With inference.offline-wait-ms &gt; 0 (prod): while {@link InferenceHealthMonitor} does not read UP (the GPU PC
@@ -121,11 +122,14 @@ public class RealJobWorker implements JobWorker {
         // same stopped GPU must not start its own full wait only when they give up (N jobs would wait N x the limit).
         long offlineDeadline = System.nanoTime() + offlineWaitMs * 1_000_000;
         PreparedPhoto photo = null;
+        // The place in the slot line is taken now and kept through the cutout, so the line stays in dispatch
+        // (accepted-or-retried) order: a retry whose cutout is reused must not get ahead of new jobs still in theirs.
+        Object place = inferenceSlots.join();
         try {
             photo = prepare(jobId, attempt);
-            // Asked before the line and again every inference.slot-recheck-ms while waiting in it: a job canceled (or
-            // canceled and retried into a newer attempt) gives its thread back instead of holding it until its turn.
-            if (!inferenceSlots.acquire(() -> jobTransitions.isPending(jobId, attempt))) {
+            // Asked first and again every inference.slot-recheck-ms while waiting: a job canceled (or canceled and
+            // retried into a newer attempt) gives its place and thread back instead of holding them until its turn.
+            if (!inferenceSlots.acquire(place, () -> jobTransitions.isPending(jobId, attempt))) {
                 logNotStarted(jobId, attempt);
                 return;
             }
@@ -148,6 +152,10 @@ public class RealJobWorker implements JobWorker {
             // save, or a failure write that threw. Escaping the @Async method would leave the job PENDING (or
             // PROCESSING) with no thread left to end it until the next restart. The slot is already released.
             failUnended(jobId, attempt, unexpected, photo);
+        } finally {
+            // A cutout that threw never reached acquire(): its place must not block the line. After acquire() the
+            // place is gone already and this does nothing.
+            inferenceSlots.leave(place);
         }
     }
 
