@@ -14,8 +14,8 @@
 #   - Restarted by Docker (A6, 2026-11-26): backend or caddy died (the kernel's OOM kill at the container's mem_limit,
 #     Java's -XX:+ExitOnOutOfMemoryError with exit code 3, a crash) and Docker's policy started it again. One such
 #     restart used to send nothing (the crash loop needs 3 and watches only the backend). Now each rise of Docker's
-#     RestartCount -> one Discord message, 🧠 when it was memory (State.OOMKilled, or Docker's oom event: Docker clears
-#     OOMKilled when it starts the container again), ♻️ otherwise. At most one per container every 10 min; restarts in
+#     RestartCount -> one Discord message, 🧠 when it was memory (State.OOMKilled, or Docker's oom event: Docker can
+#     clear OOMKilled when it starts the container again; not reproduced on the VM), ♻️ otherwise. At most one per container every 10 min; restarts in
 #     between are counted into the next one. A container recreated by a deploy counts from 0; during a backend crash loop
 #     🧱 speaks instead.
 #   - Caddy stopped: a caddy container that is not running (stopped, dead, paused, removed; Docker brings back only one
