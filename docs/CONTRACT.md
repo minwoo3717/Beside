@@ -78,6 +78,13 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 
 상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지. 503 은 `QUEUE_FULL` 전용이다(2026-11-21 #21 결정, `api-v1.1` 에서 더함. 상한을 켠 서버만 보낸다). 429 `RATE_LIMITED` + `Retry-After`(클라이언트별 요청 제한)는 이름만 예약했다(2026-11-21 #22, 구현·한도는 [계획]). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
 
+### 요청 id `X-Request-Id` (다음 태그 전 추가) — [구현됨]
+
+- 요청 헤더 `X-Request-Id`(선택): 앱은 요청마다 보낸다(`BesideApiClient.Prepare`). 서버는 1~64자의 `A-Z a-z 0-9 . _ : -` 만 그대로 쓴다. 없거나 규칙 밖이면 새 UUID 를 만든다.
+- 응답 헤더 `X-Request-Id`: 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다.
+- 서버 로그는 이 id 로 찾는다(텍스트 로그 `rid=`, prod JSON 로그 필드 `requestId`, [ops/RUNBOOK.md](ops/RUNBOOK.md) '먼저 볼 곳'). 앱은 응답 헤더를 읽지 않아도 된다. 모르는 헤더는 무시한다(필드 추가와 같은 규칙).
+- [api/openapi.yaml](api/openapi.yaml) 에는 아직 없다. 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만). 다음 태그 때 openapi 에 옮긴다 [계획].
+
 ### Mock 서버 동작 (profile `mock`, 기본)
 
 접수 → 2초 PENDING → 3초 PROCESSING → COMPLETED(샘플 GLB). 업로드 **파일명에 `fail`** 이 들어가면 FAILED `INFERENCE_FAILED`(실패 UI·retry 테스트용). 작업과 `Idempotency-Key` 는 서버 DB(H2)에 저장돼 재시작 후에도 남는다. 재시작 때 PENDING/PROCESSING 이던 작업은 FAILED `INTERNAL_ERROR` 로 바뀌며 retry 로 다시 실행한다. 샘플 GLB 는 현재 0바이트(교체 필요).
