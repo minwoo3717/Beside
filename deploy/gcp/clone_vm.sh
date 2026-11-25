@@ -9,6 +9,7 @@
 #   bash deploy/gcp/clone_vm.sh create staging [latest|now|<snapshot>]   # default latest (the daily 19:14 UTC one)
 #   bash deploy/gcp/clone_vm.sh create standby [latest|now|<snapshot>]
 #   bash deploy/gcp/clone_vm.sh status staging|standby
+#   bash deploy/gcp/clone_vm.sh ip standby          # temporary external IP, ONLY after clone_init.sh (Tailscale login)
 #   bash deploy/gcp/clone_vm.sh delete staging|standby --yes
 #   DRY_RUN=1 bash deploy/gcp/clone_vm.sh ...                             # print the changing commands only
 # 'now' takes a crash-consistent snapshot of the running prod disk first (no downtime), named beside-vm-<role>-<UTC time>.
@@ -30,7 +31,7 @@ usage() {
   sed -n '2,17p' "$0" >&2
   exit 2
 }
-[[ "$CMD" =~ ^(create|status|delete)$ ]] || usage
+[[ "$CMD" =~ ^(create|status|delete|ip)$ ]] || usage
 [[ "$ROLE" =~ ^(staging|standby)$ ]] || { echo "role must be staging or standby, got '$ROLE'" >&2; usage; }
 if [[ -z "$PROJECT" || "$PROJECT" == "(unset)" ]]; then
   echo "no project selected: run  gcloud config set project <PROJECT_ID>  and try again" >&2
@@ -52,6 +53,14 @@ case "$CMD" in
 status)
   "${G[@]}" compute instances describe "$VM" --zone="$ZONE" \
     --format='table(name,status,networkInterfaces[0].networkIP:label=INTERNAL_IP,networkInterfaces[0].accessConfigs[0].natIP:label=EXTERNAL_IP,labels.role,creationTimestamp)'
+  exit 0
+  ;;
+ip)
+  # A temporary (ephemeral) external IP so the standby can log in to Tailscale as its own node and reach the GPU Pod.
+  # Only after deploy/standby/clone_init.sh wiped prod's node state. scripts/failover_vm.sh drops it before the
+  # static IP is attached. Staging never gets one (it stays internal).
+  [[ "$ROLE" == standby ]] || { echo "only the standby gets an external IP" >&2; exit 2; }
+  run "${G[@]}" compute instances add-access-config "$VM" --zone="$ZONE" --access-config-name=external-nat
   exit 0
   ;;
 delete)

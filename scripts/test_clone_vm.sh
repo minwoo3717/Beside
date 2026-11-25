@@ -35,6 +35,7 @@ case "$1 $2 $3" in
     touch "$FAKE/exists" ;;
   "compute disks snapshot") ;;
   "compute instances update") ;;
+  "compute instances add-access-config") ;;
   "compute instances delete") rm -f "$FAKE/exists" ;;
   *) echo "fake gcloud: unexpected $*" >&2; exit 3 ;;
 esac
@@ -64,6 +65,13 @@ grep -q "AAAATEST" "$WORK/keys" || fail "prod ssh keys not copied"
 grep -q "clone_init.sh" "$WORK/out.txt" || fail "no next-step hint"
 grep -q "10.178.0.9" "$WORK/out.txt" || fail "internal IP not printed"
 if bash "$CLONE" create staging > "$WORK/out.txt" 2>&1; then fail "created over an existing VM"; fi
+
+# ---- temporary IP: standby only, never for staging
+if bash "$CLONE" ip staging > "$WORK/out.txt" 2>&1; then fail "gave staging an external IP"; fi
+bash "$CLONE" ip standby > "$WORK/out.txt" 2>&1 || fail "ip standby"
+c="$(line 'compute instances add-access-config')"
+word "$c" beside-standby; word "$c" --access-config-name=external-nat
+[[ "$c" == *--address* ]] && fail "the temporary IP must not be the static one"
 
 # ---- delete needs --yes
 if bash "$CLONE" delete staging > "$WORK/out.txt" 2>&1; then fail "deleted without --yes"; fi
