@@ -68,8 +68,8 @@ unity/
 - **[구현됨]** UI 두 종류: 기본 UI(`MainUIController`)와 디자인 UI(`DesignedUIController`). 둘 다 붙이고 하나만 켠다(화면은 `OnEnable` 에서 생성되므로 꺼진 쪽은 나타나지 않는다). 디자인 UI: 갤러리 선택, 사진 확인, 진행 단계, 미리보기, AR 3단계 안내, 상단 안내 닫기(×), 하단 버튼 숨기기/보기, 서버 설정 화면, 템플릿 UI 자동 숨김.
 - **[미검증]** 디자인 UI 시안 E(2026-11-22, "Beside 앱 UI 개선 시안"): 밝은 회색 바탕·흰 카드·남색 강조, Noto Sans KR(`Assets/Beside/UI/Resources/BesideUI/Fonts`, OFL), 선 아이콘 14개, 7개 화면 전체. 홈에 **이어보기 카드**("만들던 모델이 있어요", 작업 첫 사진 썸네일)와 **좋은 사진 예시 3장**, 미리보기 3D 배경은 흰 카드색. 디자인 UI 가 켜져 있으면 저장된 작업을 앱 시작 때 자동으로 이어 가지 않고 홈 카드에서 고르게 한다(`offerResumeOnHome` → `JobManager.ResumeOnStart = false`, 기본 UI 는 그대로 자동 복원). 컴파일은 Unity 2021.3 참조 DLL + uGUI 2018.3 + 외부 패키지 대체 스텁으로만 확인했다: 바꾼 코드의 오류 0, 남은 오류 8개는 모두 그 참조에 없는 Unity 6 API(`Image.pixelsPerUnitMultiplier`, `PostWwwForm` 등, 기존 코드에서도 같음). Unity 6 편집기 컴파일·에디터 Play·기기 확인은 [계획].
 - **[참고용]** 디자인 UI 웹 재현(`unity/docs/ui-preview/`, `python3 unity/docs/ui-preview/serve.py 5173`): 7개 화면을 Unity 코드의 문구·색·크기와 같은 글꼴·아이콘·예시 사진(`Resources/BesideUI` 를 그대로 읽음)으로 옮겨 눌러 보는 브라우저 미리보기. 3D 모델·카메라·생성 서버는 그림과 가짜 진행(약 12초)으로 대신하므로 Unity 화면 확인을 대신하지 않는다. 이 폴더의 파일을 고치면 열린 페이지가 1초 안에 저절로 다시 읽히고(`/live-version`), css·js 주소에 수정 시각을 붙이고 캐시를 막아(`no-store`) 새로고침하면 항상 최신 파일을 받는다.
-- **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식.
-- **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록.
+- **[검증됨]** 실제 Android 기기: 바닥 인식·배치·조작, 서버 GLB 런타임 로드, v1 Mock 서버 전체 흐름(갤러리 → 생성 → 미리보기 → AR 배치), AR 화면 진입 후 바닥 인식. 2026-10-14 PR #1(`e0e1c2b`) 때 적은 줄이고, **증빙이 리포에 없다**: 기기 이름·날짜·빌드 커밋·영상·logcat·`metrics.csv` 가 없다(2026-11-25 확인: `git ls-files`, [CHANGELOG.md](CHANGELOG.md)). 그 뒤 main 코드(2026-11-20 리뷰 수정, 2026-11-21 포트, 2026-11-22 시안 E)로는 기기 확인 전이다(아래 [미검증] 줄).
+- **[검증됨]** 에디터: 리깅 GLB 애니메이션·정면·크기, 동작 버튼, 배치 제한·벽 차단·바닥 점 숨김, `metrics.csv` 기록. 같은 PR #1 때 적은 줄이고, 날짜·커밋·기록 같은 증빙이 리포에 없다(2026-11-25 확인).
 - **[검증됨]** (연구용 프로젝트 Beside_Reserch, 브랜치 `Unity` 코드, 2026-11-01~03, SM-S947N) 리깅 모델 털(애니메이션 중 크기·위치), 그림자 바닥면, 그 프로젝트의 서버(`embed_hair.py`: TANGENT 있음, 결 맵 G 부호 뒤집기 없음)가 넣은 GLB 털 맵 적용. **main 에 합친 코드와 main 변환기(PR #25) GLB 로는 확인하지 않았다.**
 - **[실험 결과]** 털 렌더링 성능(브랜치 코드, SM-S947N 1대, MSAA 4x): [experiments/2026-11-03_fur-benchmark.md](experiments/2026-11-03_fur-benchmark.md). 기록이 `unity/experiments/` 에 있어 루트 CLAUDE.md 의 [실험 결과] 정의(`generation/experiments/`·`docs/` 기록) 밖이다 — 이 폴더를 정의에 넣을지는 결정 전([experiments/README.md](experiments/README.md)). 앱 기본값(쉘 20겹 + 자동 조절)은 펫이 화면 87% 일 때 13.5 ms, 20% 일 때 4.2 ms.
 - **[미검증]** 브랜치 `Unity` 포트(2026-11-21: 쉘 털 v2·FurLab·그림자 바닥면·FpsOverlay·씬, MSAA 4x, Graphics API OpenGLES3 + Vulkan)는 Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일만 확인했다: 오류 0, 경고 39 — 같은 방법으로 컴파일한 main 과 같은 경고다(줄 번호만 다름. 포트가 처음 더한 FurLab 의 `FindFirstObjectByType` 4·`ShellFurRenderer.bakedFrame` 미사용 1 은 리뷰 뒤 고침). 정의 기호 `BESIDE_NATIVEGALLERY` 를 더하거나 Android 처럼 `UNITY_EDITOR` 를 빼고 `UNITY_ANDROID` 를 더해도 오류 0. 에디터 Play·기기 확인은 [계획](아래 "브랜치 Unity 포트 다시 시험").
@@ -85,7 +85,7 @@ unity/
 | Unity | **6 (6000.6.0f1)**, AR Mobile 템플릿 (URP). 다른 6000.x 버전으로 열면 업그레이드 안내가 뜬다. 2022.3 이하로는 열 수 없다 |
 | 패키지 | AR Foundation 6.6.x · Google ARCore XR Plugin 6.6.x · XR Interaction Toolkit 3.5.1 (Starter Assets, AR Starter Assets 샘플) · Input System 1.20 · glTFast (`com.unity.cloud.gltfast`) · Newtonsoft Json (`com.unity.nuget.newtonsoft-json`) · NativeGallery (yasirkula, unitypackage) |
 | Scripting Define Symbols | `BESIDE_NATIVEGALLERY` — NativeGallery 가 설치된 경우에만. 없으면 갤러리 코드가 꺼진 채 컴파일되고 화면 캡처가 사진을 대신한다. `BESIDE_NATIVESHARE` — FurLab 결과 공유(NativeShare 플러그인, 선택, 지금은 정의 안 됨) |
-| Android | Minimum API Level 24 이상(템플릿 기본값), Scripting Backend IL2CPP, ARM64 |
+| Android | Minimum API Level **34**(`ProjectSettings.asset` 의 `AndroidMinSdkVersion: 34`, 2026-10-14 PR #1 `e0e1c2b` 부터. 템플릿 기본값 24 가 아니다. 의도한 값인지는 확인 전 — 2026-11-25 확인). API 34 = Android 14 라 그보다 낮은 기기에는 설치되지 않는다. Scripting Backend IL2CPP, ARM64 |
 | Graphics API | Auto 끔, **OpenGLES3 를 맨 위, Vulkan 을 그 아래**(2026-11-21 브랜치 `Unity` 값으로 바꿈, 전에는 OpenGLES3 만). Vulkan 만 두면 SM-S947N 에서 AR 카메라 화면이 검게 나온다(2026-11-02 확인) |
 | 렌더링 | URP 에셋(`Assets/Settings/URP-Performant.asset`) **MSAA 4x**(전에는 꺼짐), QualitySettings Balanced 안티에일리어싱 4x — 쉘 털 v2 는 alpha-to-coverage 라 MSAA 를 끄면 털 대부분이 사라진다(2x 이상 유지. 2x 는 4x 보다 가까이(화면 87%, 쉘 16겹)에서 32%, 멀리(22%)에서 23% 싸다 [실험 결과], 멀리는 라운드마다 흔들림). Player 의 **Frame Timing Stats** 켬(FurLab·FpsOverlay GPU 시간) |
 | 권한 | `INTERNET`, `CAMERA`(AR Foundation), 사진 접근은 NativeGallery |
@@ -125,7 +125,7 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 
 ## 폰 ↔ 서버 연결
 
-앱에서 주소를 바꾸려면 **홈 맨 아래 "서버 설정"**(기본 UI 는 홈 오른쪽 위) → 주소 입력(`https://` 생략 가능, 경로 없이) → **연결 확인**(healthz) → **저장**. 저장한 주소는 앱을 다시 켜도 유지되고, 주소를 바꾸면 이전 서버의 작업 기록은 지워진다. "기본 주소로 되돌리기" = Inspector 의 `JobManager.baseUrl`.
+앱에서 주소를 바꾸려면 **홈 맨 아래 "서버 설정"**(디자인 UI. 시안 E 전 빌드는 홈 오른쪽 위. 기본 UI(`MainUIController`)에는 서버 설정 화면이 없다 — 2026-11-25 코드 확인) → 주소 입력(`https://` 생략 가능, 경로 없이) → **연결 확인**(healthz) → **저장**. 저장한 주소는 앱을 다시 켜도 유지되고, 주소를 바꾸면 이전 서버의 작업 기록은 지워진다. "기본 주소로 되돌리기" = Inspector 의 `JobManager.baseUrl`.
 
 ### A. USB (adb reverse) — Wi-Fi 가 막힌 환경
 
@@ -154,13 +154,13 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 
 ### D. 흐름 사전 점검
 
-PC 에서 `.\scripts\e2e_mock.ps1 -BaseUrl http://localhost:8080` 으로 서버 쪽 전체 흐름을 먼저 확인한다. `backend/storage/results/sample-dog.glb` 는 현재 **리깅 GLB** 로 교체해 쓰고 있다(아래 "리깅 GLB").
+PC 에서 `.\scripts\e2e_mock.ps1 -BaseUrl http://localhost:8080` 으로 서버 쪽 전체 흐름을 먼저 확인한다. Mock 서버가 결과로 내주는 `backend/storage/results/sample-dog.glb` 는 **리포에서는 0 B 빈 파일**이다(2026-11-25 확인: blob `e69de29`, 2026-10-01 `4ea8dbb` 부터 바뀐 적 없음. `e2e_mock.ps1` 이 0바이트 경고를 낸다). 앱에서 모델까지 보려면 각자 PC 에서 이 파일을 유효한 GLB(리깅 GLB 등)로 바꿔 둔다 — 커밋하지 않는 이유와 방법은 아래 "리깅 GLB".
 
 ## 빌드 (Android)
 
 1. `File > Build Profiles` → 플랫폼 **Android**, Scene List 에 `SampleScene` 체크. 다른 플랫폼이면 **Switch Platform**.
 2. `Edit > Project Settings > XR Plug-in Management > Android` 에서 **Google ARCore** 체크, Project Validation 경고는 **Fix All**.
-3. `Player > Other Settings` 확인: Package Name(기본값 유지. 두 빌드를 같이 설치하려면 변경), Minimum API Level 24+, IL2CPP, ARM64, **Allow downloads over HTTP**(위 환경 표), Scripting Define Symbols 에 `BESIDE_NATIVEGALLERY`(NativeGallery 설치 시).
+3. `Player > Other Settings` 확인: Package Name(기본값 유지. 두 빌드를 같이 설치하려면 변경), Minimum API Level(지금 34, 위 환경 표), IL2CPP, ARM64, **Allow downloads over HTTP**(위 환경 표), Scripting Define Symbols 에 `BESIDE_NATIVEGALLERY`(NativeGallery 설치 시).
 4. 폰을 USB 로 연결하고 Build Profiles 의 **Run Device** 에서 선택(안 보이면 Refresh).
 5. **Build And Run**. 저장 경로는 영문 폴더(예 `Builds/`). 첫 빌드는 Gradle 때문에 5~10분 걸린다.
 6. 설치 후 카메라 권한 허용 → 홈 화면(디자인 UI) → 필요하면 "서버 설정"에서 주소 저장.
@@ -209,7 +209,7 @@ APK 만 만들려면 **Build** 로 `.apk` 를 저장해 `adb install -r 파일.a
 
 ### 대기열 상한 (`QUEUE_FULL`) — 안건 #21, 2026-11-21 결정(`api-v1.1`)
 
-서버 기본값은 상한 꺼짐(`admission.max-pending=0`)이고 운영 서버도 이 대응이 든 새 빌드를 팀·시연 기기에 깔고 5차 부하 시험을 한 뒤에야 켠다. 그래서 지금 서버에서는 `QUEUE_FULL` 을 받지 않는다. 아래 시나리오는 모두 **[계획]** 이다(에디터 Play·기기에서 아직 하지 않았다). 로컬 서버를 mock 프로필, 상한 1, 작업마다 120초 PENDING 으로 띄운다:
+서버 기본값은 상한 꺼짐(`admission.max-pending=0`)이고 운영 서버도 이 대응이 든 새 빌드를 팀·시연 기기에 깐 뒤에야 켠다(다른 조건이던 5차 부하 시험은 2026-11-21 에 N 19 를 확인했다). 그래서 지금 서버에서는 `QUEUE_FULL` 을 받지 않는다. 아래 시나리오는 모두 **[계획]** 이다(에디터 Play·기기에서 아직 하지 않았다). 로컬 서버를 mock 프로필, 상한 1, 작업마다 120초 PENDING 으로 띄운다:
 
 ```powershell
 cd backend
@@ -252,7 +252,7 @@ cd backend
 
 ## 리깅 GLB (SMAL 기반)
 
-AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입힌 GLB. 현재 샘플은 `backend/storage/results/sample-dog.glb` 로 Mock 서버가 내려준다.
+AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입힌 GLB. Mock 서버는 `backend/storage/results/sample-dog.glb` 를 내려주지만, 리포의 그 파일은 0 B 빈 파일이다(2026-11-25 확인). 리깅 GLB 는 아래 라이선스 때문에 리포에 없고, 각자 PC 에서만 이 자리에 둔다.
 
 | 항목 | 값 |
 |---|---|
@@ -263,10 +263,12 @@ AnimalLift(SMAL 계열 canonical 메시) 출력에 SMAL 뼈대·웨이트를 입
 | 텍스처 | 1장(`pet_body`), 기존 OBJ 와 같은 UV 라 털 지도 공용 |
 
 - **SMAL 은 학술용 라이선스**라 리깅 GLB 도 파생물로 취급해 공개 레포에 커밋하지 않는다. `sample-dog.glb` 는 이미 추적 중인 파일이므로 `.gitignore` 만으로는 부족하다: 로컬은 `git update-index --assume-unchanged backend/storage/results/sample-dog.glb`, 레포에서 빼려면 백엔드 담당과 `git rm --cached` 후 `.gitignore`.
-- 털 지도 전달(2026-11-21 안건 #4·#14 결정): 서버 GLB 하나(`base.glb`) 안 `extras.beside` 에 털 맵 두 장과 `furLength` 가 들어간다([GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md)). 변환기·리깅 쪽은 PR #25 로 **[구현됨]**(브랜치 `feat/contract-v1.0` 에 합침, main 병합(2026-11-21)·Pod 반영 전 — Pod 반영 전까지 서버 모델에는 털 맵이 없다. 병합 뒤에는 Pod 를 다시 켜기만 해도 반영될 수 있다: [GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md) '알려진 점'). 앱은 이 맵을 **작업 흐름(`JobManager` 가 내려받은 GLB 바이트)에서만** 읽는다(`RuntimeModelLoader.TryReadEmbeddedHair`). `ModelLoader` 의 Test Glb Url(URL·로컬 경로)로 연 GLB 는 안의 털 맵을 읽지 않으므로, 그 경로로 털을 보려면 지금처럼 Test Hair Length/Flow Url(로컬 PNG)을 함께 준다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다). 서버 모델의 털을 기기에서 본 기록은 없다 **[계획]**.
+- 털 지도 전달(2026-11-21 안건 #4·#14 결정): 서버 GLB 하나(`base.glb`) 안 `extras.beside` 에 털 맵 두 장과 `furLength` 가 들어간다([GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md)). 변환기·리깅 쪽은 PR #25 로 **[구현됨]**(브랜치 `feat/contract-v1.0` 에 합침, 2026-11-21 main 병합). 5차 부하 시험(2026-11-21)에서 볼륨 리포를 main `fe10683` 에 맞춘 Pod 가 만든 GLB 에 털 맵 두 장(`hair_length`·`hair_flow`)과 `furLength` 0.02041 이 들어 있었다 **[실험 결과]**([vm-5th](../docs/perf/load/2026-11-21_vm-5th.md) 1절 '털 맵 확인'). 지금 운영에 붙이는 Pod 가 어느 커밋으로 도는지는 기록이 없다(Pod 를 켤 때 main 을 받는 점은 [GLB_SPEC §4.1](../docs/asset/GLB_SPEC.md) '알려진 점'). 앱은 이 맵을 **작업 흐름(`JobManager` 가 내려받은 GLB 바이트)에서만** 읽는다(`RuntimeModelLoader.TryReadEmbeddedHair`). `ModelLoader` 의 Test Glb Url(URL·로컬 경로)로 연 GLB 는 안의 털 맵을 읽지 않으므로, 그 경로로 털을 보려면 지금처럼 Test Hair Length/Flow Url(로컬 PNG)을 함께 준다(먼저 앱에서 "처음부터"로 저장된 작업을 지운다). 서버 모델의 털을 기기에서 본 기록은 없다 **[계획]**.
 - 다음 단계: ① ~~리깅 모델 털 확인~~ (2026-11 연구용 프로젝트·SM-S947N, 브랜치 코드. main 병합 코드로 다시 확인 [계획]) ② Mock 서버 설정·.gitignore 정리 ③ 바닥 위 걷기(이동 + Walk) ④ ~~GLB_SPEC 에 rigged 추가(노드·클립 이름, 정점당 뼈 4개 이하, 털 지도 전달)~~ — 2026-11-21 GLB_SPEC §3·§3.1(리깅은 선택 항목, 클립 이름 다섯 개)·§4.1(털 맵) ⑤ 추론 서비스에 "추론 → 리깅" 연결 ⑥ 실제 사진 E2E + 측정(리깅·털 켜고 끈 FPS 비교) ⑦ 사진·영상 자세 따라하기(확장).
 
 ## 폰 ↔ GPU PC real 서버 (실제 모델 E2E, PLAN 3단계 10-20 주 선행)
+
+**지금(2026-11-25)은 이 절 대신 운영 VM 을 쓴다**: 앱 "서버 설정"에 `https://beside-team.duckdns.org` 를 저장하고 연결 확인에서 `real,prod` 를 본다(HTTPS 라 "Allow downloads over HTTP" 가 필요 없다). 추론은 Runpod GPU Pod 가 켜져 있을 때만 돈다. 꺼져 있으면 서버는 작업을 최대 30분 PENDING 으로 두고 `INFERENCE_UNAVAILABLE` 로 끝내며, 앱은 그 전에 `maxWaitSeconds`(600 s) 가 지나 `WAIT_TIMEOUT` 을 보인다. 절차는 [deploy/README.md](../deploy/README.md) '폰 앱'·'Runpod Pod 쪽'. 이 경로로 기기에서 끝까지 본 기록은 리포에 없다 [계획]. 아래는 2026-10 GPU PC 배치 때의 절차다.
 
 real 프로파일은 Spring 과 Python 추론 서비스가 **같은 PC(팀원 GPU PC)** 에서 돈다(결정 2026-10-05). 그 PC 에서 `.\scripts\run_real.ps1` 로 두 서버를 띄운다([backend/README.md](../backend/README.md) 'GPU PC 에 real 배치'). 앱 쪽에서 Mock 때와 달라지는 것:
 
