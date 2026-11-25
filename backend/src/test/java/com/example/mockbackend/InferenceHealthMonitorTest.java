@@ -6,8 +6,10 @@ import com.example.mockbackend.service.InferenceHealthMonitor.AlertChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.State;
 import com.example.mockbackend.service.InferenceHealthMonitor.StateChanged;
 import com.example.mockbackend.service.InferenceHealthMonitor.Status;
+import com.example.mockbackend.service.InferenceMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +40,7 @@ class InferenceHealthMonitorTest {
     private final AtomicInteger status = new AtomicInteger(200);
     private final AtomicReference<String> body = new AtomicReference<>();
     private final AtomicReference<String> tokenSeen = new AtomicReference<>();
+    private final AtomicLong delayMs = new AtomicLong();
     private final List<Object> events = new ArrayList<>();
 
     @BeforeEach
@@ -44,6 +48,11 @@ class InferenceHealthMonitorTest {
         server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/healthz", exchange -> {
             tokenSeen.set(exchange.getRequestHeaders().getFirst("X-Inference-Token"));
+            try {
+                Thread.sleep(delayMs.get());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(status.get(), bytes.length);
             try (OutputStream out = exchange.getResponseBody()) {
@@ -353,6 +362,63 @@ class InferenceHealthMonitorTest {
         monitor.refresh();
         assertThat(alerts()).hasSize(4);
         assertThat(output.getAll()).contains("tokenOk=false").doesNotContain("s3cret-value");
+    }
+
+    /**
+     * docs/METRICS.md §5.1: the latest reading as gauges (one state at 1, busyForMs in seconds, NaN when not
+     * reported) and every check as a health request, by how the HTTP exchange ended.
+     */
+    @Test
+    void theLatestReadingIsExportedAsGaugesAndEveryCheckIsTimed() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/";
+        InferenceHealthMonitor monitor = new InferenceHealthMonitor(baseUrl, "s3cret", 120_000, new ObjectMapper(),
+                events::add, new InferenceMetrics(registry));
+        assertThat(states(registry)).as("before the first check").containsExactly("DOWN=0.0", "LOADING=0.0",
+                "UNKNOWN=1.0", "UP=0.0");
+        assertThat(busySeconds(registry)).isNaN();
+
+        answer(true, false, ",\"tokenOk\":true,\"busyForMs\":8700");
+        monitor.refresh();
+        assertThat(states(registry)).containsExactly("DOWN=0.0", "LOADING=0.0", "UNKNOWN=0.0", "UP=1.0");
+        assertThat(busySeconds(registry)).isEqualTo(8.7);
+
+        answer(false, false);   // an older service still loading: no busyForMs
+        monitor.refresh();
+        assertThat(states(registry)).containsExactly("DOWN=0.0", "LOADING=1.0", "UNKNOWN=0.0", "UP=0.0");
+        assertThat(busySeconds(registry)).isNaN();
+
+        body.set("not json");   // 200 that cannot be read: DOWN, but the exchange itself was ok
+        monitor.refresh();
+        status.set(503);
+        monitor.refresh();
+        assertThat(states(registry)).containsExactly("DOWN=1.0", "LOADING=0.0", "UNKNOWN=0.0", "UP=0.0");
+
+        answer(true, false);
+        delayMs.set(CHECK_TIMEOUT_MS + 500);   // no answer within the 2 s of a check
+        assertThat(monitor.refresh().state()).isEqualTo(State.DOWN);
+        delayMs.set(0);
+        server.stop(0);
+        server = null;
+        monitor.refresh();      // nothing listens any more
+
+        assertThat(registry.get("beside.inference.request").timers()).filteredOn(timer -> timer.count() > 0)
+                .extracting(timer -> timer.getId().getTag("call") + "/" + timer.getId().getTag("outcome") + "=" + timer.count())
+                .containsExactlyInAnyOrder("health/ok=3", "health/error=1", "health/timeout=1", "health/unavailable=1");
+    }
+
+    private static final long CHECK_TIMEOUT_MS = 2_000;
+
+    /** beside.inference.state as "STATE=value", sorted by state. */
+    private static List<String> states(SimpleMeterRegistry registry) {
+        return registry.get("beside.inference.state").gauges().stream()
+                .map(gauge -> gauge.getId().getTag("state") + "=" + gauge.value())
+                .sorted()
+                .toList();
+    }
+
+    private static double busySeconds(SimpleMeterRegistry registry) {
+        return registry.get("beside.inference.busy.seconds").gauge().value();
     }
 
     private InferenceHealthMonitor monitor(String token) {
