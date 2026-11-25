@@ -45,6 +45,7 @@
       renderRatingSummary(Array.isArray(ratingSummary.groups) ? ratingSummary.groups : []);
       lastSuccess = new Date(now);
       showConnection(true);
+      refreshFunnel(false);
     } catch (error) {
       console.error(error);
       showConnection(false);
@@ -200,6 +201,61 @@
     $("#ratings-body").replaceChildren(...rows);
     $("#ratings-empty").hidden = rows.length > 0;
   }
+
+  // ------------------------------------------------------------------ session funnel (product events)
+
+  const FUNNEL_EVERY_MS = 30000;   // the funnel reads the range's events: not on every 5 s refresh
+  const funnelRange = $("#funnel-range");
+  let funnelAt = 0;
+  let funnelLoading = false;
+
+  M.FUNNEL_RANGES.forEach((range) => {
+    const option = document.createElement("option");
+    option.value = String(range.days);
+    option.textContent = range.label;
+    option.selected = range.days === 7;
+    funnelRange.append(option);
+  });
+
+  function funnelDays() {
+    return Number.parseInt(funnelRange.value, 10) || 7;
+  }
+
+  /** A failure here only empties this panel: it must not mark the whole dashboard as disconnected. */
+  async function refreshFunnel(force) {
+    const now = Date.now();
+    if (funnelLoading || (!force && now - funnelAt < FUNNEL_EVERY_MS)) return;
+    funnelLoading = true;
+    funnelAt = now;
+    $("#events-csv-link").href = M.eventsCsvUrl(funnelDays(), now);
+    try {
+      renderFunnel(M.funnelView(await getJson(M.funnelUrl(funnelDays(), now))));
+    } catch (error) {
+      console.error(error);
+      $("#funnel-summary").textContent = "퍼널을 불러오지 못했어요. 30초 뒤 다시 시도합니다.";
+    } finally {
+      funnelLoading = false;
+    }
+  }
+
+  function renderFunnel(view) {
+    $("#funnel-summary").textContent = view.summary;
+    const rows = view.rows.map((step) => {
+      const row = document.createElement("tr");
+      row.append(
+        cell(step.label),
+        cell(step.event, "muted"),
+        cell(step.sessions, "num"),
+        cell(step.conversion, "num"),
+        cell(step.fromPrev, "num"),
+        cell(step.median, "num"));
+      return row;
+    });
+    $("#funnel-body").replaceChildren(...rows);
+    $("#funnel-empty").hidden = !view.empty;
+  }
+
+  funnelRange.addEventListener("change", () => refreshFunnel(true));
 
   // ------------------------------------------------------------------ app metrics.csv upload
 

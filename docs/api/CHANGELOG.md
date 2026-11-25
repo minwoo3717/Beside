@@ -84,3 +84,14 @@ v1.0 몫은 위 'v1.0 — 2026-11-21 확정'(태그 `api-v1.0`), v1.1 몫은 위
 - 목적: 서버 로그에서 요청 하나를 찾는다(멘토링 '모든 오류를 로그로'·'추적'). 텍스트 로그는 `rid=`, prod JSON 로그는 필드 `requestId`.
 - 문서: [CONTRACT.md](../CONTRACT.md) §2 '요청 id'. openapi.yaml 에는 다음 태그 때 적는다 [계획]. 계약 테스트는 헤더를 비교하지 않는다.
 - 구현 상태: `RequestIdFilter`·`RequestIdFilterTest` **[구현됨]**(브랜치 `w1/logging`). 운영 VM 배포는 [계획].
+
+### 2026-11-26 — 제품 이벤트 수집 (안건 #24, 다음 태그 v1.3 후보, 모두 추가)
+
+멘토 피드백(2026-11-25: 개발자 로그와 별도로 클릭·노출 로그 같은 제품 지표를 서버로 보내 대시보드에서 볼 것)에 따라 Backend 담당이 #1~#23 과 같은 방식으로 정했다([REVIEW_CHECKLIST.md](REVIEW_CHECKLIST.md) #24 결정 칸). 기존 필드·enum·엔드포인트·상태 코드는 그대로이고 [openapi.yaml](openapi.yaml) `info.version` 도 1.2.0 그대로 둔다(태그를 올릴 때 1.3.0).
+
+- 엔드포인트 추가 — 수집(tag events, 공개): `POST /api/v1/events`(recordEvents) — 본문 `ProductEventBatch {installId, sessionId, appVersion, platform: android|web, events[1..50]}`, 이벤트 `ProductEvent {name, at, seq, jobId?, screen?, props?}`, 202 `ProductEventsAccepted {accepted, dropped}`. 이름 enum 12개(`screen_view`, `photos_selected`, `generate_tap`, `job_cancel_tap`, `job_failed_shown`, `model_ready`, `fur_toggle`, `ar_issue_shown`, `model_placed`, `animation_play`, `photo_saved`, `start_over`), `screen` enum 8개(앱 화면 7개 + 웹 `share`). 모르는 이름·속성은 400 이 아니라 버리고 센다. 묶음 오류는 400 `INVALID_REQUEST`(51개 이상 포함), 32 KB 초과는 413 `PAYLOAD_TOO_LARGE` — 새 코드 없음.
+- 엔드포인트 추가 — 관리(tag admin, Caddy 인증 뒤): `GET /api/v1/admin/events`(adminEvents, json·csv `product_events.csv`), `GET /api/v1/admin/funnel`(adminFunnel, 세션 퍼널 6단계). 스키마 `AdminProductEvent`, `AdminFunnel`, `AdminFunnelStep`.
+- 규칙: 서버 전체 요청 수 상한(토큰 버킷 초당 50 묶음)을 넘은 묶음은 202 로 `accepted 0` 을 돌려주고 저장하지 않는다(새 상태 코드를 만들지 않으려고, 429 `RATE_LIMITED` 는 #22 예약 그대로). 같은 `sessionId`·`seq` 는 한 번만 저장한다. 개인정보(IP·파일 이름·서버 주소·공유 토큰·자유 글)는 받지 않는다. 보존 30일(#23 자동 삭제 전까지 손으로).
+- 측정 이름(추가, [METRICS.md](../METRICS.md) §6): 이벤트 이름·속성 표, Prometheus `beside_app_events_total{name,platform}`, `beside_app_events_dropped_total{reason}`.
+- 배포(Caddy, 계약 밖): `POST /api/v1/events` 만 공개, 같은 경로의 다른 method 와 관리 API 는 Basic 인증 뒤(`deploy/test_caddy_routes.sh`).
+- 구현 상태: 서버(`EventV1Controller`·`ProductEventService`)·관리 페이지 '세션 퍼널'·공유 뷰어 신호·Unity `ProductEvents` **[구현됨]**(브랜치 `w7/product-events`, backend 시험·node 시험 통과, Unity 는 Roslyn 컴파일만). 병합·VM 배포·기기 확인은 [계획].

@@ -62,6 +62,9 @@ namespace Beside.Job
         public event Action<string, string, GameObject> ModelReady;
         /// <summary>(jobId, placed instance) — first AR placement of the current job (e2e end point).</summary>
         public event Action<string, GameObject> ModelPlaced;
+        /// <summary>Numbers of the last ModelReady, read by ProductEvents (model_ready, docs/METRICS.md §6.1): the GLB came
+        /// from the app cache, model load ms, status wait ms (the same loadMs / waitMs as metrics.csv).</summary>
+        public (bool cached, long loadMs, long waitMs) LastReady { get; private set; }
 
         const string JobIdPrefKey = "beside.lastJobId";
         BesideApiClient api;
@@ -366,7 +369,8 @@ namespace Beside.Job
 
             // 3. cache or download
             string path = CachePath(CurrentJobId);
-            if (IsValidCachedGlb(path))
+            bool fromCache = IsValidCachedGlb(path);
+            if (fromCache)
             {
                 row.downloadMs = 0;
                 MetricsRecorder.Log(requestId, CurrentJobId, "download", 0, null, "cache hit", new FileInfo(path).Length);
@@ -407,6 +411,7 @@ namespace Beside.Job
             pendingE2e = e2e;
 
             running = null;
+            LastReady = (fromCache, row.loadMs, row.waitMs);   // before the events: ProductEvents reads it in ModelReady
             SetState(State.Ready, "완료! 바닥을 터치해서 배치하세요");
             ModelReady?.Invoke(CurrentJobId, path, template);
         }

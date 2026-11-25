@@ -70,3 +70,84 @@ test("share info: 200 is ok, 404 SHARE_NOT_FOUND or no token is missing, the res
   assert.deepEqual(await share.loadShare(async () => Response.json({ ...info, asset: { url: "https://elsewhere.example/x.glb" } }), token),
     { kind: "error" }, "only the share asset route of this server is loaded");
 });
+
+// ---------------------------------------------------------------- product events (docs/METRICS.md §6, POST /api/v1/events)
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function memoryStorage() {
+  const values = new Map();
+  return { getItem: (key) => (values.has(key) ? values.get(key) : null), setItem: (key, value) => values.set(key, String(value)), values };
+}
+
+function recordingFetch(status = 202) {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options, body: JSON.parse(options.body) });
+    return new Response(JSON.stringify({ accepted: 1, dropped: 0 }), { status });
+  };
+  return { calls, fetchImpl };
+}
+
+test("viewer events go to the collector as web, with ids only and never the share token or the address", async () => {
+  const storage = memoryStorage();
+  const { calls, fetchImpl } = recordingFetch();
+  const clock = new Date("2026-11-26T01:02:03.004Z");
+  const tracker = share.createTracker({ fetchImpl, storage, cryptoImpl: globalThis.crypto, now: () => clock });
+
+  assert.equal(await tracker.track("screen_view"), true);
+  assert.equal(await tracker.track("animation_play", share.animationProps("Walk")), true);
+  await tracker.track("animation_play", share.animationProps("Jump"));   // a clip the app does not have: no props
+
+  assert.equal(calls.length, 3);
+  for (const call of calls) {
+    assert.equal(call.url, "/api/v1/events", "same origin, the public collector");
+    assert.equal(call.options.method, "POST");
+    assert.equal(call.options.keepalive, true);
+    assert.equal(call.options.referrerPolicy, "no-referrer");
+    assert.equal(call.options.headers["Content-Type"], "application/json");
+    const text = call.options.body;
+    for (const secret of [token, "/s/", "http", "localhost", "share.html"]) {
+      assert.ok(!text.includes(secret), `the batch must not contain ${secret}: ${text}`);
+    }
+    assert.deepEqual(Object.keys(call.body), ["installId", "sessionId", "appVersion", "platform", "events"]);
+    assert.equal(call.body.platform, "web");
+    assert.equal(call.body.appVersion, "web");
+    assert.match(call.body.installId, UUID);
+    assert.match(call.body.sessionId, UUID);
+    assert.equal(call.body.events.length, 1);
+    for (const key of Object.keys(call.body.events[0])) {
+      assert.ok(["name", "at", "seq", "screen", "props"].includes(key), `unexpected event field ${key}`);
+    }
+  }
+  assert.deepEqual(calls.map((call) => call.body.events[0]), [
+    { name: "screen_view", at: "2026-11-26T01:02:03.004Z", seq: 0, screen: "share" },
+    { name: "animation_play", at: "2026-11-26T01:02:03.004Z", seq: 1, screen: "share", props: { clip: "Walk" } },
+    { name: "animation_play", at: "2026-11-26T01:02:03.004Z", seq: 2, screen: "share" }
+  ]);
+
+  // The install id is kept for the next visit; every visit is a new session.
+  assert.equal(storage.values.get("beside.installId"), tracker.installId);
+  const again = share.createTracker({ fetchImpl, storage, cryptoImpl: globalThis.crypto });
+  assert.equal(again.installId, tracker.installId);
+  assert.notEqual(again.sessionId, tracker.sessionId);
+});
+
+test("blocked storage, no crypto.randomUUID and a failing network never break the viewer", async () => {
+  const throwing = { getItem() { throw new Error("SecurityError"); }, setItem() { throw new Error("SecurityError"); } };
+  const noRandomUuid = { getRandomValues: (bytes) => globalThis.crypto.getRandomValues(bytes) };   // plain http
+  const offline = share.createTracker({
+    fetchImpl: async () => { throw new TypeError("Failed to fetch"); }, storage: throwing, cryptoImpl: noRandomUuid
+  });
+  assert.match(offline.installId, UUID);
+  assert.match(offline.sessionId, UUID);
+  assert.equal(await offline.track("screen_view"), false, "resolves false instead of rejecting");
+
+  const refused = share.createTracker({ fetchImpl: recordingFetch(400).fetchImpl, storage: null });
+  assert.equal(await refused.track("screen_view"), false);
+  assert.match(share.randomUuid(undefined), UUID, "Math.random fallback still has the v4 shape");
+
+  const broken = memoryStorage();
+  broken.setItem("beside.installId", "not-a-uuid");
+  assert.match(share.installId(broken, globalThis.crypto), UUID, "a broken saved id is replaced");
+});

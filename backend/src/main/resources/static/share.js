@@ -76,7 +76,85 @@ const BesideShare = (() => {
     return { kind: "ok", info };
   }
 
-  return Object.freeze({ ANIMATIONS, tokenFromPath, animationLabel, animationChips, defaultAnimation, formatExpiry, loadShare });
+  // ------------------------------------------------------------------ product events (docs/METRICS.md §6)
+  // The viewer tells the server that a shared model was opened (screen_view, screen=share) and which clip chips were
+  // pressed (animation_play). Same origin, one small POST per event. A batch holds only a random install id, a random
+  // session id and the event: never the token, the page address or anything typed. Failures are ignored.
+
+  const EVENTS_URL = "/api/v1/events";
+  const INSTALL_KEY = "beside.installId";
+  const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  /** A random v4 UUID: crypto.randomUUID where there is one (https, localhost), else getRandomValues (plain http). */
+  function randomUuid(cryptoImpl) {
+    if (cryptoImpl && typeof cryptoImpl.randomUUID === "function") return cryptoImpl.randomUUID();
+    const bytes = new Uint8Array(16);
+    if (cryptoImpl && typeof cryptoImpl.getRandomValues === "function") cryptoImpl.getRandomValues(bytes);
+    else for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  /** The install id kept in localStorage, made once. Storage may be missing or throw (private mode): a new id then. */
+  function installId(storage, cryptoImpl) {
+    try {
+      const saved = storage ? storage.getItem(INSTALL_KEY) : null;
+      if (typeof saved === "string" && UUID_PATTERN.test(saved)) return saved;
+    } catch (unavailable) { /* blocked storage: fall through */ }
+    const made = randomUuid(cryptoImpl);
+    try {
+      if (storage) storage.setItem(INSTALL_KEY, made);
+    } catch (unavailable) { /* not kept: the next visit counts as a new install */ }
+    return made;
+  }
+
+  /** animation_play props: the clip when it is one of the app's five, else none (the server keeps only those). */
+  function animationProps(name) {
+    return ANIMATIONS.some((clip) => clip.name === name) ? { clip: name } : undefined;
+  }
+
+  /**
+   * Sends the viewer's events. options: fetchImpl, storage (localStorage or null), cryptoImpl, now (() => Date).
+   * track(name, props) resolves true when the server answered 2xx; it never rejects.
+   */
+  function createTracker(options) {
+    const opts = options || {};
+    const now = typeof opts.now === "function" ? opts.now : () => new Date();
+    const install = installId(opts.storage, opts.cryptoImpl);
+    const session = randomUuid(opts.cryptoImpl);
+    let seq = 0;
+
+    function batch(name, props) {
+      const event = { name, at: now().toISOString(), seq: seq++, screen: "share" };
+      if (props) event.props = props;
+      return { installId: install, sessionId: session, appVersion: "web", platform: "web", events: [event] };
+    }
+
+    async function track(name, props) {
+      try {
+        const response = await opts.fetchImpl(EVENTS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(batch(name, props)),
+          keepalive: true,                // still sent when the viewer closes the tab right after
+          credentials: "same-origin",
+          referrerPolicy: "no-referrer"   // the page address holds the token
+        });
+        return Boolean(response && response.ok);
+      } catch (offline) {
+        return false;
+      }
+    }
+
+    return Object.freeze({ track, installId: install, sessionId: session });
+  }
+
+  return Object.freeze({
+    ANIMATIONS, tokenFromPath, animationLabel, animationChips, defaultAnimation, formatExpiry, loadShare,
+    EVENTS_URL, randomUuid, installId, animationProps, createTracker
+  });
 })();
 
 if (typeof module === "object" && module.exports) {
@@ -98,6 +176,11 @@ function startShareViewer(doc, win) {
   const errorDetail = byId("error-detail");
   let idleClip = null;
   let current = null;
+  // localStorage itself can throw (blocked site data): the tracker then makes a new install id per visit.
+  let storage = null;
+  try { storage = win.localStorage; } catch (blocked) { storage = null; }
+  const events = BesideShare.createTracker({ fetchImpl: win.fetch.bind(win), storage, cryptoImpl: win.crypto });
+  events.track("screen_view");
 
   // model-viewer comes from the CDN; give up with a message instead of an empty box when it never arrives.
   function viewerReady() {
@@ -140,7 +223,10 @@ function startShareViewer(doc, win) {
       chip.textContent = clip.label;
       chip.dataset.clip = clip.name;
       chip.setAttribute("aria-pressed", "false");
-      chip.addEventListener("click", () => play(clip.name, clip.once));
+      chip.addEventListener("click", () => {
+        events.track("animation_play", BesideShare.animationProps(clip.name));
+        play(clip.name, clip.once);
+      });
       return chip;
     });
     chipBar.replaceChildren(...chips);

@@ -4,6 +4,7 @@ using System.IO;
 using Beside.Api;
 using Beside.AR;
 using Beside.Job;
+using Beside.Metrics;
 using Beside.Pet;
 using UnityEngine;
 using UnityEngine.UI;
@@ -764,7 +765,8 @@ namespace Beside.UI.Designed
             errorCode = InfoRow(info, "오류 코드");
             errorRetry = InfoRow(info, "다시 시도");
 
-            errorRetryButton = DesignKit.PrimaryButton("Retry", bottom, RetryButtonText, () => jobManager.Retry());
+            errorRetryButton = DesignKit.PrimaryButton("Retry", bottom, RetryButtonText,
+                () => { ProductEvents.TrackJob("generate_tap", jobManager.CurrentJobId, ("mode", "retry")); jobManager.Retry(); });
             errorRetryLabel = errorRetryButton.GetComponentInChildren<Text>();
             DesignKit.SecondaryButton("Other", bottom, "다른 사진 고르기", StartOver);
         }
@@ -784,6 +786,7 @@ namespace Beside.UI.Designed
 
         void Show(Page p)
         {
+            ProductEvents.ScreenView(p.ToString().ToLowerInvariant());   // screen_view (METRICS §6.1): home … settings
             home.gameObject.SetActive(p == Page.Home);
             confirm.gameObject.SetActive(p == Page.Confirm);
             progress.gameObject.SetActive(p == Page.Progress);
@@ -968,6 +971,7 @@ namespace Beside.UI.Designed
             if (photoPicker == null) return;
             photoPicker.Pick(photos =>
             {
+                if (photoPicker.GalleryAvailable) ProductEvents.PhotosSelected("gallery", photos?.Count ?? 0);
                 if (photos == null || photos.Count == 0)
                 {
                     if (!photoPicker.GalleryAvailable) StartCoroutine(CaptureThenConfirm()); // editor / no plugin
@@ -985,6 +989,7 @@ namespace Beside.UI.Designed
             photoPicker.CaptureScreen("camera.jpg", p => captured = p);
             while (captured == null) yield return null;
             canvas.gameObject.SetActive(true);
+            ProductEvents.PhotosSelected("camera", 1);
             ShowConfirm(new List<Photo> { captured.Value });
         }
 
@@ -1023,6 +1028,7 @@ namespace Beside.UI.Designed
         void StartWithPending()
         {
             if (pendingPhotos.Count == 0) return;
+            ProductEvents.Track("generate_tap", ("mode", "new"), ("photoCount", Mathf.Min(pendingPhotos.Count, 10)));
             if (pendingHero != null) { SetHero(pendingHero, null); heroUnsaved = true; }
             jobManager.StartJob(pendingPhotos);
         }
@@ -1031,12 +1037,14 @@ namespace Beside.UI.Designed
         {
             string id = jobManager.SavedJobId;
             if (string.IsNullOrEmpty(id) || jobManager.IsBusy) return;
+            ProductEvents.TrackJob("generate_tap", id, ("mode", "resume"));
             elapsedText = "";
             jobManager.ResumeJob(id);   // StateChanged opens the progress screen
         }
 
         void CancelProgress()
         {
+            ProductEvents.JobCancelTap(jobManager);   // before the cancel: it reads the stage and the elapsed time
             jobManager.CancelByUser(forget: true);   // also drops a job still waiting in the server's queue (POST /cancel)
             DeleteHeroFiles();
             SetHero(null, null);
@@ -1067,6 +1075,7 @@ namespace Beside.UI.Designed
 
         void PlaceAtCenter()
         {
+            ProductEvents.NoteCenterPlacement();   // a model_placed right after this is method=center
             if (centerPlacer == null || !centerPlacer.PlaceAtCenter())
                 ShowToast("화면 가운데에 바닥이 없어요. 폰을 조금 움직여 보세요.", 3f);
         }
@@ -1094,9 +1103,10 @@ namespace Beside.UI.Designed
             File.WriteAllBytes(Path.Combine(dir, name), png);
             ShowToast("사진을 저장했어요", 2.5f);
 #endif
+            ProductEvents.Track("photo_saved");
         }
 
-        void ToggleFur() { furOn = !furOn; SetFur(furOn); }
+        void ToggleFur() { furOn = !furOn; SetFur(furOn); ProductEvents.Track("fur_toggle", ("on", furOn)); }
 
         void SetFur(bool on)
         {
@@ -1106,6 +1116,7 @@ namespace Beside.UI.Designed
 
         void StartOver()
         {
+            ProductEvents.Track("start_over", ("from", ProductEvents.CurrentScreen));   // preview, ar or error
             ClearPlacedModels();
             readyTemplate = null; placed = false; pendingPhotos.Clear();
             ClearThumbs();

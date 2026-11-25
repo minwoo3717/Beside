@@ -7,6 +7,8 @@ public final class ApiV1Paths {
     public static final String BASE = "/api/v1";
     public static final String JOBS = BASE + "/jobs";
     public static final String HEALTHZ = BASE + "/healthz";
+    /** Product events (tag events, REVIEW_CHECKLIST #24): the public collector the app and the share viewer post to. */
+    public static final String EVENTS = BASE + "/events";
 
     private ApiV1Paths() {
     }
