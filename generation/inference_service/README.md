@@ -4,7 +4,24 @@ Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는
 
 상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다. 1건 시간·VRAM 은 **[실험 결과]** [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, 리깅 끔, 표본 4건 + 2차 부하 539건). 품질 점수와 리깅을 켠 측정은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정'). VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다 [실험 결과].
 
-- **요청 id**(2026-11-26, Spring 쪽 [구현됨]): Spring 이 `/infer`·`/infer/upload`·`/artifacts` 요청에 `X-Request-Id: <jobId>-<attempt>` 헤더를 붙인다. 서비스는 무시해도 된다. 로그에 남기는 것은 [계획]([docs/CONTRACT.md](../../docs/CONTRACT.md) §6).
+- **요청 id·추적**(2026-11-26): Spring 이 `/infer`·`/infer/upload`·`/artifacts` 요청에 `X-Request-Id: <jobId>-<attempt>` 와 W3C `traceparent` 헤더를 붙인다([docs/CONTRACT.md](../../docs/CONTRACT.md) §6). 서비스는 둘 다 무시해도 되는 선택 헤더이고, 이 서비스는 로그 줄에 `rid=`·`trace=` 로 남긴다 **[구현됨, 배포 전]**(아래 '로그').
+
+## 로그 (2026-11-26) **[구현됨, 배포 전]**
+
+stderr(Pod 에서는 `/workspace/beside-logs/inference.log`)에 한 줄씩 쓴다. 전에는 로거에 설정이 없어 WARNING 이상만 Python 의 마지막 수단 핸들러로 나갔다(시각·수준 없이 메시지만). 그래서 평소 줄도 `warning` 으로 찍었고, 실패 응답 대부분은 아예 남지 않았다.
+
+```
+2026-11-26T01:02:03.456Z INFO beside.inference request POST /infer/upload client=127.0.0.1:53120 traceparent=00-4bf92f35…-00f067aa…-01 rid=3fa85f64-…-1 trace=4bf92f35…
+2026-11-26T01:02:12.210Z INFO beside.inference job 3fa85f64-…: infer 4512 ms, convert 850 ms, 19876 tris, 1310720 bytes rid=3fa85f64-…-1 trace=4bf92f35…
+2026-11-26T01:05:00.001Z WARNING beside.inference job 3fa85f64-…: 503 INFERENCE_UNAVAILABLE AnimalLift is still loading rid=3fa85f64-…-2 trace=…
+```
+
+- 형식: `<UTC 시각(ms, Z)> <수준> <로거> <메시지>`. `beside.*` 는 INFO 이상, 변환기(`convert_asset`)는 WARNING 이상. 모델 로드·실행 결과·업로드 모드 결과·작업 폴더 정리는 INFO, 실패 응답·취소·이상한 설정은 WARNING, 모델 예외는 traceback 이 붙은 ERROR 다.
+- **요청 줄**: 작업 요청(토큰이 지키는 경로 `/infer`·`/infer/upload`·`/artifacts/*`)마다 들어올 때 INFO 한 줄 `request <METHOD> <path> client=<ip>:<port> traceparent=<헤더 또는 ->`. `/healthz` 는 Spring 이 15초마다 부르므로 줄이 없다.
+- **`rid=`·`trace=`**: 요청을 처리하는 동안 남는 모든 줄의 끝에 붙는다. `rid` 는 `X-Request-Id`(Spring 은 `<jobId>-<attempt>`), `trace` 는 `traceparent` 의 trace id(32자 16진수)다. Spring 로그(Loki)와 작업 한 건의 트레이스(Grafana Tempo)를 이 값으로 찾는다([deploy/README.md](../../deploy/README.md) '로그 · 알림'). 형식이 다른 헤더 값(`[A-Za-z0-9._-]{1,128}` 밖, W3C 형식이 아닌 traceparent)은 남기지 않는다. 토큰(보낸 것도 기대한 것도)과 쿼리 문자열은 어느 줄에도 없다.
+- **실패 응답**: 다른 줄이 남지 않던 것을 모두 WARNING `job <id>: <상태> <code> <message>` 로 남긴다 — 400 사진 없음, 500 샘플 GLB 없음, 501 모델 미설정, 503 모델 로딩 중·로드 실패, 500 `CONVERSION_FAILED`(변환기 `ConversionError`), 404 `/artifacts`(없는 작업·파일), 422(업로드의 사진 수는 job id 와 함께, `request` 파트가 틀리면 `POST /infer/upload: 422 …`, 경로 모드 본문 검증은 `POST /infer: 422 …` — 무엇이 틀렸는지만, 입력값은 남기지 않는다), 401 토큰(`<METHOD> <path>: 401 INFERENCE_UNAVAILABLE wrong|missing X-Inference-Token`). 모델 실패(ERROR + traceback)·패스스루 모의 실패·취소된 실행은 원래 남던 줄 하나뿐이다(한 응답에 줄 하나).
+- 요청별 시간 줄(아래 `BESIDE_REQUEST_TIMING`)은 `docs/perf` 의 분석 스크립트가 읽는 형식이라 그대로 둔다(시각 `at=`, 수준·rid 없음). 같은 요청의 `request` 줄과는 `client` 포트와 시각으로 맞춘다.
+- 확인 **[구현됨]**: `test_app.py` 의 `ServiceLogTest` 6개 — 줄 형식(UTC·수준·로거·rid·trace), 새 프로세스에서 INFO 가 stderr 로 나오고 DEBUG 는 안 나옴, 실패 응답 9가지가 job id 와 함께 WARNING 한 줄씩, 401 에 토큰이 없음, `X-Request-Id`·`traceparent` 가 같은 요청의 모든 줄에 붙고 요청이 끝나면 남지 않음(`/healthz` 줄 없음), 형식이 다른 헤더 값·줄바꿈이 든 경로는 남지 않음. Pod 에서 실제 줄을 본 것은 [계획](배포 전).
 
 ## GPU 서버 실행
 
@@ -104,7 +121,7 @@ BESIDE_INFERENCE_TOKEN=<비밀값> uvicorn app:app --host <tailnet IP> --port 80
 
 ## 요청별 시간 기록 (`BESIDE_REQUEST_TIMING=1`, 부하 시험용)
 
-두 모드 모두에서 쓸 수 있다. 기본은 꺼짐이고, 켜지 않으면 미들웨어도 출력도 없다. 켜면 HTTP 요청마다 stderr(Pod 에서는 `inference.log`)에 한 줄을 쓴다.
+두 모드 모두에서 쓸 수 있다. 서비스 자체의 기본은 꺼짐이고, 켜지 않으면 미들웨어도 출력도 없다. **Runpod Pod 는 2026-11-26 부터 켜고 띄운다**: `deploy/runpod/start_pod.sh` 가 `BESIDE_REQUEST_TIMING=1` 을 기본으로 넘긴다(끄려면 `BESIDE_REQUEST_TIMING=0 bash start_pod.sh`, `test_start_pod_supervisor.sh` 가 두 모드·재시작 뒤 환경을 확인) **[구현됨, 배포 전]**. 켜면 HTTP 요청마다 stderr(Pod 에서는 `inference.log`)에 한 줄을 쓴다.
 
 ```
 timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 start_ms=8231.0 end_ms=8231.4 gone_ms=- out=1212 err=- at=2026-11-20T01:02:03.456Z
@@ -129,7 +146,7 @@ timing POST /infer/upload 200 client=127.0.0.1:53120 in=169811 body_ms=310.2 sta
 - **클라이언트가 떠난 뒤 끝난 답**은 보통 줄처럼 찍힌다. uvicorn 이 보낼 곳 없는 답을 조용히 버리기 때문이다. 이때 uvicorn 의 접근 로그 줄은 없다.
 - **Pod 에서 켜기**: `start_pod.sh` 는 이미 떠 있는 서비스를 다시 띄우지 않는다.
   1. 먼저 `touch /workspace/beside-norestart && kill $(cat /var/run/beside/inference.pid)` 로 서비스를 내린다. 2026-11-20 부터 `start_pod.sh` 의 감독 루프가 끝난 서비스를 5 s 뒤 예전 설정으로 다시 띄우므로, 표시 파일 없이 `kill` 만 하면 새 설정이 들어가지 않는다([deploy/README.md](../../deploy/README.md) Runpod 절 '서비스 자동 재시작'). 2번의 `start_pod.sh` 가 표시 파일을 지운다.
-  2. `BESIDE_REQUEST_TIMING=1 bash /workspace/Beside/deploy/runpod/start_pod.sh` 로 다시 띄운다. 환경변수는 두 모드 모두 uvicorn 까지 이어진다.
+  2. `bash /workspace/Beside/deploy/runpod/start_pod.sh` 로 다시 띄운다(2026-11-26 부터 기본이 켬. 그 전 판은 `BESIDE_REQUEST_TIMING=1` 을 앞에 붙였다). 환경변수는 두 모드 모두 uvicorn 까지 이어진다.
   3. `curl -s http://127.0.0.1:8002/healthz` 한 번 뒤 `grep '^timing ' /workspace/beside-logs/inference.log` 에 줄이 나오는지 본다.
 - 쓰는 곳: 3차 부하 시험 4절의 가설을 가리는 4차 시험. 동시 작업에서 응답·내려받기가 길어지는 것이 이쪽이 늦게 답해서인지, 경로에서 늦어져서인지 본다.
 - 확인한 것 **[구현됨]**:

@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -33,6 +34,9 @@ for _knob in KNOBS:   # each test sets the passthrough knobs it needs
 try:
     from fastapi.testclient import TestClient
     import app as service
+    # The service's stderr handler (INFO and up since 2026-11-26) would print every request and job line of these
+    # tests; ServiceLogTest checks the lines through the records and the handler's formatter instead.
+    service.LOG_HANDLER.setLevel(logging.CRITICAL)
 except ImportError as missing:  # pragma: no cover - environment without fastapi/httpx
     TestClient = None
     MISSING = str(missing)
@@ -1764,6 +1768,150 @@ class RequestTimingTest(_ModelModeCase):
         self.assertRegex(lines[0], r"^timing POST /infer/upload 401 ")
         for secret in ("wrong-secret", "right-secret", "leakme"):
             self.assertNotIn(secret, lines[0])
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class ServiceLogTest(_ModelModeCase):
+    """Service log (plan B4, 2026-11-26, README '로그'): every line has its UTC time, level and logger; routine lines are
+    INFO; every failure answer that nothing else logged is a WARNING naming the job; X-Request-Id and the traceparent's
+    trace id go with every line of their request, and never the token."""
+
+    TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
+    TRACEPARENT = "00-" + TRACE_ID + "-00f067aa0ba902b7-01"
+    LINE = r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z (INFO|WARNING|ERROR) (beside\.inference|convert_asset) "
+
+    def failures(self):
+        return [r.getMessage() for r in self.records.records if r.levelno == logging.WARNING]
+
+    def photo(self):
+        path = Path(tempfile.mkdtemp(prefix="beside-log-")) / "dog.jpg"
+        self.addCleanup(shutil.rmtree, path.parent, True)
+        path.write_bytes(b"\xff\xd8\xff\xe0 jpeg")
+        return path
+
+    def infer(self, image):
+        return self.client.post("/infer", json={"jobId": self.job, "imagePaths": [str(image)]})
+
+    def test_a_line_has_its_utc_time_level_logger_and_request(self):
+        record = logging.LogRecord("beside.inference", logging.WARNING, __file__, 1, "job %s: %d %s", ("j-1", 503, "X"),
+                                   None)
+        record.created, record.msecs = 86400.25, 250.0
+        formatter = service.LOG_HANDLER.formatter
+        self.assertEqual(formatter.format(record), "1970-01-02T00:00:00.250Z WARNING beside.inference job j-1: 503 X")
+        record.request_id, record.trace_id = "j-1-2", self.TRACE_ID
+        self.assertEqual(formatter.format(record), "1970-01-02T00:00:00.250Z WARNING beside.inference job j-1: 503 X "
+                         f"rid=j-1-2 trace={self.TRACE_ID}")
+        self.assertTrue(service.log.isEnabledFor(logging.INFO))   # routine lines are INFO now, and shown
+
+    def test_a_fresh_process_writes_info_lines_with_time_and_level_to_stderr(self):
+        """As the Pod imports it: no logging set up by anyone else; INFO shows, DEBUG not, the converter's warnings too."""
+        script = ("import sys, logging; sys.path.insert(0, sys.argv[1]); import app\n"
+                  "app.log.info('hello %s', 'pod'); app.log.debug('hidden')\n"
+                  "logging.getLogger('convert_asset').warning('converter says')\n")
+        import subprocess
+        done = subprocess.run([sys.executable, "-c", script, str(HERE)], capture_output=True, text=True, timeout=120,
+                              env=dict(os.environ, BESIDE_WORK_DIR=WORK))
+        self.assertEqual(done.returncode, 0, done.stderr[-2000:])
+        lines = done.stderr.splitlines()
+        self.assertTrue(any(re.match(self.LINE + r"hello pod$", l) and " INFO beside.inference " in l for l in lines),
+                        done.stderr[-2000:])
+        self.assertTrue(any(re.match(self.LINE + r"converter says$", l) and " WARNING convert_asset " in l for l in lines),
+                        done.stderr[-2000:])
+        self.assertNotIn("hidden", done.stderr)
+
+    def test_every_failure_answer_is_a_warning_naming_the_job(self):
+        photo = self.photo()
+        module = sys.modules["convert_asset"]
+        with mock.patch.object(service, "MODEL", None):
+            loading = self.upload()
+        with mock.patch.object(service, "ANIMALLIFT_DIR", None):
+            unconfigured = self.infer(photo)
+        missing_photo = self.infer(photo.parent / "gone.jpg")
+        with mock.patch.object(service, "SAMPLE_GLB", str(photo.parent / "no-sample.glb")):
+            no_sample = self.infer(photo)
+        with mock.patch.object(module, "convert", side_effect=module.ConversionError("GLB_SPEC: 90000 triangles")):
+            conversion = self.upload()
+        no_glb = self.client.get(f"/artifacts/{self.job}/base.glb")
+        eleven = self.client.post("/infer/upload", data={"request": json.dumps({"jobId": self.job})},
+                                  files=[("photos", (f"{i}.jpg", b"\xff\xd8", "image/jpeg")) for i in range(11)])
+        bad_part = self.client.post("/infer/upload", data={"request": "{}"},
+                                    files=[("photos", ("dog.jpg", b"\xff\xd8", "image/jpeg"))])
+        bad_body = self.client.post("/infer", json={"jobId": "../x", "imagePaths": [str(photo)]})
+
+        self.assertEqual([a.status_code for a in (loading, unconfigured, missing_photo, no_sample, conversion, no_glb,
+                                                  eleven, bad_part, bad_body)],
+                         [503, 501, 400, 500, 500, 404, 422, 422, 422])
+        warned = self.failures()
+        for prefix in (f"job {self.job}: 503 INFERENCE_UNAVAILABLE AnimalLift is still loading",
+                       f"job {self.job}: 501 INFERENCE_UNAVAILABLE No model configured",
+                       f"job {self.job}: 400 INFERENCE_FAILED image not found: ",
+                       f"job {self.job}: 500 CONVERSION_FAILED BESIDE_SAMPLE_GLB not found: ",
+                       f"job {self.job}: 500 CONVERSION_FAILED GLB_SPEC: 90000 triangles",
+                       f"job {self.job}: 404 base.glb not in the work folder",
+                       f"job {self.job}: 422 1 to 10 photos, got 11",
+                       "POST /infer/upload: 422 invalid request part ",
+                       "POST /infer: 422 invalid request "):
+            self.assertEqual(len([w for w in warned if w.startswith(prefix)]), 1, (prefix, warned))
+        self.assertEqual(len(warned), 9, warned)   # one line per failure answer, no second line for any of them
+        self.assertNotIn("../x", " ".join(warned))   # what was wrong, not the input itself
+
+    def test_a_refused_token_is_logged_without_either_token(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "right-secret"):
+            wrong = self.client.post("/infer/upload", headers={"X-Inference-Token": "wrong-secret",
+                                                               "X-Request-Id": f"{self.job}-3"},
+                                     data={"request": json.dumps({"jobId": self.job})},
+                                     files=[("photos", ("dog.jpg", b"\xff\xd8", "image/jpeg"))])
+            missing = self.client.delete(f"/artifacts/{self.job}")
+        self.assertEqual((wrong.status_code, missing.status_code), (401, 401))
+        warned = [r for r in self.records.records if r.levelno == logging.WARNING]
+        self.assertEqual([r.getMessage() for r in warned],
+                         ["POST /infer/upload: 401 INFERENCE_UNAVAILABLE wrong X-Inference-Token",
+                          f"DELETE /artifacts/{self.job}: 401 INFERENCE_UNAVAILABLE missing X-Inference-Token"])
+        self.assertEqual([r.request_id for r in warned], [f"{self.job}-3", None])
+        for record in self.records.records:
+            text = service.LOG_HANDLER.formatter.format(record)
+            self.assertNotIn("secret", text)
+
+    def test_the_request_id_and_trace_go_with_every_line_of_the_request(self):
+        answer = self.client.post("/infer/upload", headers={"X-Request-Id": f"{self.job}-2", "traceparent": self.TRACEPARENT},
+                                  data={"request": json.dumps({"jobId": self.job})},
+                                  files=[("photos", ("dog.jpg", b"\xff\xd8\xff\xe0 jpeg", "image/jpeg"))])
+        self.assertEqual(answer.status_code, 200, answer.text)
+        service.log.info("after the request")
+        glb = self.client.get(answer.json()["glbUrl"])
+        self.assertEqual(glb.status_code, 200)
+        health = self.client.get("/healthz", headers={"X-Request-Id": "health-1"})
+        self.assertEqual(health.status_code, 200)
+
+        by_message = {r.getMessage(): r for r in self.records.records}
+        request = next(r for m, r in by_message.items() if m.startswith("request POST /infer/upload "))
+        self.assertIn(f"traceparent={self.TRACEPARENT}", request.getMessage())
+        job_line = next(r for m, r in by_message.items() if m.startswith(f"job {self.job}: infer "))
+        for record in (request, job_line, by_message[f"job {self.job}: upload mode, 1 photo(s) in, "
+                                                     f"{self.job_dir / 'base.glb'} out"]):
+            self.assertEqual((record.levelno, record.request_id, record.trace_id),
+                             (logging.INFO, f"{self.job}-2", self.TRACE_ID), record.getMessage())
+        self.assertTrue(service.LOG_HANDLER.formatter.format(job_line).endswith(f" rid={self.job}-2 trace={self.TRACE_ID}"))
+        after = by_message["after the request"]
+        self.assertEqual((after.request_id, after.trace_id), (None, None))   # nothing left behind
+        download = next(r for m, r in by_message.items() if m.startswith(f"request GET /artifacts/{self.job}/base.glb "))
+        self.assertEqual((download.request_id, download.getMessage().endswith("traceparent=-")), (None, True))
+        self.assertFalse(any("/healthz" in m for m in by_message))   # polled every 15 s: no line
+        self.assertEqual([r.getMessage() for r in self.records.records if r.levelno >= logging.WARNING], [])
+
+    def test_header_values_of_another_form_are_not_logged(self):
+        for rid, traceparent in (("bad id", "00-xyz"), ("x" * 129, "00-" + "0" * 32 + "-00f067aa0ba902b7-01"),
+                                 ("ok-id", "ff-" + self.TRACE_ID + "-00f067aa0ba902b7-01"),
+                                 ("ok-id", self.TRACEPARENT.upper())):
+            self.records.records.clear()
+            self.client.delete(f"/artifacts/{self.job}", headers={"X-Request-Id": rid, "traceparent": traceparent})
+            (request,) = [r for r in self.records.records if r.getMessage().startswith("request DELETE ")]
+            self.assertEqual(request.trace_id, None, traceparent)
+            self.assertTrue(request.getMessage().endswith("traceparent=-"), request.getMessage())
+            self.assertEqual(request.request_id, rid if rid == "ok-id" else None, rid)
+        weird = self.client.get("/artifacts/a%0Afake-line/base.glb")
+        self.assertEqual(weird.status_code, 404)
+        self.assertFalse(any("\n" in r.getMessage() for r in self.records.records))
 
 
 class UprightPhotoTest(unittest.TestCase):

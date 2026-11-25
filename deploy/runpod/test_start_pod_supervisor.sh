@@ -12,7 +12,7 @@ SUP="$REPO/deploy/runpod/supervise_inference.sh"
 START="$REPO/deploy/runpod/start_pod.sh"
 T="$(mktemp -d)"
 unset THREADS UVICORN_TIMEOUT_KEEP_ALIVE MODE PORT WORKSPACE RUN_DIR LOG_DIR NORESTART_FILE BESIDE_INFERENCE_TOKEN \
-  RESTART_DELAY_S RESTART_MAX_DELAY_S RESTART_STABLE_S RUNPOD_POD_ID ALLOW_NO_GPU SAMPLE_GLB TOKEN_FILE
+  RESTART_DELAY_S RESTART_MAX_DELAY_S RESTART_STABLE_S RUNPOD_POD_ID ALLOW_NO_GPU SAMPLE_GLB TOKEN_FILE BESIDE_REQUEST_TIMING
 
 cleanup() {
   # every process this test started has $T in its command line, except the model-mode supervisor (section C: its
@@ -252,6 +252,10 @@ new_bpid() { local p; p="$(bpid)"; [[ "$p" != "$1" ]] && alive "$p" && healthy; 
 is_service() { tr '\0' ' ' < "/proc/$1/cmdline" | grep -qF -- "$SERVE"; }
 show() { sed 's/^/     | /' "$B/out"; }
 
+run_pod BESIDE_REQUEST_TIMING=yes
+check "BESIDE_REQUEST_TIMING other than 0 or 1: refused before anything starts" \
+  bash -c "test '$rc' != 0 && grep -q 'BESIDE_REQUEST_TIMING must be 1' '$B/out' && test ! -e '$RUN/inference.pid'"
+
 run_pod
 check "first run: exit 0" test "$rc" = 0 || show
 p1="$(bpid)"
@@ -263,6 +267,7 @@ check "first run: pid file is the uvicorn process (its command line)" is_service
 check "first run: healthz answers" healthy
 check "first run: the supervisor runs" alive "$(bsup)"
 check "service environment: keep-alive 75" env_of "$p1" UVICORN_TIMEOUT_KEEP_ALIVE=75
+check "service environment: request timing lines on by default" env_of "$p1" BESIDE_REQUEST_TIMING=1
 check "service environment: sample GLB" env_of "$p1" "BESIDE_SAMPLE_GLB=$WS/beside-sample.glb"
 check "service working directory: generation/inference_service" \
   test "$(readlink "/proc/$p1/cwd")" = "$(cd "$REPO/generation/inference_service" && pwd -P)"
@@ -288,6 +293,7 @@ check "kill -9: back with a new pid and healthz" new_bpid "$p1"
 check "kill -9: new pid is the uvicorn process" is_service "$p2"
 check "kill -9: same settings after the restart (keep-alive)" env_of "$p2" UVICORN_TIMEOUT_KEEP_ALIVE=75
 check "kill -9: same settings after the restart (threads)" env_of "$p2" OMP_NUM_THREADS=8
+check "kill -9: same settings after the restart (request timing)" env_of "$p2" BESIDE_REQUEST_TIMING=1
 check "kill -9: same token after the restart" env_of "$p2" BESIDE_INFERENCE_TOKEN=test-token-not-a-secret
 check "kill -9: same working directory" test "$(readlink "/proc/$p2/cwd")" = "$(readlink "/proc/$(bsup)/cwd")"
 check "kill -9: supervisor.log has the exit and the restart" has "$blog" "service pid $p1 exited (status 137, signal 9)"
@@ -389,7 +395,8 @@ printf '%s\n' '#!/usr/bin/env bash' \
 chmod +x "$ENV_BIN/python"
 WSL_LINE="AnimalLift: $WS/AnimalLift | work: $WS/beside-work | listen: 127.0.0.1:$PORT"   # start_inference_wsl.sh prints it
 MODEL_ENV=("BESIDE_ANIMALLIFT_DIR=$WS/AnimalLift" "BESIDE_WORK_DIR=$WS/beside-work" "CONDA_HOME=$CONDA" "PORT=$PORT"
-           BESIDE_HOST=127.0.0.1 UVICORN_TIMEOUT_KEEP_ALIVE=75 OMP_NUM_THREADS=8 BESIDE_INFERENCE_TOKEN=test-token-not-a-secret)
+           BESIDE_HOST=127.0.0.1 UVICORN_TIMEOUT_KEEP_ALIVE=75 OMP_NUM_THREADS=8 BESIDE_INFERENCE_TOKEN=test-token-not-a-secret
+           BESIDE_REQUEST_TIMING=1)
 
 run_pod MODE=model ALLOW_NO_GPU=1
 check "model: exit 0" test "$rc" = 0 || show
