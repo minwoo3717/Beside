@@ -2414,6 +2414,981 @@
           "range": true
         }
       ]
+    },
+    {
+      "id": 30,
+      "type": "row",
+      "title": "GPU·추론",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 86
+      }
+    },
+    {
+      "id": 31,
+      "type": "stat",
+      "title": "추론 서비스 상태 (지금)",
+      "description": "beside_inference_state: real 서버가 15초마다 /healthz 로 본 판정. UP = 모델 로드됨(또는 패스스루), LOADING = 응답은 하지만 모델 없음(로딩 중·로드 실패), DOWN = 오류 응답·답 없음, UNKNOWN = 첫 확인 전. DOWN·LOADING 동안 새 작업은 PENDING 으로 기다린다. mock 서버에는 이 값이 없다(-).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 87
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "LOADING",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 3
+                }
+              }
+            }
+          ],
+          "noValue": "-",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "max(beside_inference_state{env=\"$env\",state=\"UP\"}) * 3 + max(beside_inference_state{env=\"$env\",state=\"LOADING\"}) * 2 + max(beside_inference_state{env=\"$env\",state=\"DOWN\"})",
+          "legendFormat": "상태",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "stat",
+      "title": "GPU 바쁜 시간 (지금)",
+      "description": "beside_inference_busy_seconds: /healthz 의 busyForMs / 1000, GPU 에서 가장 오래 돌고 있는 실행의 나이. 쉬면 0. 주황 60초, 빨강 120초 = STUCK 알림 기준(inference.stuck-alert-ms, 장애 훈련 FD13). 모르면(DOWN, 옛 서비스) -.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 91
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "-",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "max(beside_inference_busy_seconds{env=\"$env\"} >= 0)",
+          "legendFormat": "바쁜 시간",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "type": "state-timeline",
+      "title": "추론 서비스 상태 추이",
+      "description": "beside_inference_state 를 한 줄로 그린 것(UP·LOADING·DOWN·UNKNOWN). 빨간 구간 = GPU 가 꺼졌거나 답하지 않은 시간. Discord 알림(WebhookNotifier)과 같은 판정이다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 20,
+        "x": 4,
+        "y": 87
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 0,
+            "fillOpacity": 80,
+            "spanNulls": false
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "UNKNOWN",
+                  "color": "text",
+                  "index": 0
+                },
+                "1": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 1
+                },
+                "2": {
+                  "text": "LOADING",
+                  "color": "orange",
+                  "index": 2
+                },
+                "3": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 3
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto",
+        "alignValue": "left",
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "max(beside_inference_state{env=\"$env\",state=\"UP\"}) * 3 + max(beside_inference_state{env=\"$env\",state=\"LOADING\"}) * 2 + max(beside_inference_state{env=\"$env\",state=\"DOWN\"})",
+          "legendFormat": "추론 서비스",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "timeseries",
+      "title": "추론 요청 시간 p95 (call 별, $window 창)",
+      "description": "beside_inference_request_seconds_bucket 의 p95, 200(cleanup 은 2xx)으로 답한 요청만. infer = POST /infer·/infer/upload(모델 실행 포함, A40 한 번 약 8.7초), download = 업로드 모드의 GLB 받기, cleanup = DELETE /artifacts, health = /healthz. 버킷 0.05~600초 사이의 근사값. 작업 생성 시간(processing)과 비교하면 느린 곳이 GPU 인지 전송인지 보인다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 95
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, call) (rate(beside_inference_request_seconds_bucket{env=\"$env\",outcome=\"ok\"}[$window])))",
+          "legendFormat": "{{call}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "type": "timeseries",
+      "title": "추론 요청 실패 — call · 결과별 ($window 창)",
+      "description": "beside_inference_request_seconds_count 중 ok 가 아닌 것. error = 다른 상태 코드(401·403·5xx 등)나 이 서버 디스크 오류, timeout = 시간 안에 답이 끝나지 않음, unavailable = 연결 안 됨·끊김·추론 서비스 재시작으로 포기. health unavailable 이 늘면 GPU Pod·Tailscale 을 먼저 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 95
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (call, outcome) (increase(beside_inference_request_seconds_count{env=\"$env\",outcome!=\"ok\"}[$window])) > 0",
+          "legendFormat": "{{call}} {{outcome}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "type": "timeseries",
+      "title": "GPU 바쁜 시간 추이",
+      "description": "beside_inference_busy_seconds. 실행마다 0 에서 올라가 끝나면 0 으로 돌아온다. 빨간 선 120초 = STUCK 알림 기준. 선이 내려오지 않고 계속 오르면 실행이 멈춘 것이다(FD13).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 103
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "max(beside_inference_busy_seconds{env=\"$env\"} >= 0)",
+          "legendFormat": "바쁜 시간",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "type": "row",
+      "title": "제품 퍼널(서버)",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 111
+      }
+    },
+    {
+      "id": 38,
+      "type": "bargauge",
+      "title": "제품 퍼널 (선택 기간)",
+      "description": "서버가 본 단계별 수. 업로드 시도 = 접수(beside_jobs_created_total, v0 포함) + 업로드 거절(beside_jobs_upload_rejected_total) + 대기열 상한 거절(beside_jobs_refused_total{op=\"create\"}). 생성 완료 = COMPLETED 로 끝난 실행(retry 포함). GLB 받기 = beside_asset_downloads_total{outcome=\"ok\"}(같은 작업을 여러 번 받으면 여러 번). 공유 보기 = 뷰어가 링크를 연 수. 같은 사람을 잇는 퍼널이 아니라 단계마다 센 수다. 앱 화면의 단계(AR 배치 등)는 앱 metrics.csv(§3)에 있다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 112
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "-"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "namePlacement": "auto",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "maxVizHeight": 300
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "(sum(increase(beside_jobs_created_total{env=\"$env\"}[$__range])) or vector(0)) + (sum(increase(beside_jobs_upload_rejected_total{env=\"$env\"}[$__range])) or vector(0)) + (sum(increase(beside_jobs_refused_total{env=\"$env\",op=\"create\"}[$__range])) or vector(0))",
+          "legendFormat": "업로드 시도",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "sum(increase(beside_jobs_created_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "접수",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "C",
+          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",result=\"COMPLETED\"}[$__range]))",
+          "legendFormat": "생성 완료",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "D",
+          "expr": "sum(increase(beside_asset_downloads_total{env=\"$env\",outcome=\"ok\"}[$__range]))",
+          "legendFormat": "GLB 받기 성공",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "E",
+          "expr": "sum(increase(beside_share_created_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "공유 링크 생성",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "F",
+          "expr": "sum(increase(beside_share_views_total{env=\"$env\",outcome=\"ok\"}[$__range]))",
+          "legendFormat": "공유 보기 성공",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "type": "timeseries",
+      "title": "업로드 거절 — 코드별 ($window 창)",
+      "description": "beside_jobs_upload_rejected_total{code}: POST /api/v1/jobs 가 400·413 으로 거절한 업로드. 대표 사진 검사 코드(NO_ANIMAL_DETECTED, IMAGE_TOO_BLURRY 등)가 많으면 기준값(제안값)이나 앱 안내 문구를 다시 본다. QUEUE_FULL = 대기열 상한의 503(beside_jobs_refused_total{op=\"create\"}). 0 인 코드는 그리지 않는다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 112
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (code) (increase(beside_jobs_upload_rejected_total{env=\"$env\"}[$window])) > 0",
+          "legendFormat": "{{code}}",
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "sum(increase(beside_jobs_refused_total{env=\"$env\",op=\"create\"}[$window])) > 0",
+          "legendFormat": "QUEUE_FULL",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "공유 보기 — 결과별 ($window 창)",
+      "description": "beside_share_views_total{outcome}: 공유 뷰어(/s/{token})가 링크 정보를 연 수. 응답은 모두 404 SHARE_NOT_FOUND 이지만 이유를 나눈다: revoked 취소됨, expired 만료됨(기본 7일), not_found 없는 토큰·작업이 지워진 링크. expired 가 많으면 유효 기간을 다시 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 121
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 1,
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (outcome) (increase(beside_share_views_total{env=\"$env\"}[$window])) > 0",
+          "legendFormat": "{{outcome}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "업로드 거절률 (선택 기간)",
+      "description": "(업로드 거절 + 대기열 상한 거절) / 업로드 시도. 주황 20 %, 빨강 50 % 는 제안값(실제 사용자 사진으로 잰 값이 아직 없다). 높으면 '업로드 거절 — 코드별' 에서 이유를 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 121
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "-",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "((sum(increase(beside_jobs_upload_rejected_total{env=\"$env\"}[$__range])) or vector(0)) + (sum(increase(beside_jobs_refused_total{env=\"$env\",op=\"create\"}[$__range])) or vector(0))) / (((sum(increase(beside_jobs_created_total{env=\"$env\"}[$__range])) or vector(0)) + (sum(increase(beside_jobs_upload_rejected_total{env=\"$env\"}[$__range])) or vector(0)) + (sum(increase(beside_jobs_refused_total{env=\"$env\",op=\"create\"}[$__range])) or vector(0))) > 0)",
+          "legendFormat": "거절률",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "공유 링크 생성 · 보기 (선택 기간)",
+      "description": "beside_share_created_total(만든 링크)과 beside_share_views_total{outcome=\"ok\"}(열린 링크).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 121
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "noValue": "-",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum(increase(beside_share_created_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "생성",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "sum(increase(beside_share_views_total{env=\"$env\",outcome=\"ok\"}[$__range]))",
+          "legendFormat": "보기 성공",
+          "instant": true,
+          "range": false
+        }
+      ]
     }
   ],
   "templating": {
