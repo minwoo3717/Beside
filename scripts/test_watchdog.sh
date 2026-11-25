@@ -26,6 +26,7 @@ case "$*" in
     echo "$(cat "$F/status") $(cat "$F/started") $(cat "$F/restartcount" 2>/dev/null || echo 0)" ;;
   "exec c0ffee curl -fsS -m 5 -o /dev/null http://localhost:8081/actuator/health") [[ -f "$F/healthy" ]] ;;
   "restart -t 20 c0ffee")
+    echo "$WATCHDOG_NOW" >> "$F/restart-tries"
     [[ -f "$F/restart-fails" ]] && exit 1
     echo "$WATCHDOG_NOW" >> "$F/restarts"
     date -u -d "@$WATCHDOG_NOW" +%Y-%m-%dT%H:%M:%S.123456789Z > "$F/started" ;;
@@ -181,10 +182,26 @@ touch "$WORK/fake/healthy"; step 17700
 rm "$WORK/fake/healthy"
 
 # docker restart fails: exit 1 and a message
+tries() { [[ -f "$WORK/fake/restart-tries" ]] && wc -l < "$WORK/fake/restart-tries" | tr -d ' ' || echo 0; }
 touch "$WORK/fake/restart-fails"
+tries_before="$(tries)"
 step 20000; step 20030
 if step 20060; then fail "a failed restart exited 0"; fi
 [[ "$(count '재시작 실패')" == 1 ]] || fail "no restart-failed message"
+# review finding 2026-11-25: a failed restart waits out the cooldown too (it used to try again and send 🔴 every run)
+for t in 20090 20120 20150 20180 20210 20400 20640; do
+  if step "$t"; then fail "run $t after a failed restart exited 0 while the backend is still down"; fi
+done
+[[ "$(tries)" == $((tries_before + 1)) ]] || fail "restart tried $(( $(tries) - tries_before )) times within 10 min"
+[[ "$(count '재시작 실패')" == 1 ]] || fail "restart-failed message sent $(count '재시작 실패') times within 10 min"
+step 20660 || true   # 20060 + 600: one more try, one more message
+[[ "$(tries)" == $((tries_before + 2)) && "$(count '재시작 실패')" == 2 ]] || fail "no second try after the cooldown"
+# the backend comes back by itself: one recovery message, no restart
+touch "$WORK/fake/healthy"
+step 20690 || fail "healthy run after a failed restart"
+step 20720 || fail "second healthy run after a failed restart"
+[[ "$(count '재시작이 실패했던 backend 가 다시 정상')" == 1 ]] || fail "recovery after a failed restart not reported once"
+rm "$WORK/fake/healthy"
 rm "$WORK/fake/restart-fails"
 
 # disk: 85 % -> one warning, again only after an hour; 79 % -> none
