@@ -405,6 +405,20 @@ echo running > "$WORK/fake/caddy-status"; echo false > "$WORK/fake/oomkilled"
 step 110030; step 110060
 [[ "$(messages)" == "$quiet_from" ]] || fail "a restart or caddy stop from the maintenance window reported afterwards: $(last_message)"
 
+# the 5-minute off-VM backup (REDUNDANCY Phase 1-1): with the unit's BACKUP_STALE_S (30 min) a last good run is judged
+# after that long, not after 3 h, and the message gives its age in minutes
+unit_stale="$(sed -n 's/^Environment=BACKUP_STALE_S=//p' "$HERE/../deploy/watchdog/beside-watchdog.service")"
+[[ "$unit_stale" =~ ^[0-9]+$ ]] && ((unit_stale >= 900 && unit_stale <= 3600)) \
+  || fail "BACKUP_STALE_S in beside-watchdog.service: '$unit_stale' (5-minute backup runs)"
+echo $((T0 + 120000)) > "$WORK/backup/last.ok"
+echo inactive > "$WORK/fake/backup-state"
+backup_from="$(backup)"
+step $((120000 + unit_stale - 30)) BACKUP_STALE_S="$unit_stale"
+[[ "$(backup)" == "$backup_from" ]] || fail "5-minute backup: alerted before the last good run was $((unit_stale / 60)) min old"
+step $((120000 + unit_stale + 60)) BACKUP_STALE_S="$unit_stale"
+[[ "$(backup)" == $((backup_from + 1)) ]] || fail "5-minute backup: no alert $((unit_stale / 60)) min after the last good run"
+last_message | grep -q "마지막 성공이 $(((unit_stale + 60) / 60))분 전이에요" || fail "no age in minutes: $(last_message)"
+
 # the webhook URL went only through curl's config on stdin, comment stripped; never on a command line or in the log
 grep -qF "$HOOK" "$WORK/fake/curl-argv" && fail "webhook URL on a curl command line"
 grep -qF "$HOOK" "$WORK/log" && fail "webhook URL in the log"

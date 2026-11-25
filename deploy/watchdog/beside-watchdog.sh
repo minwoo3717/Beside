@@ -25,8 +25,9 @@
 #     and none of the container messages (Docker restarts and caddy stops then are taken as they are, also afterwards).
 #     A reminder goes out when such a flag is older than 12 h.
 #   - Disk: / at 80 % or more -> one Discord warning per hour.
-#   - Off-VM backup (R1, deploy/backup): its last good run (/var/lib/beside-backup/last.ok) 3 h old, or its unit failed
-#     and never succeeded -> a Discord message every 6 h until a good run, which is reported once. A failed backup
+#   - Off-VM backup (R1, deploy/backup): its last good run (/var/lib/beside-backup/last.ok) BACKUP_STALE_S old (3 h by
+#     default for an hourly timer, 30 min in beside-watchdog.service for the 5-minute one), or its unit failed and never
+#     succeeded -> a Discord message every 6 h until a good run, which is reported once. A failed backup
 #     unit alone leaves nothing but the journal; this keeps a stopped backup from going unnoticed. Nothing while the
 #     backup is not installed or a run is in progress.
 # The webhook is NOTIFY_WEBHOOK_URL from ~beside/Beside/deploy/.env (the backend's own); it is never printed and never
@@ -54,7 +55,7 @@ DISK_EVERY_S="${DISK_ALERT_EVERY_S:-3600}"
 MAINT_REMIND_S="${MAINTENANCE_REMIND_S:-43200}"
 BACKUP_UNIT="${BACKUP_UNIT:-beside-backup.service}"
 BACKUP_OK_FILE="${BACKUP_OK_FILE:-/var/lib/beside-backup/last.ok}"   # written by offsite_backup.sh after a good run
-BACKUP_STALE_S="${BACKUP_STALE_S:-10800}"        # hourly runs: 3 h = three missed or failed runs
+BACKUP_STALE_S="${BACKUP_STALE_S:-10800}"        # hourly runs: 3 h = three missed or failed runs (unit: 1800, 5-minute runs)
 BACKUP_EVERY_S="${BACKUP_ALERT_EVERY_S:-21600}"
 CADDY_SERVICE="${BESIDE_CADDY_SERVICE:-caddy}"
 WATCHED_SERVICES="${BESIDE_WATCHED_SERVICES:-$SERVICE $CADDY_SERVICE}"   # Docker restarts reported for these
@@ -140,7 +141,11 @@ check_backup() {
       fi
       return 0
     fi
-    reason="마지막 성공이 $((age / 3600))시간 전이에요"
+    if ((age < 7200)); then
+      reason="마지막 성공이 $((age / 60))분 전이에요"
+    else
+      reason="마지막 성공이 $((age / 3600))시간 전이에요"
+    fi
   elif [[ "$state" == failed ]]; then
     reason="설치한 뒤 한 번도 성공하지 않았어요"
   else
@@ -148,7 +153,7 @@ check_backup() {
   fi
   last="$(get backup.alerted 0)"
   if ((NOW - last >= BACKUP_EVERY_S)); then
-    notify "🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · $HOST) — $reason. journalctl -u beside-backup -n 30 으로 원인(서비스 계정·범위, 버킷, backend 의 매시 DB 백업)을 확인해 주세요"
+    notify "🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · $HOST) — $reason. journalctl -u beside-backup -n 30 으로 원인(서비스 계정·범위, 버킷, backend 의 DB 백업이 멈춤)을 확인해 주세요"
     put backup.alerted "$NOW"
   fi
 }

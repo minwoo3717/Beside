@@ -13,5 +13,8 @@ ExecStart=/usr/local/sbin/beside-watchdog
 StateDirectory=beside-watchdog
 StateDirectoryMode=0700
 SyslogIdentifier=beside-watchdog
+# The off-VM backup (deploy/backup) runs every 5 minutes: a last good run 30 min old = 6 missed or failed runs. Goes
+# with the 5-minute beside-backup.timer (with an hourly one this would report a stopped backup every 6 h).
+Environment=BACKUP_STALE_S=1800
 # docker restart waits up to 20 s for a clean stop, then kills; the script gives it 120 s.
 TimeoutStartSec=180
