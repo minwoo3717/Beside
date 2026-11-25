@@ -201,7 +201,7 @@ TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름
 
 ## 모니터링 (Prometheus + Grafana, 선택)
 
-2026-11-26 더함 **[구현됨, 배포 전]**: 로그 수집(Loki + Alloy), Grafana 지표 알림 11개, 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
+2026-11-26 더함 **[구현됨, 배포 전]**: 로그 수집(Loki + Alloy), Grafana 지표 알림 12개(2026-11-26 스테이징 훈련 뒤 앞단 지연 1개 추가), 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
 
 설정 파일 **[구현됨]** · VM 에서 띄우기 **[적용]**: 2026-11-25 05:52 UTC, 아래 '띄우기 · 확인' 의 `$M up -d` 대신 `$M up -d --no-deps prometheus grafana` 로 backend·caddy 를 건드리지 않고 띄웠다(먼저 `--dry-run` 으로 확인, 두 컨테이너 ID·재시작 0 그대로, `.env` 백업 `deploy/.env.bak-20261125-grafana`, 관리자 비밀번호는 VM 에서 만들어 출력하지 않음). 그때 메모리는 grafana 55 MiB·prometheus 100 MiB 였다. 이제 VM 의 compose 명령에는 늘 `--profile monitoring` 을 붙인다(아래). 첫 값은 [2026-11-25 리허설](../docs/ops/data/2026-11-25_demo-gpu-rehearsal/README.md) 의 Prometheus 질의. 멘토 지표 5종(생성 성공률, 생성 시간 평균·p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)과 서버 자원을 한 화면에서 본다. 지표 이름은 [docs/METRICS.md](../docs/METRICS.md) §5(`beside.*` → Prometheus `beside_*`).
 
@@ -225,10 +225,10 @@ backend:8081/actuator/prometheus ◀── 15초마다 ── prometheus:9090 (V
 | prometheus | 384m |
 | grafana | 256m |
 | loki | 384m (`GOMEMLIMIT=300MiB`), 2026-11-26 |
-| alloy | 256m (`GOMEMLIMIT=200MiB`), 2026-11-26 |
+| alloy | 384m (`GOMEMLIMIT=300MiB`), 2026-11-26. 처음 256m 였으나 스테이징 훈련에서 부하 없이도 230 MiB 라 올렸다 |
 | tempo | 384m (`GOMEMLIMIT=300MiB`), 2026-11-26 W8 분산 추적 |
 | Docker · OS | 한도 없음, 약 0.5GB |
-| **합계** | **약 6.6GB + OS** (한도 합 6,784 MiB = backend 3,072 + caddy 2,048 + prometheus 384 + grafana 256 + loki 384 + alloy 256 + tempo 384. tempo 전에는 약 6.2GB, 2026-11-26 전에는 약 5.6GB). compose 밖 `beside-stub`(512m)이 떠 있으면 약 7.1GB. CI 가 monitoring 프로필의 한도 합이 7 GiB 이하인지 본다 |
+| **합계** | **약 6.75GB + OS** (한도 합 6,912 MiB = backend 3,072 + caddy 2,048 + prometheus 384 + grafana 256 + loki 384 + alloy 384 + tempo 384. tempo 전에는 약 6.2GB, 2026-11-26 전에는 약 5.6GB). compose 밖 `beside-stub`(512m)이 떠 있으면 약 7.1GB. CI 가 monitoring 프로필의 한도 합이 7 GiB 이하인지 본다 |
 
 caddy 한도는 2026-11-18 부하 시험 A1 에서 한도 없이 최대 2,246 MiB 까지 쓴 것(9,000명 유지 구간 2,170 MiB, 5,400명 1,292 MiB, 평상시 규모 1,800명 451 MiB)을 보고 정했다. compose 값 **[구현됨]** · `docker compose config` 로 두 값을 확인하는 CI 단언은 넣었지만 아직 돌지 않았다(개발 PC 에 Docker 가 없다. PR CI 의 docker 작업이 통과하면 그 커밋을 여기에 적는다). 목적은 caddy 가 늘어나 backend·OS 몫을 먹지 못하게 하는 것이다. 1g 로 낮추면 한도 없이 1 GiB 를 넘은 5,400명(평상시의 3배)부터 OOM 으로 caddy 가 죽어 모든 연결이 끊길 수 있다 [가설]. 한도 안에서 A1 9,000명이 그대로 버티는지는 다시 재야 한다 **[계획]**. 한도에 닿으면 caddy 컨테이너만 OOM 으로 죽고 `unless-stopped` 로 다시 뜬다(그동안 연결이 끊긴다). VM 반영 **[구현됨: 적용]**: 2026-11-20 05:33 UTC 배포로 caddy 를 다시 만들었고 `Memory` 2147483648, `GOMEMLIMIT` 1638MiB 를 확인했다.
 
@@ -295,7 +295,7 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
 - **왜**: 로그는 서비스마다 50 MB 에서 지워지고(부하 중에는 몇 분) VM 과 함께 사라졌다. 지표 알림은 0개라 대시보드는 사람이 볼 때만 쓸모가 있었다. 2026-11-25 멘토링('로그를 서버로 보내 대시보드로', '모니터링을 해야 감지가 빠르다').
 - **로그**: `alloy` 가 Docker 의 json-file 로그(`/var/lib/docker/containers`, 읽기만)를 읽어 `loki` 로 보낸다. `docker.sock` 은 붙이지 않는다. 서비스 이름은 json-file `labels` 가 넣는 `attrs` 에서 읽는다(아래 '로그'). 라벨은 `service`·`stream`·`level`(backend·caddy)뿐이고, `jobId`·`uri` 는 질의 때 `| json` 으로 본다. 보관 7일(볼륨 `beside_loki_data`).
 - **대시보드**: Grafana **Beside** 폴더 → **Beside 로그**(서비스별 로그 줄/분, backend 수준별, Caddy 상태별·응답 시간 p95, ERROR·WARN, 실패 코드별, Caddy 5xx uri, 느린 요청, ID 로 찾기). 원본 [monitoring/grafana/dashboards/beside-logs.json](monitoring/grafana/dashboards/beside-logs.json). 로그 줄의 `jobId`·`requestId` 를 누르면 작업 페이지·같은 요청의 로그로 간다.
-- **알림**: [monitoring/grafana/provisioning/alerting/rules.yml](monitoring/grafana/provisioning/alerting/rules.yml) 11개, `env="prod"` 만. Discord 는 2026-11-26 결정으로 기존 팀 채널(`GRAFANA_ALERT_WEBHOOK_URL` 을 비우면 `NOTIFY_WEBHOOK_URL`). 기준은 [docs/ops/SLO.md](../docs/ops/SLO.md). 메시지는 '📈 …', 풀리면 '✅ 해제: …'.
+- **알림**: [monitoring/grafana/provisioning/alerting/rules.yml](monitoring/grafana/provisioning/alerting/rules.yml) 12개, `env="prod"` 만(2026-11-26 스테이징 훈련 뒤 조회 알림 라벨·기준 고침, 앞단 지연 알림 추가 — [docs/ops/2026-11-26_staging-drills.md](../docs/ops/2026-11-26_staging-drills.md)). Discord 는 2026-11-26 결정으로 기존 팀 채널(`GRAFANA_ALERT_WEBHOOK_URL` 을 비우면 `NOTIFY_WEBHOOK_URL`). 기준은 [docs/ops/SLO.md](../docs/ops/SLO.md). 메시지는 '📈 …', 풀리면 '✅ 해제: …'.
 - **띄우기**(backend·caddy 는 그대로): `$M up -d --no-deps loki alloy` 다음 `$M up -d --no-deps grafana`(알림 폴더 마운트·환경 변수가 바뀌어 다시 만들어진다). 확인: Grafana Explore 에서 Loki `{service="backend"}`, 알림 → 규칙 목록 11개.
 - **로그 형식**: prod backend 는 한 줄에 JSON 하나(`logback-spring.xml`, 2026-11-26). `docker compose logs backend | jq -r .message` 로 읽고, `requestId`·`jobId`·`traceId` 필드로 찾는다. 부하 시험 문서의 옛 텍스트 줄 예시(`deploy/loadtest/README.md`)는 이제 JSON 의 `message` 다.
 - **추적(분산 트레이싱, W8)** **[구현됨, 배포 전]**: 작업 한 건이 어디에 시간을 썼는지 한 화면에서 본다(멘토링 '로깅·모니터링·추적').

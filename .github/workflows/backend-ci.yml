@@ -331,7 +331,7 @@ jobs:
           # image runs as compose runs it (named volume at /var/tempo, owned by its user 10001), gets ready, takes one
           # OTLP/HTTP span on 4318 and returns it by trace id on 3200
           docker run --rm -v "$PWD/deploy/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro" "$(img grafana/tempo)" \
-            -config.file=/etc/tempo/tempo.yml -config.verify
+            -config.file=/etc/tempo/tempo.yml -config.verify=true
           docker volume create ci-tempo-data > /dev/null
           docker run -d --name ci-tempo -p 127.0.0.1:3201:3200 -p 127.0.0.1:4319:4318 \
             -v "$PWD/deploy/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro" -v ci-tempo-data:/var/tempo \
