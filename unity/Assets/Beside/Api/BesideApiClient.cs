@@ -182,6 +182,27 @@ namespace Beside.Api
             }
         }
 
+        // ---------- POST /api/v1/events (product events, docs/METRICS.md §6) ----------
+
+        /// <summary>Sends one batch (the JSON of a ProductEventBatch). 202 { accepted, dropped }. 400 / 413 mean the
+        /// batch itself is wrong and will never be accepted (the caller drops it); a connection error or 5xx is worth
+        /// sending again later.</summary>
+        public IEnumerator PostEvents(string batchJson, string requestId,
+            Action<ProductEventsAccepted> onAccepted, Action<ApiError> onError)
+        {
+            using (var req = new UnityWebRequest(Url(ApiV1Routes.Events), UnityWebRequest.kHttpVerbPOST))
+            {
+                req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(batchJson ?? "")) { contentType = "application/json" };
+                req.downloadHandler = new DownloadHandlerBuffer();
+                Prepare(req, requestId);
+                req.SetRequestHeader("Content-Type", "application/json");
+                yield return req.SendWebRequest();
+
+                if (!Succeeded(req, out var error)) { onError(error); yield break; }
+                onAccepted(Parse<ProductEventsAccepted>(req.downloadHandler.text) ?? new ProductEventsAccepted());
+            }
+        }
+
         // ---------- GET /api/v1/healthz ----------
 
         public IEnumerator Health(Action<HealthResponse> onOk, Action<ApiError> onError)

@@ -19,6 +19,11 @@ namespace Beside.Api
         public const long MaxPhotoBytes = 5L * 1024 * 1024;
         public const long MaxRequestBytes = 20L * 1024 * 1024;
 
+        /// <summary>POST: product events (REVIEW_CHECKLIST #24, docs/METRICS.md §6). 1~50 events, body ≤ 32 KB.</summary>
+        public const string Events = BasePath + "/events";
+        public const int MaxEventsPerBatch = 50;
+        public const int MaxEventBatchBytes = 32 * 1024;
+
         public static string Job(string jobId)
         {
             return Jobs + "/" + jobId;
