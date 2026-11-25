@@ -13,7 +13,8 @@
 # Install and check: deploy/README.md '운영 대응 설치'. Config: /etc/beside-backup.env with BUCKET=<bucket name>.
 #   sudo /usr/local/sbin/beside-offsite-backup                  # what the timer runs
 #   sudo FORCE_FILES=1 /usr/local/sbin/beside-offsite-backup    # photos and GLBs too, now, not only at the day's first run
-# Exit status 1 when an upload failed (the next run tries it again); a good run writes its time to $STATE_DIR/last.ok,
+# Exit status 1 when an upload failed (the next run tries it again) or the newest H2 zip is older than DB_STALE_MIN
+# (150 min: the backend's own hourly backup stopped); a good run writes its time to $STATE_DIR/last.ok,
 # which the VM watchdog reads to report a backup that stopped. The access token is never printed or put on a command
 # line. Tests: scripts/test_offsite_backup.sh (fake docker/curl/metadata server/bucket).
 set -euo pipefail
@@ -39,6 +40,8 @@ MIN_AGE_MIN="${MIN_AGE_MIN:-2}"                               # newer files may 
 METADATA="${METADATA_URL:-http://169.254.169.254}"
 GCS_UPLOAD="${GCS_UPLOAD_URL:-https://storage.googleapis.com/upload/storage/v1}"
 FORCE_FILES="${FORCE_FILES:-0}"
+DB_STALE_MIN="${DB_STALE_MIN:-150}"   # newest H2 zip older than this = the backend's hourly backup missed twice
+MAINTENANCE_FILES="${BESIDE_MAINTENANCE_FILES:-/etc/beside-maintenance /home/beside/fault/MAINTENANCE}"
 
 if [[ -n "${JOURNAL_STREAM:-}" ]]; then E='<3>'; else E='error: '; fi   # <3> = journald priority "err"
 log() { printf '%s\n' "$*"; }
@@ -186,6 +189,32 @@ else
   failed=1
 fi
 log "db: $sent new backup(s) sent, newest handled: ${last:-none}"
+
+# A backend whose hourly H2 backup stopped (a folder it cannot write, a full disk) left runs of "0 new" that counted as
+# good, and its own failure is only an ERROR line in the backend log: nothing reached Discord while the bucket's newest
+# DB copy grew old (review finding, 2026-11-25). Now a newest zip older than DB_STALE_MIN fails the run, so last.ok
+# stops moving and the VM watchdog reports it. Not checked under a maintenance flag (load tests and drills; the
+# load-test overlay turns the backend's backup off).
+if [[ -d "$BACKUP_DIR" ]]; then
+  maintenance=""
+  for flag in $MAINTENANCE_FILES; do
+    if [[ -e "$flag" ]]; then maintenance="$flag"; break; fi
+  done
+  newest="$({ find "$BACKUP_DIR" -maxdepth 1 -type f -name 'beside-*.zip' -printf '%T@ %f\n' || true; } | sort -n | tail -n1)"
+  if [[ -n "$maintenance" ]]; then
+    log "db: maintenance flag $maintenance: the age of the newest backup is not checked"
+  elif [[ -z "$newest" ]]; then
+    err "no H2 backup zip in $BACKUP_DIR: is the backend's hourly backup (storage.backup.*) running?"
+    failed=1
+  else
+    newest_s="${newest%% *}"
+    newest_age_min=$(( ($(date +%s) - ${newest_s%%.*}) / 60 ))
+    if ((newest_age_min > DB_STALE_MIN)); then
+      err "the newest H2 backup ${newest#* } is $newest_age_min min old (limit $DB_STALE_MIN): the backend's hourly backup has stopped (backend log: 'H2 backup failed')"
+      failed=1
+    fi
+  fi
+fi
 
 # ---- files/: photos and GLBs, once a day. files.done lists every relative path already sent (objects never change:
 # uploads/<job>_<name> and results/<job>/base.glb are written once per job).
