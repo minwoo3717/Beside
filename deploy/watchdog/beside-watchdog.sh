@@ -11,7 +11,18 @@
 #     is restarted by Docker's policy, never runs 90 s and so is never judged above. When Docker's RestartCount has gone
 #     up 3 times since the last good health check -> one Discord message (again hourly while it goes on), and one when
 #     health is good again. The watchdog's own `docker restart` does not count there.
-#   - Maintenance: while /etc/beside-maintenance or ~beside/fault/MAINTENANCE exists, no restarts (load tests, drills).
+#   - Restarted by Docker (A6, 2026-11-26): backend or caddy died (the kernel's OOM kill at the container's mem_limit,
+#     Java's -XX:+ExitOnOutOfMemoryError with exit code 3, a crash) and Docker's policy started it again. One such
+#     restart used to send nothing (the crash loop needs 3 and watches only the backend). Now each rise of Docker's
+#     RestartCount -> one Discord message, 🧠 when it was memory (State.OOMKilled, or Docker's oom event: Docker clears
+#     OOMKilled when it starts the container again), ♻️ otherwise. At most one per container every 10 min; restarts in
+#     between are counted into the next one. A container recreated by a deploy counts from 0; during a backend crash loop
+#     🧱 speaks instead.
+#   - Caddy stopped: a caddy container that is not running (stopped, dead, paused, removed; Docker brings back only one
+#     that exits by itself) means the public address is down -> one message once seen on 2 runs in a row (a deploy
+#     recreates it within one), again hourly, its return once.
+#   - Maintenance: while /etc/beside-maintenance or ~beside/fault/MAINTENANCE exists, no restarts (load tests, drills)
+#     and none of the container messages (Docker restarts and caddy stops then are taken as they are, also afterwards).
 #     A reminder goes out when such a flag is older than 12 h.
 #   - Disk: / at 80 % or more -> one Discord warning per hour.
 #   - Off-VM backup (R1, deploy/backup): its last good run (/var/lib/beside-backup/last.ok) 3 h old, or its unit failed
@@ -45,6 +56,12 @@ BACKUP_UNIT="${BACKUP_UNIT:-beside-backup.service}"
 BACKUP_OK_FILE="${BACKUP_OK_FILE:-/var/lib/beside-backup/last.ok}"   # written by offsite_backup.sh after a good run
 BACKUP_STALE_S="${BACKUP_STALE_S:-10800}"        # hourly runs: 3 h = three missed or failed runs
 BACKUP_EVERY_S="${BACKUP_ALERT_EVERY_S:-21600}"
+CADDY_SERVICE="${BESIDE_CADDY_SERVICE:-caddy}"
+WATCHED_SERVICES="${BESIDE_WATCHED_SERVICES:-$SERVICE $CADDY_SERVICE}"   # Docker restarts reported for these
+RESTART_EVERY_S="${RESTART_ALERT_EVERY_S:-600}"
+CADDY_DOWN_RUNS="${CADDY_DOWN_RUNS:-2}"
+CADDY_DOWN_EVERY_S="${CADDY_DOWN_ALERT_EVERY_S:-3600}"
+HEAP_DUMP="${HEAP_DUMP:-/app/storage/backend-oom.hprof}"   # -XX:HeapDumpPath in backend/Dockerfile
 NOW="${WATCHDOG_NOW:-$(date +%s)}"
 HOST="$(hostname 2>/dev/null || echo vm)"
 
@@ -262,8 +279,112 @@ check_crash_loop() {
   put crashloop.alerted "$NOW"
 }
 
+# maintenance_flag: prints the first maintenance flag that exists; status 1 when there is none.
+maintenance_flag() {
+  local flag
+  for flag in $MAINTENANCE_FILES; do
+    if [[ -e "$flag" ]]; then
+      printf '%s' "$flag"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# check_containers: one docker inspect per watched service for the two checks below. Under a maintenance flag both only
+# take the state as it is (drills and load tests kill and stop containers on purpose), so nothing comes late either.
+check_containers() {
+  local quiet svc cid status count oomkilled
+  quiet="$(maintenance_flag)" || quiet=""
+  for svc in $WATCHED_SERVICES; do
+    if ! cid="$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" \
+        --filter "label=com.docker.compose.service=$svc" 2>/dev/null | head -n1)"; then
+      warn "docker does not answer"
+      return 0
+    fi
+    status=""; count=""; oomkilled=""
+    if [[ -n "$cid" ]]; then
+      read -r status count oomkilled < <(docker inspect -f '{{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}}' "$cid" 2>/dev/null)
+      [[ ! "${count:-}" =~ ^[0-9]+$ ]] || check_restarts "$svc" "$cid" "$count" "${oomkilled:-false}" "$quiet"
+    fi
+    [[ "$svc" != "$CADDY_SERVICE" ]] || check_caddy_running "${status:-없음}" "$quiet"
+  done
+}
+
+# check_restarts <service> <cid> <RestartCount> <OOMKilled> <maintenance flag or "">: Docker restarted the container
+# since the last report. restarts.<svc> is the count already reported (or taken as it is), restarts.<svc>.at the last
+# run that had nothing new: Docker's event log from then on tells why (the last exit code, an oom).
+check_restarts() {
+  local svc="$1" cid="$2" count="$3" oomkilled="$4" quiet="$5" seen last since events code n after
+  seen="$(get "restarts.$svc")"
+  if [[ ! "$seen" =~ ^[0-9]+$ ]]; then
+    seen="$count"   # first run: restarts from before the watchdog are no news
+  elif [[ "$(get "restarts.$svc.cid")" != "$cid" ]]; then
+    seen=0          # recreated (a deploy): the new container counts from 0
+  elif ((count < seen)); then
+    seen="$count"
+  fi
+  [[ "$(get "restarts.$svc.cid")" == "$cid" ]] || put "restarts.$svc.cid" "$cid"
+  if ((count == seen)) || [[ -n "$quiet" ]] || [[ "$svc" == "$SERVICE" && -n "$(get crashloop.alerted)" ]]; then
+    put "restarts.$svc" "$count"
+    put "restarts.$svc.at" "$NOW"
+    return 0
+  fi
+  put "restarts.$svc" "$seen"
+  last="$(get "restarts.$svc.alerted" 0)"
+  ((NOW - last >= RESTART_EVERY_S)) || return 0   # reported a moment ago: the next message counts this one in
+  n=$((count - seen))
+  since="$(get "restarts.$svc.at" "$((NOW - RESTART_EVERY_S))")"
+  # Docker keeps a short log of recent events in memory; --until makes this a query, not a stream.
+  events="$(timeout 10 docker events --since "$since" --until "$NOW" --filter "container=$cid" \
+    --filter event=die --filter event=oom --format '{{.Action}} {{index .Actor.Attributes "exitCode"}}' 2>/dev/null)" || true
+  code="$(awk '$1 == "die" && $2 != "" { c = $2 } END { print c }' <<<"$events")"
+  if [[ "$svc" == "$SERVICE" ]]; then
+    after="그때 PENDING·PROCESSING 이던 작업은 INTERNAL_ERROR 로 끝나요(앱에서 다시 시도)"
+  else
+    after="꺼진 동안 공개 주소 연결이 끊겼어요"
+  fi
+  if [[ "$oomkilled" == true ]] || grep -q '^oom' <<<"$events"; then
+    notify "🧠 $svc 가 메모리 한도(mem_limit)를 넘어 커널이 강제로 끝냈고(OOM kill) Docker 가 다시 띄웠어요 (VM 감시 · $HOST) — 다시 띄운 횟수 $n. $after. docker stats --no-stream 으로 메모리를 보고, 되풀이되면 deploy/docker-compose.yml 의 mem_limit 를 확인해 주세요"
+  elif [[ "$svc" == "$SERVICE" && "$code" == 3 ]]; then
+    notify "🧠 backend 가 Java 힙 부족(OutOfMemoryError, 종료 코드 3)으로 끝났고 Docker 가 다시 띄웠어요 (VM 감시 · $HOST) — 다시 띄운 횟수 $n. $after. 힙 덤프 $HEAP_DUMP(볼륨 beside-storage)를 꺼내 분석한 뒤 지워 주세요(남아 있으면 다음 덤프를 쓰지 않아요)"
+  else
+    [[ "$code" != 137 ]] || code="137, SIGKILL: 메모리 한도였을 수 있어요(journalctl -k)"
+    notify "♻️ $svc 가 꺼져서 Docker 가 다시 띄웠어요 (VM 감시 · $HOST) — 다시 띄운 횟수 $n, 종료 코드 ${code:-모름}. $after. docker logs --tail 50 ${cid:0:12} 로 원인을 확인해 주세요"
+  fi
+  put "restarts.$svc.alerted" "$NOW"
+  put "restarts.$svc" "$count"
+  put "restarts.$svc.at" "$NOW"
+}
+
+# check_caddy_running <status or 없음> <maintenance flag or "">: restarting counts as running (Docker brings it back and
+# check_restarts reports it); anything else, CADDY_DOWN_RUNS runs in a row, is reported.
+check_caddy_running() {
+  local status="$1" quiet="$2" downs last
+  if [[ "$status" == running || "$status" == restarting ]]; then
+    del caddy.down
+    if [[ -z "$quiet" && -n "$(get caddy.alerted)" ]]; then
+      notify "✅ caddy 가 다시 실행 중이에요 (VM 감시 · $HOST) — 공개 주소가 다시 열렸어요"
+      del caddy.alerted
+    fi
+    return 0
+  fi
+  if [[ -n "$quiet" ]]; then
+    del caddy.down
+    return 0
+  fi
+  downs=$(($(get caddy.down 0) + 1))
+  put caddy.down "$downs"
+  ((downs >= CADDY_DOWN_RUNS)) || return 0
+  last="$(get caddy.alerted 0)"
+  ((NOW - last >= CADDY_DOWN_EVERY_S)) || return 0
+  notify "🚪 caddy 가 멈춰 있어요 (상태 $status, VM 감시 · $HOST) — 공개 주소(앱·웹)가 모두 열리지 않아요. Docker 는 멈춘 컨테이너를 다시 띄우지 않아요: docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d caddy. 일부러 멈췄다면 점검 표시(/etc/beside-maintenance)를 두세요"
+  put caddy.alerted "$NOW"
+}
+
 rc=0
 check_disk
 check_backup
 check_backend || rc=1
+check_containers
 exit "$rc"

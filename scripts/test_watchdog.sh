@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Test of deploy/watchdog/beside-watchdog.sh without a VM: stub docker (one backend container whose state, start time
-# and health come from files), curl (the Discord webhook, recorded), systemctl (the off-VM backup unit) and df on PATH;
+# Test of deploy/watchdog/beside-watchdog.sh without a VM: stub docker (a backend and a caddy container whose state,
+# start time, RestartCount, OOMKilled and health come from files, and Docker's event log from events-<container>), curl
+# (the Discord webhook, recorded), systemctl (the off-VM backup unit) and df on PATH;
 # the clock is WATCHDOG_NOW. Checks the decisions: 3 failures in a row -> one restart and one message; booting
 # containers are not judged; at most one restart per 10 min with one "still failing" message; recovery is reported
 # once; maintenance flags, stopped containers and stale failures never restart; a crash loop (Docker's RestartCount up
 # 3 since the last good check) is reported once an hour, its end once; disk warnings at most hourly; an
 # off-VM backup without a good run for 3 h (or failing since it was installed) is reported every 6 h, its recovery
-# once; the webhook URL is never on a command line or in the log.
+# once; a container that Docker restarted (crash, OOM kill, Java heap OOM) is reported once per 10 min with 🧠 for
+# memory, a stopped or removed caddy after two runs and hourly, both never under a maintenance flag; the webhook URL is
+# never on a command line or in the log.
 #   bash scripts/test_watchdog.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -26,6 +29,28 @@ case "$*" in
     echo "$(cat "$F/status") $(cat "$F/started") $(cat "$F/restartcount" 2>/dev/null || echo 0)" ;;
   "exec c0ffee curl -fsS -m 5 -o /dev/null http://localhost:8081/actuator/health") [[ -f "$F/healthy" ]] ;;
   "inspect -f {{.State.Status}} c0ffee") cat "$F/status" ;;
+  "inspect -f {{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}} c0ffee")
+    echo "$(cat "$F/status") $(cat "$F/restartcount" 2>/dev/null || echo 0) $(cat "$F/oomkilled" 2>/dev/null || echo false)" ;;
+  "ps -aq --filter label=com.docker.compose.project=beside --filter label=com.docker.compose.service=caddy")
+    cat "$F/caddy-cid" 2>/dev/null || true ;;
+  "inspect -f {{.State.Status}} {{.RestartCount}} {{.State.OOMKilled}} cadd"*)   # cadd1e, or cadd2e once recreated
+    echo "$(cat "$F/caddy-status") $(cat "$F/caddy-restartcount" 2>/dev/null || echo 0) $(cat "$F/caddy-oomkilled" 2>/dev/null || echo false)" ;;
+  "events --since "*)
+    # a query of Docker's event log: the "<time> <action> <exit code>" lines of events-<container> between --since and
+    # --until, printed as "<action> <exit code>" (the watchdog's --format)
+    since="" until="" cid="" format=""
+    while (($#)); do
+      case "$1" in
+        --since) since="$2"; shift ;;
+        --until) until="$2"; shift ;;
+        --filter) [[ "$2" != container=* ]] || cid="${2#container=}"; shift ;;
+        --format) format="$2"; shift ;;
+      esac
+      shift
+    done
+    [[ -n "$since" && -n "$until" && -n "$cid" && "$format" == '{{.Action}} {{index .Actor.Attributes "exitCode"}}' ]] \
+      || { echo "fake docker: events without --since, --until, a container or the format: $*" >&2; exit 1; }
+    awk -v s="$since" -v u="$until" '$1 >= s && $1 <= u { print $2, $3 }' "$F/events-$cid" 2>/dev/null || true ;;
   "restart -t 20 c0ffee")
     echo "$WATCHDOG_NOW" >> "$F/restart-tries"
     if [[ -f "$F/restart-fails" ]]; then
@@ -65,11 +90,15 @@ echo running > "$WORK/fake/status"
 date -u -d "@$T0" +%Y-%m-%dT%H:%M:%S.000000001Z > "$WORK/fake/started"
 echo 41 > "$WORK/fake/disk"
 touch "$WORK/fake/healthy"
+echo cadd1e > "$WORK/fake/caddy-cid"
+echo running > "$WORK/fake/caddy-status"
 
-step() {   # step <seconds after T0>: one timer run
-  local rc=0
-  env STATE_DIRECTORY="$WORK/state" BESIDE_ENV_FILE="$WORK/env" WATCHDOG_NOW=$((T0 + $1)) \
-    BACKUP_OK_FILE="$WORK/backup/last.ok" BESIDE_MAINTENANCE_FILES="$WORK/maintenance $WORK/fault/MAINTENANCE" bash "$SCRIPT" >> "$WORK/log" 2>&1 || rc=$?
+step() {   # step <seconds after T0> [VAR=value ...]: one timer run
+  local rc=0 t="$1"
+  shift
+  env STATE_DIRECTORY="$WORK/state" BESIDE_ENV_FILE="$WORK/env" WATCHDOG_NOW=$((T0 + t)) \
+    BACKUP_OK_FILE="$WORK/backup/last.ok" BESIDE_MAINTENANCE_FILES="$WORK/maintenance $WORK/fault/MAINTENANCE" "$@" \
+    bash "$SCRIPT" >> "$WORK/log" 2>&1 || rc=$?
   return "$rc"
 }
 fail() { echo "FAIL: $*"; echo "--- log"; cat "$WORK/log"; echo "--- messages"; cat "$WORK/fake/messages" 2>/dev/null; exit 1; }
@@ -279,6 +308,103 @@ step 80030
 [[ "$(wc -l < "$WORK/fake/curl-argv")" == "$calls" ]] || fail "curl called without a webhook"
 grep -q "message only logged" "$WORK/log" || fail "no log line without a webhook"
 
+# Docker restarted a container (A6, 2026-11-26): one OOM kill or crash that Docker's policy restarted used to send
+# nothing (🧱 needs 3 and watches only the backend). Each rise of RestartCount of backend or caddy -> one message (at most
+# every 10 min per container, what happened meanwhile counted in), 🧠 when it was memory; a stopped caddy -> one message
+# after two runs, hourly reminders, its return once; a maintenance flag silences all of it, also afterwards.
+printf 'BESIDE_DOMAIN=example.test\nNOTIFY_WEBHOOK_URL=%s   # team channel\n' "$HOOK" > "$WORK/env"
+echo 41 > "$WORK/fake/disk"
+echo $((T0 + 100000)) > "$WORK/backup/last.ok"
+ev() { echo "$((T0 + $2)) $3 ${4:-}" >> "$WORK/fake/events-$1"; }   # ev <container> <seconds after T0> <action> [exit code]
+again() { count 'Docker 가 다시 띄웠어요'; }
+memory() { count '🧠'; }
+last_message() { tail -n1 "$WORK/fake/messages"; }
+step 100000 || fail "run before the Docker restarts"
+a0="$(again)"; m0="$(memory)"
+# one crash of the backend (exit code 1): one ♻️ with the count and the exit code, then nothing more
+ev c0ffee 100010 die 1
+echo 1 > "$WORK/fake/restartcount"
+step 100030 || fail "run after one Docker restart"
+[[ "$(again)" == $((a0 + 1)) && "$(memory)" == "$m0" ]] \
+  || fail "one crash: $(($(again) - a0)) restart and $(($(memory) - m0)) memory message(s)"
+last_message | grep -q '♻️ backend 가 꺼져서 Docker 가 다시 띄웠어요 .*다시 띄운 횟수 1, 종료 코드 1\. 그때 PENDING' \
+  || fail "restart message without the count, exit code or jobs: $(last_message)"
+step 100060; step 100090
+[[ "$(again)" == $((a0 + 1)) ]] || fail "the same Docker restart reported again"
+# the kernel kills it at mem_limit: Docker has cleared State.OOMKilled by the next run, its oom event still says so.
+# Within 10 min of the last message it waits, then it is reported with what happened meanwhile.
+ev c0ffee 100100 oom; ev c0ffee 100100 die 137
+echo 2 > "$WORK/fake/restartcount"
+step 100120
+[[ "$(again)" == $((a0 + 1)) ]] || fail "a restart within 10 min of the last message was reported at once"
+step 100640
+[[ "$(memory)" == $((m0 + 1)) ]] || fail "no 🧠 for an OOM kill that only Docker's events show"
+last_message | grep -q '🧠 backend 가 메모리 한도(mem_limit)를 넘어 .*다시 띄운 횟수 1\.' || fail "OOM message: $(last_message)"
+ev c0ffee 100700 die 1; echo 3 > "$WORK/fake/restartcount"; step 100710
+ev c0ffee 100800 die 1; echo 4 > "$WORK/fake/restartcount"; step 100810
+step 101240
+last_message | grep -q '♻️ backend .*다시 띄운 횟수 2, 종료 코드 1\.' || fail "two restarts within 10 min not counted into one message: $(last_message)"
+[[ "$(again)" == $((a0 + 3)) ]] || fail "expected 3 restart messages so far, got $(($(again) - a0))"
+# Java's heap runs out: -XX:+ExitOnOutOfMemoryError ends the JVM with exit code 3 (backend/Dockerfile) -> 🧠, the dump
+ev c0ffee 101900 die 3; echo 5 > "$WORK/fake/restartcount"
+step 101930
+[[ "$(memory)" == $((m0 + 2)) ]] || fail "no 🧠 for exit code 3"
+last_message | grep -q '🧠 backend 가 Java 힙 부족(OutOfMemoryError, 종료 코드 3).*backend-oom.hprof' || fail "heap OOM message: $(last_message)"
+# caddy OOM-killed and seen while Docker is still restarting it: State.OOMKilled -> 🧠 (its own 10 min), not "stopped"
+echo restarting > "$WORK/fake/caddy-status"; echo true > "$WORK/fake/caddy-oomkilled"; echo 1 > "$WORK/fake/caddy-restartcount"
+step 101960
+[[ "$(memory)" == $((m0 + 3)) ]] || fail "no 🧠 for caddy"
+last_message | grep -q '🧠 caddy 가 .*공개 주소 연결이 끊겼어요' || fail "caddy OOM message: $(last_message)"
+step 101990
+[[ "$(count 'caddy 가 멈춰 있어요')" == 0 ]] || fail "a caddy that Docker is restarting was reported as stopped"
+echo running > "$WORK/fake/caddy-status"; echo false > "$WORK/fake/caddy-oomkilled"
+# a deploy recreates the containers: a lower count (backend) is no restart; a new container (caddy cadd2e) counts from 0,
+# so the one restart Docker already gave it is reported although its count equals the old container's
+echo 0 > "$WORK/fake/restartcount"
+echo cadd2e > "$WORK/fake/caddy-cid"; ev cadd2e 102590 die 1
+step 102600
+[[ "$(again)" == $((a0 + 6)) ]] || fail "recreated containers: expected one more restart message, got $(($(again) - a0 - 5))"
+last_message | grep -q '♻️ caddy 가 꺼져서 .*다시 띄운 횟수 1, 종료 코드 1\.' || fail "recreated caddy: $(last_message)"
+step 102630
+[[ "$(again)" == $((a0 + 6)) ]] || fail "a recreated container reported twice"
+
+# caddy stopped (Docker does not bring it back): one 🚪 after two runs, again after an hour, its return once; removed too
+stopped() { count 'caddy 가 멈춰 있어요'; }
+echo exited > "$WORK/fake/caddy-status"
+step 102700
+[[ "$(stopped)" == 0 ]] || fail "caddy reported stopped after one run (a deploy recreates it within one)"
+step 102730
+[[ "$(stopped)" == 1 ]] || fail "a stopped caddy not reported after two runs"
+last_message | grep -q '🚪 caddy 가 멈춰 있어요 (상태 exited, .*up -d caddy' || fail "caddy stopped message: $(last_message)"
+step 102760; step 103500
+[[ "$(stopped)" == 1 ]] || fail "a stopped caddy reported again within the hour"
+step $((102730 + 3600))
+[[ "$(stopped)" == 2 ]] || fail "no reminder for a caddy stopped for an hour"
+echo running > "$WORK/fake/caddy-status"
+step 106400; step 106430
+[[ "$(count 'caddy 가 다시 실행 중')" == 1 ]] || fail "caddy's return reported $(count 'caddy 가 다시 실행 중') times"
+rm "$WORK/fake/caddy-cid"   # compose rm
+step 106460; step 106490
+[[ "$(stopped)" == 3 ]] && last_message | grep -q '상태 없음' || fail "a removed caddy not reported: $(last_message)"
+echo cadd2e > "$WORK/fake/caddy-cid"
+step 106520
+[[ "$(count 'caddy 가 다시 실행 중')" == 2 ]] || fail "the return of a removed caddy not reported"
+
+# a maintenance flag (drills, load tests): an OOM kill of the backend, a caddy restart and a stopped caddy say nothing,
+# and nothing comes once the flag goes
+touch "$WORK/maintenance"
+quiet_from="$(messages)"
+ev c0ffee 107010 oom; ev c0ffee 107010 die 137; echo 1 > "$WORK/fake/restartcount"; echo true > "$WORK/fake/oomkilled"
+ev cadd2e 107010 die 0; echo 2 > "$WORK/fake/caddy-restartcount"
+step 107030
+echo exited > "$WORK/fake/caddy-status"
+for t in 107060 107090 107120 110000; do step "$t"; done
+[[ "$(messages)" == "$quiet_from" ]] || fail "messages under a maintenance flag: $(last_message)"
+rm "$WORK/maintenance"
+echo running > "$WORK/fake/caddy-status"; echo false > "$WORK/fake/oomkilled"
+step 110030; step 110060
+[[ "$(messages)" == "$quiet_from" ]] || fail "a restart or caddy stop from the maintenance window reported afterwards: $(last_message)"
+
 # the webhook URL went only through curl's config on stdin, comment stripped; never on a command line or in the log
 grep -qF "$HOOK" "$WORK/fake/curl-argv" && fail "webhook URL on a curl command line"
 grep -qF "$HOOK" "$WORK/log" && fail "webhook URL in the log"
@@ -286,4 +412,4 @@ grep -qxF "url = \"$HOOK\"" "$WORK/fake/curl-config" || fail "webhook URL not pa
 python3 -I -c 'import json, sys; [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]' "$WORK/fake/messages" \
   || fail "a message is not valid JSON"
 [[ "$(stat -c %a "$WORK/state")" == 700 ]] || fail "state folder is not 700"
-echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, crash loop, disk, backup and webhook handling ok"
+echo "beside-watchdog.sh: restart after 3 failures, grace, cooldown, recovery, maintenance, crash loop, Docker restarts and OOM, caddy stopped, disk, backup and webhook handling ok"
