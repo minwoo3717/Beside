@@ -1,0 +1,41 @@
+# Tempo 설정 (deploy/docker-compose.yml 의 tempo 서비스, profile monitoring, 2026-11-26 W8 분산 추적).
+# 하나의 프로세스(single binary)가 받기·저장·질의를 다 한다. 저장은 볼륨 tempo_data 의 파일이다(/var/tempo, 이미지가
+# 사용자 10001 의 폴더로 만들어 두므로 이름 있는 볼륨이 그 권한을 물려받는다).
+# 받는 곳: backend 가 OTLP HTTP 로 보낸다(MANAGEMENT_OTLP_TRACING_ENDPOINT=http://tempo:4318/v1/traces). 4318 은 compose
+# 내부망에만 연다(ports 없음). Grafana 는 http://tempo:3200 으로 읽는다(데이터소스 uid beside-tempo).
+# 확인: docker run --rm -v ./tempo.yml:/etc/tempo/tempo.yml:ro grafana/tempo:2.6.1 -config.file=/etc/tempo/tempo.yml -config.verify
+# 바꾼 뒤: docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring restart tempo
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          # 2.7 부터 기본이 localhost 로 바뀐다. 다른 컨테이너(backend)가 보내므로 모든 주소에서 받는다(compose 내부망).
+          endpoint: "0.0.0.0:4318"
+
+ingester:
+  # 작업 한 건의 트레이스는 길어야 몇 분이다. 블록을 자주 잘라 메모리(mem_limit 384m)에 오래 들고 있지 않는다.
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    # 보관 72시간. 발표·장애 확인용이고 실행별 기록은 job_runs·events.jsonl 에 따로 있다.
+    block_retention: 72h
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+# 밖으로 나가는 사용 통계를 끈다(Grafana·Loki 와 같다).
+usage_report:
+  reporting_enabled: false
