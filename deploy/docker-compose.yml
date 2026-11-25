@@ -52,8 +52,14 @@ services:
       # 조용히 만들어 기존 작업이 모두 404 였다). 새 서버의 첫 시작만 셸에서 STORAGE_DB_CREATE_IF_MISSING=true 를 붙인다
       # (README 'VM 첫 설정' 6번). 잃은 DB 는 백업으로 되돌린다(docs/ops/RUNBOOK.md 'DB 복구').
       STORAGE_DB_CREATEIFMISSING: ${STORAGE_DB_CREATE_IF_MISSING:-false}
+      # H2 온라인 백업(볼륨의 backup/beside-<시각>.zip)의 주기와 남길 개수: storage.backup.cron ↔ STORAGE_BACKUP_CRON,
+      # storage.backup.keep ↔ STORAGE_BACKUP_KEEP. 기본값은 application-prod.properties 와 같다(매시 5분·48개, CI 가 같은지
+      # 본다). 운영 VM 은 deploy/.env 에서 5분마다·288개(하루)로 둔다(.env.example, REDUNDANCY Phase 1-1). 그때는 VM 밖
+      # 업로드도 5분 판으로 함께 설치한다(deploy/backup, README '운영 대응 설치' 4번).
+      STORAGE_BACKUP_CRON: "${STORAGE_BACKUP_CRON:-0 5 * * * *}"
+      STORAGE_BACKUP_KEEP: "${STORAGE_BACKUP_KEEP:-48}"
     volumes:
-      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 매시 H2 백업, 최신 48개). 컨테이너를 지워도 남는다.
+      # H2 DB · uploads · results · preprocessed · events.jsonl · backup(prod 의 H2 백업 zip, STORAGE_BACKUP_*). 컨테이너를 지워도 남는다.
       - beside-storage:/app/storage
       # 전처리 모델(약 210 MB, scripts/fetch_models.sh 가 받는다). 이미지에 넣지 않고 읽기 전용으로 붙인다.
       - ${BESIDE_MODELS_DIR:-../backend/models}:/app/models:ro

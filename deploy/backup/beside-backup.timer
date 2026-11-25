@@ -1,12 +1,13 @@
-# Every hour at minute 20 (the backend writes its H2 backup at minute 5, application-prod.properties).
+# Every 5 minutes at minute 3, 8, 13, ... 58 (REDUNDANCY Phase 1-1): 3 minutes after the backend's 5-minute H2 backup
+# (STORAGE_BACKUP_CRON=0 */5 * * * * in deploy/.env), so each zip is older than MIN_AGE_MIN (2 min) when it is sent.
 # Persistent: a run missed while the VM was off happens right after it starts again.
 [Unit]
-Description=Beside offsite backup every hour at minute 20
+Description=Beside offsite backup every 5 minutes
 
 [Timer]
-OnCalendar=*-*-* *:20:00
+OnCalendar=*:03/5
 Persistent=true
-AccuracySec=1min
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target
