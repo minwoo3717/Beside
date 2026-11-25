@@ -18,7 +18,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         clean = path.split("?", 1)[0].split("#", 1)[0]
         if clean.startswith("/res/"):
             target = os.path.normpath(os.path.join(RES, clean[len("/res/"):]))
-            return target if target.startswith(RES) else RES
+            # inside RES only: a bare string prefix let siblings such as ../BesideUI.meta through (review 2026-11-25)
+            try:
+                inside = os.path.commonpath([RES, target]) == RES
+            except ValueError:   # another drive on Windows
+                inside = False
+            return target if inside else RES
         return super().translate_path(path)
 
     polls = 0

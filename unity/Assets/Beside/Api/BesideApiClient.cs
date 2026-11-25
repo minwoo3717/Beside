@@ -165,6 +165,23 @@ namespace Beside.Api
             }
         }
 
+        // ---------- POST /api/v1/jobs/{jobId}/cancel (API v1.2) ----------
+
+        /// <summary>200 with the job, now FAILED(CANCELED). 409 JOB_NOT_PENDING when generation already started or the
+        /// job already ended; 404 JOB_NOT_FOUND.</summary>
+        public IEnumerator CancelJob(string jobId, string requestId,
+            Action<JobResponse> onCanceled, Action<ApiError> onError)
+        {
+            using (var req = UnityWebRequest.PostWwwForm(Url(ApiV1Routes.Cancel(jobId)), ""))
+            {
+                Prepare(req, requestId);
+                yield return req.SendWebRequest();
+
+                if (!Succeeded(req, out var error)) { onError(error); yield break; }
+                onCanceled(Parse<JobResponse>(req.downloadHandler.text));
+            }
+        }
+
         // ---------- GET /api/v1/healthz ----------
 
         public IEnumerator Health(Action<HealthResponse> onOk, Action<ApiError> onError)

@@ -2,6 +2,15 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-25 (코드 리뷰 고침)
+
+- 취소가 서버에도 간다: `JobManager.CancelByUser(forget)` 가 앱 흐름을 멈추고, 작업이 서버 대기열에 있으면(Waiting, PROCESSING 아님) `POST /api/v1/jobs/{id}/cancel`(API v1.2)을 보낸다. 디자인 UI 진행 화면 '취소'(저장된 작업도 잊음)와 기본 UI '취소'(작업은 남김)가 이것을 쓴다. 응답은 로그만(409 `JOB_NOT_PENDING` = 이미 생성 시작). 전에는 앱만 멈춰 버린 작업이 GPU 를 썼다. `BesideApiClient.CancelJob`·`ApiV1Routes.Cancel` 추가
+- `ErrorMessages`: `CANCELED`(다시 시도 가능, `/retry` 로 처음부터)와 `JOB_NOT_PENDING` 문구(ERROR_CODES.md 그대로). 웹 보관함에서 취소한 작업을 앱이 열면 일반 오류 문구가 나왔다
+- 서버 주소 저장: 주소가 바뀔 때만 작업 사진을 지움(같은 주소로 저장하면 남은 작업의 사진만 지워졌다). `JobManager.ClearSavedJob` 은 작업을 먼저 잊고 `Idle` 을 알려, 홈에 지운 작업의 이어보기 카드가 남지 않는다. 저장 뒤 설정 화면에 머물러 '저장했어요' 가 보인다(웹 재현 `app.js` 도 주소가 바뀔 때만 저장된 작업을 지움)
+- 홈 서버 상태: 주소를 바꾸면 옛 주소로 보낸 healthz 응답을 버린다(세대 번호 `healthGen`). 늦게 온 옛 '연결 안 됨' 이 새 주소에 남던 문제
+- 웹 재현 `serve.py`: `/res/` 경로가 `BesideUI` 폴더 안인지 `commonpath` 로 확인(문자열 앞부분 비교라 `../BesideUI.meta` 가 열렸다)
+- 확인: Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일 오류 0, 경고 39(2026-11-21 기준과 같은 수). 에디터 Play·기기 확인은 [계획]
+
 ## 2026-11-22
 
 - 디자인 UI를 시안 E("Beside 앱 UI 개선 시안")로 바꿈: 홈·사진 확인·진행·미리보기·AR(찾는 중/배치 전/배치 후)·오류·서버 설정 7개 화면. `DesignKit` 토큰·위젯 교체, `DesignedUIController` 다시 작성(같은 GUID, 같은 이벤트·공개 메서드만 사용)

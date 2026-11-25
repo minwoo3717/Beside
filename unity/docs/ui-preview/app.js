@@ -265,6 +265,7 @@
     },
     save: () => {
       const url = normalize($("#url").value);
+      if ((url || "") !== state.url) state.savedJob = false;   // like JobManager.SetBaseUrl: only a new server drops the job
       state.url = url || "";
       $("#url").value = url || DEFAULT_URL;
       setSettingsStatus("저장했어요 · " + (url || DEFAULT_URL), COLORS.success);

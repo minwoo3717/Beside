@@ -182,9 +182,30 @@ namespace Beside.Job
             SetState(State.Idle, "");
         }
 
+        /// <summary>
+        /// The user's "취소": stops the app's flow like <see cref="CancelJob"/> (or forgets the job too, like
+        /// <see cref="ClearSavedJob"/>, when <paramref name="forget"/>) and, while the job still waits in the server's
+        /// queue, asks the server to drop it (POST /cancel, API v1.2). Before, the job stayed PENDING and later took the
+        /// GPU for a model nobody would download (review finding, 2026-11-25). The answer is only logged: 409
+        /// JOB_NOT_PENDING means generation already started, and the app lets go of the job either way.
+        /// </summary>
+        public void CancelByUser(bool forget)
+        {
+            string jobId = CurrentJobId;
+            bool queuedOnServer = CurrentState == State.Waiting && !string.IsNullOrEmpty(jobId)
+                && (LastJobStatus == null || LastJobStatus.Status != JobStatus.Processing);
+            if (forget) ClearSavedJob();
+            else CancelJob();
+            if (!queuedOnServer) return;
+            StartCoroutine(api.CancelJob(jobId, Guid.NewGuid().ToString("N"),
+                job => Debug.Log($"[JobManager] cancel {jobId}: {(job != null ? job.Status.ToString() : "ok")}"),
+                error => Debug.Log($"[JobManager] cancel {jobId} not done on the server: {error}")));
+        }
+
         public void ClearSavedJob()
         {
-            CancelJob();
+            // Forget first: CancelJob raises StateChanged(Idle), and a listener reading SavedJobId then must not see the
+            // job being dropped (after a server change the home 이어보기 card stayed on for it, review 2026-11-25).
             PlayerPrefs.DeleteKey(JobIdPrefKey);
             PlayerPrefs.Save();
             CurrentJobId = null;
@@ -192,6 +213,7 @@ namespace Beside.Job
             lastPhotos = null;
             uploadKey = null;
             // RetryAvailableAt stays: the server's queue is still full for new photos ("처음부터", "다른 사진 고르기")
+            CancelJob();
         }
 
         public void CheckHealth(Action<HealthResponse> onOk, Action<ApiError> onError) => StartCoroutine(api.Health(onOk, onError));

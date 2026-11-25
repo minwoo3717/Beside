@@ -37,6 +37,8 @@ namespace Beside.Api
             { "NOT_FOUND", "요청한 정보를 찾을 수 없어요." },
             { "JOB_NOT_COMPLETED", "아직 모델을 만들고 있어요. 잠시 후 다시 확인해 주세요." },
             { "JOB_NOT_FAILED", "실패한 작업만 다시 시도할 수 있어요." },
+            // API v1.2: POST /cancel on a job that is no longer PENDING
+            { "JOB_NOT_PENDING", "이미 생성이 시작돼 취소할 수 없어요." },
             { "INTERNAL_ERROR", "서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요." },
             // Queue cap (API v1.1): POST /jobs and /retry refused with 503 + Retry-After. Retry waits for Retry-After.
             { QueueFull, "지금 생성 요청이 많아요. 잠시 후 다시 시도해 주세요." },
@@ -45,6 +47,8 @@ namespace Beside.Api
             { "INFERENCE_TIMEOUT", "생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요." },
             { "INFERENCE_UNAVAILABLE", "생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요." },
             { "CONVERSION_FAILED", "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요." },
+            // API v1.2: canceled while PENDING (this app's 취소, or the web library). Retry starts it over.
+            { "CANCELED", "취소한 작업이에요. 다시 시도하면 처음부터 만들어요." },
             // App-side
             { ApiError.Network, "서버에 연결할 수 없어요. 네트워크를 확인해 주세요." },
             { ApiError.BadResponse, "서버 응답을 이해할 수 없어요. 앱을 최신 버전으로 업데이트해 주세요." },
@@ -58,7 +62,7 @@ namespace Beside.Api
         /// QUEUE_FULL re-sends the refused request (same photos and Idempotency-Key, or POST /retry) after Retry-After.</summary>
         static readonly HashSet<string> Retryable = new HashSet<string>
         {
-            "INFERENCE_FAILED", "INFERENCE_TIMEOUT", "INFERENCE_UNAVAILABLE", "CONVERSION_FAILED",
+            "INFERENCE_FAILED", "INFERENCE_TIMEOUT", "INFERENCE_UNAVAILABLE", "CONVERSION_FAILED", "CANCELED",
             "INTERNAL_ERROR", "JOB_NOT_COMPLETED", QueueFull,
             ApiError.Network, DownloadFailed, FileCorrupt, WaitTimeout,
         };
@@ -70,6 +74,7 @@ namespace Beside.Api
 
         /// <summary>Server job failure codes: retry goes through POST /api/v1/jobs/{id}/retry.</summary>
         public static bool IsJobFailureCode(string code) =>
-            code == "INFERENCE_FAILED" || code == "INFERENCE_TIMEOUT" || code == "INFERENCE_UNAVAILABLE" || code == "CONVERSION_FAILED";
+            code == "INFERENCE_FAILED" || code == "INFERENCE_TIMEOUT" || code == "INFERENCE_UNAVAILABLE" || code == "CONVERSION_FAILED"
+            || code == "CANCELED";
     }
 }

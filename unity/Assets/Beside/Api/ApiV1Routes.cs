@@ -35,6 +35,12 @@ namespace Beside.Api
             return Job(jobId) + "/retry";
         }
 
+        /// <summary>POST: a PENDING job leaves the queue and ends FAILED(CANCELED) (API v1.2).</summary>
+        public static string Cancel(string jobId)
+        {
+            return Job(jobId) + "/cancel";
+        }
+
         public static string List(int limit = 20, string cursor = null)
         {
             string url = Jobs + "?limit=" + limit;
