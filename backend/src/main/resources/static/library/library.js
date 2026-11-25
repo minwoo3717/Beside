@@ -204,6 +204,9 @@
         win.location.hash = "#/";
         return;
       }
+      // Any failed read (the timer's, a button's, the first one of the route) tries again while this pet is on
+      // screen: the timer was cleared above, and a refresh that failed used to stop for good (review 2026-11-25).
+      if (L.parseRoute(win.location.hash).petId === petId) scheduleRefresh(petId);
       throw error;
     }
     if (L.parseRoute(win.location.hash).petId !== petId) return; // navigated away meanwhile
@@ -216,16 +219,12 @@
   }
 
   /**
-   * The next refresh of the pet on screen. One that fails (a redeploy, Wi-Fi gone) tries again while the pet is still
-   * on screen: it used to stop for good, leaving jobs made in the app or another tab at "생성 중" (review 2026-11-25).
+   * The next refresh of the pet on screen. A failed one schedules the next itself (loadPet): it used to stop for good,
+   * leaving jobs made in the app or another tab at "생성 중" (review 2026-11-25).
    */
   function scheduleRefresh(petId) {
     clearTimeout(state.refreshTimer);
-    state.refreshTimer = setTimeout(() => {
-      loadPet(petId, true).catch(() => {
-        if (L.parseRoute(win.location.hash).petId === petId) scheduleRefresh(petId);
-      });
-    }, DETAIL_REFRESH_MS);
+    state.refreshTimer = setTimeout(() => loadPet(petId, true).catch(() => {}), DETAIL_REFRESH_MS);
   }
 
   function renderPet(pet) {
