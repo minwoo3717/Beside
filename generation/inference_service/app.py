@@ -355,8 +355,11 @@ class _RequestTiming:
             client = scope.get("client") or ("-", "-")
             status = rec["status"] or (500 if error != "-" else "-")
             at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(wall)) + f".{int(wall % 1 * 1000):03d}Z"
+            # The path is percent-decoded (%0A is a real newline, %20 a space) and this line is on by default on the Pod
+            # (start_pod.sh): printable ASCII with no space, so it stays one line with the fields docs/perf parsers split
+            path = _printable(scope.get("path", "-")).replace(" ", "?")
             timing_log.info("timing %s %s %s client=%s:%s in=%d body_ms=%s start_ms=%s end_ms=%s gone_ms=%s out=%d "
-                            "err=%s at=%s", scope.get("method", "-"), scope.get("path", "-"), status, client[0],
+                            "err=%s at=%s", scope.get("method", "-"), path, status, client[0],
                             client[1], rec["in"], ms(rec["body"]), ms(rec["start"]), ms(rec["end"]), ms(rec["gone"]),
                             rec["out"], error, at)
 

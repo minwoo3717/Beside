@@ -1712,6 +1712,15 @@ class RequestTimingTest(_ModelModeCase):
         self.assertFalse(service.REQUEST_TIMING)
         self.assertFalse(any(m.cls is service._RequestTiming for m in service.app.user_middleware))
 
+    def test_a_path_with_a_newline_or_a_space_stays_one_line_with_the_same_fields(self):
+        # 2026-11-26 pre-deploy review: scope["path"] is percent-decoded and the Pod writes these lines by default now,
+        # with no token needed (this layer wraps the token check), so %0A must not start a forged line
+        self.client.get("/artifacts/x%0Atiming%20GET%20/forged%20200/base.glb")
+        self.assertEqual(len(self.lines.records), 1)
+        self.assertNotIn(chr(10), self.lines.records[0].getMessage())
+        (line,) = self.timings()
+        self.assertEqual(line["path"], "/artifacts/x?timing?GET?/forged?200/base.glb")
+
     def test_an_upload_and_its_glb_download_are_timed(self):
         answer = self.upload()
         self.assertEqual(answer.status_code, 200, answer.text)
