@@ -1,0 +1,39 @@
+## success
+query: sum(increase(beside_jobs_finished_total{env="prod",worker=~".*",result="COMPLETED"}[10m])) / sum(increase(beside_jobs_finished_total{env="prod",worker=~".*",code!="CANCELED"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"1"]}]}}
+## finished
+query: sum by (result) (increase(beside_jobs_finished_total{env="prod",worker=~".*"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"result":"COMPLETED"},"value":[1795586400,"9.375"]}]}}
+## total_avg_s
+query: sum(increase(beside_job_total_seconds_sum{env="prod",worker=~".*",result="COMPLETED"}[10m])) / sum(increase(beside_job_total_seconds_count{env="prod",worker=~".*",result="COMPLETED"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"19.558111111111113"]}]}}
+## total_p95_s
+query: histogram_quantile(0.95, sum by (le) (increase(beside_job_total_seconds_bucket{env="prod",worker=~".*",result="COMPLETED"}[10m])))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"53.25"]}]}}
+## queue_max_10m
+query: max_over_time(sum(beside_jobs_queue{env="prod"})[10m:15s])
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"3"]}]}}
+## queue_by_state_max
+query: max by (state) (max_over_time(beside_jobs_queue{env="prod"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"state":"pending"},"value":[1795586400,"2"]},{"metric":{"state":"processing"},"value":[1795586400,"1"]}]}}
+## asset_fail_ratio
+query: sum(increase(beside_asset_downloads_total{env="prod",outcome=~"client_abort|error"}[10m])) / sum(increase(beside_asset_downloads_total{env="prod",outcome=~"ok|client_abort|error"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"0"]}]}}
+## asset_by_outcome
+query: sum by (outcome) (increase(beside_asset_downloads_total{env="prod"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"outcome":"client_abort"},"value":[1795586400,"0"]},{"metric":{"outcome":"error"},"value":[1795586400,"0"]},{"metric":{"outcome":"ok"},"value":[1795586400,"13.541666666666668"]},{"metric":{"outcome":"not_found"},"value":[1795586400,"0"]},{"metric":{"outcome":"not_completed"},"value":[1795586400,"0"]}]}}
+## api_p95_by_uri
+query: histogram_quantile(0.95, sum by (le, uri) (increase(http_server_requests_seconds_bucket{env="prod",uri!~"/actuator.*"}[10m])))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{"uri":"/api/v1/jobs/{jobId}"},"value":[1795586400,"0.0238681592039801"]},{"metric":{"uri":"/api/v1/jobs/{jobId}/asset"},"value":[1795586400,"0.024234693877551023"]},{"metric":{"uri":"/**"},"value":[1795586400,"NaN"]},{"metric":{"uri":"UNKNOWN"},"value":[1795586400,"0.02375"]},{"metric":{"uri":"/api/v1/admin/client-metrics"},"value":[1795586400,"NaN"]},{"metric":{"uri":"/api/v1/admin/runs"},"value":[1795586400,"NaN"]},{"metric":{"uri":"/api/v1/healthz"},"value":[1795586400,"0.02375"]},{"metric":{"uri":"/api/v1/jobs"},"value":[1795586400,"2.2562499999999996"]},{"metric":{"uri":"/api/v1/admin/stats"},"value":[1795586400,"NaN"]},{"metric":{"uri":"/api/v1/admin/ratings/summary"},"value":[1795586400,"NaN"]}]}}
+## heap_after_gc
+query: max(jvm_memory_usage_after_gc_percent{env="prod",area="heap",pool="long-lived"})
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"0.065112503175813"]}]}}
+## processing_avg_s
+query: sum(increase(beside_job_processing_seconds_sum{env="prod",worker=~".*",result="COMPLETED"}[10m])) / sum(increase(beside_job_processing_seconds_count{env="prod",worker=~".*",result="COMPLETED"}[10m]))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"11.282444444444446"]}]}}
+## processing_p95_s
+query: histogram_quantile(0.95, sum by (le) (increase(beside_job_processing_seconds_bucket{env="prod",worker=~".*",result="COMPLETED"}[10m])))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"28.5"]}]}}
+## queued_p95_s
+query: histogram_quantile(0.95, sum by (le) (increase(beside_job_queued_seconds_bucket{env="prod",worker=~".*"}[10m])))
+{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1795586400,"27"]}]}}

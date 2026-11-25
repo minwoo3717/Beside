@@ -4,9 +4,22 @@
 
 - **[구현됨]** 측정·보고서 도구 `scripts/perf/`(Python 표준 라이브러리, 단위 테스트 `python -m unittest discover -s scripts/perf -p "test_*.py"`).
 - **[실험 결과]** `data/` 의 원시 결과와 [backend-perf-report.pdf](backend-perf-report.pdf). 측정 조건(PC, JVM 옵션, 고정 CPU, 다른 프로그램의 부하, 명령)은 각 데이터 폴더의 `run.json` 과 보고서 '측정 방법'에 있다.
-- **[계획]** 클라우드 VM, VM ↔ GPU PC(Tailscale), 실제 AnimalLift 추론, Unity 쪽 측정: [notes/20-next-version.md](notes/20-next-version.md).
+- **[계획]** 이 벤치마크 도구로 클라우드 VM, VM ↔ GPU PC(Tailscale), 실제 AnimalLift 추론, Unity 쪽 측정을 재는 것: [notes/20-next-version.md](notes/20-next-version.md).
+  - 2026-11-25 확인: 이 가운데 VM ↔ GPU 전송 시간과 실제 추론 시간은 이 도구가 아니라 아래 부하 시험 2~5차(Runpod A40 Pod, Tailscale)와 [exp-01](../../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)에서 따로 쟀다 **[실험 결과]**. 앱 `metrics.csv` 측정은 아직 0건이다(METRICS.md 머리의 [계획]).
 
-부하 시험(k6, 배포 VM)은 이 벤치마크와 따로 둔다. 쏘카 수준 목표 트래픽 모델·합격 기준·시험 구성은 [load/TRAFFIC_MODEL.md](load/TRAFFIC_MODEL.md), 원시 결과는 k6 실행마다 `load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`, 스크립트는 [scripts/load/](../../scripts/load/)에 있다. 루프백 벤치마크는 같은 PC 에서 버전끼리 비교한 값이고 부하 시험 값(`load.*`)은 VM 에서 잰 용량이라, 한 표에 섞거나 서로 대신해 인용하지 않는다. 부하 문서는 `notes/` 에 넣지 않는다(`report.py` 가 `notes/*.md` 를 모두 이 보고서에 넣는다). 부하 시험은 2026-11-18~21 에 배포 VM 에서 다섯 번 했다 **[실험 결과]**: 1차는 API 계층(mock 워커), 2~5차는 실제 A40 앞의 생성 대기열·슬롯 2개·큐 상한 0 대 19·짧은 장애 재현이다. 결과는 `load/2026-11-*_vm-*.md`(1차 [2026-11-18_vm-1st.md](load/2026-11-18_vm-1st.md) ~ 5차 [2026-11-21_vm-5th.md](load/2026-11-21_vm-5th.md)).
+부하 시험(k6, 배포 VM)은 이 벤치마크와 따로 둔다. 쏘카 수준 목표 트래픽 모델·합격 기준·시험 구성은 [load/TRAFFIC_MODEL.md](load/TRAFFIC_MODEL.md), 원시 결과는 k6 실행마다 `load/data/<YYYY-MM-DD_HHMM>-<RUN_ID>/`, 스크립트는 [scripts/load/](../../scripts/load/)에 있다. 루프백 벤치마크는 같은 PC 에서 버전끼리 비교한 값이고 부하 시험 값(`load.*`)은 VM 에서 잰 용량이라, 한 표에 섞거나 서로 대신해 인용하지 않는다. 부하 문서는 `notes/` 에 넣지 않는다(`report.py` 가 `notes/*.md` 를 모두 이 보고서에 넣는다).
+
+부하 시험 결과 **[실험 결과]** (배포 VM, 2026-11-18~21. 2026-11-25 확인: 다섯 문서와 `load/data/` 의 실행 폴더가 main 에 있다):
+
+| 차수 | 문서 | 무엇 |
+|---|---|---|
+| 1차 | [load/2026-11-18_vm-1st.md](load/2026-11-18_vm-1st.md) | API 계층 A0~A4(mock 워커, 미국 서부 부하 발생기) |
+| 2차 | [load/2026-11-18_vm-2nd.md](load/2026-11-18_vm-2nd.md) | 실제 GPU(Runpod A40) 대기열: S0·S_busy, G1r·G3r |
+| 3차 | [load/2026-11-19_vm-3rd.md](load/2026-11-19_vm-3rd.md) | 슬롯 2개, 장애 F1a·F1b-real·F2-real |
+| 4차 | [load/2026-11-20_vm-4th.md](load/2026-11-20_vm-4th.md) | 같은 Pod 의 c=1·c=2(S_busy 8.67 s), F1b-real 다시 |
+| 5차 | [load/2026-11-21_vm-5th.md](load/2026-11-21_vm-5th.md) | 털 맵 GLB 의 S_busy 8.81 s, 큐 상한 0 대 19(`g3cap19` 합격 기준 1~5 통과), 장애 재현 FD16b·F1b·FD9·FD5(훈련 backend) |
+
+큐 상한 회의 자료는 [load/2026-11-20_queue-cap.md](load/2026-11-20_queue-cap.md) 다.
 
 ## 파일
 

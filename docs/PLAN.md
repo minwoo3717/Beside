@@ -1,18 +1,18 @@
 # 단계별 계획 (PLAN)
 
-기준일: **2026-10-06(화) 주차 시작**, 상태 갱신 2026-10-30(#1 머지·4b단계 반영), 2026-11-01(4b 부하·운영 추가), 2026-11-02(k6 v2.3.0 실제 실행으로 스크립트 확인·수정). 지금 빠진 것과 담당은 점검표 [CHECKLIST.md](CHECKLIST.md)(2026-10-31, 부하 시험 항목 2026-11-02). 표기: **[구현됨]** 코드·테스트가 리포에 있음 / **[실험 결과]** 측정값이 기록됨 / **[계획]** 아직 안 함 / **직접 할 일** 코드로 해결되지 않아 사람이 해야 함. 아직 하지 않은 것을 한 것처럼 쓰지 않는다. 이 문서는 주 1회 계약 회의에서 갱신한다.
+기준일: **2026-10-06(화) 주차 시작**, 상태 갱신 2026-10-30(#1 머지·4b단계 반영), 2026-11-01(4b 부하·운영 추가), 2026-11-02(k6 v2.3.0 실제 실행으로 스크립트 확인·수정), 2026-11-25(태그 `api-v1.0`·`api-v1.1`·`api-v1.2`, PR #27 병합, 5차 부하 시험, 발표일 2026-12-04 반영). 지금 빠진 것과 담당은 점검표 [CHECKLIST.md](CHECKLIST.md)(2026-10-31, 부하 시험 항목 2026-11-02, 발표까지 남은 일은 0절 2026-11-25). 표기: **[구현됨]** 코드·테스트가 리포에 있음 / **[실험 결과]** 측정값이 기록됨 / **[계획]** 아직 안 함 / **직접 할 일** 코드로 해결되지 않아 사람이 해야 함. 아직 하지 않은 것을 한 것처럼 쓰지 않는다. 이 문서는 주 1회 계약 회의에서 갱신한다.
 
 ## 한눈에 보기
 
-| 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-31) |
+| 단계 | 기간 | 주 담당 | 핵심 산출물 | 상태 (2026-10-31, 2026-11-25 갱신) |
 |---|---|---|---|---|
-| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl·app.js v1 **[구현됨]**, 계약 회의·GLB 교체 등 **직접 할 일** 남음 |
+| 0 계약·Mock 고도화 | 10-06 ~ 10-12 (1주) | Backend, 전 트랙 리뷰 | API v1 동결, Mock 서버 v1, 문서 뼈대 | 계약·코드·문서·H2·events.jsonl·app.js v1 **[구현됨]**. 계약 결정은 2026-11-21(회의 대신 Backend 담당), 태그 `api-v1.0`(3ae3ca1) 2026-11-21 **[구현됨]**. GLB 교체·컴파일 증빙은 **직접 할 일** 남음 |
 | 1 Unity Mock 연동 | 10-13 ~ 10-26 (2주) | Unity | 갤러리 → 업로드 → 폴링 → 다운로드 → 로드 (Mock) | 앱 코드 **머지됨**(#1, 2026-10-14). DoD 증빙(영상·logcat·metrics 10회)이 리포에 없어 [구현됨] 은 증빙 뒤 |
 | 2 AR 배치 | 10-27 ~ 11-09 (2주) | Unity | AR 평면 배치, 스케일/회전, metrics.csv | AR 코드 **머지됨**(#1: 평면 배치·가운데 놓기·1마리 제한·애니메이션 칩 5종·셸 털). FPS 등 [실험 결과] 없음 |
-| 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | `/infer` 에 AnimalLift·변환기·자동 리깅 연결 코드 **머지됨**(#1 — 첫 사진 1장만 사용, 리깅은 템플릿이 있을 때만). exp-01~04 기록 없음 = 측정값 0건 |
-| 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증), 실제 모델 E2E **[계획]**(10-20 주 선행) |
-| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음, 부하·운영(쏘카 수준 목표) | 배포 기반 **[구현됨]**(S1~S4·S10, 2026-10-30), GCP VM 실제 배포 **[구현됨]**(2026-11-13, 추론은 스텁), 기능 4묶음은 검토 브랜치 `review/api-v1.1`(계약 회의 전), GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13): VM ↔ Pod 연결과 AnimalLift 모델 모드 전체 흐름 **[구현됨]**(2026-11-17, A40 EU-SE-1, exp-01 기록), 부하·운영 도구는 `load/socar` 를 main 에 병합(PR #3), VM 위 측정 1차(A 시리즈, mock) **[실험 결과]**(2026-11-18, VM CPU 를 가장 많이 쓴 것은 Caddy, 폴링 규칙상 통과 300·900 RPS 지연 기준 안 유지·1,200 붕괴), 실제 GPU 의 G0r·G1r·G3r 2차(2026-11-18)·G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로) 3차(2026-11-19) **[실험 결과]**, 스텁 G1·G2·G3·스텁 F1~F5 **[계획]** |
-| 5 측정·보고 | 11-23 ~ 12-06 (2주) | 전원 | 측정표, 발표, 보고서, 데모 | **[계획]** |
+| 3 AnimalLift 연구 | 10-06 ~ 11-08 (5주, 병행) | 3D Generation | 베이스라인 재현 → `/infer` 연결·**실제 E2E 선행** → 개선 실험 ≥ 2 (순서 변경 10-06) | `/infer` 에 AnimalLift·변환기·자동 리깅 연결 코드 **머지됨**(#1 — 첫 사진 1장만 사용, 리깅은 템플릿이 있을 때만). ~~exp-01~04 기록 없음 = 측정값 0건~~ → 2026-11-25 확인: exp-01(2026-11-17, A40 베이스라인 시간·VRAM) **[실험 결과]**, Unity 트랙 조사 3개(모델 비교·방해 요소·같은 개 일관성) **[실험 결과]**, exp-03 은 틀만 **[계획]**. exp-02(품질)·exp-04 는 없음 |
+| 4 실 연동 | 11-09 ~ 11-22 (2주) | Backend + Generation, Unity 검증 | real 워커 ↔ `/infer`, 실제 GLB 서빙 | real 워커 ↔ `/infer`·실행별 측정 `job_runs`·GPU PC 배치 절차 **[구현됨]**(패스스루 검증). ~~실제 모델 E2E [계획]~~ → VM + Runpod A40 의 실제 모델 E2E **[실험 결과]**(exp-01 2026-11-17, 부하 시험 2~5차). 폰 앱 실제 모델 흐름은 **[계획]** |
+| 4b 배포·확장 | 10-30 ~ 11-22 | Backend (Generation 리뷰) | VM 배포(Docker·Caddy·Tailscale), `/infer` 업로드 모드, GPU 오프라인 대기, 기능 4묶음, 부하·운영(쏘카 수준 목표) | 배포 기반 **[구현됨]**(S1~S4·S10, 2026-10-30), GCP VM 실제 배포 **[구현됨]**(2026-11-13, 처음엔 스텁 → 2026-11-17 부터 Runpod Pod. 2026-11-25 VM 은 main `625c2a5`), 기능 4묶음은 ~~검토 브랜치 `review/api-v1.1`(계약 회의 전)~~ → `api-v1.2`(PR #27, 2026-11-22 병합, f6dfa66) **[구현됨]**, GPU 는 Runpod Pod + Pod 안 Tailscale 로 결정(2026-11-13): VM ↔ Pod 연결과 AnimalLift 모델 모드 전체 흐름 **[구현됨]**(2026-11-17, A40 EU-SE-1, exp-01 기록), 부하·운영 도구는 `load/socar` 를 main 에 병합(PR #3), VM 위 측정 1차(A 시리즈, mock) **[실험 결과]**(2026-11-18, VM CPU 를 가장 많이 쓴 것은 Caddy, 폴링 규칙상 통과 300·900 RPS 지연 기준 안 유지·1,200 붕괴), 실제 GPU 의 G0r·G1r·G3r 2차(2026-11-18)·G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로) 3차(2026-11-19)·4차(2026-11-19 UTC)·5차(2026-11-21 UTC, 큐 상한 0 대 19, 장애 재현) **[실험 결과]**, 스텁 G1·G2·G3·스텁 F1~F5 **[계획]** |
+| 5 측정·보고 | 11-23 ~ 12-04 발표 (원래 12-06. 2026-11-25 발표일 확인으로 고침, 보고서 제출일은 확인 전) | 전원 | 측정표, 발표, 보고서, 데모 | 서버·추론 측정은 부하 시험 1~5차 **[실험 결과]**. 측정표 3종·앱 측정·품질표·리허설·데모 영상은 **[계획]**. 보고서 초안은 2026-11-25 브랜치 `docs/final-report-2026-11-25` 에서 씀. 남은 일: [CHECKLIST 0절](CHECKLIST.md) |
 
 ```mermaid
 gantt
@@ -31,7 +31,7 @@ gantt
     /infer 베이스라인 연결      :s3b, 2026-10-13, 7d
     4 실 연동 (/infer)         :s4g, 2026-11-09, 14d
     section 전원
-    5 측정·보고                :s5, 2026-11-23, 14d
+    5 측정·보고 (발표 12-04)   :s5, 2026-11-23, 12d
 ```
 
 의존 관계: 0 → 1 → 2, 0 → 3(병행), (2, 3) → 4 → 5. 3단계는 GPU 서버 확보(직접 할 일)에 의존한다. 실제 E2E 선행(10-20 주)은 1단계 PR 머지, exp-01, `convert_asset.py` 투입에 의존한다.
@@ -44,7 +44,7 @@ gantt
 
 | 항목 | 상태 | 비고 |
 |---|---|---|
-| API v1 계약 `openapi.yaml`, `ERROR_CODES.md`, `CHANGELOG.md` | **[구현됨]** 2026-10-04 | 계약 회의 후 `git tag api-v1.0` |
+| API v1 계약 `openapi.yaml`, `ERROR_CODES.md`, `CHANGELOG.md` | **[구현됨]** 2026-10-04 | 계약 회의 후 `git tag api-v1.0` → 2026-11-21 올림(3ae3ca1) |
 | Spring v1 엔드포인트(create/get/asset/retry/list/healthz), Mock 워커(실패 트리거, Idempotency-Key, timings) | **[구현됨]** | `JobV1ApiTest` |
 | 계약 테스트 `openapi.yaml` ↔ `/v3/api-docs` | **[구현됨]** | `JobV1ContractTest` |
 | profile `mock \| real` 분리, real 워커 스텁 | **[구현됨]** | `/infer` 호출은 2026-10-04 4단계 선행으로 구현 |
@@ -61,7 +61,7 @@ gantt
 | 브라우저 Mock UI `app.js` → v1 전환 | **[구현됨]** 2026-10-04 | Node 테스트 18개(실제 서버 라이브 포함) 통과. 오류 문구는 ERROR_CODES, GIF 거부. v0 API 는 동결 유지 |
 
 완료 기준(DoD):
-- [ ] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0` — 결정은 2026-11-21 계약 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸·CHANGELOG 에 적었다. v1.0 몫의 결정 반영(openapi·코드·문서)은 [구현됨](`feat/contract-v1.0` → main, `JobV1ContractTest` 통과), 태그 `api-v1.0` 은 [계획]
+- [x] 계약 회의에서 REVIEW_CHECKLIST 결정 → `CHANGELOG.md` 반영 → `git tag api-v1.0` — 결정은 2026-11-21 계약 회의 대신 Backend 담당이 #1~#23 을 정해 결정 칸·CHANGELOG 에 적었다. v1.0 몫의 결정 반영(openapi·코드·문서)은 [구현됨](`feat/contract-v1.0` → main, `JobV1ContractTest` 통과). 2026-11-25 확인(`git tag -l`): 태그 `api-v1.0`(3ae3ca1, 2026-11-21), `api-v1.1`(fe10683, 2026-11-21), `api-v1.2`(f6dfa66, 2026-11-22)
 - [x] `cd backend; .\gradlew.bat test` 전부 통과, `node --test backend/src/test/js/mock-mvp.test.cjs` 통과 (2026-10-04 확인)
 - [ ] `scripts/e2e_mock.ps1` 이 bytes > 0 인 GLB 를 받는다 (샘플 교체 후)
 - [x] 서버 재시작 후 기존 jobId 조회가 200 (H2) — 2026-10-04 jar 강제 종료·재시작으로 확인. 같은 Idempotency-Key 도 같은 jobId
@@ -111,8 +111,8 @@ DoD:
 | 10-27 ~ 11-08 | 개선 실험 ≥ 2건 — 실패 사례 → 가설 → 개선 → 비교. 개선안마다 E2E 로 폰에서 확인, `modelVersion` 으로 구분. 후보(확정 아님): 입력 전처리(배경 제거·크롭 — Spring 쪽 [구현됨] 2026-11-05 브랜치 `feat/preprocess`, 3D 비교는 [generation/experiments/2026-11-05_exp-03_input-preprocess.md](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) [계획]), 입력 장수, 텍스처 해상도, 메시 후처리(decimation) | exp-03, exp-04 |
 
 DoD:
-- [ ] exp-01 ~ exp-04 기록, 표 채움 **[실험 결과]** (실제 E2E 의 `job_runs` CSV 와 `events.jsonl` 사본을 exp 폴더에)
-- [ ] 베이스라인 수치와 환경 명시
+- [ ] exp-01 ~ exp-04 기록, 표 채움 **[실험 결과]** (실제 E2E 의 `job_runs` CSV 와 `events.jsonl` 사본을 exp 폴더에) — 2026-11-25: exp-01 만 [실험 결과](2026-11-17, 품질 칸은 빔), exp-03 은 틀만 [계획], exp-02·exp-04 없음. Unity 트랙 조사 3개는 TEMPLATE 순서를 따르지 않은 조사 기록이다([generation/experiments](../generation/experiments/README.md))
+- [ ] 베이스라인 수치와 환경 명시 — 2026-11-25: 시간·VRAM·환경은 exp-01(A40, CC0 사진 3장) [실험 결과]. 우리 사진 3마리 이상(exp-02)은 [계획]
 - [ ] 품질 6항목 평균(평가자 2명 이상) baseline vs 개선안
 - [ ] GLB_SPEC 통과 GLB 3건 이상, gltf-validator 오류 0
 
@@ -127,7 +127,7 @@ DoD:
 | `RealJobWorker`: 추론 슬롯 대기(`inference.max-concurrency=1`) → PROCESSING → `/infer` 호출·타임아웃 → 오류 코드 매핑 → GLB 헤더 확인·복사 → `JobFinisher` | **[구현됨]** 2026-10-04 (선행) | `InferenceClientTest` 18개·`RealJobWorkerTest` 5개(가짜 `/infer`). 실제 FastAPI 스텁으로 패스스루 COMPLETED(48바이트 최소 GLB), 501·꺼짐 → `INFERENCE_UNAVAILABLE`, 0바이트 GLB → `CONVERSION_FAILED` 확인 |
 | 실행별 측정 `job_runs`(서버 타이밍 + `/infer` 수치 + `passthrough`·`modelVersion`·`glbBytes`), `events.jsonl` 19 필드 | **[구현됨]** 2026-10-06 | `JobPersistenceTest`·`JobEventsTest`·`RealJobWorkerTest`. 측정표는 real 프로파일 h2-console 에서 `CSVWRITE`(METRICS §1.1). `/infer` 선택 필드 `modelVersion` 추가(내부 계약) |
 | 배포 구성 | **결정됨** 2026-10-05 + 절차 **[구현됨]** 2026-10-06 | 팀원 GPU PC 한 대에 Spring + 추론 서비스(같은 호스트, 당시 #6 (a) 제안). `scripts/run_real.ps1`, [backend/README](../backend/README.md) 'GPU PC 에 real 배치'. 실제 설치는 10-20 주 **직접 할 일**. 그 뒤 VM 배치(4b)로 바뀌어 업로드 모드를 `InferenceClient` 에 더했고 **[구현됨]**(4b S2), 2026-11-21 #6 을 (b) 업로드 모드(사진 멀티파트 → JSON `glbUrl` → `GET`/`DELETE /artifacts`)로 결정했다. 같은 호스트 배치는 경로 모드 그대로 |
-| 실제 AnimalLift 모델로 전체 흐름 | **[실험 결과]** — VM 업로드 모드(4b S2) + Runpod A40 으로 exp-01(2026-11-17, VM 경유 3건(사진 3장) + Pod 직접 1건)과 2차 부하 시험(2026-11-18, 539건, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))·3차(2026-11-19, 실제 모델 완료 328건, [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md))·4차(2026-11-19 UTC, k6 실행 안 실제 모델 완료 361건, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 사진 10장 이상·품질 채점(exp-02)은 [계획] | 모델 연결 코드는 #1 로 머지됨 |
+| 실제 AnimalLift 모델로 전체 흐름 | **[실험 결과]** — VM 업로드 모드(4b S2) + Runpod A40 으로 exp-01(2026-11-17, VM 경유 3건(사진 3장) + Pod 직접 1건)과 2차 부하 시험(2026-11-18, 539건, 사진 1장 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md))·3차(2026-11-19, 실제 모델 완료 328건, [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md))·4차(2026-11-19 UTC, k6 실행 안 실제 모델 완료 361건, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md))·5차(2026-11-21 UTC, 털 맵 GLB, 상한 19 실행에서 접수 286건 모두 COMPLETED, [perf/load/2026-11-21_vm-5th.md](perf/load/2026-11-21_vm-5th.md)). 사진 10장 이상·품질 채점(exp-02)은 [계획] | 모델 연결 코드는 #1 로 머지됨 |
 | Unity 에서 real 프로파일 전체 흐름 | **[계획]** — 600초 대기·`progress` null 처리는 앱(#1)에 있음, 실기기 real 흐름 기록 없음 | |
 
 DoD:
@@ -151,7 +151,7 @@ DoD:
 | S2 | `/infer` 업로드 전송 모드(Spring `inference.transfer=upload`, Python `/infer/upload`·`/artifacts`) | 내부 계약 #6 (b) | **[구현됨]** 같은 PC 패스스루 e2e, GCP VM 의 backend ↔ VM 안 스텁 컨테이너로 공개 주소 e2e(2026-11-13). Pod 쪽 `deploy/runpod/start_pod.sh`(WSL 시험 65개)·`install_animallift.sh` 로 VM ↔ Runpod Pod 연결과 AnimalLift 모델 모드 공개 주소 e2e 3건 [구현됨](2026-11-17, A40 EU-SE-1, [기록](deploy/2026-11-17_runpod-connect.md)) |
 | S3 | GPU 상태 감시·오프라인 대기, H2 온라인 백업, Discord 알림 | 없음 (healthz `inference` 필드는 회의 후) | **[구현됨]** 테스트 + 로컬에서 GPU 끔 → PENDING → 켬 → COMPLETED 확인 |
 | S4 | Dockerfile·compose·Caddyfile·CI·배포 문서 | 없음 | **[구현됨]** CI(main push·PR #4) 통과, GCP VM 배포 2026-11-13(`https://beside-team.duckdns.org`, [기록](deploy/2026-11-13_gcp-first-deploy.md)). 첫 배포 감사로 Caddy 규칙 강화(`deploy/gcp` 브랜치, 이 브랜치의 PR 로 main 병합) |
-| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합). → 2026-11-21 #11·#12: S5~S9 는 항목별로 받아 `api-v1.2` 로(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가, 오류 코드 5개). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 브랜치 `feat/api-v1.2` 에 반영 **[구현됨]**(2026-11-21), main 병합·태그 **[계획]** |
+| S5 | 측정 내보내기 API·관리자 대시보드 | openapi 추가 | 검토 브랜치 `review/api-v1.1` 에 구현·테스트 통과, main 미반영(계약 회의 후 병합). → 2026-11-21 #11·#12: S5~S9 는 항목별로 받아 `api-v1.2` 로(대기 정보·취소·공유 링크·보관함·관리 화면·품질 평가, 오류 코드 5개). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 브랜치 `feat/api-v1.2` 에 반영 **[구현됨]**(2026-11-21). ~~main 병합·태그 [계획]~~ → 2026-11-25 확인: PR #27 로 main 병합(2026-11-22), 태그 `api-v1.2`(f6dfa66), VM `625c2a5` 에 들어 있음 **[구현됨]** |
 | S6 | 대기 순번·예상 시간·취소 | openapi·ERROR_CODES 추가 | 〃 |
 | S7 | 공유 링크·웹 3D/AR 뷰어 | openapi·ERROR_CODES 추가 | 〃 |
 | S8 | 품질 평가·앱 측정 가져오기 | openapi·METRICS 추가 | 〃 |
@@ -166,30 +166,32 @@ DoD:
 
 | 조각 | 내용 | 계약 영향 | 상태 |
 |---|---|---|---|
-| B0 | 목표 트래픽 모델, 계약 회의 안건 #21~#23 과 #15 확장, PLAN·CHECKLIST 갱신 | 없음(안건만 추가) | **[구현됨]** 브랜치 `load/socar`, main 미병합 |
-| B1 | Actuator 를 관리 포트 8081 에 둠(공개 8080 에는 `/actuator` 없음), Prometheus 노출 | 없음 | **[구현됨]** 브랜치 `load/socar`, main 미병합 — `ObservabilityEndpointTest`(공개 포트 404·관리 포트 200) |
+| B0 | 목표 트래픽 모델, 계약 회의 안건 #21~#23 과 #15 확장, PLAN·CHECKLIST 갱신 | 없음(안건만 추가) | **[구현됨]** 브랜치 `load/socar`, ~~main 미병합~~ PR #3 로 main 병합(2026-11-13, 2026-11-25 `gh pr view 3` 확인) |
+| B1 | Actuator 를 관리 포트 8081 에 둠(공개 8080 에는 `/actuator` 없음), Prometheus 노출 | 없음 | **[구현됨]** 브랜치 `load/socar`, ~~main 미병합~~ PR #3 로 main 병합(2026-11-13) — `ObservabilityEndpointTest`(공개 포트 404·관리 포트 200) |
 | B2 | 작업 지표 `beside.jobs.*`·`beside.job.*`(성공률·생성 시간·대기열 길이) | METRICS 추가 | **[구현됨]** 〃 — `JobMetrics`·`JobQueueGauge` 와 테스트 |
 | B3 | 에셋 다운로드 지표(클라이언트 중단 구분) | METRICS 추가 | **[구현됨]** 〃 — 실제 Tomcat 에서 다운로드 중간 끊기 시험 포함 |
-| B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 파일 **[구현됨]** 〃. 이 PC 에 Docker 가 없어 compose·Caddy·Grafana 실행은 CI 첫 실행과 VM 에서 처음 확인 **[계획]** |
+| B4 | compose `monitoring` 프로필(Prometheus·Grafana), Caddy `/actuator*` 404·`/grafana*` 인증 | 없음 | 파일 **[구현됨]** 〃. compose·Caddy 경로는 CI(PR #3)에서 확인. Prometheus 는 부하 시험 때 VM 에서 띄움 **[실험 결과]**, Grafana 는 2026-11-25 운영 VM 에 띄움 **[적용]**([deploy/README](../deploy/README.md) '모니터링'). 화면 확인·캡처는 [계획] |
 | B5 | 추론 스텁 패스스루 설정(지연·슬롯·실패율·느린 요청, 기본 꺼짐) — Generation 리뷰 | 없음 | **[구현됨]** 〃 — `test_app.py` 8개 추가, 3D 담당 리뷰 전 |
-| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). 2차(실제 A40, G0r·G1r·G3r) 같은 날 **[실험 결과]** — [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md). 3차(실제 A40, G2r·F2-real·F1b-real, 같은 Pod 를 스텁으로 F1a) 2026-11-19 **[실험 결과]** — [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md). 4차(새 A40 Pod, G0r·같은 Pod 의 G3r·G2r·F1b-real 다시) 2026-11-19 UTC **[실험 결과]** — [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md). A3 large·스텁 G1·G2·G3·스텁 F1~F5·A5·A6 **[계획]** |
+| B6 | 부하 시험 덮어쓰기 `deploy/docker-compose.loadtest.yml` 과 절차 | 없음 | 파일 **[구현됨]** 〃, VM 실행 1차(A0~A4, A3 는 small·A4 는 15/s 까지) 2026-11-18 **[실험 결과]** — [perf/load/2026-11-18_vm-1st.md](perf/load/2026-11-18_vm-1st.md). 2차(실제 A40, G0r·G1r·G3r) 같은 날 **[실험 결과]** — [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md). 3차(실제 A40, G2r·F2-real·F1b-real, 같은 Pod 를 스텁으로 F1a) 2026-11-19 **[실험 결과]** — [perf/load/2026-11-19_vm-3rd.md](perf/load/2026-11-19_vm-3rd.md). 4차(새 A40 Pod, G0r·같은 Pod 의 G3r·G2r·F1b-real 다시) 2026-11-19 UTC **[실험 결과]** — [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md). 5차(새 A40 Pod, 털 맵 GLB 의 G0·같은 Pod 의 큐 상한 0 대 19, 장애 재현 FD16b·F1b·FD9·FD5) 2026-11-21 UTC **[실험 결과]** — [perf/load/2026-11-21_vm-5th.md](perf/load/2026-11-21_vm-5th.md). A3 large·스텁 G1·G2·G3·스텁 F1~F5·A5·A6 **[계획]** |
 | B7 | k6 스크립트·결과 수집 `scripts/load/`, 모델 계산 `model.py` | 없음 | **[구현됨]** 〃 — Python 시험 84개, k6 대역으로 돌린 Node 시험 89개(2026-11-19 PR #9 로 7개 더함: 상태 계열 카운터·browse 사전 VU). 2026-11-01~02 개발 PC 에서 실제 k6 v2.3.0 으로 스크립트마다 짧게 돌려 동작을 확인하고 찾은 문제를 고침(루프백, mock jar·패스스루 스텁·Prometheus 대역, 줄인 단계 — 용량 결과가 아니므로 [실험 결과] 로 쓰지 않는다). VM 실행 1차 2026-11-18 **[실험 결과]**(B6) |
-| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G0r·G1r·G3r 2차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로) 3차 **[실험 결과]**(2026-11-19). 새 Pod 에서 G0r(새 시작 기본값)·같은 Pod 의 c=1 과부하와 c=2(Pod 요청별 시간)·F1b-real 다시(PR #11) 4차 **[실험 결과]**(2026-11-19 UTC, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 스텁 G1·G2·G3, 스텁 F1~F5, A5·A6, 넘치는 c=2 **[계획]** |
-| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | 2026-11-21 결정: #21 큐 상한 도입(N=19, `Retry-After` 165 s) — `api-v1.1`, PR #19 에 서버·웹 코드와 시험 **[구현됨]**(Unity 는 컴파일만), 운영에서 켜는 것은 Unity 새 빌드와 5차 부하 시험 뒤 **[계획]**. #22 는 429 이름만 예약하고 키·한도·구현은 큐 상한 적용과 5차 부하 시험 뒤 **[계획]** |
+| VM 측정 | A0~A4·G1·G2·F1~F4(11-09 주), A5·A6·G3·F5(11-16 주) | — | A0~A4 1차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G0r·G1r·G3r 2차 **[실험 결과]**(2026-11-18). 실제 GPU 의 G2r·F1b-real·F2-real 과 F1a(Pod 를 스텁으로) 3차 **[실험 결과]**(2026-11-19). 새 Pod 에서 G0r(새 시작 기본값)·같은 Pod 의 c=1 과부하와 c=2(Pod 요청별 시간)·F1b-real 다시(PR #11) 4차 **[실험 결과]**(2026-11-19 UTC, [perf/load/2026-11-20_vm-4th.md](perf/load/2026-11-20_vm-4th.md)). 털 맵 GLB 로 G0·같은 Pod 의 상한 0(`g3cap0`, S_busy 8.81 s)과 상한 19(`g3cap19`, 합격 기준 1~5 통과), FD16b(실제 Pod)·F1b·FD9·FD5(훈련 스텁·훈련 backend, 알림은 훈련 수집기로) 5차 **[실험 결과]**(2026-11-21 UTC, [perf/load/2026-11-21_vm-5th.md](perf/load/2026-11-21_vm-5th.md)). 스텁 G1·G2·G3, 스텁 F1~F5, A5·A6, 넘치는 c=2 **[계획]** |
+| R1~R3 | 큐 상한(503 `QUEUE_FULL`), 클라이언트별 요청 제한(429 `RATE_LIMITED`) | openapi·ERROR_CODES | 2026-11-21 결정: #21 큐 상한 도입(N=19, `Retry-After` 165 s) — `api-v1.1`, PR #19 에 서버·웹 코드와 시험 **[구현됨]**(Unity 는 컴파일만, PR #19 는 2026-11-21 병합·태그 `api-v1.1`). 켜는 조건 중 5차 부하 시험은 끝났다(2026-11-21, N 19 그대로 **[실험 결과·계산]**). 남은 조건은 `QUEUE_FULL` 을 아는 Unity 새 빌드를 기기에 까는 것이라, 운영에서 켜는 것은 발표 뒤 **[계획]**(운영은 꺼 둠, compose 기본 0). #22 는 429 이름만 예약하고 키·한도·구현은 큐 상한 적용과 5차 부하 시험 뒤 **[계획]** |
 | B8·B9 | 전용 작업 executor, 다중 GPU 풀 | 없음 | **[계획]** VM 기준 측정 뒤 |
 
-막는 것: VM(11-04 목표, 위 직접 할 일)이 있어야 부하 시험을 시작할 수 있고, 계약 회의가 있어야 R1~R3 을 main 에 넣을 수 있다. → 2026-11-21 결정으로 R1~R3 의 순서는 `api-v1.0` 태그 → `api-v1.1`(큐 상한, PR #19)이다.
+막는 것: VM(11-04 목표, 위 직접 할 일)이 있어야 부하 시험을 시작할 수 있고, 계약 회의가 있어야 R1~R3 을 main 에 넣을 수 있다. → 2026-11-21 결정으로 R1~R3 의 순서는 `api-v1.0` 태그 → `api-v1.1`(큐 상한, PR #19)이다. 둘 다 2026-11-21 에 태그를 올렸다(2026-11-25 `git tag -l` 확인).
 
-## 5단계 — 측정·보고 (2026-11-23 ~ 12-06)
+## 5단계 — 측정·보고 (2026-11-23 ~ 12-04 발표)
 
 담당 전원. 의존: 4단계.
+
+기간: 원래 12-06 까지였다. 2026-11-25 발표일(2026-12-04, 금)을 확인해 발표일까지로 고쳤다. 보고서 제출일은 아직 확인 전이다(직접 할 일). 배포 동결 12-01·리허설 12-01 은 [CHECKLIST 0절](CHECKLIST.md) 일정의 [제안]이다.
 
 산출물: METRICS 전 항목 측정표(서버·추론·앱), 품질 평가표, 발표 자료·보고서(**문제 → 구현 → 실험 → 결과 → 개선**), 데모 영상.
 
 DoD:
-- [ ] 측정표 3종 + 환경 명시, 실험 기록과 숫자 일치
-- [ ] 발표 리허설 1회, 보고서 초안 리뷰
-- [ ] Animation·Rigging 은 "향후 과제"로만 기술
+- [ ] 측정표 3종 + 환경 명시, 실험 기록과 숫자 일치 — 2026-11-25: 서버·추론은 부하 시험 1~5차 **[실험 결과]**, 앱(기기)은 0건
+- [ ] 발표 리허설 1회, 보고서 초안 리뷰 — 2026-11-25: 보고서 초안은 브랜치 `docs/final-report-2026-11-25` 에서 씀, 리허설은 [계획]
+- [ ] Animation·Rigging 은 "향후 과제"로만 기술 — 충돌: 리깅·애니메이션 코드는 #1 로 머지됐고, PR #30(`625c2a5`, 2026-11-22)으로 리깅 템플릿 정점 번호를 변환기 출력에 맞추는 도구가 들어왔다(목적: 서버 결과에 애니메이션. 운영 결과에 리깅이 붙었다는 것은 2026-11-25 종합의 [조사]). 발표·보고서에서 어떻게 쓸지는 팀 결정(직접 할 일, CHECKLIST 0절 M2)
 
 ---
 
@@ -205,5 +207,5 @@ DoD:
 | 리포 경로에 한글·공백 (OneDrive `바탕 화면` 등) | 모델 쪽 이미지 로더(cv2 등)가 업로드 사진을 못 읽어 `INFERENCE_FAILED` | GPU PC 에서는 리포를 ASCII·공백 없는 경로(예 `C:\beside`)에 둔다. `run_real.ps1` 이 경고한다 |
 | 패스스루 실행이 측정에 섞임 | 베이스라인 수치 오염 | `job_runs.passthrough=true` 로 거른다(METRICS §1.1 SQL). 개선안은 `modelVersion` 으로 구분 |
 | 기기 성능 (FPS) | 2단계 | 삼각형 상한 하향, 텍스처 1024 로 축소 실험 |
-| 쏘카 수준(T3) 생성 수요를 GPU 1대로 감당 못 함 | 공개 베타(T2)부터 GPU 1대 용량 초과: 생성 시간 T > 21초면 이용률 0.7 초과, T ≥ 30초면 대기열이 계속 늘어 앱의 600초를 넘김 | 용량 모델로 필요 GPU 수를 계산해 보고하고(c = ⌈λT/0.7⌉, T3·T=60초면 86대, [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md)), 넘치는 요청은 큐 상한으로 즉시 거절한다(안건 #21, 2026-11-21 결정: N=19, 적용은 `api-v1.1` PR #19 [계획]). 다중 GPU 풀은 [계획] |
+| 쏘카 수준(T3) 생성 수요를 GPU 1대로 감당 못 함 | 공개 베타(T2)부터 GPU 1대 용량 초과: 생성 시간 T > 21초면 이용률 0.7 초과, T ≥ 30초면 대기열이 계속 늘어 앱의 600초를 넘김 | 용량 모델로 필요 GPU 수를 계산해 보고하고(c = ⌈λT/0.7⌉, T3·T=60초면 86대, [perf/load/TRAFFIC_MODEL.md](perf/load/TRAFFIC_MODEL.md)), 넘치는 요청은 큐 상한으로 즉시 거절한다(안건 #21, 2026-11-21 결정: N=19. 코드는 `api-v1.1` PR #19 로 main 에 들어갔고 **[구현됨]**, 5차 부하 시험에서 상한 19 가 합격 기준을 통과했다 **[실험 결과]**. 운영 VM 에서는 꺼 두었고 켜는 것은 Unity 새 빌드 뒤 [계획] — 2026-11-25 확인). T=60초 가정 대신 잰 처리 용량(슬롯 1개 409~415건/h, 슬롯 2개 510~530건/h)으로 다시 계산하면 T3 는 GPU 10~13대다 [계산]([vm-3rd 10절](perf/load/2026-11-19_vm-3rd.md)·[vm-4th 9절](perf/load/2026-11-20_vm-4th.md)). 실제로 GPU 를 늘려 본 적은 없다. 다중 GPU 풀은 [계획] |
 | 업로드·GLB 누적으로 디스크 고갈 | T2(하루 2.3 GB)에서 VM 디스크가 참: 사용 가능 약 20 GB [가정] 기준 약 9일 (30 GB 전부면 13일) | 보존 정책(안건 #23, 2026-11-21 결정: 사진 7일·GLB 30일, 지운 작업은 404 `ASSET_NOT_FOUND`, 디스크 80 % 알림은 적용됨. 자동 삭제 구현은 공개 베타 전 [계획]). 부하 시험은 별도 볼륨에 쓰고 디스크 80 %에서 중단한다 |

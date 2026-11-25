@@ -1,6 +1,6 @@
 # Beside 계약서 v1.2 (통합본)
 
-세 트랙(Backend · Unity · 3D Generation)이 지켜야 할 경계면을 한 파일에 모았다. 기계가 읽는 원본은 [api/openapi.yaml](api/openapi.yaml)이며 backend 계약 테스트(`JobV1ContractTest`)가 서버와 비교한다. 이 문서와 원본이 다르면 원본이 우선이고, 이 문서를 고친다. 상태 표기: **[구현됨]** / **[실험 결과]** / **[계획]**. "제안값"은 확정 전까지 임시값이다(2026-11-21 에 정한 것은 §7). 버전: `api-v1.0`(태그) → `api-v1.1`(큐 상한) → `api-v1.2`(검토 브랜치에서 고른 대기 정보·취소·공유·보관함·관리·평가, 브랜치 `feat/api-v1.2` 에 반영, 병합·태그 [계획]).
+세 트랙(Backend · Unity · 3D Generation)이 지켜야 할 경계면을 한 파일에 모았다. 기계가 읽는 원본은 [api/openapi.yaml](api/openapi.yaml)이며 backend 계약 테스트(`JobV1ContractTest`)가 서버와 비교한다. 이 문서와 원본이 다르면 원본이 우선이고, 이 문서를 고친다. 상태 표기: **[구현됨]** / **[실험 결과]** / **[계획]**. "제안값"은 확정 전까지 임시값이다(2026-11-21 에 정한 것은 §7). 버전: `api-v1.0`(태그) → `api-v1.1`(큐 상한) → `api-v1.2`(검토 브랜치에서 고른 대기 정보·취소·공유·보관함·관리·평가, PR #27 로 main 병합·태그 `f6dfa66` 2026-11-22 — 2026-11-25 확인: `git tag -l`).
 
 ---
 
@@ -29,7 +29,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile, workerType: "mock"\|"real" }`. `profile` 은 활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음, 예 `mock`·`real`, 공개 서버는 `real,prod`, 활성 프로파일이 없으면 `mock`). 앱은 `mock`\|`real` 둘 중 하나라고 가정하지 않는다(워커 종류는 `workerType`) | — |
 | `POST /api/v1/jobs/{jobId}/cancel` (v1.2) | 본문 없음. PENDING 일 때만 | **200** `JobResponse`(status=FAILED, `error.code=CANCELED`). 워커는 시작하지 않는다 | 409 `JOB_NOT_PENDING`(PROCESSING 은 GPU 연산을 멈출 수 없음, 이미 끝난·취소한 작업 포함), 404, 500 |
 
-v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](api/openapi.yaml)) — [구현됨] 브랜치 `feat/api-v1.2`(검토 브랜치 2026-10-30 → 2026-11-21 #11 로 고름):
+v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](api/openapi.yaml)) — [구현됨] 브랜치 `feat/api-v1.2`(검토 브랜치 2026-10-30 → 2026-11-21 #11 로 고름) → PR #27 main 병합·태그 `api-v1.2`(2026-11-22):
 
 - 공유 링크(tag share): 만들기 `POST /api/v1/jobs/{jobId}/shares`(201, 완료 작업만, 작업당 살아 있는 링크 20개까지 — 넘으면 400 `INVALID_REQUEST`), 모두 끊기 `DELETE /api/v1/jobs/{jobId}/shares`(200 `{revoked}`, 토큰 없이 끊는 길), 하나 끊기 `DELETE /api/v1/shares/{token}` — 셋 다 웹 작업 상세 페이지가 쓰고 배포에서는 Basic 인증 뒤다(앱 공유는 [계획], 그때 공개 여부를 다시 정한다). 보기는 공개: `GET /api/v1/shares/{token}`, `GET /api/v1/shares/{token}/asset`, 웹 뷰어 `/s/{token}`. 공유 쪽 오류는 404 `SHARE_NOT_FOUND` 하나이고 작업 id 를 드러내지 않는다.
 - 보관함(tag pets, 배포에서는 Basic 인증): `POST/GET /api/v1/pets`, `GET/PATCH/DELETE /api/v1/pets/{petId}`(`?withJobs=true` 면 끝난 작업도 지움, 진행 중 작업이 있으면 409 `JOB_IN_PROGRESS`), `PUT /api/v1/jobs/{jobId}/pet`. 404 `PET_NOT_FOUND`. 보관함에 쓰는 길은 이것뿐이다: 공개 `POST /api/v1/jobs` 는 펫을 받지 않고(미분류로 만든다), 보관함 웹이 202 뒤에 `PUT /api/v1/jobs/{jobId}/pet` 을 부른다. `JobResponse.petId` 는 공개 `GET /api/v1/jobs/{jobId}` 에도 나오지만 그 UUID 로 할 수 있는 일은 모두 인증 뒤다.
@@ -116,7 +116,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 
 대표 사진 검사(`UNREADABLE_IMAGE` ~ `IMAGE_TOO_BLURRY`)는 첫 장만 202 전에 검사하고 처음 걸린 이유 하나를 돌려준다. real·prod 기본 켬, mock 기본 끔이라 같은 사진이 mock 에서는 202, real·prod 에서는 400 일 수 있다. 2026-11-21 결정(#19): 이 동작과 400 코드 7개를 확정하고, 기준값은 제안값 그대로 두고 팀 사진 판정표 뒤 다시 본다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md)). 서버 구현은 **[구현됨]**(2026-11-05 `feat/preprocess`, 2026-11-13 main 병합: 코드·테스트). VM(2 vCPU)의 검사 시간은 2차 부하 시험에 있다 **[실험 결과]**(`checkMs` 실행별 평균 381~483 ms, 같은 사진 반복, [perf/load/2026-11-18_vm-2nd.md](perf/load/2026-11-18_vm-2nd.md)). 메모리는 **[계획]**.
 
-대기열 상한(`QUEUE_FULL`)은 2026-11-21 에 Backend 담당이 정했다(안건 #21, `api-v1.1`): 503 `QUEUE_FULL` + `Retry-After`, N=19·`Retry-After` 165 s(목표 최악 대기 W=180 s 규칙, c=1. 5차 부하 시험에서 S_busy 를 다시 재면 다시 계산할 수 있다). 서버 기본값은 꺼짐(`admission.max-pending=0`)이고 운영 서버는 Unity 새 빌드 설치와 5차 부하 시험 전까지 꺼 둔다 **[계획: 운영에서 켜기]**. 서버·웹 코드와 시험은 **[구현됨]**(PR #19), Unity 는 에디터·기기 확인 **[계획]**. 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 의 요청은 상한과 상관없이 그 키의 작업을 받는다(첫 요청이 아직 접수 중이어도). 거절된 retry 의 작업은 FAILED 그대로다. 서버 설정 `admission.stale-after-ms`(기본은 정상 작업의 가장 긴 대기, prod·N 19·c 1 이면 2시간 56분)보다 오래된 PENDING 은 세지 않는다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
+대기열 상한(`QUEUE_FULL`)은 2026-11-21 에 Backend 담당이 정했다(안건 #21, `api-v1.1`): 503 `QUEUE_FULL` + `Retry-After`, N=19·`Retry-After` 165 s(목표 최악 대기 W=180 s 규칙, c=1. 5차 부하 시험에서 S_busy 를 다시 재면 다시 계산할 수 있다). 서버 기본값은 꺼짐(`admission.max-pending=0`)이고 운영 서버는 Unity 새 빌드 설치와 5차 부하 시험 전까지 꺼 둔다 **[계획: 운영에서 켜기]**(2026-11-25 확인: 5차 부하 시험은 2026-11-21 에 N 19 를 확인했다 — PR #28. 남은 조건은 Unity 새 빌드 설치). 서버·웹 코드와 시험은 **[구현됨]**(PR #19), Unity 는 에디터·기기 확인 **[계획]**. 상한이 차 있으면 생성은 대표 사진 검사보다 먼저 503 을 받고, 같은 `Idempotency-Key` 의 요청은 상한과 상관없이 그 키의 작업을 받는다(첫 요청이 아직 접수 중이어도). 거절된 retry 의 작업은 FAILED 그대로다. 서버 설정 `admission.stale-after-ms`(기본은 정상 작업의 가장 긴 대기, prod·N 19·c 1 이면 2시간 56분)보다 오래된 PENDING 은 세지 않는다(자세한 규칙은 [api/ERROR_CODES.md](api/ERROR_CODES.md) '대기열 상한').
 
 ### Job 실패 (`JobResponse.error.code`, status=FAILED)
 
@@ -148,7 +148,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 | 정점 속성 | `POSITION`, `NORMAL`, `TEXCOORD_0`, 리깅본은 + `JOINTS_0`·`WEIGHTS_0`(템플릿 것). 인덱스 uint16/uint32 |
 | 머티리얼 | PBR metallic-roughness, baseColorTexture = `uv.png`, metallic 0, roughness 0.8~1.0 (제안값) |
 | 텍스처 | ≤ 2048² (제안값, #3), PNG 임베드, sRGB. base color 1장(+ 아래 털 맵 2장은 linear 데이터, 같은 해상도 상한) |
-| 털 맵 | 앱 셸 털용 길이·결 맵 두 장(PNG, BIN 청크)과 `furLength` 를 base GLB 루트 `extras.beside` = `{ hairLengthImage, hairFlowImage, furLength }` 에 싣는다(2026-11-21 #14). 변환기가 넣고 리깅본도 옮긴다 **[구현됨: PR #25, main 병합(2026-11-21)·Pod 반영 전]**. 앱은 작업 흐름으로 받은 GLB 에서만 읽는다. 기기 확인 **[계획]**. 형식은 GLB_SPEC §4.1 |
+| 털 맵 | 앱 셸 털용 길이·결 맵 두 장(PNG, BIN 청크)과 `furLength` 를 base GLB 루트 `extras.beside` = `{ hairLengthImage, hairFlowImage, furLength }` 에 싣는다(2026-11-21 #14). 변환기가 넣고 리깅본도 옮긴다 **[구현됨: PR #25, main 병합(2026-11-21)·Pod 반영(2026-11-25 확인: 2026-11-21 5차 부하 시험의 Pod 가 낸 GLB 에 `extras.beside` — [perf/load/2026-11-21_vm-5th.md](perf/load/2026-11-21_vm-5th.md) 1절 '털 맵 확인')]**. 앱은 작업 흐름으로 받은 GLB 에서만 읽는다. 기기 확인 **[계획]**. 형식은 GLB_SPEC §4.1 |
 | 파일 크기 | ≤ 10 MB (제안값, #3). 실제 출력 1,310,876~1,327,400 B **[실험 결과]**(exp-01 — 리깅 없고 털 맵을 GLB 에 넣기 전의 출력) |
 | 검증 | gltf-validator 오류 0 **[계획]**(exp-02), Unity glTFast 로드, 바닥 접지·정면 확인. 변환기는 삼각형·텍스처·파일 크기 상한을 넘으면 `CONVERSION_FAILED` 로 끝낸다 **[구현됨]** |
 | 변환기 출력 | `base.glb` + `base.metrics.json { vertices, triangles, textureSize, bytes, convertMs }`(리깅한 GLB 를 쓰면 `bytes`·`convertMs` 를 그 기준으로 다시 씀) |
@@ -200,7 +200,7 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 
 `detail.code` 가 Job 실패 코드면 HTTP 상태와 관계없이 그 코드를 쓴다. Spring 은 `/infer` 를 `inference.max-concurrency`(기본 1)건만 동시에 부르고, `error.message` 에 경로·내부 주소·추론 서비스 원문 메시지를 싣지 않는다(서버 로그에만).
 
-`GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드. 그 밖의 선택 필드(`tokenOk`·`busyForMs`·`loadError`·`instanceId` — 2026-11-20, `modelVersion` — API v1.2 병합 2026-11-21: 로드된 모델, `+rig` 는 붙이지 않음 #18)는 [inference_service/README.md](../generation/inference_service/README.md) 'GET /healthz'.
+`GET /healthz` → `{ "status": "ok", "device": "cuda|cpu|unknown", "modelLoaded": false, "passthrough": false }`. 환경변수 `BESIDE_SAMPLE_GLB` 가 있으면 모델 없이 샘플 경로를 돌려주는 패스스루 모드. 그 밖의 선택 필드(`tokenOk`·`busyForMs`·`loadError`·`instanceId` — 2026-11-20, `modelVersion` — API v1.2 병합 2026-11-22(PR #27): 로드된 모델, `+rig` 는 붙이지 않음 #18)는 [inference_service/README.md](../generation/inference_service/README.md) 'GET /healthz'.
 필드 추가(2026-11-20) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `tokenOk`(요청에 `X-Inference-Token` 이 있을 때만 `/infer` 가 그 값을 받을지 true/false, 없으면 null)·`busyForMs`(아직 도는 가장 오래된 `predict`·패스스루 모의 생성이 시작한 뒤 ms, 없으면 0). 응답은 여전히 200 이고, Spring 은 두 필드로 Discord 알림만 보낸다(`inference.stuck-alert-ms`, 기본 120000). 작업을 보낼지 정하는 UP 판정은 바꾸지 않는다.
 필드 추가(2026-11-20, 장애 훈련 FD18) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `loadError`(모델을 불러오지 못한 이유 한 줄 — 예외 이름과 짧은 메시지, 경로·토큰 없음, 최대 200자. 불러오는 중·불러온 뒤·패스스루는 null). `status`·`modelLoaded`·UP 판정은 그대로이고(작업은 지금처럼 PENDING 으로 기다린다), Spring 은 생기고 풀릴 때 Discord 알림(🧩, 예외 이름만)을 한 번씩 보낸다.
 필드 추가(2026-11-20, 장애 훈련 FD16b) **[구현됨: FastAPI·Spring, 시험으로 확인]**: `instanceId`(서비스 프로세스마다 새로 정하는 무작위 16진 12자). 상태·UP 판정·알림은 그대로이고, prod Spring 은 요청을 보낼 때 본 값과 다른 `instanceId` 가 보이면 끝나지 않은 그 요청을 포기한다(`POST` 중 `INFERENCE_UNAVAILABLE`, 내려받는 중 `CONVERSION_FAILED`, [inference_service/README.md](../generation/inference_service/README.md) 'Spring 쪽 매핑 추가').
@@ -230,7 +230,7 @@ DELETE /artifacts/{jobId}            → 204 작업 폴더(업로드 사진·결
 | `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
 | 그 밖 | 업로드 | 위 표 그대로 |
 
-Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 120000 — 2026-11-21 #7 로 600000 에서 줄였다. 그 작업 자신의 요청에만 걸리고 PENDING 대기는 세지 않는다. 앱의 최대 대기 600 s 는 그대로. 운영 VM 에는 2026-11-21 main `fe10683` 배포로 들어갔다), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
+Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 120000 — 2026-11-21 #7 로 600000 에서 줄였다. 그 작업 자신의 요청에만 걸리고 PENDING 대기는 세지 않는다. 앱의 최대 대기 600 s 는 그대로. 운영 VM 도 120 s: 2026-11-21 `fe10683` 배포부터([perf/load/2026-11-21_vm-5th.md](perf/load/2026-11-21_vm-5th.md) 1절), 2026-11-25 확인 VM main `625c2a5`), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
 
 ---
 
@@ -239,8 +239,8 @@ Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `ht
 안건 #1~#23 은 2026-11-21 에 계약 회의를 열지 않고 Backend 담당(저장소 관리자)이 정했다. 결정 전문은 [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md) 의 '결정' 칸, 버전별 정리는 [api/CHANGELOG.md](api/CHANGELOG.md).
 
 - `api-v1.0`(2026-11-21 태그)에 넣은 것: `hair` variant 삭제(#4), GLB_SPEC 을 실제 출력에 맞춤(#14), 에셋 상한은 제안값 유지·hair 상한 삭제(#3), 프로파일 차이 명시(#17·#19), 429 `RATE_LIMITED` 이름 예약(#22), 내부 계약 — 업로드 모드(#6)·`inference.timeout-ms` 120 s(#7)·`+rig`(#18), 측정 문서 표기(#16). #7 의 나머지(retry 횟수 제한 없음, 서버 재시작 때 끊긴 작업은 FAILED `INTERNAL_ERROR` + retry, 폴링 1~2초, 앱 최대 대기 600 s)와 #1·#2·#5·#8·#9·#10·#13·#15·#20 은 지금 문서 그대로 확정.
-- `api-v1.1` 에 넣는 것: 작업 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, N=19·165 s, 기본 꺼짐 — #21, PR #19). 운영에서 켜는 것은 Unity 새 빌드와 5차 부하 시험 뒤 **[계획]**.
-- `api-v1.2` 에 넣는 것: v1.1 검토 브랜치에서 고른 기능 — 대기 정보(`queue`·`estimate`, 상한을 켜면 상한과 같은 행을 셈)·대기 취소·공유 링크·반려동물 보관함·관리 API/화면·품질 평가와 오류 코드 `CANCELED`·`JOB_NOT_PENDING`·`JOB_IN_PROGRESS`·`SHARE_NOT_FOUND`·`PET_NOT_FOUND`(#11·#12). 작업 삭제·썸네일·입력 사진 엔드포인트와 `thumbnailUrl` 은 뺐다. `+rig` 는 그 작업의 리깅이 성공했을 때만(#18, 추론 서비스 `/healthz` 의 `modelVersion` 도 `+rig` 없이). 서버·웹과 시험 **[구현됨]**(브랜치 `feat/api-v1.2`), main 병합·태그·VM 배포는 **[계획]**, Unity 는 바꾸지 않음(새 필드·코드를 무시·일반 문구로 처리).
+- `api-v1.1` 에 넣는 것: 작업 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, N=19·165 s, 기본 꺼짐 — #21, PR #19, main 병합·태그 `api-v1.1` `fe10683`). 운영에서 켜는 것은 Unity 새 빌드 설치 뒤 **[계획]**(5차 부하 시험은 2026-11-21 에 N 19 를 확인 — PR #28, 2026-11-25 확인).
+- `api-v1.2` 에 넣는 것: v1.1 검토 브랜치에서 고른 기능 — 대기 정보(`queue`·`estimate`, 상한을 켜면 상한과 같은 행을 셈)·대기 취소·공유 링크·반려동물 보관함·관리 API/화면·품질 평가와 오류 코드 `CANCELED`·`JOB_NOT_PENDING`·`JOB_IN_PROGRESS`·`SHARE_NOT_FOUND`·`PET_NOT_FOUND`(#11·#12). 작업 삭제·썸네일·입력 사진 엔드포인트와 `thumbnailUrl` 은 뺐다. `+rig` 는 그 작업의 리깅이 성공했을 때만(#18, 추론 서비스 `/healthz` 의 `modelVersion` 도 `+rig` 없이). 서버·웹과 시험 **[구현됨]**(브랜치 `feat/api-v1.2`). main 병합(PR #27 `f6dfa66`, 2026-11-22)·태그 `api-v1.2`·운영 VM 배포(main `625c2a5`, 2026-11-22)는 끝났다(2026-11-25 확인: `git tag -l`, `gh pr view 27`, VM `~/Beside` 커밋). Unity 는 바꾸지 않음(새 필드·코드를 무시·일반 문구로 처리).
 - 남은 것 **[계획]**: 보존 정책의 자동 삭제 구현(사진 7일·GLB 30일, 공개 베타 전 — #23), 요청 제한의 키·한도·구현(#22), 앱에서 `queue`·`estimate`·취소 쓰기.
 
 ## 8. 원본 문서

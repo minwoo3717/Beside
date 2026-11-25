@@ -4,6 +4,7 @@
   - API·VM 은 **cold standby**: 매일 스냅샷 + VM 밖 백업 + 연습한 복구 절차.
   - GPU 는 **Pod 안 자동 재시작 + 새 Pod 복구 절차**로 한다.
   - 두 대를 동시에 돌리는 active-active 나 hot standby 는 지금 하지 않는다.
+  - 2026-11-25: [6절](#6-다음-단계-계획-2026-11-25-계획)에 다음 단계 계획(warm standby 단계안)을 세움, 실행 전.
 - **근거**: [장애 훈련 결과](2026-11-20_failure-drills.md), [런북](RUNBOOK.md).
 - **표기**:
   - [적용] 운영에 켜 둠
@@ -63,7 +64,7 @@
 | API·VM | **cold standby 적용**. 스냅샷 매일 [적용], VM 밖 백업 [적용], 복구 절차 [실험 결과 FD6], 자동 재시작 [이미], 감시 스크립트 R4 [적용](2026-11-20 05:34), 외부 가동 감시 R3 [계획: 채널] | 훈련에서 가장 위험했던 것은 "죽음" 이 아니라 "감지가 안 되는 것"(FD4·FD5·FD13·FD17)과 "백업이 같은 디스크"였다. 두 대 운영은 H2·로컬 파일·JVM 큐를 다시 짜야 하고 월 $160~290 이다. 팀 내부·시연 트래픽(T1~T2)과 남은 4주에 맞지 않는다 |
 | DB·파일 | **RPO: DB 24 h → 1 h, 파일 24 h** [적용] | 백업 zip 을 매시 20분에 버킷으로 올리고, 사진·GLB 는 하루 1번 올린다. H2 매시 5분 백업은 2026-11-20 05:33 UTC 배포로 켰다(설정 확인. 그 전에는 매일 04:30 KST zip 이 올라갔다). 버킷 백업으로 복구해 작업 15건을 확인했다 |
 | 보안 | 전용 서비스 계정 `beside-backup@`(버킷 만들기만, 키 없음), 컨테이너의 메타데이터 차단 [적용] | 2026-11-13 결정(컨테이너가 클라우드 권한을 얻지 않게)을 지키면서 VM 밖 백업을 하려면 |
-| GPU | **Pod 안 자동 재시작(R7) [적용] + 새 Pod 복구 절차** | 실제로 가장 자주 난 GPU 장애는 "멈춘 Pod 가 같은 호스트의 GPU 를 못 받음" 이다(2·3·4차·오늘). 새 Pod 로 98 s 에 복구했다. 다른 데이터센터 대기는 오늘 조회에서 A40 재고가 EU-SE-1 Medium, CA-MTL-1 Low 였고 EU-RO-1·EU-CZ-1·US-KS-2 는 없었다. 볼륨이 데이터센터에 묶여 바로 쓸 수 없다 |
+| GPU | **Pod 안 자동 재시작(R7) [적용] + 새 Pod 복구 절차** | 실제로 가장 자주 난 GPU 장애는 "멈춘 Pod 가 같은 호스트의 GPU 를 못 받음" 이다(2·3·4차·오늘). 새 Pod 로 98 s 에 복구했다. 다른 데이터센터 대기는 2026-11-20 조회에서 A40 재고가 EU-SE-1 Medium, CA-MTL-1 Low 였고 EU-RO-1·EU-CZ-1·US-KS-2 는 없었다. 2026-11-25 조회(Runpod `get-gpu-type NVIDIA A40`, Pod, 배치 조건 GPU 당 vCPU 4·RAM 24 GB)에서는 A40 Pod 재고가 EU-SE-1·CA-MTL-1 두 곳뿐이고 둘 다 LOW 였다. 볼륨이 데이터센터에 묶여 바로 쓸 수 없다 |
 | DNS·TLS | DuckDNS 유지, 전환 절차만 | 고정 IP 라 바뀔 일이 드물다. Cloudflare 는 자체 도메인이 필요하다 |
 
 ## 4. 나중 단계 (공개 베타 이상) [계획]
@@ -79,5 +80,155 @@
 - RTO 는 장애 훈련으로 잰다(FD1·FD3·FD6·FD16a). 결과는 [2026-11-20_failure-drills.md](2026-11-20_failure-drills.md).
 - R4·R7 은 배포한 뒤 2차 확인에서 다시 쟀다: FD2 멈춤 → 재시작 112 s, Pod 서비스 `kill -9` → UP 41 s [실험 결과 2차].
 - RPO 는 표지 작업으로 잰다(FD5).
-- 스냅샷 일정이 만든 첫 스냅샷(2026-11-20 19:00 UTC 이후)은 아직 확인하지 않았다 [계획].
-- 외부 가동 감시 알림은 채널을 만든 뒤 켠다 [계획].
+- 스냅샷 일정이 만든 스냅샷은 2026-11-25 확인했다: READY 5개(`beside-vm-asia-northeast3-a-20261120191411-6ww5dte2` ~ `beside-vm-asia-northeast3-a-20261124191411-l434mv0g`, 매일 19:14 UTC, `gcloud compute snapshots list`). 첫 것은 2026-11-20 19:14 UTC 다. 스냅샷으로 VM 을 다시 세우는 것은 FD6(훈련용 수동 스냅샷)에서만 연습했다.
+- 외부 가동 감시 알림은 채널을 만든 뒤 켠다 [계획]. 2026-11-25 에도 가동 감시는 0개다.
+
+## 6. 다음 단계 계획 (2026-11-25) [계획]
+
+- **상태**: 계획만 세웠다. 이 절의 어느 것도 실행하지 않았다. 실행은 사용자가 나중에 단계별로 명령한다(2026-11-25 사용자 결정).
+- **근거**: 2026-11-25 읽기 전용 조사. 원문은 [data/2026-11-25_redundancy-design/](data/2026-11-25_redundancy-design/).
+  - [00-constraints.md](data/2026-11-25_redundancy-design/00-constraints.md): backend 를 두 대 띄우거나 대기 서버로 넘기지 못하게 하는 제약 23가지
+  - [D1-warm-standby.md](data/2026-11-25_redundancy-design/D1-warm-standby.md): 다른 zone 대기 VM + 계획 전환
+  - [D2-active-active.md](data/2026-11-25_redundancy-design/D2-active-active.md): VM 2대 + NLB + Cloud SQL + GCS
+  - [D3-gpu-first.md](data/2026-11-25_redundancy-design/D3-gpu-first.md): backend GPU 풀과 시연 시간 Pod 두 대
+  - [90-synthesis.md](data/2026-11-25_redundancy-design/90-synthesis.md) B절: 점수표와 추천
+- **표기**: 시간·비용의 [계산]·[제안값]·[가설]·[미확인]은 조사 원문 그대로다. 목표 RTO·RPO 는 [제안값]이다. 단가 출처는 각 원문 5절에 있다.
+
+### 6.1 세 설계안 점수
+
+기준마다 1~5점, 30점 만점이다(90-synthesis B-1).
+
+| 기준 | D1 warm standby | D2 active-active | D3 GPU 먼저 |
+|---|---|---|---|
+| 12/04 전 완료 가능성 | 3 | 1 | 2 |
+| 훈련에서 드러난 위험을 줄이는 정도 | 3 | 2 | 4 |
+| 발표 증거(측정 가능한 전환) | 5 | 2 | 4 |
+| 비용(크레딧 안) | 4 | 3 | 4 |
+| 코드 위험(테스트·계약·MVP) | 4 | 1 | 2 |
+| 되돌리기 | 5 | 2 | 4 |
+| **합계 /30** | **24** | **11** | **20** |
+
+- **D1**: 앱 코드 0줄. 전체(W0~W12)는 약 7인일이고, 핵심(대기 VM + 계획 전환)은 약 2.5일이다. 가장 잦은 GPU 장애는 그대로 남는다.
+- **D2**: 약 15인일. 작업 배분·상태 전이·DB 를 바꾸고, PostgreSQL 로 옮긴 뒤 생긴 데이터는 H2 로 돌아가지 않는다.
+- **D3**: 실제로 가장 잦았던 GPU 장애(FD16a·R7/F2·FD10·FD17·FD18)를 겨눈다. 다만 backend 핵심 경로 500~900줄(2~4일)이고, 리뷰 브랜치(`fix/review-2026-11-25`, 7a8a56c)와 같은 파일을 고친다.
+
+### 6.2 추천과 사용자 결정
+
+**추천**: D1 을 줄여 단계로 나누고, D3 에서 backend 코드 0줄인 GPU 대비(절차·코드 고정)를 접붙이고, D2 는 발표 뒤 설계로만 둔다.
+- 12/04 전에는 운영 앱 코드를 건드리지 않고 "실제로 넘어가는 전환"을 재서 보여 주는 쪽이 남은 작업량과 MVP 원칙에 맞다. GPU 쪽도 같은 이유로 코드 대신 절차와 코드 고정으로 대비한다.
+- 4절의 장기 순서(GPU 풀 → 저장소·DB → VM 2대)는 Phase 3 에서 그대로 따른다.
+- 3절의 "cold standby" 결정을 "연습한 대기 VM" 으로 바꾸는 일이다. 3절은 Phase 0 을 실행할 때 고친다(0-2).
+
+**사용자 결정 (2026-11-25)**:
+- 계획만 세운다. 실행은 사용자가 나중에 명령한다.
+- 백업 주기 단축(DB 5분, 사진·GLB 매 실행)은 리뷰 브랜치를 VM 에 배포하는 창에 함께 넣는다. backend 재시작이 1번으로 끝난다.
+- 발표 당일 GPU 는 Pod 1대를 일찍 켜고 녹화 영상을 준비한다. Phase G 의 G-c(같은 볼륨의 예비 Pod B)는 고르지 않았다.
+
+### 6.3 전후 비교 (목표는 [제안값])
+
+| 항목 | 지금 | Phase 1 뒤 | Phase 2 뒤 |
+|---|---|---|---|
+| VM·zone 유실 RTO | 새 VM 응답까지 145 s(FD6) + 전환은 연습 안 함 → 사람 포함 20~40분 [가설] | 계획 전환 실측(목표 ≤ 3분). 비계획은 절차만 | 비계획 ≤ 10분 |
+| DB RPO | 최대 약 75분([deploy/README.md](../../deploy/README.md) '얼마나 잃는가') | 약 8분 [계산] | 같음. 대기 VM 에 미리 복구돼 있음 |
+| 사진·GLB RPO | 최대 24 h | 약 8분 [계산] | 같음 |
+| VM·Caddy 장애 감지 | 없음(가동 감시 0개) | R3 메일 3~4분 | + 다른 zone 의 대기 감시 약 90 s |
+
+### 6.4 단계별 계획
+
+#### Phase 0 — 감지 공백 닫기, 문서 먼저 (11/25~26 제안)
+
+| 조각 | 바꿀 파일·자원 | 시험·확인 | 시간 |
+|---|---|---|---|
+| 0-1 R3 외부 가동 감시 | 자원: 메일 알림 채널(사람, 콘솔), `deploy/gcp/uptime_check.sh create <channel>` | `gcloud monitoring uptime list-configs` 1개, `uptime_check.sh status` | 25분 |
+| 0-2 문서 먼저(D1 W1) | 이 문서 3절 결정을 "연습한 대기 VM" 으로. RUNBOOK 에 '대기 서버로 넘기기·되돌리기'와 금지 사항(복제본에서 `tailscale logout` 금지, 두 VM 동시 활성 금지). RUNBOOK 'DB 복구'·'VM 다시 세우기' 는 리뷰 브랜치(877f63b)가 고치므로 그 병합 뒤에 | 문서 검토 | 0.3일 |
+| 0-3 백업 계정에 버킷 읽기(D1 W3) | `deploy/gcp/backup_bucket.sh`(`BESIDE_BACKUP_READ=1`), `scripts/test_gcp_ops.sh`. 지우기·덮어쓰기는 여전히 안 됨 | `DRY_RUN=1`, `get-iam-policy` 에 `roles/storage.objectViewer` | 0.2일 + IAM 승인(사람) |
+
+- **DoD**: 가동 감시 1개가 켜져 있고, IAM 결합이 확인된다.
+- **비용**: $0. 가동 감시는 실행 100만 회까지 무료다(D3 0절, Google 가격 예시).
+
+#### Phase 1 — 백업 주기 단축 + 대기 VM + 계획 전환·되돌리기 실측 (11/26~11/30 제안, BE 약 2.5일, 줄인 판 약 1.8일)
+
+| 조각 | 바꿀 파일·자원 | 시험·확인 | 시간 |
+|---|---|---|---|
+| 1-1 백업 주기(D1 W2). 리뷰 브랜치 배포 창에 묶음 | `deploy/docker-compose.yml` 이 `STORAGE_BACKUP_CRON`·`STORAGE_BACKUP_KEEP` 을 넘김(지금 compose 에는 없음, 기본값은 지금 값 `0 5 * * * *`·48 — `application-prod.properties:33-34`). `deploy/.env.example`. VM `.env` 는 `0 */5 * * * *`·288. 사진·GLB 매 실행은 `beside-backup.service` drop-in `Environment=FORCE_FILES=1`(스크립트 0줄 [가설: 시험 안 함] — main `offsite_backup.sh:41` 이 환경 변수로 읽고, :193 이 "그날 첫 실행" 조건). `beside-backup.timer` 는 `*:20:00` → `*:03/5`. 호스트별 접두사(W2-③)는 Phase 2 | `scripts/test_offsite_backup.sh`(WSL), CI compose config. VM 에서 5분 zip 3개·업로드 3번(`journalctl -u beside-backup`), 리뷰 브랜치의 `DB_STALE_MIN` 검사 통과 | 0.5일 |
+| 1-2 대기 VM(D1 W4) | 새 `deploy/gcp/standby_vm.sh create\|ip-ephemeral\|status`: 가장 새 스냅샷 → zone b, e2-standard-2, `--no-address`, SA `beside-backup@`, 태그 `beside-web`, 라벨 `role=standby`, 삭제 방지 | `test_gcp_ops.sh` 가짜 gcloud. 할당량 여유 IN_USE_ADDRESSES 1/4, CPUS 2/12(D1 조사) | 0.5일 |
+| 1-3 대기 VM 첫 시작(D1 W5) | 새 `deploy/standby/standby_init.sh`: role 파일 → 점검 표시 → 감시·백업 타이머 끔 → `compose stop` → `beside-stub` 제거 → `last.ok` 지움 → tailscaled 정지·상태 파일 삭제 → 임시 IP → `tailscale up --hostname=beside-standby` | WSL 가짜 명령. VM 에서 `tailscale status` 에 beside-vm·beside-standby 가 따로 보이고 "Duplicate node key" 없음 | 0.5일 + Tailscale 로그인 링크·ACL 확인(사람) |
+| 1-4 계획 전환 스크립트(D1 W8 줄인 판) | 새 `scripts/failover_vm.sh --planned`(+`DRY_RUN`, 단계별 UTC 타임라인 파일). 순서: 원본 점검 표시 → `stop backend` → 오프라인 H2 백업(이름 형식 `beside-yyyyMMdd-HHmmss-SSS.zip` 그대로) → `FORCE_FILES=1` 로 바로 올림 → 대상에서 당겨 와 복구 → 대상 `up -d` → 원본 `delete-access-config --access-config-name=external-nat` → 대상의 임시 IP 떼기 → 대상에 `beside-ip` 붙이기 → healthz·공개 경로 61개. 실패하면 원본에 IP 를 다시 붙이는 되돌림 포함. `scripts/deploy_vm.sh` 에 `BESIDE_DEPLOY_STANDBY=1`(build + `up --no-start`). SSH 는 `HostKeyAlias` 를 따로 | `scripts/test_failover_vm.sh`(가짜 gcloud·ssh), DRY_RUN 출력 검토 | 1일(수동 절차 + 타임라인 기록만이면 0.3일) |
+| 1-5 훈련 D-1·D-3 | D-1 계획 전환 a→b, D-3 되돌리기 b→a. 결과 문서 `docs/ops/2026-1x-xx_failover-drills.md` 와 데이터. RUNBOOK 'VM 다시 세우기' 3~4번 [계획] → [실험 결과] | 아래 DoD | 0.5일(창 1시간, 공지는 사람) |
+
+- **DoD** (D-1·D-3 각각):
+  - GCP 밖에서 `scripts/fault/drill_client.py`(1 s healthz + 20 s 마다 작업)로 잰 외부 끊김 초
+  - 스크립트 시작부터 공개 첫 200 까지의 시간
+  - `deploy/test_caddy_routes.sh` 61/61
+  - 표지 작업 A(마지막 백업 전)·B(뒤)가 모두 남음(RPO 0)
+  - Tailscale 노드가 둘로 따로 보이고 중복 키 경고가 없음
+  - 진행 중 작업이 `INTERNAL_ERROR` → retry 로 성공. Pod 를 켰다면 전환 뒤 1건 COMPLETED
+  - 목표 ≤ 3분 [제안값]. 못 맞춰도 잰 값을 [실험 결과]로 적는다.
+- **비용** [계산]: 대기 VM 을 훈련 날만 켜면 약 $1~3 + 디스크 약 $0.22/일(e2-standard-2 $0.086/h, pd-balanced $0.13/GB·월 — gcloud-compute.com 제3자, 공식 서울값 [미확인]). 12/04 까지 상시로 켜면 약 $19. 버킷 추가분은 $1 미만.
+
+#### Phase G — 발표 GPU 대비 (11/26~12/04 제안, backend 코드 0줄, D3 에서 접붙임)
+
+| 조각 | 바꿀 파일·자원 | 시험·확인 | 시간·비용 |
+|---|---|---|---|
+| G-a 당일 절차와 리허설 1회 | Pod 1대를 일찍 켜고, 실패하면 같은 볼륨으로 새 Pod, 대체 녹화 영상 준비(사용자 결정). 당일 절차는 [RUNBOOK '발표 당일 GPU 절차'](RUNBOOK.md) 에 적었다(2026-11-25). 리허설 1회 **[실험 결과]**: 새 Pod 생성 → VM 의 UP 89.6 s, 첫 작업 e2e 22.1 s, 9건 모두 COMPLETED([기록](data/2026-11-25_demo-gpu-rehearsal/README.md)). 실패 때 새 Pod 를 다시 세우는 시간은 재지 않았다 [계획] | 리허설에서 Pod 기동 → healthz UP 시간, 실패 때 새 Pod 를 세우는 시간(FD16a 98 s 와 비교) | 2시간 + 리허설 안. 리허설은 Pod 약 5분, 약 $0.05 [계산] |
+| G-b 시연 Pod 코드 고정 | Runpod Pod 시작 명령(리포 밖, RUNBOOK 'GPU Pod 다시 세우기' 2번)의 `checkout -B main origin/main` 을 태그(예: `demo-1204`)로. 리뷰 브랜치 병합(7c52918 이 리깅 도구 확인을 바꿈)부터 Pod 동작이 바뀌기 때문 | 시작 뒤 `/workspace/beside-logs/autostart-git.log` 의 커밋 | 30분(시작 명령 수정은 사람) |
+| G-c 같은 볼륨 예비 Pod B | **고르지 않음**(2026-11-25 사용자 결정). 참고: `start_pod.sh:49·53` 의 `TS_DIR`·`LOG_DIR` 을 바꿀 수 있게 하고 시연 시간에만 Pod B 를 켜는 안 | — | 0.5일 + $0.59/h × 4 h ≈ $2.4 [계산] |
+
+- **DoD**: 리허설에서 Pod 기동부터 짧은 작업 1건 COMPLETED 까지 잰 값, 대체 녹화 영상 1개.
+- **비용**: 위 표. A40 Pod $0.59/h(2026-11-25 `get-gpu-type`). 재고는 EU-SE-1·CA-MTL-1 모두 LOW 라 리허설에서 실제로 Pod 를 켜 본다.
+
+#### Phase 2 — warm 대기 + 비계획 전환 (12/05~12/12 제안, 발표 뒤)
+
+| 조각 | 바꿀 파일·자원 | 시험·확인 | 시간 |
+|---|---|---|---|
+| W6 당겨 오기 | 새 `deploy/standby/standby_pull.sh` + 5분 타이머. role 파일이 standby 가 아니거나 backend 가 돌고 있으면 거부(활성 DB 보호) | 가짜 gcloud·docker 로 WSL 시험(거부 조건 포함). VM 에서 3번 돌고 lag 표시 | 1일 |
+| W2-③ 호스트별 접두사 | DB 객체를 `db/<hostname>/` 로 나누고 RUNBOOK 'DB 복구' 갱신 | `scripts/test_offsite_backup.sh` | 0.3일 |
+| 비계획 전환 | `failover_vm.sh --unplanned`: 원본 `stop --async` + `delete-access-config` 에 시간 제한. 떼지 못하면 DuckDNS 안내를 출력하고 멈춤 | `scripts/test_failover_vm.sh` | 0.5일 |
+| (선택) W7 대기 감시 | 새 `deploy/standby/standby_watch.sh` 30 s, Discord 알림 | WSL 시험, 점검 창에서 운영 caddy 60 s 멈춤 | 0.5일 |
+| 훈련 D-2·D-3′ | D-2: 운영 VM 에서 `echo o > /proc/sysrq-trigger`. D-3′: 옛 운영 VM 을 대기로 돌려 되돌리기 | 아래 DoD | 0.5일 |
+
+- **DoD**: `last.pull` 기준 lag ≤ 10분이 24시간 유지됨(그림). D-2 에서 첫 감지 시각(R3 메일 / 대기 감시), 장애부터 공개 200 까지 ≤ 10분 [제안값], 잃은 표지는 마지막 업로드 뒤의 것뿐.
+- **비용** [계산]: 대기 VM 상시 약 $2.4/일, 7일에 약 $17. 12/21 정리 목록에 `beside-standby` 를 넣는다.
+
+#### Phase 3 — 프로젝트가 계속되면 (4절 순서: GPU 먼저)
+
+| 조각 | 바꿀 것 | 시험·확인 | 시간·비용 |
+|---|---|---|---|
+| G1 추론 주소 목록 | D3 P2 를 "G1만"으로 줄인 것(약 300줄), 리뷰 브랜치(7a8a56c) 병합 위에서. 주소마다 감시와 `restartWatch`, 시도마다 주소 고정(GLB 받기·`DELETE /artifacts` 를 같은 주소로), 진행 중 작업은 "다른 주소가 UP 이고 45 s 넘게 DOWN 이면 포기" | D3 4절 시험(스텁 서버 두 개), `.\gradlew.bat test` | [미확인](D3 는 P2 전체를 2~4일로 봄) |
+| 6차 부하 시험 | Pod 두 대로 μ₂ 실측 → `N_eff = 19 × UP 대수` 검증. R 은 대수와 거의 무관하게 165~167 s 이고, μ₂ 를 선형으로 놓은 것은 [가설]. 그다음 G2 슬롯 풀 | D3 P6(주소마다 G0 → G3 풀 과부하) | 3시간, Pod 두 대 약 $3.5 + k6 약 $0.5 [계산, D3 5절] |
+| D2-1 | 조건부 상태 전이 + 끝내기 펜싱. 그 뒤 D2-2~6, 인프라 D2-7~10 은 1~2일 시연 창에서만 세웠다 지운다 | 잠금을 나눈 `JobTransitions` 두 개로 start↔cancel 500번 경합, 공유 `jdbc:h2:mem` 두 컨텍스트 시험 | D2-1 1일 [가설], D2 전체 약 15인일 [가설] |
+| 그 뒤 | 자동 전환(막기 단계를 확실히 한 뒤), DuckDNS 전환 연습(D-4), 지역 디스크 평가 | — | — |
+
+- **DoD·비용**: 조각을 시작할 때 정한다 [계획].
+
+### 6.5 2·3위 안에서 접붙인 것
+
+- **D3 에서**:
+  - Runpod 사실(같은 데이터센터 볼륨에 여러 Pod 연결 허용, 동시 쓰기 위험)과 상태 폴더 분리. RUNBOOK 'GPU Pod 다시 세우기' 3번에 적었다.
+  - Serverless 예비 주소를 healthz 로 깨우지 않는다. 깨우면 $1.22/h 가 상시로 나간다.
+  - `N_eff` 규칙과 "R 은 GPU 대수와 거의 무관" 을 멘토 '확장 기준' 답으로 쓴다.
+  - 45 s 포기 규칙(G1 설계).
+- **D2 에서**:
+  - 새 Spring 프로파일을 만들지 않는다. healthz 의 `profile` 은 활성 프로파일을 그대로 내므로 대기 VM 도 `real,prod` 로 띄운다.
+  - D2-1 시험 설계를 Phase 3 첫 코드로.
+  - Caddy `:8090` readiness 헬스 체크, gcsfuse 메타데이터 캐시 TTL 0, Cloud SQL 비공개 IP 는 메모로 남긴다.
+- **D1 교정**:
+  - 제약 문서의 "복제본에서 `tailscale logout`" 제안을 철회한다. 같은 노드 키를 만료시켜 운영 VM 까지 끊을 수 있다 [가설].
+  - 사진·GLB 매 실행은 스크립트 수정 대신 systemd drop-in 으로 한다(1-1).
+
+### 6.6 하지 않을 것
+
+| 하지 않을 것 | 이유 |
+|---|---|
+| D2 전체(active-active, Cloud SQL, gcsfuse, NLB)를 12/04 전에 | 약 15인일. 오류 문구가 바뀌고, PostgreSQL 로 옮긴 데이터는 되돌릴 수 없다. FD1~3·FD6 은 지금 장치(재시작 정책·R4·GCE 자동 재시작·스냅샷 복구)로 17.8~145 s 에 회복했다 [실험 결과] |
+| D3 P2(backend GPU 풀 코드)를 12/04 전에 | 시연 9일 전 핵심 경로 500~900줄이고, 리뷰 브랜치(7a8a56c)와 같은 파일이다 |
+| 자동 전환 | 막기 단계 없이 넘어가면 두 VM 이 함께 활성일 수 있다. R3 는 DNS·TLS 장애에도 울리는데, 그건 전환으로 풀리지 않는다(D1 7절) |
+| 지역 영구 디스크, Async PD | 부팅 디스크를 옮기는 동안 중단이 생긴다. Async PD 는 다른 지역이라 고정 IP 를 옮길 수 없다(`create_vm.sh:36·70`) |
+| 대기 VM 에서 backend 상시 실행 | 예약 작업 중복, GPU 알림 2번, 백업 줄기 섞임([제약](data/2026-11-25_redundancy-design/00-constraints.md) 10·11·19) |
+| 복제본에서 `tailscale logout` | 위 D1 교정 |
+| Serverless 예비 + healthz 감시 | 일꾼이 계속 깨어 있어 $1.22/h 로 Pod 보다 비싸다(D3 `get-gpu-type`) |
+| 같은 Pod 안 슬롯 2개 | 처리량 1.19배뿐이고([2026-11-20_queue-cap.md](../perf/load/2026-11-20_queue-cap.md)) 느린 연결 문제가 있다 |
+| backend 두 대가 GPU 하나 공유 | Python `MODEL_LOCK` 대기가 120 s 시간 초과 안에 들어간다(제약 15) |
+| e2-small 대기 VM | 전환 때 크기를 바꾸려면 정지·시작이 필요해 RTO 가 약 90 s 늘어난다. 크레딧은 충분하다 |
+| 큐 상한을 운영에서 켜기 | `QUEUE_FULL` 을 아는 Unity 새 빌드가 기기에 깔리기 전이다(docs/api/CHANGELOG.md v1.1) |
+| 12/02 이후 운영을 건드리는 훈련 | 발표 직전 운영 서버 위험 |
