@@ -1,0 +1,25 @@
+# Grafana 데이터소스: compose 내부망의 Loki. 대시보드 'Beside 로그'(beside-logs.json)와 알림 규칙이 uid beside-loki 로 가리킨다.
+# 이 파일의 '$$' 는 Grafana 가 환경 변수로 바꾸지 않게 한 것이다(화면에서는 '$' 하나로 보인다).
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    uid: beside-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    jsonData:
+      maxLines: 1000
+      # 로그 줄의 jobId·requestId 를 누르면 작업 페이지나 같은 ID 의 다른 로그로 간다.
+      derivedFields:
+        - name: jobId
+          matcherRegex: 'jobId[=":\s]+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
+          url: '/job/?id=$${__value.raw}'
+          urlDisplayLabel: 작업 페이지
+        - name: requestId
+          matcherRegex: 'requestId[=":\s]+"?([A-Za-z0-9._:-]{8,64})'
+          datasourceUid: beside-loki
+          url: '{service=~"backend|caddy"} |= "$${__value.raw}"'
+          urlDisplayLabel: 같은 요청의 로그
