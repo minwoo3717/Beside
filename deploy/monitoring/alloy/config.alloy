@@ -1,0 +1,85 @@
+// Grafana Alloy 설정 (deploy/docker-compose.yml 의 alloy 서비스, profile monitoring).
+// 하는 일: VM 의 Docker 로그 파일(json-file)을 읽어 Loki 로 보낸다.
+// - docker.sock 을 쓰지 않는다(소켓은 :ro 여도 사실상 root 권한이다). 대신 compose 의 x-logging 이
+//   json-file 의 labels 옵션으로 각 줄에 compose 서비스 이름(attrs."com.docker.compose.service")을 넣는다.
+// - compose 밖 컨테이너(beside-stub 등)는 service="other" 로 들어간다.
+// - backend(prod 는 JSON 로그)와 caddy(JSON 접근 로그)는 level 라벨을 뽑는다. jobId·uri 같은 값은
+//   라벨로 만들지 않는다(라벨이 많아지면 Loki 가 느려진다). 질의 때 | json 으로 본다.
+// 바꾼 뒤: docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile monitoring restart alloy
+
+local.file_match "docker" {
+  path_targets = [{"__path__" = "/var/lib/docker/containers/*/*-json.log"}]
+  sync_period  = "15s"
+}
+
+loki.source.file "docker" {
+  targets       = local.file_match.docker.targets
+  forward_to    = [loki.process.docker.receiver]
+  // 처음 뜰 때 옛 로그 전체를 다시 보내지 않는다. 읽은 위치는 --storage.path 볼륨에 남는다.
+  tail_from_end = true
+}
+
+loki.process "docker" {
+  forward_to = [loki.write.local.receiver]
+
+  // Docker json-file 한 줄: {"log":"...\n","stream":"stdout","attrs":{...},"time":"..."}
+  stage.json {
+    expressions = {
+      log     = "log",
+      stream  = "stream",
+      time    = "time",
+      service = "attrs.\"com.docker.compose.service\"",
+    }
+  }
+
+  stage.template {
+    source   = "service"
+    template = "{{ if .Value }}{{ .Value }}{{ else }}other{{ end }}"
+  }
+
+  stage.labels {
+    values = {
+      service = "",
+      stream  = "",
+    }
+  }
+
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+  }
+
+  stage.output {
+    source = "log"
+  }
+
+  // backend(prod JSON: "level":"ERROR") 와 caddy("level":"error") 의 수준을 대문자로 라벨에 둔다.
+  // 텍스트 로그(prod 가 아닌 backend)는 level 이 없어 라벨도 없다.
+  stage.match {
+    selector = "{service=~\"backend|caddy\"}"
+
+    stage.json {
+      source      = "log"
+      expressions = {
+        level = "level",
+      }
+    }
+
+    stage.template {
+      source   = "level"
+      template = "{{ ToUpper .Value }}"
+    }
+
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
