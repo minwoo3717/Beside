@@ -1,0 +1,2376 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: scripts/load/api_staged.js
+        output: -
+
+     scenarios: (100.00%) 2 scenarios, 4200 max VUs, 28m3s max duration (incl. graceful stop):
+              * browse: Up to 20.00 iterations/s for 6m0s over 2 stages (maxVUs: 200, exec: browse, gracefulStop: 30s)
+              * flows: Up to 5.00 iterations/s for 6m0s over 2 stages (maxVUs: 450-4000, exec: flow, gracefulStop: 22m3s)
+
+
+Init     [  86% ] 559/650 VUs initialized
+browse   [   0% ]
+flows    [   0% ]
+
+running (00m00.8s), 0000/0650 VUs, 0 complete and 0 interrupted iterations
+browse   [   0% ] 000/200 VUs    0m00.7s/6m0s  00.41 iters/s
+flows    [   0% ] 0000/0450 VUs  0m00.7s/6m0s  0.20 iters/s
+
+running (00m01.8s), 0000/0650 VUs, 0 complete and 0 interrupted iterations
+browse   [   0% ] 000/200 VUs    0m01.7s/6m0s  00.41 iters/s
+flows    [   0% ] 0000/0450 VUs  0m01.7s/6m0s  0.20 iters/s
+
+running (00m02.8s), 0000/0650 VUs, 1 complete and 0 interrupted iterations
+browse   [   1% ] 000/200 VUs    0m02.7s/6m0s  00.99 iters/s
+flows    [   1% ] 0000/0450 VUs  0m02.7s/6m0s  0.20 iters/s
+
+running (00m03.8s), 0000/0650 VUs, 2 complete and 0 interrupted iterations
+browse   [   1% ] 000/200 VUs    0m03.7s/6m0s  01.28 iters/s
+flows    [   1% ] 0000/0450 VUs  0m03.7s/6m0s  0.20 iters/s
+
+running (00m04.8s), 0000/0650 VUs, 3 complete and 0 interrupted iterations
+browse   [   1% ] 000/200 VUs    0m04.7s/6m0s  01.52 iters/s
+flows    [   1% ] 0000/0450 VUs  0m04.7s/6m0s  0.20 iters/s
+
+running (00m05.8s), 0001/0650 VUs, 5 complete and 0 interrupted iterations
+browse   [   2% ] 000/200 VUs    0m05.7s/6m0s  01.91 iters/s
+flows    [   2% ] 0001/0450 VUs  0m05.7s/6m0s  0.49 iters/s
+
+running (00m06.8s), 0001/0650 VUs, 7 complete and 0 interrupted iterations
+browse   [   2% ] 000/200 VUs    0m06.7s/6m0s  02.23 iters/s
+flows    [   2% ] 0001/0450 VUs  0m06.7s/6m0s  0.49 iters/s
+
+running (00m07.8s), 0002/0650 VUs, 9 complete and 0 interrupted iterations
+browse   [   2% ] 000/200 VUs    0m07.7s/6m0s  02.52 iters/s
+flows    [   2% ] 0002/0450 VUs  0m07.7s/6m0s  0.64 iters/s
+
+running (00m08.8s), 0003/0650 VUs, 12 complete and 0 interrupted iterations
+browse   [   2% ] 000/200 VUs    0m08.7s/6m0s  02.89 iters/s
+flows    [   2% ] 0003/0450 VUs  0m08.7s/6m0s  0.76 iters/s
+
+running (00m09.8s), 0003/0650 VUs, 15 complete and 0 interrupted iterations
+browse   [   3% ] 000/200 VUs    0m09.7s/6m0s  03.21 iters/s
+flows    [   3% ] 0003/0450 VUs  0m09.7s/6m0s  0.76 iters/s
+
+running (00m10.8s), 0004/0650 VUs, 19 complete and 0 interrupted iterations
+browse   [   3% ] 000/200 VUs    0m10.7s/6m0s  03.61 iters/s
+flows    [   3% ] 0004/0450 VUs  0m10.7s/6m0s  0.86 iters/s
+
+running (00m11.8s), 0005/0650 VUs, 22 complete and 0 interrupted iterations
+browse   [   3% ] 000/200 VUs    0m11.7s/6m0s  03.87 iters/s
+flows    [   3% ] 0005/0450 VUs  0m11.7s/6m0s  0.96 iters/s
+
+running (00m12.8s), 0006/0650 VUs, 26 complete and 0 interrupted iterations
+browse   [   4% ] 000/200 VUs    0m12.7s/6m0s  04.20 iters/s
+flows    [   4% ] 0006/0450 VUs  0m12.7s/6m0s  1.04 iters/s
+
+running (00m13.8s), 0007/0650 VUs, 31 complete and 0 interrupted iterations
+browse   [   4% ] 000/200 VUs    0m13.7s/6m0s  04.58 iters/s
+flows    [   4% ] 0007/0450 VUs  0m13.7s/6m0s  1.12 iters/s
+
+running (00m14.8s), 0009/0650 VUs, 36 complete and 0 interrupted iterations
+browse   [   4% ] 000/200 VUs    0m14.7s/6m0s  04.93 iters/s
+flows    [   4% ] 0009/0450 VUs  0m14.7s/6m0s  1.26 iters/s
+
+running (00m15.8s), 0010/0650 VUs, 41 complete and 0 interrupted iterations
+browse   [   4% ] 000/200 VUs    0m15.7s/6m0s  05.26 iters/s
+flows    [   4% ] 0010/0450 VUs  0m15.7s/6m0s  1.32 iters/s
+
+running (00m16.8s), 0011/0650 VUs, 46 complete and 0 interrupted iterations
+browse   [   5% ] 000/200 VUs    0m16.7s/6m0s  05.57 iters/s
+flows    [   5% ] 0011/0450 VUs  0m16.7s/6m0s  1.38 iters/s
+
+running (00m17.8s), 0013/0650 VUs, 52 complete and 0 interrupted iterations
+browse   [   5% ] 000/200 VUs    0m17.7s/6m0s  05.92 iters/s
+flows    [   5% ] 0013/0450 VUs  0m17.7s/6m0s  1.50 iters/s
+
+running (00m18.8s), 0014/0650 VUs, 58 complete and 0 interrupted iterations
+browse   [   5% ] 000/200 VUs    0m18.7s/6m0s  06.24 iters/s
+flows    [   5% ] 0014/0450 VUs  0m18.7s/6m0s  1.55 iters/s
+
+running (00m19.8s), 0016/0650 VUs, 64 complete and 0 interrupted iterations
+browse   [   5% ] 000/200 VUs    0m19.7s/6m0s  06.56 iters/s
+flows    [   5% ] 0016/0450 VUs  0m19.7s/6m0s  1.66 iters/s
+
+running (00m20.8s), 0017/0650 VUs, 71 complete and 0 interrupted iterations
+browse   [   6% ] 000/200 VUs    0m20.7s/6m0s  06.90 iters/s
+flows    [   6% ] 0017/0450 VUs  0m20.7s/6m0s  1.71 iters/s
+
+running (00m21.8s), 0019/0650 VUs, 78 complete and 0 interrupted iterations
+browse   [   6% ] 000/200 VUs    0m21.7s/6m0s  07.23 iters/s
+flows    [   6% ] 0019/0450 VUs  0m21.7s/6m0s  1.80 iters/s
+
+running (00m22.8s), 0022/0650 VUs, 85 complete and 0 interrupted iterations
+browse   [   6% ] 001/200 VUs    0m22.7s/6m0s  07.59 iters/s
+flows    [   6% ] 0021/0450 VUs  0m22.7s/6m0s  1.89 iters/s
+
+running (00m23.8s), 0023/0650 VUs, 93 complete and 0 interrupted iterations
+browse   [   7% ] 000/200 VUs    0m23.7s/6m0s  07.90 iters/s
+flows    [   7% ] 0023/0450 VUs  0m23.7s/6m0s  1.98 iters/s
+
+running (00m24.8s), 0025/0650 VUs, 101 complete and 0 interrupted iterations
+browse   [   7% ] 000/200 VUs    0m24.7s/6m0s  08.23 iters/s
+flows    [   7% ] 0025/0450 VUs  0m24.7s/6m0s  2.06 iters/s
+
+running (00m25.8s), 0027/0650 VUs, 110 complete and 0 interrupted iterations
+browse   [   7% ] 000/200 VUs    0m25.7s/6m0s  08.58 iters/s
+flows    [   7% ] 0027/0450 VUs  0m25.7s/6m0s  2.14 iters/s
+
+running (00m26.8s), 0030/0650 VUs, 118 complete and 0 interrupted iterations
+browse   [   7% ] 001/200 VUs    0m26.7s/6m0s  08.93 iters/s
+flows    [   7% ] 0029/0450 VUs  0m26.7s/6m0s  2.22 iters/s
+
+running (00m27.8s), 0032/0650 VUs, 127 complete and 0 interrupted iterations
+browse   [   8% ] 001/200 VUs    0m27.7s/6m0s  09.26 iters/s
+flows    [   8% ] 0032/0450 VUs  0m27.7s/6m0s  2.33 iters/s
+
+running (00m28.8s), 0034/0650 VUs, 137 complete and 0 interrupted iterations
+browse   [   8% ] 000/200 VUs    0m28.7s/6m0s  09.57 iters/s
+flows    [   8% ] 0034/0450 VUs  0m28.7s/6m0s  2.40 iters/s
+
+running (00m29.8s), 0036/0650 VUs, 147 complete and 0 interrupted iterations
+browse   [   8% ] 000/200 VUs    0m29.7s/6m0s  09.92 iters/s
+flows    [   8% ] 0036/0450 VUs  0m29.7s/6m0s  2.47 iters/s
+
+running (00m30.8s), 0039/0650 VUs, 157 complete and 0 interrupted iterations
+browse   [   9% ] 000/200 VUs    0m30.7s/6m0s  10.25 iters/s
+flows    [   9% ] 0039/0450 VUs  0m30.7s/6m0s  2.57 iters/s
+
+running (00m31.8s), 0041/0650 VUs, 167 complete and 0 interrupted iterations
+browse   [   9% ] 000/200 VUs    0m31.7s/6m0s  10.57 iters/s
+flows    [   9% ] 0041/0450 VUs  0m31.7s/6m0s  2.63 iters/s
+
+running (00m32.8s), 0044/0650 VUs, 178 complete and 0 interrupted iterations
+browse   [   9% ] 000/200 VUs    0m32.7s/6m0s  10.91 iters/s
+flows    [   9% ] 0044/0450 VUs  0m32.7s/6m0s  2.72 iters/s
+
+running (00m33.8s), 0047/0650 VUs, 189 complete and 0 interrupted iterations
+browse   [   9% ] 000/200 VUs    0m33.7s/6m0s  11.24 iters/s
+flows    [   9% ] 0047/0450 VUs  0m33.7s/6m0s  2.81 iters/s
+
+running (00m34.8s), 0050/0650 VUs, 200 complete and 0 interrupted iterations
+browse   [  10% ] 000/200 VUs    0m34.7s/6m0s  11.56 iters/s
+flows    [  10% ] 0050/0450 VUs  0m34.7s/6m0s  2.90 iters/s
+
+running (00m35.8s), 0053/0650 VUs, 212 complete and 0 interrupted iterations
+browse   [  10% ] 000/200 VUs    0m35.7s/6m0s  11.90 iters/s
+flows    [  10% ] 0053/0450 VUs  0m35.7s/6m0s  2.99 iters/s
+
+running (00m36.8s), 0056/0650 VUs, 224 complete and 0 interrupted iterations
+browse   [  10% ] 000/200 VUs    0m36.7s/6m0s  12.23 iters/s
+flows    [  10% ] 0056/0450 VUs  0m36.7s/6m0s  3.07 iters/s
+
+running (00m37.8s), 0059/0650 VUs, 237 complete and 0 interrupted iterations
+browse   [  10% ] 000/200 VUs    0m37.7s/6m0s  12.58 iters/s
+flows    [  10% ] 0059/0450 VUs  0m37.7s/6m0s  3.15 iters/s
+
+running (00m38.8s), 0062/0650 VUs, 249 complete and 0 interrupted iterations
+browse   [  11% ] 000/200 VUs    0m38.7s/6m0s  12.90 iters/s
+flows    [  11% ] 0062/0450 VUs  0m38.7s/6m0s  3.23 iters/s
+
+running (00m39.8s), 0065/0650 VUs, 262 complete and 0 interrupted iterations
+browse   [  11% ] 000/200 VUs    0m39.7s/6m0s  13.23 iters/s
+flows    [  11% ] 0065/0450 VUs  0m39.7s/6m0s  3.30 iters/s
+
+running (00m40.8s), 0069/0650 VUs, 276 complete and 0 interrupted iterations
+browse   [  11% ] 000/200 VUs    0m40.7s/6m0s  13.58 iters/s
+flows    [  11% ] 0069/0450 VUs  0m40.7s/6m0s  3.40 iters/s
+
+running (00m41.8s), 0072/0650 VUs, 290 complete and 0 interrupted iterations
+browse   [  12% ] 000/200 VUs    0m41.7s/6m0s  13.92 iters/s
+flows    [  12% ] 0072/0450 VUs  0m41.7s/6m0s  3.48 iters/s
+
+running (00m42.8s), 0076/0650 VUs, 304 complete and 0 interrupted iterations
+browse   [  12% ] 000/200 VUs    0m42.7s/6m0s  14.25 iters/s
+flows    [  12% ] 0076/0450 VUs  0m42.7s/6m0s  3.57 iters/s
+
+running (00m43.8s), 0079/0650 VUs, 318 complete and 0 interrupted iterations
+browse   [  12% ] 000/200 VUs    0m43.7s/6m0s  14.57 iters/s
+flows    [  12% ] 0079/0450 VUs  0m43.7s/6m0s  3.64 iters/s
+
+running (00m44.8s), 0083/0650 VUs, 333 complete and 0 interrupted iterations
+browse   [  12% ] 000/200 VUs    0m44.7s/6m0s  14.91 iters/s
+flows    [  12% ] 0083/0450 VUs  0m44.7s/6m0s  3.73 iters/s
+
+running (00m45.8s), 0087/0650 VUs, 348 complete and 0 interrupted iterations
+browse   [  13% ] 000/200 VUs    0m45.7s/6m0s  15.24 iters/s
+flows    [  13% ] 0087/0450 VUs  0m45.7s/6m0s  3.82 iters/s
+
+running (00m46.8s), 0090/0650 VUs, 363 complete and 0 interrupted iterations
+browse   [  13% ] 000/200 VUs    0m46.7s/6m0s  15.57 iters/s
+flows    [  13% ] 0090/0450 VUs  0m46.7s/6m0s  3.88 iters/s
+
+running (00m47.8s), 0094/0650 VUs, 379 complete and 0 interrupted iterations
+browse   [  13% ] 000/200 VUs    0m47.7s/6m0s  15.91 iters/s
+flows    [  13% ] 0094/0450 VUs  0m47.7s/6m0s  3.97 iters/s
+
+running (00m48.8s), 0098/0650 VUs, 395 complete and 0 interrupted iterations
+browse   [  14% ] 000/200 VUs    0m48.7s/6m0s  16.24 iters/s
+flows    [  14% ] 0098/0450 VUs  0m48.7s/6m0s  4.05 iters/s
+
+running (00m49.8s), 0102/0650 VUs, 412 complete and 0 interrupted iterations
+browse   [  14% ] 000/200 VUs    0m49.7s/6m0s  16.58 iters/s
+flows    [  14% ] 0102/0450 VUs  0m49.7s/6m0s  4.13 iters/s
+
+running (00m50.8s), 0107/0650 VUs, 428 complete and 0 interrupted iterations
+browse   [  14% ] 000/200 VUs    0m50.7s/6m0s  16.90 iters/s
+flows    [  14% ] 0107/0450 VUs  0m50.7s/6m0s  4.23 iters/s
+
+running (00m51.8s), 0111/0650 VUs, 445 complete and 0 interrupted iterations
+browse   [  14% ] 000/200 VUs    0m51.7s/6m0s  17.23 iters/s
+flows    [  14% ] 0111/0450 VUs  0m51.7s/6m0s  4.31 iters/s
+
+running (00m52.8s), 0115/0650 VUs, 463 complete and 0 interrupted iterations
+browse   [  15% ] 000/200 VUs    0m52.7s/6m0s  17.58 iters/s
+flows    [  15% ] 0115/0450 VUs  0m52.7s/6m0s  4.39 iters/s
+
+running (00m53.8s), 0121/0650 VUs, 480 complete and 0 interrupted iterations
+browse   [  15% ] 001/200 VUs    0m53.7s/6m0s  17.92 iters/s
+flows    [  15% ] 0120/0450 VUs  0m53.7s/6m0s  4.48 iters/s
+
+running (00m54.8s), 0125/0650 VUs, 498 complete and 0 interrupted iterations
+browse   [  15% ] 001/200 VUs    0m54.7s/6m0s  18.25 iters/s
+flows    [  15% ] 0124/0450 VUs  0m54.7s/6m0s  4.56 iters/s
+
+running (00m55.8s), 0129/0650 VUs, 517 complete and 0 interrupted iterations
+browse   [  15% ] 000/200 VUs    0m55.7s/6m0s  18.57 iters/s
+flows    [  15% ] 0129/0450 VUs  0m55.7s/6m0s  4.65 iters/s
+
+running (00m56.8s), 0134/0650 VUs, 536 complete and 0 interrupted iterations
+browse   [  16% ] 000/200 VUs    0m56.7s/6m0s  18.91 iters/s
+flows    [  16% ] 0134/0450 VUs  0m56.7s/6m0s  4.73 iters/s
+
+running (00m57.8s), 0138/0650 VUs, 555 complete and 0 interrupted iterations
+browse   [  16% ] 000/200 VUs    0m57.7s/6m0s  19.24 iters/s
+flows    [  16% ] 0138/0450 VUs  0m57.7s/6m0s  4.80 iters/s
+
+running (00m58.8s), 0143/0650 VUs, 574 complete and 0 interrupted iterations
+browse   [  16% ] 000/200 VUs    0m58.7s/6m0s  19.57 iters/s
+flows    [  16% ] 0143/0450 VUs  0m58.7s/6m0s  4.89 iters/s
+
+running (00m59.8s), 0148/0650 VUs, 594 complete and 0 interrupted iterations
+browse   [  17% ] 000/200 VUs    0m59.7s/6m0s  19.91 iters/s
+flows    [  17% ] 0148/0450 VUs  0m59.7s/6m0s  4.97 iters/s
+
+running (01m00.8s), 0153/0650 VUs, 614 complete and 0 interrupted iterations
+browse   [  17% ] 000/200 VUs    1m00.7s/6m0s  20.00 iters/s
+flows    [  17% ] 0153/0450 VUs  1m00.7s/6m0s  5.00 iters/s
+
+running (01m01.8s), 0158/0650 VUs, 634 complete and 0 interrupted iterations
+browse   [  17% ] 000/200 VUs    1m01.7s/6m0s  20.00 iters/s
+flows    [  17% ] 0158/0450 VUs  1m01.7s/6m0s  5.00 iters/s
+
+running (01m02.8s), 0163/0650 VUs, 654 complete and 0 interrupted iterations
+browse   [  17% ] 000/200 VUs    1m02.7s/6m0s  20.00 iters/s
+flows    [  17% ] 0163/0450 VUs  1m02.7s/6m0s  5.00 iters/s
+
+running (01m03.8s), 0168/0650 VUs, 674 complete and 0 interrupted iterations
+browse   [  18% ] 000/200 VUs    1m03.7s/6m0s  20.00 iters/s
+flows    [  18% ] 0168/0450 VUs  1m03.7s/6m0s  5.00 iters/s
+
+running (01m04.8s), 0173/0650 VUs, 694 complete and 0 interrupted iterations
+browse   [  18% ] 000/200 VUs    1m04.7s/6m0s  20.00 iters/s
+flows    [  18% ] 0173/0450 VUs  1m04.7s/6m0s  5.00 iters/s
+
+running (01m05.8s), 0177/0650 VUs, 715 complete and 0 interrupted iterations
+browse   [  18% ] 000/200 VUs    1m05.7s/6m0s  20.00 iters/s
+flows    [  18% ] 0177/0450 VUs  1m05.7s/6m0s  5.00 iters/s
+
+running (01m06.8s), 0182/0650 VUs, 735 complete and 0 interrupted iterations
+browse   [  19% ] 000/200 VUs    1m06.7s/6m0s  20.00 iters/s
+flows    [  19% ] 0182/0450 VUs  1m06.7s/6m0s  5.00 iters/s
+
+running (01m07.8s), 0186/0650 VUs, 756 complete and 0 interrupted iterations
+browse   [  19% ] 000/200 VUs    1m07.7s/6m0s  20.00 iters/s
+flows    [  19% ] 0186/0450 VUs  1m07.7s/6m0s  5.00 iters/s
+
+running (01m08.8s), 0190/0650 VUs, 777 complete and 0 interrupted iterations
+browse   [  19% ] 000/200 VUs    1m08.7s/6m0s  20.00 iters/s
+flows    [  19% ] 0190/0450 VUs  1m08.7s/6m0s  5.00 iters/s
+
+running (01m09.8s), 0195/0650 VUs, 797 complete and 0 interrupted iterations
+browse   [  19% ] 000/200 VUs    1m09.7s/6m0s  20.00 iters/s
+flows    [  19% ] 0195/0450 VUs  1m09.7s/6m0s  5.00 iters/s
+
+running (01m10.8s), 0199/0650 VUs, 818 complete and 0 interrupted iterations
+browse   [  20% ] 000/200 VUs    1m10.7s/6m0s  20.00 iters/s
+flows    [  20% ] 0199/0450 VUs  1m10.7s/6m0s  5.00 iters/s
+
+running (01m11.8s), 0203/0650 VUs, 839 complete and 0 interrupted iterations
+browse   [  20% ] 000/200 VUs    1m11.7s/6m0s  20.00 iters/s
+flows    [  20% ] 0203/0450 VUs  1m11.7s/6m0s  5.00 iters/s
+
+running (01m12.8s), 0207/0650 VUs, 860 complete and 0 interrupted iterations
+browse   [  20% ] 000/200 VUs    1m12.7s/6m0s  20.00 iters/s
+flows    [  20% ] 0207/0450 VUs  1m12.7s/6m0s  5.00 iters/s
+
+running (01m13.8s), 0211/0650 VUs, 881 complete and 0 interrupted iterations
+browse   [  20% ] 000/200 VUs    1m13.7s/6m0s  20.00 iters/s
+flows    [  20% ] 0211/0450 VUs  1m13.7s/6m0s  5.00 iters/s
+
+running (01m14.8s), 0215/0650 VUs, 902 complete and 0 interrupted iterations
+browse   [  21% ] 000/200 VUs    1m14.7s/6m0s  20.00 iters/s
+flows    [  21% ] 0215/0450 VUs  1m14.7s/6m0s  5.00 iters/s
+
+running (01m15.8s), 0219/0650 VUs, 923 complete and 0 interrupted iterations
+browse   [  21% ] 000/200 VUs    1m15.7s/6m0s  20.00 iters/s
+flows    [  21% ] 0219/0450 VUs  1m15.7s/6m0s  5.00 iters/s
+
+running (01m16.8s), 0223/0650 VUs, 944 complete and 0 interrupted iterations
+browse   [  21% ] 000/200 VUs    1m16.7s/6m0s  20.00 iters/s
+flows    [  21% ] 0223/0450 VUs  1m16.7s/6m0s  5.00 iters/s
+
+running (01m17.8s), 0227/0650 VUs, 965 complete and 0 interrupted iterations
+browse   [  22% ] 000/200 VUs    1m17.7s/6m0s  20.00 iters/s
+flows    [  22% ] 0227/0450 VUs  1m17.7s/6m0s  5.00 iters/s
+
+running (01m18.8s), 0230/0650 VUs, 987 complete and 0 interrupted iterations
+browse   [  22% ] 000/200 VUs    1m18.7s/6m0s  20.00 iters/s
+flows    [  22% ] 0230/0450 VUs  1m18.7s/6m0s  5.00 iters/s
+
+running (01m19.8s), 0235/0650 VUs, 1007 complete and 0 interrupted iterations
+browse   [  22% ] 001/200 VUs    1m19.7s/6m0s  20.00 iters/s
+flows    [  22% ] 0234/0450 VUs  1m19.7s/6m0s  5.00 iters/s
+
+running (01m20.8s), 0242/0650 VUs, 1025 complete and 0 interrupted iterations
+browse   [  22% ] 004/200 VUs    1m20.7s/6m0s  20.00 iters/s
+flows    [  22% ] 0238/0450 VUs  1m20.7s/6m0s  5.00 iters/s
+
+running (01m21.8s), 0240/0650 VUs, 1052 complete and 0 interrupted iterations
+browse   [  23% ] 000/200 VUs    1m21.7s/6m0s  20.00 iters/s
+flows    [  23% ] 0240/0450 VUs  1m21.7s/6m0s  5.00 iters/s
+
+running (01m22.8s), 0244/0650 VUs, 1073 complete and 0 interrupted iterations
+browse   [  23% ] 000/200 VUs    1m22.7s/6m0s  20.00 iters/s
+flows    [  23% ] 0244/0450 VUs  1m22.7s/6m0s  5.00 iters/s
+
+running (01m23.8s), 0247/0650 VUs, 1095 complete and 0 interrupted iterations
+browse   [  23% ] 000/200 VUs    1m23.7s/6m0s  20.00 iters/s
+flows    [  23% ] 0247/0450 VUs  1m23.7s/6m0s  5.00 iters/s
+
+running (01m24.8s), 0251/0650 VUs, 1116 complete and 0 interrupted iterations
+browse   [  24% ] 000/200 VUs    1m24.7s/6m0s  20.00 iters/s
+flows    [  24% ] 0251/0450 VUs  1m24.7s/6m0s  5.00 iters/s
+
+running (01m25.8s), 0252/0650 VUs, 1140 complete and 0 interrupted iterations
+browse   [  24% ] 000/200 VUs    1m25.7s/6m0s  20.00 iters/s
+flows    [  24% ] 0252/0450 VUs  1m25.7s/6m0s  5.00 iters/s
+
+running (01m26.8s), 0256/0650 VUs, 1161 complete and 0 interrupted iterations
+browse   [  24% ] 000/200 VUs    1m26.7s/6m0s  20.00 iters/s
+flows    [  24% ] 0256/0450 VUs  1m26.7s/6m0s  5.00 iters/s
+
+running (01m27.8s), 0258/0650 VUs, 1184 complete and 0 interrupted iterations
+browse   [  24% ] 000/200 VUs    1m27.7s/6m0s  20.00 iters/s
+flows    [  24% ] 0258/0450 VUs  1m27.7s/6m0s  5.00 iters/s
+
+running (01m28.8s), 0262/0650 VUs, 1205 complete and 0 interrupted iterations
+browse   [  25% ] 000/200 VUs    1m28.7s/6m0s  20.00 iters/s
+flows    [  25% ] 0262/0450 VUs  1m28.7s/6m0s  5.00 iters/s
+
+running (01m29.8s), 0272/0650 VUs, 1220 complete and 0 interrupted iterations
+browse   [  25% ] 008/200 VUs    1m29.7s/6m0s  20.00 iters/s
+flows    [  25% ] 0264/0450 VUs  1m29.7s/6m0s  5.00 iters/s
+
+running (01m30.8s), 0282/0650 VUs, 1235 complete and 0 interrupted iterations
+browse   [  25% ] 013/200 VUs    1m30.7s/6m0s  20.00 iters/s
+flows    [  25% ] 0269/0450 VUs  1m30.7s/6m0s  5.00 iters/s
+
+running (01m31.8s), 0285/0650 VUs, 1257 complete and 0 interrupted iterations
+browse   [  25% ] 011/200 VUs    1m31.7s/6m0s  20.00 iters/s
+flows    [  25% ] 0274/0450 VUs  1m31.7s/6m0s  5.00 iters/s
+
+running (01m32.8s), 0289/0650 VUs, 1278 complete and 0 interrupted iterations
+browse   [  26% ] 010/200 VUs    1m32.7s/6m0s  20.00 iters/s
+flows    [  26% ] 0279/0450 VUs  1m32.7s/6m0s  5.00 iters/s
+
+running (01m33.8s), 0297/0650 VUs, 1295 complete and 0 interrupted iterations
+browse   [  26% ] 013/200 VUs    1m33.7s/6m0s  20.00 iters/s
+flows    [  26% ] 0284/0450 VUs  1m33.7s/6m0s  5.00 iters/s
+
+running (01m34.8s), 0297/0650 VUs, 1320 complete and 0 interrupted iterations
+browse   [  26% ] 010/200 VUs    1m34.7s/6m0s  20.00 iters/s
+flows    [  26% ] 0287/0450 VUs  1m34.7s/6m0s  5.00 iters/s
+
+running (01m35.8s), 0301/0650 VUs, 1341 complete and 0 interrupted iterations
+browse   [  27% ] 011/200 VUs    1m35.7s/6m0s  20.00 iters/s
+flows    [  27% ] 0290/0450 VUs  1m35.7s/6m0s  5.00 iters/s
+
+running (01m36.8s), 0303/0650 VUs, 1364 complete and 0 interrupted iterations
+browse   [  27% ] 011/200 VUs    1m36.7s/6m0s  20.00 iters/s
+flows    [  27% ] 0292/0450 VUs  1m36.7s/6m0s  5.00 iters/s
+
+running (01m37.8s), 0307/0650 VUs, 1385 complete and 0 interrupted iterations
+browse   [  27% ] 012/200 VUs    1m37.7s/6m0s  20.00 iters/s
+flows    [  27% ] 0295/0450 VUs  1m37.7s/6m0s  5.00 iters/s
+
+running (01m38.8s), 0307/0650 VUs, 1410 complete and 0 interrupted iterations
+browse   [  27% ] 010/200 VUs    1m38.7s/6m0s  20.00 iters/s
+flows    [  27% ] 0297/0450 VUs  1m38.7s/6m0s  5.00 iters/s
+
+running (01m39.8s), 0313/0650 VUs, 1429 complete and 0 interrupted iterations
+browse   [  28% ] 013/200 VUs    1m39.7s/6m0s  20.00 iters/s
+flows    [  28% ] 0300/0450 VUs  1m39.7s/6m0s  5.00 iters/s
+
+running (01m40.8s), 0311/0650 VUs, 1456 complete and 0 interrupted iterations
+browse   [  28% ] 012/200 VUs    1m40.7s/6m0s  20.00 iters/s
+flows    [  28% ] 0299/0450 VUs  1m40.7s/6m0s  5.00 iters/s
+
+running (01m41.8s), 0314/0650 VUs, 1478 complete and 0 interrupted iterations
+browse   [  28% ] 013/200 VUs    1m41.7s/6m0s  20.00 iters/s
+flows    [  28% ] 0301/0450 VUs  1m41.7s/6m0s  5.00 iters/s
+
+running (01m42.8s), 0315/0650 VUs, 1502 complete and 0 interrupted iterations
+browse   [  29% ] 011/200 VUs    1m42.7s/6m0s  20.00 iters/s
+flows    [  29% ] 0304/0450 VUs  1m42.7s/6m0s  5.00 iters/s
+
+running (01m43.8s), 0318/0650 VUs, 1524 complete and 0 interrupted iterations
+browse   [  29% ] 012/200 VUs    1m43.7s/6m0s  20.00 iters/s
+flows    [  29% ] 0306/0450 VUs  1m43.7s/6m0s  5.00 iters/s
+
+running (01m44.8s), 0320/0650 VUs, 1547 complete and 0 interrupted iterations
+browse   [  29% ] 013/200 VUs    1m44.7s/6m0s  20.00 iters/s
+flows    [  29% ] 0307/0450 VUs  1m44.7s/6m0s  5.00 iters/s
+
+running (01m45.8s), 0319/0650 VUs, 1573 complete and 0 interrupted iterations
+browse   [  29% ] 011/200 VUs    1m45.7s/6m0s  20.00 iters/s
+flows    [  29% ] 0308/0450 VUs  1m45.7s/6m0s  5.00 iters/s
+
+running (01m46.8s), 0323/0650 VUs, 1594 complete and 0 interrupted iterations
+browse   [  30% ] 010/200 VUs    1m46.7s/6m0s  20.00 iters/s
+flows    [  30% ] 0313/0450 VUs  1m46.7s/6m0s  5.00 iters/s
+
+running (01m47.8s), 0327/0650 VUs, 1615 complete and 0 interrupted iterations
+browse   [  30% ] 011/200 VUs    1m47.7s/6m0s  20.00 iters/s
+flows    [  30% ] 0316/0450 VUs  1m47.7s/6m0s  5.00 iters/s
+
+running (01m48.8s), 0329/0650 VUs, 1638 complete and 0 interrupted iterations
+browse   [  30% ] 012/200 VUs    1m48.7s/6m0s  20.00 iters/s
+flows    [  30% ] 0317/0450 VUs  1m48.7s/6m0s  5.00 iters/s
+
+running (01m49.8s), 0333/0650 VUs, 1659 complete and 0 interrupted iterations
+browse   [  30% ] 015/200 VUs    1m49.7s/6m0s  20.00 iters/s
+flows    [  30% ] 0318/0450 VUs  1m49.7s/6m0s  5.00 iters/s
+
+running (01m50.8s), 0332/0650 VUs, 1685 complete and 0 interrupted iterations
+browse   [  31% ] 015/200 VUs    1m50.7s/6m0s  20.00 iters/s
+flows    [  31% ] 0317/0450 VUs  1m50.7s/6m0s  5.00 iters/s
+
+running (01m51.8s), 0330/0650 VUs, 1712 complete and 0 interrupted iterations
+browse   [  31% ] 011/200 VUs    1m51.7s/6m0s  20.00 iters/s
+flows    [  31% ] 0319/0450 VUs  1m51.7s/6m0s  5.00 iters/s
+
+running (01m52.8s), 0333/0650 VUs, 1734 complete and 0 interrupted iterations
+browse   [  31% ] 011/200 VUs    1m52.7s/6m0s  20.00 iters/s
+flows    [  31% ] 0322/0450 VUs  1m52.7s/6m0s  5.00 iters/s
+
+running (01m53.8s), 0337/0650 VUs, 1755 complete and 0 interrupted iterations
+browse   [  32% ] 014/200 VUs    1m53.7s/6m0s  20.00 iters/s
+flows    [  32% ] 0323/0450 VUs  1m53.7s/6m0s  5.00 iters/s
+
+running (01m54.8s), 0336/0650 VUs, 1781 complete and 0 interrupted iterations
+browse   [  32% ] 014/200 VUs    1m54.7s/6m0s  20.00 iters/s
+flows    [  32% ] 0322/0450 VUs  1m54.7s/6m0s  5.00 iters/s
+
+running (01m55.8s), 0331/0650 VUs, 1811 complete and 0 interrupted iterations
+browse   [  32% ] 010/200 VUs    1m55.7s/6m0s  20.00 iters/s
+flows    [  32% ] 0321/0450 VUs  1m55.7s/6m0s  5.00 iters/s
+
+running (01m56.8s), 0334/0650 VUs, 1833 complete and 0 interrupted iterations
+browse   [  32% ] 010/200 VUs    1m56.7s/6m0s  20.00 iters/s
+flows    [  32% ] 0324/0450 VUs  1m56.7s/6m0s  5.00 iters/s
+
+running (01m57.8s), 0339/0650 VUs, 1853 complete and 0 interrupted iterations
+browse   [  33% ] 013/200 VUs    1m57.7s/6m0s  20.00 iters/s
+flows    [  33% ] 0326/0450 VUs  1m57.7s/6m0s  5.00 iters/s
+
+running (01m58.8s), 0341/0650 VUs, 1876 complete and 0 interrupted iterations
+browse   [  33% ] 015/200 VUs    1m58.7s/6m0s  20.00 iters/s
+flows    [  33% ] 0326/0450 VUs  1m58.7s/6m0s  5.00 iters/s
+
+running (01m59.8s), 0341/0650 VUs, 1901 complete and 0 interrupted iterations
+browse   [  33% ] 014/200 VUs    1m59.7s/6m0s  20.00 iters/s
+flows    [  33% ] 0327/0450 VUs  1m59.7s/6m0s  5.00 iters/s
+
+running (02m00.8s), 0342/0650 VUs, 1925 complete and 0 interrupted iterations
+browse   [  34% ] 012/200 VUs    2m00.7s/6m0s  20.00 iters/s
+flows    [  34% ] 0330/0450 VUs  2m00.7s/6m0s  5.00 iters/s
+
+running (02m01.8s), 0343/0650 VUs, 1949 complete and 0 interrupted iterations
+browse   [  34% ] 013/200 VUs    2m01.7s/6m0s  20.00 iters/s
+flows    [  34% ] 0330/0450 VUs  2m01.7s/6m0s  5.00 iters/s
+
+running (02m02.8s), 0344/0650 VUs, 1973 complete and 0 interrupted iterations
+browse   [  34% ] 014/200 VUs    2m02.7s/6m0s  20.00 iters/s
+flows    [  34% ] 0330/0450 VUs  2m02.7s/6m0s  5.00 iters/s
+
+running (02m03.8s), 0344/0650 VUs, 1998 complete and 0 interrupted iterations
+browse   [  34% ] 012/200 VUs    2m03.7s/6m0s  20.00 iters/s
+flows    [  34% ] 0332/0450 VUs  2m03.7s/6m0s  5.00 iters/s
+
+running (02m04.8s), 0348/0650 VUs, 2019 complete and 0 interrupted iterations
+browse   [  35% ] 015/200 VUs    2m04.7s/6m0s  20.00 iters/s
+flows    [  35% ] 0333/0450 VUs  2m04.7s/6m0s  5.00 iters/s
+
+running (02m05.8s), 0345/0650 VUs, 2047 complete and 0 interrupted iterations
+browse   [  35% ] 013/200 VUs    2m05.7s/6m0s  20.00 iters/s
+flows    [  35% ] 0332/0450 VUs  2m05.7s/6m0s  5.00 iters/s
+
+running (02m06.8s), 0342/0650 VUs, 2075 complete and 0 interrupted iterations
+browse   [  35% ] 012/200 VUs    2m06.7s/6m0s  20.00 iters/s
+flows    [  35% ] 0330/0450 VUs  2m06.7s/6m0s  5.00 iters/s
+
+running (02m07.8s), 0342/0650 VUs, 2100 complete and 0 interrupted iterations
+browse   [  35% ] 011/200 VUs    2m07.7s/6m0s  20.00 iters/s
+flows    [  35% ] 0331/0450 VUs  2m07.7s/6m0s  5.00 iters/s
+
+running (02m08.8s), 0344/0650 VUs, 2123 complete and 0 interrupted iterations
+browse   [  36% ] 013/200 VUs    2m08.7s/6m0s  20.00 iters/s
+flows    [  36% ] 0331/0450 VUs  2m08.7s/6m0s  5.00 iters/s
+
+running (02m09.8s), 0345/0650 VUs, 2147 complete and 0 interrupted iterations
+browse   [  36% ] 014/200 VUs    2m09.7s/6m0s  20.00 iters/s
+flows    [  36% ] 0331/0450 VUs  2m09.7s/6m0s  5.00 iters/s
+
+running (02m10.8s), 0345/0650 VUs, 2172 complete and 0 interrupted iterations
+browse   [  36% ] 012/200 VUs    2m10.7s/6m0s  20.00 iters/s
+flows    [  36% ] 0333/0450 VUs  2m10.7s/6m0s  5.00 iters/s
+
+running (02m11.8s), 0344/0650 VUs, 2198 complete and 0 interrupted iterations
+browse   [  37% ] 012/200 VUs    2m11.7s/6m0s  20.00 iters/s
+flows    [  37% ] 0332/0450 VUs  2m11.7s/6m0s  5.00 iters/s
+
+running (02m12.8s), 0345/0650 VUs, 2222 complete and 0 interrupted iterations
+browse   [  37% ] 014/200 VUs    2m12.7s/6m0s  20.00 iters/s
+flows    [  37% ] 0331/0450 VUs  2m12.7s/6m0s  5.00 iters/s
+
+running (02m13.8s), 0344/0650 VUs, 2248 complete and 0 interrupted iterations
+browse   [  37% ] 012/200 VUs    2m13.7s/6m0s  20.00 iters/s
+flows    [  37% ] 0332/0450 VUs  2m13.7s/6m0s  5.00 iters/s
+
+running (02m14.8s), 0343/0650 VUs, 2274 complete and 0 interrupted iterations
+browse   [  37% ] 012/200 VUs    2m14.7s/6m0s  20.00 iters/s
+flows    [  37% ] 0331/0450 VUs  2m14.7s/6m0s  5.00 iters/s
+
+running (02m15.8s), 0344/0650 VUs, 2298 complete and 0 interrupted iterations
+browse   [  38% ] 011/200 VUs    2m15.7s/6m0s  20.00 iters/s
+flows    [  38% ] 0333/0450 VUs  2m15.7s/6m0s  5.00 iters/s
+
+running (02m16.8s), 0351/0650 VUs, 2316 complete and 0 interrupted iterations
+browse   [  38% ] 013/200 VUs    2m16.7s/6m0s  20.00 iters/s
+flows    [  38% ] 0338/0450 VUs  2m16.7s/6m0s  5.00 iters/s
+
+running (02m17.8s), 0352/0650 VUs, 2340 complete and 0 interrupted iterations
+browse   [  38% ] 017/200 VUs    2m17.7s/6m0s  20.00 iters/s
+flows    [  38% ] 0335/0450 VUs  2m17.7s/6m0s  5.00 iters/s
+
+running (02m18.8s), 0359/0650 VUs, 2358 complete and 0 interrupted iterations
+browse   [  39% ] 022/200 VUs    2m18.7s/6m0s  20.00 iters/s
+flows    [  39% ] 0337/0450 VUs  2m18.7s/6m0s  5.00 iters/s
+
+running (02m19.8s), 0364/0650 VUs, 2378 complete and 0 interrupted iterations
+browse   [  39% ] 027/200 VUs    2m19.7s/6m0s  20.00 iters/s
+flows    [  39% ] 0337/0450 VUs  2m19.7s/6m0s  5.00 iters/s
+
+running (02m20.8s), 0363/0650 VUs, 2404 complete and 0 interrupted iterations
+browse   [  39% ] 026/200 VUs    2m20.7s/6m0s  20.00 iters/s
+flows    [  39% ] 0337/0450 VUs  2m20.7s/6m0s  5.00 iters/s
+
+running (02m21.8s), 0361/0650 VUs, 2431 complete and 0 interrupted iterations
+browse   [  39% ] 023/200 VUs    2m21.7s/6m0s  20.00 iters/s
+flows    [  39% ] 0338/0450 VUs  2m21.7s/6m0s  5.00 iters/s
+
+running (02m22.8s), 0376/0650 VUs, 2441 complete and 0 interrupted iterations
+browse   [  40% ] 036/200 VUs    2m22.7s/6m0s  20.00 iters/s
+flows    [  40% ] 0340/0450 VUs  2m22.7s/6m0s  5.00 iters/s
+
+running (02m23.8s), 0383/0650 VUs, 2459 complete and 0 interrupted iterations
+browse   [  40% ] 041/200 VUs    2m23.7s/6m0s  20.00 iters/s
+flows    [  40% ] 0342/0450 VUs  2m23.7s/6m0s  5.00 iters/s
+
+running (02m24.8s), 0375/0650 VUs, 2492 complete and 0 interrupted iterations
+browse   [  40% ] 031/200 VUs    2m24.7s/6m0s  20.00 iters/s
+flows    [  40% ] 0344/0450 VUs  2m24.7s/6m0s  5.00 iters/s
+
+running (02m25.8s), 0397/0650 VUs, 2495 complete and 0 interrupted iterations
+browse   [  40% ] 050/200 VUs    2m25.7s/6m0s  20.00 iters/s
+flows    [  40% ] 0347/0450 VUs  2m25.7s/6m0s  5.00 iters/s
+
+running (02m26.8s), 0400/0650 VUs, 2517 complete and 0 interrupted iterations
+browse   [  41% ] 052/200 VUs    2m26.7s/6m0s  20.00 iters/s
+flows    [  41% ] 0348/0450 VUs  2m26.7s/6m0s  5.00 iters/s
+
+running (02m27.8s), 0411/0650 VUs, 2531 complete and 0 interrupted iterations
+browse   [  41% ] 062/200 VUs    2m27.7s/6m0s  20.00 iters/s
+flows    [  41% ] 0349/0450 VUs  2m27.7s/6m0s  5.00 iters/s
+
+running (02m28.8s), 0418/0650 VUs, 2549 complete and 0 interrupted iterations
+browse   [  41% ] 067/200 VUs    2m28.7s/6m0s  20.00 iters/s
+flows    [  41% ] 0351/0450 VUs  2m28.7s/6m0s  5.00 iters/s
+
+running (02m29.8s), 0420/0650 VUs, 2572 complete and 0 interrupted iterations
+browse   [  42% ] 068/200 VUs    2m29.7s/6m0s  20.00 iters/s
+flows    [  42% ] 0352/0450 VUs  2m29.7s/6m0s  5.00 iters/s
+
+running (02m30.8s), 0421/0650 VUs, 2596 complete and 0 interrupted iterations
+browse   [  42% ] 068/200 VUs    2m30.7s/6m0s  20.00 iters/s
+flows    [  42% ] 0353/0450 VUs  2m30.7s/6m0s  5.00 iters/s
+
+running (02m31.8s), 0419/0650 VUs, 2623 complete and 0 interrupted iterations
+browse   [  42% ] 064/200 VUs    2m31.7s/6m0s  20.00 iters/s
+flows    [  42% ] 0355/0450 VUs  2m31.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:01Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m32.8s), 0432/0650 VUs, 2635 complete and 0 interrupted iterations
+browse   [  42% ] 075/200 VUs    2m32.7s/6m0s  20.00 iters/s
+flows    [  42% ] 0357/0450 VUs  2m32.7s/6m0s  5.00 iters/s
+
+running (02m33.8s), 0449/0650 VUs, 2643 complete and 0 interrupted iterations
+browse   [  43% ] 088/200 VUs    2m33.7s/6m0s  20.00 iters/s
+flows    [  43% ] 0361/0450 VUs  2m33.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:02Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m34.8s), 0465/0650 VUs, 2652 complete and 0 interrupted iterations
+browse   [  43% ] 101/200 VUs    2m34.7s/6m0s  20.00 iters/s
+flows    [  43% ] 0364/0450 VUs  2m34.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:03Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m35.8s), 0473/0650 VUs, 2669 complete and 0 interrupted iterations
+browse   [  43% ] 109/200 VUs    2m35.7s/6m0s  20.00 iters/s
+flows    [  43% ] 0364/0450 VUs  2m35.7s/6m0s  5.00 iters/s
+
+running (02m36.8s), 0476/0650 VUs, 2691 complete and 0 interrupted iterations
+browse   [  44% ] 109/200 VUs    2m36.7s/6m0s  20.00 iters/s
+flows    [  44% ] 0367/0450 VUs  2m36.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:05Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m37.8s), 0483/0650 VUs, 2709 complete and 0 interrupted iterations
+browse   [  44% ] 114/200 VUs    2m37.7s/6m0s  20.00 iters/s
+flows    [  44% ] 0369/0450 VUs  2m37.7s/6m0s  5.00 iters/s
+
+running (02m38.8s), 0472/0650 VUs, 2745 complete and 0 interrupted iterations
+browse   [  44% ] 101/200 VUs    2m38.7s/6m0s  20.00 iters/s
+flows    [  44% ] 0371/0450 VUs  2m38.7s/6m0s  5.00 iters/s
+
+running (02m39.8s), 0455/0650 VUs, 2787 complete and 0 interrupted iterations
+browse   [  44% ] 082/200 VUs    2m39.7s/6m0s  20.00 iters/s
+flows    [  44% ] 0373/0450 VUs  2m39.7s/6m0s  5.00 iters/s
+
+running (02m40.8s), 0436/0650 VUs, 2831 complete and 0 interrupted iterations
+browse   [  45% ] 060/200 VUs    2m40.7s/6m0s  20.00 iters/s
+flows    [  45% ] 0376/0450 VUs  2m40.7s/6m0s  5.00 iters/s
+
+running (02m41.8s), 0453/0650 VUs, 2839 complete and 0 interrupted iterations
+browse   [  45% ] 075/200 VUs    2m41.7s/6m0s  20.00 iters/s
+flows    [  45% ] 0378/0450 VUs  2m41.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:11Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m42.8s), 0461/0650 VUs, 2856 complete and 0 interrupted iterations
+browse   [  45% ] 080/200 VUs    2m42.7s/6m0s  20.00 iters/s
+flows    [  45% ] 0381/0450 VUs  2m42.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:11Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m43.8s), 0474/0650 VUs, 2868 complete and 0 interrupted iterations
+browse   [  45% ] 091/200 VUs    2m43.7s/6m0s  20.00 iters/s
+flows    [  45% ] 0383/0450 VUs  2m43.7s/6m0s  5.00 iters/s
+
+running (02m44.8s), 0489/0650 VUs, 2878 complete and 0 interrupted iterations
+browse   [  46% ] 102/200 VUs    2m44.7s/6m0s  20.00 iters/s
+flows    [  46% ] 0387/0450 VUs  2m44.7s/6m0s  5.00 iters/s
+
+running (02m45.8s), 0511/0650 VUs, 2881 complete and 0 interrupted iterations
+browse   [  46% ] 119/200 VUs    2m45.7s/6m0s  20.00 iters/s
+flows    [  46% ] 0392/0450 VUs  2m45.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:14Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m46.8s), 0520/0650 VUs, 2897 complete and 0 interrupted iterations
+browse   [  46% ] 125/200 VUs    2m46.7s/6m0s  20.00 iters/s
+flows    [  46% ] 0395/0450 VUs  2m46.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:15Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m47.8s), 0540/0650 VUs, 2902 complete and 0 interrupted iterations
+browse   [  47% ] 142/200 VUs    2m47.7s/6m0s  20.00 iters/s
+flows    [  47% ] 0398/0450 VUs  2m47.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:16Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:16Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m48.8s), 0548/0650 VUs, 2919 complete and 0 interrupted iterations
+browse   [  47% ] 147/200 VUs    2m48.7s/6m0s  20.00 iters/s
+flows    [  47% ] 0401/0450 VUs  2m48.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m49.8s), 0493/0650 VUs, 2999 complete and 0 interrupted iterations
+browse   [  47% ] 089/200 VUs    2m49.7s/6m0s  20.00 iters/s
+flows    [  47% ] 0404/0450 VUs  2m49.7s/6m0s  5.00 iters/s
+
+running (02m50.8s), 0478/0650 VUs, 3039 complete and 0 interrupted iterations
+browse   [  47% ] 069/200 VUs    2m50.7s/6m0s  20.00 iters/s
+flows    [  47% ] 0409/0450 VUs  2m50.7s/6m0s  5.00 iters/s
+
+running (02m51.8s), 0484/0650 VUs, 3058 complete and 0 interrupted iterations
+browse   [  48% ] 070/200 VUs    2m51.7s/6m0s  20.00 iters/s
+flows    [  48% ] 0414/0450 VUs  2m51.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m52.8s), 0499/0650 VUs, 3068 complete and 0 interrupted iterations
+browse   [  48% ] 081/200 VUs    2m52.7s/6m0s  20.00 iters/s
+flows    [  48% ] 0418/0450 VUs  2m52.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m53.8s), 0516/0650 VUs, 3076 complete and 0 interrupted iterations
+browse   [  48% ] 095/200 VUs    2m53.7s/6m0s  20.00 iters/s
+flows    [  48% ] 0421/0450 VUs  2m53.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:22Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m54.8s), 0539/0650 VUs, 3078 complete and 0 interrupted iterations
+browse   [  49% ] 114/200 VUs    2m54.7s/6m0s  20.00 iters/s
+flows    [  49% ] 0425/0450 VUs  2m54.7s/6m0s  5.00 iters/s
+
+running (02m55.8s), 0559/0650 VUs, 3083 complete and 0 interrupted iterations
+browse   [  49% ] 129/200 VUs    2m55.7s/6m0s  20.00 iters/s
+flows    [  49% ] 0430/0450 VUs  2m55.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:24Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:24Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m56.8s), 0572/0650 VUs, 3095 complete and 0 interrupted iterations
+browse   [  49% ] 140/200 VUs    2m56.7s/6m0s  20.00 iters/s
+flows    [  49% ] 0432/0450 VUs  2m56.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:26Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m57.8s), 0583/0650 VUs, 3109 complete and 0 interrupted iterations
+browse   [  49% ] 147/200 VUs    2m57.7s/6m0s  20.00 iters/s
+flows    [  49% ] 0436/0450 VUs  2m57.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:26Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:26Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (02m58.8s), 0604/0650 VUs, 3113 complete and 0 interrupted iterations
+browse   [  50% ] 165/200 VUs    2m58.7s/6m0s  20.00 iters/s
+flows    [  50% ] 0439/0450 VUs  2m58.7s/6m0s  5.00 iters/s
+
+running (02m59.8s), 0620/0650 VUs, 3122 complete and 0 interrupted iterations
+browse   [  50% ] 177/200 VUs    2m59.7s/6m0s  20.00 iters/s
+flows    [  50% ] 0443/0450 VUs  2m59.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:28Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m00.8s), 0625/0650 VUs, 3142 complete and 0 interrupted iterations
+browse   [  50% ] 179/200 VUs    3m00.7s/6m0s  20.00 iters/s
+flows    [  50% ] 0446/0450 VUs  3m00.7s/6m0s  5.00 iters/s
+
+running (03m01.8s), 0576/0650 VUs, 3216 complete and 0 interrupted iterations
+browse   [  50% ] 126/200 VUs    3m01.7s/6m0s  20.00 iters/s
+flows    [  50% ] 0450/0450 VUs  3m01.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:30Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:30Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:31Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m02.8s), 0562/0652 VUs, 3253 complete and 0 interrupted iterations
+browse   [  51% ] 112/200 VUs    3m02.7s/6m0s  20.00 iters/s
+flows    [  51% ] 0450/0452 VUs  3m02.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:31Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m03.8s), 0550/0653 VUs, 3289 complete and 0 interrupted iterations
+browse   [  51% ] 097/200 VUs    3m03.7s/6m0s  20.00 iters/s
+flows    [  51% ] 0453/0453 VUs  3m03.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m04.8s), 0537/0654 VUs, 3326 complete and 0 interrupted iterations
+browse   [  51% ] 084/200 VUs    3m04.7s/6m0s  20.00 iters/s
+flows    [  51% ] 0453/0454 VUs  3m04.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:34Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m05.8s), 0544/0655 VUs, 3343 complete and 0 interrupted iterations
+browse   [  52% ] 091/200 VUs    3m05.7s/6m0s  20.00 iters/s
+flows    [  52% ] 0453/0455 VUs  3m05.7s/6m0s  5.00 iters/s
+
+running (03m06.8s), 0565/0657 VUs, 3345 complete and 0 interrupted iterations
+browse   [  52% ] 109/200 VUs    3m06.7s/6m0s  20.00 iters/s
+flows    [  52% ] 0456/0457 VUs  3m06.7s/6m0s  5.00 iters/s
+
+running (03m07.8s), 0572/0658 VUs, 3362 complete and 0 interrupted iterations
+browse   [  52% ] 114/200 VUs    3m07.7s/6m0s  20.00 iters/s
+flows    [  52% ] 0458/0458 VUs  3m07.7s/6m0s  5.00 iters/s
+
+running (03m08.8s), 0587/0661 VUs, 3369 complete and 0 interrupted iterations
+browse   [  52% ] 127/200 VUs    3m08.7s/6m0s  20.00 iters/s
+flows    [  52% ] 0460/0461 VUs  3m08.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:37Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m09.8s), 0599/0662 VUs, 3381 complete and 0 interrupted iterations
+browse   [  53% ] 139/200 VUs    3m09.7s/6m0s  20.00 iters/s
+flows    [  53% ] 0460/0462 VUs  3m09.7s/6m0s  5.00 iters/s
+
+running (03m10.8s), 0605/0664 VUs, 3398 complete and 0 interrupted iterations
+browse   [  53% ] 142/200 VUs    3m10.7s/6m0s  20.00 iters/s
+flows    [  53% ] 0463/0464 VUs  3m10.7s/6m0s  5.00 iters/s
+
+running (03m11.8s), 0612/0666 VUs, 3414 complete and 0 interrupted iterations
+browse   [  53% ] 146/200 VUs    3m11.7s/6m0s  20.00 iters/s
+flows    [  53% ] 0466/0466 VUs  3m11.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:40Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m12.8s), 0613/0668 VUs, 3436 complete and 0 interrupted iterations
+browse   [  54% ] 145/200 VUs    3m12.7s/6m0s  20.00 iters/s
+flows    [  54% ] 0468/0468 VUs  3m12.7s/6m0s  5.00 iters/s
+
+running (03m13.8s), 0614/0670 VUs, 3458 complete and 0 interrupted iterations
+browse   [  54% ] 144/200 VUs    3m13.7s/6m0s  20.00 iters/s
+flows    [  54% ] 0470/0470 VUs  3m13.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:42Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:43Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m14.8s), 0608/0672 VUs, 3487 complete and 0 interrupted iterations
+browse   [  54% ] 137/200 VUs    3m14.7s/6m0s  20.00 iters/s
+flows    [  54% ] 0471/0472 VUs  3m14.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m15.8s), 0588/0674 VUs, 3530 complete and 0 interrupted iterations
+browse   [  54% ] 116/200 VUs    3m15.7s/6m0s  20.00 iters/s
+flows    [  54% ] 0472/0474 VUs  3m15.7s/6m0s  5.00 iters/s
+
+running (03m16.8s), 0554/0676 VUs, 3587 complete and 0 interrupted iterations
+browse   [  55% ] 079/200 VUs    3m16.7s/6m0s  20.00 iters/s
+flows    [  55% ] 0475/0476 VUs  3m16.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:45Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m17.8s), 0573/0676 VUs, 3593 complete and 0 interrupted iterations
+browse   [  55% ] 097/200 VUs    3m17.7s/6m0s  20.00 iters/s
+flows    [  55% ] 0476/0476 VUs  3m17.7s/6m0s  5.00 iters/s
+
+running (03m18.8s), 0579/0678 VUs, 3610 complete and 0 interrupted iterations
+browse   [  55% ] 101/200 VUs    3m18.7s/6m0s  20.00 iters/s
+flows    [  55% ] 0478/0478 VUs  3m18.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:48Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m19.8s), 0577/0679 VUs, 3636 complete and 0 interrupted iterations
+browse   [  55% ] 098/200 VUs    3m19.7s/6m0s  20.00 iters/s
+flows    [  55% ] 0479/0479 VUs  3m19.7s/6m0s  5.00 iters/s
+
+running (03m20.8s), 0595/0682 VUs, 3640 complete and 0 interrupted iterations
+browse   [  56% ] 114/200 VUs    3m20.7s/6m0s  20.00 iters/s
+flows    [  56% ] 0481/0482 VUs  3m20.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:49Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m21.8s), 0605/0683 VUs, 3654 complete and 0 interrupted iterations
+browse   [  56% ] 123/200 VUs    3m21.7s/6m0s  20.00 iters/s
+flows    [  56% ] 0482/0483 VUs  3m21.7s/6m0s  5.00 iters/s
+
+running (03m22.8s), 0608/0685 VUs, 3674 complete and 0 interrupted iterations
+browse   [  56% ] 123/200 VUs    3m22.7s/6m0s  20.00 iters/s
+flows    [  56% ] 0485/0485 VUs  3m22.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:52Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m23.8s), 0623/0687 VUs, 3682 complete and 0 interrupted iterations
+browse   [  57% ] 137/200 VUs    3m23.7s/6m0s  20.00 iters/s
+flows    [  57% ] 0486/0487 VUs  3m23.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:52Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:53Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m24.8s), 0637/0687 VUs, 3693 complete and 0 interrupted iterations
+browse   [  57% ] 153/200 VUs    3m24.7s/6m0s  20.00 iters/s
+flows    [  57% ] 0484/0487 VUs  3m24.7s/6m0s  5.00 iters/s
+
+running (03m25.8s), 0656/0687 VUs, 3699 complete and 0 interrupted iterations
+browse   [  57% ] 170/200 VUs    3m25.7s/6m0s  20.00 iters/s
+flows    [  57% ] 0486/0487 VUs  3m25.7s/6m0s  5.00 iters/s
+
+running (03m26.8s), 0643/0689 VUs, 3735 complete and 0 interrupted iterations
+browse   [  57% ] 156/200 VUs    3m26.7s/6m0s  20.00 iters/s
+flows    [  57% ] 0487/0489 VUs  3m26.7s/6m0s  5.00 iters/s
+
+running (03m27.8s), 0640/0690 VUs, 3762 complete and 0 interrupted iterations
+browse   [  58% ] 151/200 VUs    3m27.7s/6m0s  20.00 iters/s
+flows    [  58% ] 0489/0490 VUs  3m27.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:56Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:56Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m28.8s), 0637/0690 VUs, 3790 complete and 0 interrupted iterations
+browse   [  58% ] 148/200 VUs    3m28.7s/6m0s  20.00 iters/s
+flows    [  58% ] 0489/0490 VUs  3m28.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:51:57Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:51:57Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m29.8s), 0646/0690 VUs, 3806 complete and 0 interrupted iterations
+browse   [  58% ] 156/200 VUs    3m29.7s/6m0s  20.00 iters/s
+flows    [  58% ] 0490/0490 VUs  3m29.7s/6m0s  5.00 iters/s
+
+running (03m30.8s), 0603/0691 VUs, 3873 complete and 0 interrupted iterations
+browse   [  59% ] 112/200 VUs    3m30.7s/6m0s  20.00 iters/s
+flows    [  59% ] 0491/0491 VUs  3m30.7s/6m0s  5.00 iters/s
+
+running (03m31.8s), 0600/0694 VUs, 3898 complete and 0 interrupted iterations
+browse   [  59% ] 107/200 VUs    3m31.7s/6m0s  20.00 iters/s
+flows    [  59% ] 0493/0494 VUs  3m31.7s/6m0s  5.00 iters/s
+
+running (03m32.8s), 0599/0695 VUs, 3923 complete and 0 interrupted iterations
+browse   [  59% ] 107/200 VUs    3m32.7s/6m0s  20.00 iters/s
+flows    [  59% ] 0492/0495 VUs  3m32.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:01Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m33.8s), 0603/0695 VUs, 3944 complete and 0 interrupted iterations
+browse   [  59% ] 110/200 VUs    3m33.7s/6m0s  20.00 iters/s
+flows    [  59% ] 0493/0495 VUs  3m33.7s/6m0s  5.00 iters/s
+
+running (03m34.8s), 0593/0695 VUs, 3979 complete and 0 interrupted iterations
+browse   [  60% ] 101/200 VUs    3m34.7s/6m0s  20.00 iters/s
+flows    [  60% ] 0492/0495 VUs  3m34.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:03Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:03Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m35.8s), 0602/0695 VUs, 3995 complete and 0 interrupted iterations
+browse   [  60% ] 110/200 VUs    3m35.7s/6m0s  20.00 iters/s
+flows    [  60% ] 0492/0495 VUs  3m35.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:04Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m36.8s), 0620/0695 VUs, 4002 complete and 0 interrupted iterations
+browse   [  60% ] 128/200 VUs    3m36.7s/6m0s  20.00 iters/s
+flows    [  60% ] 0492/0495 VUs  3m36.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:05Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:05Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m37.8s), 0635/0695 VUs, 4012 complete and 0 interrupted iterations
+browse   [  60% ] 144/200 VUs    3m37.7s/6m0s  20.00 iters/s
+flows    [  60% ] 0491/0495 VUs  3m37.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:06Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m38.8s), 0644/0695 VUs, 4028 complete and 0 interrupted iterations
+browse   [  61% ] 151/200 VUs    3m38.7s/6m0s  20.00 iters/s
+flows    [  61% ] 0493/0495 VUs  3m38.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:07Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:07Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m39.8s), 0628/0695 VUs, 4069 complete and 0 interrupted iterations
+browse   [  61% ] 134/200 VUs    3m39.7s/6m0s  20.00 iters/s
+flows    [  61% ] 0494/0495 VUs  3m39.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:08Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:08Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m40.8s), 0629/0696 VUs, 4092 complete and 0 interrupted iterations
+browse   [  61% ] 133/200 VUs    3m40.7s/6m0s  20.00 iters/s
+flows    [  61% ] 0496/0496 VUs  3m40.7s/6m0s  5.00 iters/s
+
+running (03m41.8s), 0581/0698 VUs, 4163 complete and 0 interrupted iterations
+browse   [  62% ] 086/200 VUs    3m41.7s/6m0s  20.00 iters/s
+flows    [  62% ] 0495/0498 VUs  3m41.7s/6m0s  5.00 iters/s
+
+running (03m42.8s), 0570/0698 VUs, 4199 complete and 0 interrupted iterations
+browse   [  62% ] 076/200 VUs    3m42.7s/6m0s  20.00 iters/s
+flows    [  62% ] 0494/0498 VUs  3m42.7s/6m0s  5.00 iters/s
+
+running (03m43.8s), 0591/0698 VUs, 4203 complete and 0 interrupted iterations
+browse   [  62% ] 096/200 VUs    3m43.7s/6m0s  20.00 iters/s
+flows    [  62% ] 0495/0498 VUs  3m43.7s/6m0s  5.00 iters/s
+
+running (03m44.8s), 0592/0698 VUs, 4227 complete and 0 interrupted iterations
+browse   [  62% ] 095/200 VUs    3m44.7s/6m0s  20.00 iters/s
+flows    [  62% ] 0497/0498 VUs  3m44.7s/6m0s  5.00 iters/s
+
+running (03m45.8s), 0601/0699 VUs, 4242 complete and 0 interrupted iterations
+browse   [  63% ] 104/200 VUs    3m45.7s/6m0s  20.00 iters/s
+flows    [  63% ] 0497/0499 VUs  3m45.7s/6m0s  5.00 iters/s
+
+running (03m46.8s), 0619/0699 VUs, 4249 complete and 0 interrupted iterations
+browse   [  63% ] 120/200 VUs    3m46.7s/6m0s  20.00 iters/s
+flows    [  63% ] 0499/0499 VUs  3m46.7s/6m0s  5.00 iters/s
+
+running (03m47.8s), 0634/0702 VUs, 4256 complete and 0 interrupted iterations
+browse   [  63% ] 133/200 VUs    3m47.7s/6m0s  20.00 iters/s
+flows    [  63% ] 0501/0502 VUs  3m47.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:16Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m48.8s), 0650/0702 VUs, 4265 complete and 0 interrupted iterations
+browse   [  64% ] 149/200 VUs    3m48.7s/6m0s  20.00 iters/s
+flows    [  64% ] 0501/0502 VUs  3m48.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:18Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m49.8s), 0648/0703 VUs, 4291 complete and 0 interrupted iterations
+browse   [  64% ] 152/200 VUs    3m49.7s/6m0s  20.00 iters/s
+flows    [  64% ] 0496/0503 VUs  3m49.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:18Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m50.8s), 0663/0703 VUs, 4301 complete and 0 interrupted iterations
+browse   [  64% ] 166/200 VUs    3m50.7s/6m0s  20.00 iters/s
+flows    [  64% ] 0497/0503 VUs  3m50.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:20Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m51.8s), 0680/0703 VUs, 4309 complete and 0 interrupted iterations
+browse   [  64% ] 182/200 VUs    3m51.7s/6m0s  20.00 iters/s
+flows    [  64% ] 0498/0503 VUs  3m51.7s/6m0s  5.00 iters/s
+
+running (03m52.8s), 0656/0703 VUs, 4358 complete and 0 interrupted iterations
+browse   [  65% ] 153/200 VUs    3m52.7s/6m0s  20.00 iters/s
+flows    [  65% ] 0503/0503 VUs  3m52.7s/6m0s  5.00 iters/s
+
+running (03m53.8s), 0659/0705 VUs, 4378 complete and 0 interrupted iterations
+browse   [  65% ] 156/200 VUs    3m53.7s/6m0s  20.00 iters/s
+flows    [  65% ] 0503/0505 VUs  3m53.7s/6m0s  5.00 iters/s
+
+running (03m54.8s), 0649/0706 VUs, 4412 complete and 0 interrupted iterations
+browse   [  65% ] 143/200 VUs    3m54.7s/6m0s  20.00 iters/s
+flows    [  65% ] 0506/0506 VUs  3m54.7s/6m0s  5.00 iters/s
+
+running (03m55.8s), 0637/0708 VUs, 4447 complete and 0 interrupted iterations
+browse   [  65% ] 129/200 VUs    3m55.7s/6m0s  20.00 iters/s
+flows    [  65% ] 0508/0508 VUs  3m55.7s/6m0s  5.00 iters/s
+
+running (03m56.8s), 0603/0710 VUs, 4504 complete and 0 interrupted iterations
+browse   [  66% ] 094/200 VUs    3m56.7s/6m0s  20.00 iters/s
+flows    [  66% ] 0509/0510 VUs  3m56.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:25Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:25Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (03m57.8s), 0618/0710 VUs, 4514 complete and 0 interrupted iterations
+browse   [  66% ] 110/200 VUs    3m57.7s/6m0s  20.00 iters/s
+flows    [  66% ] 0508/0510 VUs  3m57.7s/6m0s  5.00 iters/s
+
+running (03m58.8s), 0640/0711 VUs, 4516 complete and 0 interrupted iterations
+browse   [  66% ] 130/200 VUs    3m58.7s/6m0s  20.00 iters/s
+flows    [  66% ] 0510/0511 VUs  3m58.7s/6m0s  5.00 iters/s
+
+running (03m59.8s), 0653/0712 VUs, 4527 complete and 0 interrupted iterations
+browse   [  67% ] 142/200 VUs    3m59.7s/6m0s  20.00 iters/s
+flows    [  67% ] 0511/0512 VUs  3m59.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m00.8s), 0655/0713 VUs, 4549 complete and 0 interrupted iterations
+browse   [  67% ] 143/200 VUs    4m00.7s/6m0s  20.00 iters/s
+flows    [  67% ] 0512/0513 VUs  4m00.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:29Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m01.8s), 0665/0714 VUs, 4563 complete and 0 interrupted iterations
+browse   [  67% ] 161/200 VUs    4m01.7s/6m0s  20.00 iters/s
+flows    [  67% ] 0504/0514 VUs  4m01.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:30Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:31Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m02.8s), 0682/0714 VUs, 4571 complete and 0 interrupted iterations
+browse   [  67% ] 177/200 VUs    4m02.7s/6m0s  20.00 iters/s
+flows    [  67% ] 0505/0514 VUs  4m02.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:31Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m03.8s), 0689/0714 VUs, 4589 complete and 0 interrupted iterations
+browse   [  68% ] 187/200 VUs    4m03.7s/6m0s  20.00 iters/s
+flows    [  68% ] 0502/0514 VUs  4m03.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:32Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:33Z" level=warning msg="Insufficient VUs, reached 200 active VUs and cannot initialize more" executor=ramping-arrival-rate scenario=browse
+
+running (04m04.8s), 0692/0714 VUs, 4609 complete and 0 interrupted iterations
+browse   [  68% ] 192/200 VUs    4m04.7s/6m0s  20.00 iters/s
+flows    [  68% ] 0500/0514 VUs  4m04.7s/6m0s  5.00 iters/s
+
+running (04m05.8s), 0702/0714 VUs, 4619 complete and 0 interrupted iterations
+browse   [  68% ] 198/200 VUs    4m05.7s/6m0s  20.00 iters/s
+flows    [  68% ] 0504/0514 VUs  4m05.7s/6m0s  5.00 iters/s
+
+running (04m06.8s), 0700/0714 VUs, 4633 complete and 0 interrupted iterations
+browse   [  69% ] 195/200 VUs    4m06.7s/6m0s  20.00 iters/s
+flows    [  69% ] 0505/0514 VUs  4m06.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:35Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:35Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m07.8s), 0693/0714 VUs, 4656 complete and 0 interrupted iterations
+browse   [  69% ] 187/200 VUs    4m07.7s/6m0s  20.00 iters/s
+flows    [  69% ] 0506/0514 VUs  4m07.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m08.8s), 0654/0714 VUs, 4720 complete and 0 interrupted iterations
+browse   [  69% ] 146/200 VUs    4m08.7s/6m0s  20.00 iters/s
+flows    [  69% ] 0508/0514 VUs  4m08.7s/6m0s  5.00 iters/s
+
+running (04m09.8s), 0645/0714 VUs, 4754 complete and 0 interrupted iterations
+browse   [  69% ] 134/200 VUs    4m09.7s/6m0s  20.00 iters/s
+flows    [  69% ] 0511/0514 VUs  4m09.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m10.8s), 0619/0714 VUs, 4805 complete and 0 interrupted iterations
+browse   [  70% ] 107/200 VUs    4m10.7s/6m0s  20.00 iters/s
+flows    [  70% ] 0512/0514 VUs  4m10.7s/6m0s  5.00 iters/s
+
+running (04m11.8s), 0621/0715 VUs, 4827 complete and 0 interrupted iterations
+browse   [  70% ] 107/200 VUs    4m11.7s/6m0s  20.00 iters/s
+flows    [  70% ] 0514/0515 VUs  4m11.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:41Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m12.8s), 0635/0716 VUs, 4837 complete and 0 interrupted iterations
+browse   [  70% ] 121/200 VUs    4m12.7s/6m0s  20.00 iters/s
+flows    [  70% ] 0514/0516 VUs  4m12.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:41Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m13.8s), 0651/0717 VUs, 4845 complete and 0 interrupted iterations
+browse   [  70% ] 136/200 VUs    4m13.7s/6m0s  20.00 iters/s
+flows    [  70% ] 0515/0517 VUs  4m13.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:42Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:42Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:42Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m14.8s), 0666/0717 VUs, 4855 complete and 0 interrupted iterations
+browse   [  71% ] 156/200 VUs    4m14.7s/6m0s  20.00 iters/s
+flows    [  71% ] 0510/0517 VUs  4m14.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:43Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m15.8s), 0669/0717 VUs, 4877 complete and 0 interrupted iterations
+browse   [  71% ] 158/200 VUs    4m15.7s/6m0s  20.00 iters/s
+flows    [  71% ] 0511/0517 VUs  4m15.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m16.8s), 0680/0717 VUs, 4891 complete and 0 interrupted iterations
+browse   [  71% ] 170/200 VUs    4m16.7s/6m0s  20.00 iters/s
+flows    [  71% ] 0510/0517 VUs  4m16.7s/6m0s  5.00 iters/s
+
+running (04m17.8s), 0692/0717 VUs, 4904 complete and 0 interrupted iterations
+browse   [  72% ] 180/200 VUs    4m17.7s/6m0s  20.00 iters/s
+flows    [  72% ] 0512/0517 VUs  4m17.7s/6m0s  5.00 iters/s
+
+running (04m18.8s), 0714/0717 VUs, 4907 complete and 0 interrupted iterations
+browse   [  72% ] 198/200 VUs    4m18.7s/6m0s  20.00 iters/s
+flows    [  72% ] 0516/0517 VUs  4m18.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:47Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:47Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:47Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m19.8s), 0710/0717 VUs, 4922 complete and 0 interrupted iterations
+browse   [  72% ] 198/200 VUs    4m19.7s/6m0s  20.00 iters/s
+flows    [  72% ] 0512/0517 VUs  4m19.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:48Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m20.8s), 0713/0717 VUs, 4936 complete and 0 interrupted iterations
+browse   [  72% ] 200/200 VUs    4m20.7s/6m0s  20.00 iters/s
+flows    [  72% ] 0513/0517 VUs  4m20.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:49Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m21.8s), 0710/0717 VUs, 4946 complete and 0 interrupted iterations
+browse   [  73% ] 196/200 VUs    4m21.7s/6m0s  20.00 iters/s
+flows    [  73% ] 0514/0517 VUs  4m21.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:50Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m22.8s), 0712/0717 VUs, 4964 complete and 0 interrupted iterations
+browse   [  73% ] 199/200 VUs    4m22.7s/6m0s  20.00 iters/s
+flows    [  73% ] 0513/0517 VUs  4m22.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:51Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m23.8s), 0713/0717 VUs, 4976 complete and 0 interrupted iterations
+browse   [  73% ] 198/200 VUs    4m23.7s/6m0s  20.00 iters/s
+flows    [  73% ] 0515/0517 VUs  4m23.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:53Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m24.8s), 0711/0717 VUs, 4999 complete and 0 interrupted iterations
+browse   [  74% ] 195/200 VUs    4m24.7s/6m0s  20.00 iters/s
+flows    [  74% ] 0516/0517 VUs  4m24.7s/6m0s  5.00 iters/s
+
+running (04m25.8s), 0711/0718 VUs, 5018 complete and 0 interrupted iterations
+browse   [  74% ] 193/200 VUs    4m25.7s/6m0s  20.00 iters/s
+flows    [  74% ] 0518/0518 VUs  4m25.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m26.8s), 0698/0719 VUs, 5055 complete and 0 interrupted iterations
+browse   [  74% ] 181/200 VUs    4m26.7s/6m0s  20.00 iters/s
+flows    [  74% ] 0517/0519 VUs  4m26.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m27.8s), 0673/0719 VUs, 5105 complete and 0 interrupted iterations
+browse   [  74% ] 155/200 VUs    4m27.7s/6m0s  20.00 iters/s
+flows    [  74% ] 0518/0519 VUs  4m27.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:56Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m28.8s), 0684/0720 VUs, 5118 complete and 0 interrupted iterations
+browse   [  75% ] 167/200 VUs    4m28.7s/6m0s  20.00 iters/s
+flows    [  75% ] 0517/0520 VUs  4m28.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m29.8s), 0698/0720 VUs, 5129 complete and 0 interrupted iterations
+browse   [  75% ] 178/200 VUs    4m29.7s/6m0s  20.00 iters/s
+flows    [  75% ] 0520/0520 VUs  4m29.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:52:59Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m30.8s), 0687/0720 VUs, 5165 complete and 0 interrupted iterations
+browse   [  75% ] 171/200 VUs    4m30.7s/6m0s  20.00 iters/s
+flows    [  75% ] 0516/0520 VUs  4m30.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:52:59Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m31.8s), 0696/0720 VUs, 5181 complete and 0 interrupted iterations
+browse   [  75% ] 178/200 VUs    4m31.7s/6m0s  20.00 iters/s
+flows    [  75% ] 0518/0520 VUs  4m31.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:00Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:00Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:00Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m32.8s), 0698/0720 VUs, 5204 complete and 0 interrupted iterations
+browse   [  76% ] 182/200 VUs    4m32.7s/6m0s  20.00 iters/s
+flows    [  76% ] 0516/0520 VUs  4m32.7s/6m0s  5.00 iters/s
+
+running (04m33.8s), 0712/0720 VUs, 5215 complete and 0 interrupted iterations
+browse   [  76% ] 194/200 VUs    4m33.7s/6m0s  20.00 iters/s
+flows    [  76% ] 0518/0520 VUs  4m33.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:02Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:02Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:02Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:03Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m34.8s), 0707/0720 VUs, 5245 complete and 0 interrupted iterations
+browse   [  76% ] 194/200 VUs    4m34.7s/6m0s  20.00 iters/s
+flows    [  76% ] 0513/0520 VUs  4m34.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:03Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m35.8s), 0709/0720 VUs, 5268 complete and 0 interrupted iterations
+browse   [  77% ] 199/200 VUs    4m35.7s/6m0s  20.00 iters/s
+flows    [  77% ] 0510/0520 VUs  4m35.7s/6m0s  5.00 iters/s
+
+running (04m36.8s), 0712/0720 VUs, 5272 complete and 0 interrupted iterations
+browse   [  77% ] 200/200 VUs    4m36.7s/6m0s  20.00 iters/s
+flows    [  77% ] 0512/0520 VUs  4m36.7s/6m0s  5.00 iters/s
+
+running (04m37.8s), 0716/0720 VUs, 5290 complete and 0 interrupted iterations
+browse   [  77% ] 199/200 VUs    4m37.7s/6m0s  20.00 iters/s
+flows    [  77% ] 0517/0520 VUs  4m37.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:06Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:06Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:06Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m38.8s), 0710/0720 VUs, 5312 complete and 0 interrupted iterations
+browse   [  77% ] 199/200 VUs    4m38.7s/6m0s  20.00 iters/s
+flows    [  77% ] 0511/0520 VUs  4m38.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:07Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:07Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:07Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m39.8s), 0702/0720 VUs, 5339 complete and 0 interrupted iterations
+browse   [  78% ] 190/200 VUs    4m39.7s/6m0s  20.00 iters/s
+flows    [  78% ] 0512/0520 VUs  4m39.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Get \"https://beside-team.duckdns.org/api/v1/healthz\": request timeout"
+
+running (04m40.8s), 0708/0720 VUs, 5358 complete and 0 interrupted iterations
+browse   [  78% ] 198/200 VUs    4m40.7s/6m0s  20.00 iters/s
+flows    [  78% ] 0510/0520 VUs  4m40.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:09Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:10Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:10Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:10Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:10Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m41.8s), 0699/0720 VUs, 5390 complete and 0 interrupted iterations
+browse   [  78% ] 197/200 VUs    4m41.7s/6m0s  20.00 iters/s
+flows    [  78% ] 0502/0520 VUs  4m41.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:10Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m42.8s), 0694/0720 VUs, 5420 complete and 0 interrupted iterations
+browse   [  79% ] 190/200 VUs    4m42.7s/6m0s  20.00 iters/s
+flows    [  79% ] 0504/0520 VUs  4m42.7s/6m0s  5.00 iters/s
+
+running (04m43.8s), 0705/0720 VUs, 5432 complete and 0 interrupted iterations
+browse   [  79% ] 197/200 VUs    4m43.7s/6m0s  20.00 iters/s
+flows    [  79% ] 0508/0520 VUs  4m43.7s/6m0s  5.00 iters/s
+
+running (04m44.8s), 0708/0720 VUs, 5445 complete and 0 interrupted iterations
+browse   [  79% ] 199/200 VUs    4m44.7s/6m0s  20.00 iters/s
+flows    [  79% ] 0509/0520 VUs  4m44.7s/6m0s  5.00 iters/s
+
+running (04m45.8s), 0711/0720 VUs, 5466 complete and 0 interrupted iterations
+browse   [  79% ] 200/200 VUs    4m45.7s/6m0s  20.00 iters/s
+flows    [  79% ] 0511/0520 VUs  4m45.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:14Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m46.8s), 0713/0720 VUs, 5474 complete and 0 interrupted iterations
+browse   [  80% ] 199/200 VUs    4m46.7s/6m0s  20.00 iters/s
+flows    [  80% ] 0514/0520 VUs  4m46.7s/6m0s  5.00 iters/s
+
+running (04m47.8s), 0713/0720 VUs, 5495 complete and 0 interrupted iterations
+browse   [  80% ] 197/200 VUs    4m47.7s/6m0s  20.00 iters/s
+flows    [  80% ] 0516/0520 VUs  4m47.7s/6m0s  5.00 iters/s
+
+running (04m48.8s), 0719/0721 VUs, 5496 complete and 0 interrupted iterations
+browse   [  80% ] 200/200 VUs    4m48.7s/6m0s  20.00 iters/s
+flows    [  80% ] 0519/0521 VUs  4m48.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:17Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m49.8s), 0702/0722 VUs, 5535 complete and 0 interrupted iterations
+browse   [  80% ] 186/200 VUs    4m49.7s/6m0s  20.00 iters/s
+flows    [  80% ] 0516/0522 VUs  4m49.7s/6m0s  5.00 iters/s
+
+running (04m50.8s), 0700/0722 VUs, 5562 complete and 0 interrupted iterations
+browse   [  81% ] 181/200 VUs    4m50.7s/6m0s  20.00 iters/s
+flows    [  81% ] 0519/0522 VUs  4m50.7s/6m0s  5.00 iters/s
+
+running (04m51.8s), 0710/0722 VUs, 5577 complete and 0 interrupted iterations
+browse   [  81% ] 188/200 VUs    4m51.7s/6m0s  20.00 iters/s
+flows    [  81% ] 0522/0522 VUs  4m51.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:20Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:20Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m52.8s), 0709/0723 VUs, 5602 complete and 0 interrupted iterations
+browse   [  81% ] 189/200 VUs    4m52.7s/6m0s  20.00 iters/s
+flows    [  81% ] 0520/0523 VUs  4m52.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:21Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m53.8s), 0718/0723 VUs, 5616 complete and 0 interrupted iterations
+browse   [  82% ] 197/200 VUs    4m53.7s/6m0s  20.00 iters/s
+flows    [  82% ] 0521/0523 VUs  4m53.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:23Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m54.8s), 0721/0724 VUs, 5625 complete and 0 interrupted iterations
+browse   [  82% ] 199/200 VUs    4m54.7s/6m0s  20.00 iters/s
+flows    [  82% ] 0522/0524 VUs  4m54.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:23Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m55.8s), 0719/0725 VUs, 5635 complete and 0 interrupted iterations
+browse   [  82% ] 196/200 VUs    4m55.7s/6m0s  20.00 iters/s
+flows    [  82% ] 0523/0525 VUs  4m55.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:24Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:24Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:25Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m56.8s), 0714/0725 VUs, 5665 complete and 0 interrupted iterations
+browse   [  82% ] 192/200 VUs    4m56.7s/6m0s  20.00 iters/s
+flows    [  82% ] 0522/0525 VUs  4m56.7s/6m0s  5.00 iters/s
+
+running (04m57.8s), 0723/0725 VUs, 5677 complete and 0 interrupted iterations
+browse   [  83% ] 199/200 VUs    4m57.7s/6m0s  20.00 iters/s
+flows    [  83% ] 0524/0525 VUs  4m57.7s/6m0s  5.00 iters/s
+
+running (04m58.8s), 0725/0726 VUs, 5689 complete and 0 interrupted iterations
+browse   [  83% ] 200/200 VUs    4m58.7s/6m0s  20.00 iters/s
+flows    [  83% ] 0525/0526 VUs  4m58.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:28Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (04m59.8s), 0722/0727 VUs, 5698 complete and 0 interrupted iterations
+browse   [  83% ] 198/200 VUs    4m59.7s/6m0s  20.00 iters/s
+flows    [  83% ] 0524/0527 VUs  4m59.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:28Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:28Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m00.8s), 0711/0727 VUs, 5734 complete and 0 interrupted iterations
+browse   [  84% ] 187/200 VUs    5m00.7s/6m0s  20.00 iters/s
+flows    [  84% ] 0524/0527 VUs  5m00.7s/6m0s  5.00 iters/s
+
+running (05m01.8s), 0725/0727 VUs, 5745 complete and 0 interrupted iterations
+browse   [  84% ] 198/200 VUs    5m01.7s/6m0s  20.00 iters/s
+flows    [  84% ] 0527/0527 VUs  5m01.7s/6m0s  5.00 iters/s
+
+running (05m02.8s), 0725/0728 VUs, 5755 complete and 0 interrupted iterations
+browse   [  84% ] 200/200 VUs    5m02.7s/6m0s  20.00 iters/s
+flows    [  84% ] 0525/0528 VUs  5m02.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:31Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m03.8s), 0724/0728 VUs, 5774 complete and 0 interrupted iterations
+browse   [  84% ] 197/200 VUs    5m03.7s/6m0s  20.00 iters/s
+flows    [  84% ] 0527/0528 VUs  5m03.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:33Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m04.8s), 0724/0729 VUs, 5796 complete and 0 interrupted iterations
+browse   [  85% ] 200/200 VUs    5m04.7s/6m0s  20.00 iters/s
+flows    [  85% ] 0524/0529 VUs  5m04.7s/6m0s  5.00 iters/s
+
+running (05m05.8s), 0725/0729 VUs, 5803 complete and 0 interrupted iterations
+browse   [  85% ] 200/200 VUs    5m05.7s/6m0s  20.00 iters/s
+flows    [  85% ] 0525/0529 VUs  5m05.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:35Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m06.8s), 0726/0729 VUs, 5814 complete and 0 interrupted iterations
+browse   [  85% ] 200/200 VUs    5m06.7s/6m0s  20.00 iters/s
+flows    [  85% ] 0526/0529 VUs  5m06.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m07.8s), 0725/0729 VUs, 5830 complete and 0 interrupted iterations
+browse   [  85% ] 199/200 VUs    5m07.7s/6m0s  20.00 iters/s
+flows    [  85% ] 0526/0529 VUs  5m07.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:36Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m08.8s), 0707/0729 VUs, 5869 complete and 0 interrupted iterations
+browse   [  86% ] 185/200 VUs    5m08.7s/6m0s  20.00 iters/s
+flows    [  86% ] 0522/0529 VUs  5m08.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:37Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:37Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m09.8s), 0696/0729 VUs, 5905 complete and 0 interrupted iterations
+browse   [  86% ] 176/200 VUs    5m09.7s/6m0s  20.00 iters/s
+flows    [  86% ] 0520/0529 VUs  5m09.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:38Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m10.8s), 0710/0729 VUs, 5916 complete and 0 interrupted iterations
+browse   [  86% ] 192/200 VUs    5m10.7s/6m0s  20.00 iters/s
+flows    [  86% ] 0518/0529 VUs  5m10.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:39Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m11.8s), 0714/0729 VUs, 5937 complete and 0 interrupted iterations
+browse   [  87% ] 197/200 VUs    5m11.7s/6m0s  20.00 iters/s
+flows    [  87% ] 0517/0529 VUs  5m11.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:40Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m12.8s), 0719/0729 VUs, 5950 complete and 0 interrupted iterations
+browse   [  87% ] 200/200 VUs    5m12.7s/6m0s  20.00 iters/s
+flows    [  87% ] 0519/0529 VUs  5m12.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:41Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m13.8s), 0720/0729 VUs, 5958 complete and 0 interrupted iterations
+browse   [  87% ] 200/200 VUs    5m13.7s/6m0s  20.00 iters/s
+flows    [  87% ] 0520/0529 VUs  5m13.7s/6m0s  5.00 iters/s
+
+running (05m14.8s), 0724/0729 VUs, 5971 complete and 0 interrupted iterations
+browse   [  87% ] 200/200 VUs    5m14.7s/6m0s  20.00 iters/s
+flows    [  87% ] 0524/0529 VUs  5m14.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:43Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:43Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m15.8s), 0722/0729 VUs, 5981 complete and 0 interrupted iterations
+browse   [  88% ] 200/200 VUs    5m15.7s/6m0s  20.00 iters/s
+flows    [  88% ] 0522/0529 VUs  5m15.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:44Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m16.8s), 0724/0729 VUs, 5986 complete and 0 interrupted iterations
+browse   [  88% ] 200/200 VUs    5m16.7s/6m0s  20.00 iters/s
+flows    [  88% ] 0524/0529 VUs  5m16.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:45Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:46Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m17.8s), 0725/0729 VUs, 5998 complete and 0 interrupted iterations
+browse   [  88% ] 199/200 VUs    5m17.7s/6m0s  20.00 iters/s
+flows    [  88% ] 0526/0529 VUs  5m17.7s/6m0s  5.00 iters/s
+
+running (05m18.8s), 0726/0730 VUs, 6021 complete and 0 interrupted iterations
+browse   [  89% ] 197/200 VUs    5m18.7s/6m0s  20.00 iters/s
+flows    [  89% ] 0529/0530 VUs  5m18.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:48Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m19.8s), 0729/0730 VUs, 6029 complete and 0 interrupted iterations
+browse   [  89% ] 200/200 VUs    5m19.7s/6m0s  20.00 iters/s
+flows    [  89% ] 0529/0530 VUs  5m19.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:48Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:48Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m20.8s), 0724/0731 VUs, 6055 complete and 0 interrupted iterations
+browse   [  89% ] 193/200 VUs    5m20.7s/6m0s  20.00 iters/s
+flows    [  89% ] 0531/0531 VUs  5m20.7s/6m0s  5.00 iters/s
+
+running (05m21.8s), 0731/0733 VUs, 6071 complete and 0 interrupted iterations
+browse   [  89% ] 199/200 VUs    5m21.7s/6m0s  20.00 iters/s
+flows    [  89% ] 0532/0533 VUs  5m21.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:50Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m22.8s), 0729/0735 VUs, 6091 complete and 0 interrupted iterations
+browse   [  90% ] 195/200 VUs    5m22.7s/6m0s  20.00 iters/s
+flows    [  90% ] 0534/0535 VUs  5m22.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:52Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m23.8s), 0736/0736 VUs, 6099 complete and 0 interrupted iterations
+browse   [  90% ] 200/200 VUs    5m23.7s/6m0s  20.00 iters/s
+flows    [  90% ] 0536/0536 VUs  5m23.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:52Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:52Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:53Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m24.8s), 0733/0737 VUs, 6113 complete and 0 interrupted iterations
+browse   [  90% ] 198/200 VUs    5m24.7s/6m0s  20.00 iters/s
+flows    [  90% ] 0535/0537 VUs  5m24.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:53Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m25.8s), 0731/0737 VUs, 6128 complete and 0 interrupted iterations
+browse   [  90% ] 199/200 VUs    5m25.7s/6m0s  20.00 iters/s
+flows    [  90% ] 0532/0537 VUs  5m25.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:54Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m26.8s), 0729/0737 VUs, 6139 complete and 0 interrupted iterations
+browse   [  91% ] 198/200 VUs    5m26.7s/6m0s  20.00 iters/s
+flows    [  91% ] 0531/0537 VUs  5m26.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:55Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m27.8s), 0725/0737 VUs, 6168 complete and 0 interrupted iterations
+browse   [  91% ] 200/200 VUs    5m27.7s/6m0s  20.00 iters/s
+flows    [  91% ] 0525/0537 VUs  5m27.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:56Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m28.8s), 0706/0737 VUs, 6205 complete and 0 interrupted iterations
+browse   [  91% ] 181/200 VUs    5m28.7s/6m0s  20.00 iters/s
+flows    [  91% ] 0525/0537 VUs  5m28.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:57Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m29.8s), 0714/0737 VUs, 6222 complete and 0 interrupted iterations
+browse   [  92% ] 189/200 VUs    5m29.7s/6m0s  20.00 iters/s
+flows    [  92% ] 0525/0537 VUs  5m29.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:58Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m30.8s), 0706/0737 VUs, 6255 complete and 0 interrupted iterations
+browse   [  92% ] 187/200 VUs    5m30.7s/6m0s  20.00 iters/s
+flows    [  92% ] 0519/0537 VUs  5m30.7s/6m0s  5.00 iters/s
+time="2026-11-25T18:53:59Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:59Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+time="2026-11-25T18:53:59Z" level=warning msg="Request Failed" error="Post \"https://beside-team.duckdns.org/api/v1/jobs\": request timeout"
+
+running (05m31.8s), 0642/0737 VUs, 6344 complete and 0 interrupted iterations
+browse   [  92% ] 138/200 VUs    5m31.7s/6m0s  20.00 iters/s
+flows    [  92% ] 0504/0537 VUs  5m31.7s/6m0s  5.00 iters/s
+
+running (05m32.8s), 0588/0737 VUs, 6423 complete and 0 interrupted iterations
+browse   [  92% ] 086/200 VUs    5m32.7s/6m0s  20.00 iters/s
+flows    [  92% ] 0502/0537 VUs  5m32.7s/6m0s  5.00 iters/s
+
+running (05m33.8s), 0525/0737 VUs, 6511 complete and 0 interrupted iterations
+browse   [  93% ] 037/200 VUs    5m33.7s/6m0s  20.00 iters/s
+flows    [  93% ] 0488/0537 VUs  5m33.7s/6m0s  5.00 iters/s
+
+running (05m34.8s), 0500/0737 VUs, 6561 complete and 0 interrupted iterations
+browse   [  93% ] 021/200 VUs    5m34.7s/6m0s  20.00 iters/s
+flows    [  93% ] 0479/0537 VUs  5m34.7s/6m0s  5.00 iters/s
+
+running (05m35.8s), 0479/0737 VUs, 6607 complete and 0 interrupted iterations
+browse   [  93% ] 005/200 VUs    5m35.7s/6m0s  20.00 iters/s
+flows    [  93% ] 0474/0537 VUs  5m35.7s/6m0s  5.00 iters/s
+
+running (05m36.8s), 0474/0737 VUs, 6637 complete and 0 interrupted iterations
+browse   [  94% ] 000/200 VUs    5m36.7s/6m0s  20.00 iters/s
+flows    [  94% ] 0474/0537 VUs  5m36.7s/6m0s  5.00 iters/s
+
+running (05m37.8s), 0476/0737 VUs, 6660 complete and 0 interrupted iterations
+browse   [  94% ] 000/200 VUs    5m37.7s/6m0s  20.00 iters/s
+flows    [  94% ] 0476/0537 VUs  5m37.7s/6m0s  5.00 iters/s
+
+running (05m38.8s), 0477/0737 VUs, 6684 complete and 0 interrupted iterations
+browse   [  94% ] 000/200 VUs    5m38.7s/6m0s  20.00 iters/s
+flows    [  94% ] 0477/0537 VUs  5m38.7s/6m0s  5.00 iters/s
+
+running (05m39.8s), 0478/0737 VUs, 6708 complete and 0 interrupted iterations
+browse   [  94% ] 000/200 VUs    5m39.7s/6m0s  20.00 iters/s
+flows    [  94% ] 0478/0537 VUs  5m39.7s/6m0s  5.00 iters/s
+
+running (05m40.8s), 0479/0737 VUs, 6732 complete and 0 interrupted iterations
+browse   [  95% ] 000/200 VUs    5m40.7s/6m0s  20.00 iters/s
+flows    [  95% ] 0479/0537 VUs  5m40.7s/6m0s  5.00 iters/s
+
+running (05m41.8s), 0484/0737 VUs, 6752 complete and 0 interrupted iterations
+browse   [  95% ] 001/200 VUs    5m41.7s/6m0s  20.00 iters/s
+flows    [  95% ] 0483/0537 VUs  5m41.7s/6m0s  5.00 iters/s
+
+running (05m42.8s), 0491/0737 VUs, 6770 complete and 0 interrupted iterations
+browse   [  95% ] 004/200 VUs    5m42.7s/6m0s  20.00 iters/s
+flows    [  95% ] 0487/0537 VUs  5m42.7s/6m0s  5.00 iters/s
+
+running (05m43.8s), 0487/0737 VUs, 6799 complete and 0 interrupted iterations
+browse   [  95% ] 000/200 VUs    5m43.7s/6m0s  20.00 iters/s
+flows    [  95% ] 0487/0537 VUs  5m43.7s/6m0s  5.00 iters/s
+
+running (05m44.8s), 0491/0737 VUs, 6820 complete and 0 interrupted iterations
+browse   [  96% ] 000/200 VUs    5m44.7s/6m0s  20.00 iters/s
+flows    [  96% ] 0491/0537 VUs  5m44.7s/6m0s  5.00 iters/s
+
+running (05m45.8s), 0493/0737 VUs, 6843 complete and 0 interrupted iterations
+browse   [  96% ] 000/200 VUs    5m45.7s/6m0s  20.00 iters/s
+flows    [  96% ] 0493/0537 VUs  5m45.7s/6m0s  5.00 iters/s
+
+running (05m46.8s), 0495/0737 VUs, 6866 complete and 0 interrupted iterations
+browse   [  96% ] 001/200 VUs    5m46.7s/6m0s  20.00 iters/s
+flows    [  96% ] 0494/0537 VUs  5m46.7s/6m0s  5.00 iters/s
+
+running (05m47.8s), 0498/0737 VUs, 6888 complete and 0 interrupted iterations
+browse   [  97% ] 000/200 VUs    5m47.7s/6m0s  20.00 iters/s
+flows    [  97% ] 0498/0537 VUs  5m47.7s/6m0s  5.00 iters/s
+
+running (05m48.8s), 0502/0737 VUs, 6909 complete and 0 interrupted iterations
+browse   [  97% ] 000/200 VUs    5m48.7s/6m0s  20.00 iters/s
+flows    [  97% ] 0502/0537 VUs  5m48.7s/6m0s  5.00 iters/s
+
+running (05m49.8s), 0507/0737 VUs, 6929 complete and 0 interrupted iterations
+browse   [  97% ] 001/200 VUs    5m49.7s/6m0s  20.00 iters/s
+flows    [  97% ] 0506/0537 VUs  5m49.7s/6m0s  5.00 iters/s
+
+running (05m50.8s), 0507/0737 VUs, 6954 complete and 0 interrupted iterations
+browse   [  97% ] 000/200 VUs    5m50.7s/6m0s  20.00 iters/s
+flows    [  97% ] 0507/0537 VUs  5m50.7s/6m0s  5.00 iters/s
+
+running (05m51.8s), 0515/0737 VUs, 6971 complete and 0 interrupted iterations
+browse   [  98% ] 007/200 VUs    5m51.7s/6m0s  20.00 iters/s
+flows    [  98% ] 0508/0537 VUs  5m51.7s/6m0s  5.00 iters/s
+
+running (05m52.8s), 0531/0737 VUs, 6980 complete and 0 interrupted iterations
+browse   [  98% ] 018/200 VUs    5m52.7s/6m0s  20.00 iters/s
+flows    [  98% ] 0513/0537 VUs  5m52.7s/6m0s  5.00 iters/s
+
+running (05m53.8s), 0545/0737 VUs, 6991 complete and 0 interrupted iterations
+browse   [  98% ] 027/200 VUs    5m53.7s/6m0s  20.00 iters/s
+flows    [  98% ] 0518/0537 VUs  5m53.7s/6m0s  5.00 iters/s
+
+running (05m54.8s), 0560/0737 VUs, 7001 complete and 0 interrupted iterations
+browse   [  99% ] 037/200 VUs    5m54.7s/6m0s  20.00 iters/s
+flows    [  99% ] 0523/0537 VUs  5m54.7s/6m0s  5.00 iters/s
+
+running (05m55.8s), 0580/0737 VUs, 7006 complete and 0 interrupted iterations
+browse   [  99% ] 052/200 VUs    5m55.7s/6m0s  20.00 iters/s
+flows    [  99% ] 0528/0537 VUs  5m55.7s/6m0s  5.00 iters/s
+
+running (05m56.8s), 0601/0737 VUs, 7010 complete and 0 interrupted iterations
+browse   [  99% ] 068/200 VUs    5m56.7s/6m0s  20.00 iters/s
+flows    [  99% ] 0533/0537 VUs  5m56.7s/6m0s  5.00 iters/s
+
+running (05m57.8s), 0618/0738 VUs, 7017 complete and 0 interrupted iterations
+browse   [  99% ] 081/200 VUs    5m57.7s/6m0s  20.00 iters/s
+flows    [  99% ] 0537/0538 VUs  5m57.7s/6m0s  5.00 iters/s
+
+running (05m58.8s), 0624/0740 VUs, 7034 complete and 0 interrupted iterations
+browse   [ 100% ] 084/200 VUs    5m58.7s/6m0s  20.00 iters/s
+flows    [ 100% ] 0540/0540 VUs  5m58.7s/6m0s  5.00 iters/s
+
+running (05m59.8s), 0623/0743 VUs, 7057 complete and 0 interrupted iterations
+browse   [ 100% ] 081/200 VUs    5m59.7s/6m0s  20.00 iters/s
+flows    [ 100% ] 0542/0543 VUs  5m59.7s/6m0s  5.00 iters/s
+
+running (06m00.8s), 0621/0743 VUs, 7065 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m01.8s), 0612/0743 VUs, 7074 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m02.8s), 0606/0743 VUs, 7080 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m03.8s), 0605/0743 VUs, 7081 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m04.8s), 0602/0743 VUs, 7084 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m05.8s), 0573/0743 VUs, 7113 complete and 0 interrupted iterations
+browse ↓ [ 100% ] 082/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m06.8s), 0534/0743 VUs, 7152 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m07.8s), 0521/0743 VUs, 7165 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m08.8s), 0516/0743 VUs, 7170 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m09.8s), 0513/0743 VUs, 7173 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m10.8s), 0509/0743 VUs, 7177 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m11.8s), 0506/0743 VUs, 7180 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m12.8s), 0503/0743 VUs, 7183 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m13.8s), 0502/0743 VUs, 7184 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m14.8s), 0499/0743 VUs, 7187 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m15.8s), 0499/0743 VUs, 7187 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m16.8s), 0498/0743 VUs, 7188 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m17.8s), 0498/0743 VUs, 7188 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m18.8s), 0498/0743 VUs, 7188 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m19.8s), 0495/0743 VUs, 7191 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m20.8s), 0493/0743 VUs, 7193 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m21.8s), 0491/0743 VUs, 7195 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m22.8s), 0488/0743 VUs, 7198 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m23.8s), 0485/0743 VUs, 7201 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m24.8s), 0483/0743 VUs, 7203 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m25.8s), 0480/0743 VUs, 7206 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m26.8s), 0478/0743 VUs, 7208 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m27.8s), 0474/0743 VUs, 7212 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m28.8s), 0471/0743 VUs, 7215 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m29.8s), 0468/0743 VUs, 7218 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m30.8s), 0461/0743 VUs, 7225 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m31.8s), 0455/0743 VUs, 7231 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m32.8s), 0447/0743 VUs, 7239 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m33.8s), 0441/0743 VUs, 7245 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m34.8s), 0439/0743 VUs, 7247 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m35.8s), 0439/0743 VUs, 7247 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m36.8s), 0438/0743 VUs, 7248 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m37.8s), 0436/0743 VUs, 7250 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m38.8s), 0416/0743 VUs, 7270 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m39.8s), 0387/0743 VUs, 7299 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m40.8s), 0353/0743 VUs, 7333 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m41.8s), 0327/0743 VUs, 7359 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m42.8s), 0302/0743 VUs, 7384 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m43.8s), 0292/0743 VUs, 7394 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m44.8s), 0284/0743 VUs, 7402 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m45.8s), 0280/0743 VUs, 7406 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m46.8s), 0275/0743 VUs, 7411 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m47.8s), 0273/0743 VUs, 7413 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m48.8s), 0270/0743 VUs, 7416 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m49.8s), 0268/0743 VUs, 7418 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m50.8s), 0264/0743 VUs, 7422 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m51.8s), 0255/0743 VUs, 7431 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m52.8s), 0251/0743 VUs, 7435 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m53.8s), 0248/0743 VUs, 7438 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m54.8s), 0248/0743 VUs, 7438 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m55.8s), 0248/0743 VUs, 7438 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m56.8s), 0247/0743 VUs, 7439 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m57.8s), 0247/0743 VUs, 7439 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m58.8s), 0247/0743 VUs, 7439 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (06m59.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m00.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m01.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m02.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m03.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m04.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m05.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m06.8s), 0246/0743 VUs, 7440 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m07.8s), 0244/0743 VUs, 7442 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m08.8s), 0237/0743 VUs, 7449 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m09.8s), 0231/0743 VUs, 7455 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m10.8s), 0228/0743 VUs, 7458 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m11.8s), 0207/0743 VUs, 7479 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m12.8s), 0185/0743 VUs, 7501 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m13.8s), 0180/0743 VUs, 7506 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m14.8s), 0176/0743 VUs, 7510 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m15.8s), 0171/0743 VUs, 7515 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m16.8s), 0170/0743 VUs, 7516 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m17.8s), 0165/0743 VUs, 7521 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m18.8s), 0160/0743 VUs, 7526 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m19.8s), 0158/0743 VUs, 7528 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m20.8s), 0156/0743 VUs, 7530 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m21.8s), 0154/0743 VUs, 7532 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m22.8s), 0149/0743 VUs, 7537 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m23.8s), 0142/0743 VUs, 7544 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m24.8s), 0138/0743 VUs, 7548 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m25.8s), 0134/0743 VUs, 7552 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m26.8s), 0131/0743 VUs, 7555 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m27.8s), 0122/0743 VUs, 7564 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m28.8s), 0118/0743 VUs, 7568 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m29.8s), 0112/0743 VUs, 7574 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m30.8s), 0107/0743 VUs, 7579 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m31.8s), 0095/0743 VUs, 7591 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m32.8s), 0089/0743 VUs, 7597 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m33.8s), 0081/0743 VUs, 7605 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m34.8s), 0080/0743 VUs, 7606 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m35.8s), 0078/0743 VUs, 7608 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m36.8s), 0078/0743 VUs, 7608 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m37.8s), 0074/0743 VUs, 7612 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m38.8s), 0073/0743 VUs, 7613 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m39.8s), 0072/0743 VUs, 7614 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m40.8s), 0072/0743 VUs, 7614 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m41.8s), 0069/0743 VUs, 7617 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m42.8s), 0068/0743 VUs, 7618 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m43.8s), 0042/0743 VUs, 7644 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m44.8s), 0024/0743 VUs, 7662 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m45.8s), 0012/0743 VUs, 7674 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m46.8s), 0011/0743 VUs, 7675 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m47.8s), 0011/0743 VUs, 7675 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m48.8s), 0010/0743 VUs, 7676 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m49.8s), 0010/0743 VUs, 7676 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m50.8s), 0010/0743 VUs, 7676 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m51.8s), 0010/0743 VUs, 7676 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m52.8s), 0009/0743 VUs, 7677 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m53.8s), 0008/0743 VUs, 7678 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m54.8s), 0008/0743 VUs, 7678 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m55.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m56.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m57.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m58.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (07m59.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m00.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m01.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m02.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m03.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m04.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m05.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m06.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m07.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m08.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m09.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m10.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m11.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m12.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m13.8s), 0007/0743 VUs, 7679 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m14.8s), 0006/0743 VUs, 7680 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m15.8s), 0004/0743 VUs, 7682 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m16.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m17.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m18.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m19.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m20.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m21.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m22.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m23.8s), 0003/0743 VUs, 7683 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m24.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m25.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m26.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m27.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m28.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m29.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m30.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m31.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m32.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m33.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m34.8s), 0002/0743 VUs, 7684 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m35.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m36.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m37.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m38.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m39.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+
+running (08m40.8s), 0001/0743 VUs, 7685 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ↓ [ 100% ] 0543/0543 VUs  6m0s  5.00 iters/s
+== beside load: api_staged.js (A1) run=s2c base=https://beside-team.duckdns.org
+requests 40945 (78.6/s), dropped_iterations 562 (browse 469, flows 93), vus_max 743
+data sent 19.373 Mbps (whole-run average), peak stage 0 upload 24.754 Mbps, received 29.527 Mbps (UPLINK_MBPS not set)
+healthz p50 (RTT_base candidate) 4093.726 ms
+checks: 233 failed of 42205
+responses by status (load_status*Count): 0 (no response) 233, 4xx 0, 5xx 0
+stage  users     target   status     latency p95 (ms)
+0      9000      18000    fail       asset=22915.18 create=60000.81 healthz=15381.48 poll=11741.21  http 0=233
+breaking point: none — dropped_iterations 562 > 0 (browse 469, flows 93) and k6 cannot tie them to a stage (ramping-arrival-rate): no stage counts as passed and there is no breaking point; raise PRE_VUS (k6 drops an iteration for every VU it starts mid-test, so MAX_VUS alone does not help) or check the load PC, and run again; the browse drops need BROWSE_PRE_VUS (api_staged.js: PRE_VUS sizes the flows scenario only)
+thresholds: 23 failed
+  FAIL dropped_iterations count==0
+  FAIL http_req_duration{endpoint:asset,stage:0,phase:hold} p(95)<3000
+  FAIL http_req_duration{endpoint:asset,stage:0,phase:hold} p(99)<6000
+  FAIL http_req_duration{endpoint:asset} p(95)<3000
+  FAIL http_req_duration{endpoint:asset} p(99)<6000
+  FAIL http_req_duration{endpoint:create,stage:0,phase:hold} p(99)<3000
+  FAIL http_req_duration{endpoint:create,stage:0,phase:hold} p(95)<1500
+  FAIL http_req_duration{endpoint:create} p(95)<1500
+  FAIL http_req_duration{endpoint:create} p(99)<3000
+  FAIL http_req_duration{endpoint:healthz,stage:0,phase:hold} p(95)<54.49
+  FAIL http_req_duration{endpoint:healthz,stage:0,phase:hold} p(99)<154.49
+  FAIL http_req_duration{endpoint:healthz} p(95)<54.49
+  FAIL http_req_duration{endpoint:healthz} p(99)<154.49
+  FAIL http_req_duration{endpoint:poll,stage:0,phase:hold} p(99)<304.49
+  FAIL http_req_duration{endpoint:poll,stage:0,phase:hold} p(95)<104.49
+  FAIL http_req_duration{endpoint:poll} p(95)<104.49
+  FAIL http_req_duration{endpoint:poll} p(99)<304.49
+  FAIL http_req_waiting{endpoint:asset,stage:0,phase:hold} p(95)<154.49
+  FAIL http_req_waiting{endpoint:asset} p(95)<154.49
+  FAIL load_errorRatio rate<0.005
+  FAIL load_errorRatio{stage:0,phase:hold} rate<0.005
+  FAIL load_flowOkRatio rate>=0.95
+  FAIL load_flowOkRatio{stage:0,phase:hold} rate>=0.95
+
+running (08m40.9s), 0000/0743 VUs, 7686 complete and 0 interrupted iterations
+browse ✓ [ 100% ] 000/200 VUs    6m0s  20.00 iters/s
+flows  ✓ [ 100% ] 0000/0543 VUs  6m0s  5.00 iters/s
+time="2026-11-25T18:57:09Z" level=error msg="thresholds on metrics 'dropped_iterations, http_req_duration{endpoint:asset,stage:0,phase:hold}, http_req_duration{endpoint:asset}, http_req_duration{endpoint:create,stage:0,phase:hold}, http_req_duration{endpoint:create}, http_req_duration{endpoint:healthz,stage:0,phase:hold}, http_req_duration{endpoint:healthz}, http_req_duration{endpoint:poll,stage:0,phase:hold}, http_req_duration{endpoint:poll}, http_req_waiting{endpoint:asset,stage:0,phase:hold}, http_req_waiting{endpoint:asset}, load_errorRatio, load_errorRatio{stage:0,phase:hold}, load_flowOkRatio, load_flowOkRatio{stage:0,phase:hold}' have been crossed"
