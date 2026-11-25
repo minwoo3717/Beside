@@ -67,12 +67,12 @@
 2. 어느 백업으로 돌아갈지 고른다.
    - VM 안 `storage/backup/beside-*.zip`(매시 5분, 48개 [적용] 2026-11-20 05:33 UTC 배포, 설정 `0 5 * * * *` 확인. 그 전 zip 은 매일 04:30 KST 것)
    - 또는 버킷 `gs://beside-514511-backups/db/`(매시 20분에 올림 [적용]). VM 의 서비스 계정 `beside-backup@` 은 버킷을 읽지 못하므로(`roles/storage.objectCreator` 뿐) 소유자 계정으로 받아 볼륨의 `backup/` 에 넣은 뒤 3번으로 간다. 이 순서는 연습하지 않았다 [계획].
-     1. 개발 PC 나 Cloud Shell(소유자 계정)에서 `gcloud storage cp gs://beside-514511-backups/db/<zip> .`
+     1. 개발 PC(소유자 계정으로 `gcloud` 로그인)에서 `gcloud storage cp gs://beside-514511-backups/db/<zip> .`. 다음 단계의 SSH 별칭과 키가 개발 PC 에만 있으므로 Cloud Shell 에서 받지 않는다.
      2. VM 으로 옮긴다: 개발 PC 에서 `scp <zip> beside-gcp:~`([deploy/README.md](../../deploy/README.md) 의 SSH 별칭).
      3. VM 에서 backend 이미지로 넣는다. 파일과 `backup/` 폴더의 주인이 uid 10001 이어야 backend 의 매시 백업이 계속 된다(sudo 로 폴더를 만들면 root 소유가 되어 매시 백업이 실패한다):
         `docker run --rm -v beside-storage:/app/storage -v "$HOME/<zip>:/in.zip:ro" --entrypoint sh beside-backend:local -c 'mkdir -p /app/storage/backup && cp /in.zip /app/storage/backup/<zip>'`
-3. backend 이미지로 복구한다(파일 주인 uid 10001). zip 이 볼륨에 없으면 `test -f` 에서 멈춰 DB 파일을 지우지 않는다:
-   `docker run --rm -v beside-storage:/app/storage --entrypoint sh beside-backend:local -c 'test -f /app/storage/backup/<zip> && rm -f /app/storage/db/beside-real.mv.db && java -Dloader.main=org.h2.tools.Restore -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher -file /app/storage/backup/<zip> -dir /app/storage/db -db beside-real'`
+3. backend 이미지로 복구한다(파일 주인 uid 10001). zip 이 볼륨에 없으면 'zip 없음' 을 출력하고 멈춰 DB 파일을 지우지 않는다. 이 줄이 나오면 4번으로 가지 않는다(지금 DB 그대로 떠서 복구된 것처럼 보인다):
+   `docker run --rm -v beside-storage:/app/storage --entrypoint sh beside-backend:local -c 'test -f /app/storage/backup/<zip> || { echo "zip 없음: /app/storage/backup/<zip> — 아무것도 바꾸지 않았어요" >&2; exit 1; }; rm -f /app/storage/db/beside-real.mv.db && java -Dloader.main=org.h2.tools.Restore -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher -file /app/storage/backup/<zip> -dir /app/storage/db -db beside-real'`
 4. `up -d backend` → healthz.
 5. 아는 작업 id 로 확인한다. 백업 뒤에 만든 작업은 잃는다(RPO = 백업 간격).
 - **주의**: 1차 훈련 때는 DB 파일이 없으면 backend 가 빈 DB 로 그냥 떴다. 이제 prod 는 시작하지 않는다 [적용] 2026-11-20 15:53(PR #22). 복구 전에는 backend 가 뜨지 않는 것이 정상이다. 새 서버의 첫 시작만 `STORAGE_DB_CREATE_IF_MISSING=true` 를 붙인다([deploy/README.md](../../deploy/README.md) 'VM 첫 설정' 6번).

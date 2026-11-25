@@ -4,7 +4,7 @@
 # Checks: zips go oldest first and only once, an unreadable zip is reported and skipped, a failed upload stops the db
 # order and is sent on the next run, photos/GLBs go once a day (or with FORCE_FILES=1), a file deleted after the run
 # listed it is skipped without failing, only a good run writes last.ok, a lost state never overwrites what the bucket
-# has, a newest H2 zip older than 150 min fails the run (not under a maintenance flag), a VM without the write scope
+# has, a newest H2 zip older than 150 min fails the run (not under a maintenance flag or in the first 150 min after a boot), a VM without the write scope
 # uploads nothing, and the token is never on a command line or printed.
 #   bash scripts/test_offsite_backup.sh
 set -euo pipefail
@@ -89,7 +89,7 @@ file_at() {  # file_at <relative path> <minutes ago>
 run() {
   local rc=0
   env STATE_DIRECTORY="$WORK/state" BESIDE_BACKUP_CONFIG="$WORK/backup.env" METADATA_URL=http://meta.test \
-    BESIDE_MAINTENANCE_FILES="$WORK/maintenance" \
+    BESIDE_MAINTENANCE_FILES="$WORK/maintenance" UPTIME_S=999999 \
     GCS_UPLOAD_URL=https://gcs.test/upload/storage/v1 "$@" bash "$SCRIPT" > "$WORK/out.txt" 2>&1 || rc=$?
   cat "$WORK/out.txt" >> "$WORK/all.txt"
   return "$rc"
@@ -201,6 +201,9 @@ touch "$WORK/maintenance"
 run || fail "a stale backup failed the run under a maintenance flag"
 grep -q "maintenance flag" "$WORK/out.txt" || fail "maintenance flag not logged"
 rm "$WORK/maintenance"
+# a VM just booted after hours off (or rebuilt from a snapshot) runs before the backend's next backup: not judged yet
+run UPTIME_S=600 || fail "a stale backup failed the first run after a boot"
+grep -q "up 10 min (< 150): the age of the newest backup is not checked yet" "$WORK/out.txt" || fail "boot grace not logged"
 echo 1 > "$WORK/state/last.ok"
 zip_at beside-20261120-200500-001.zip 15
 run || fail "run after a new backup"

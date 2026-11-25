@@ -201,8 +201,13 @@ if [[ -d "$BACKUP_DIR" ]]; then
     if [[ -e "$flag" ]]; then maintenance="$flag"; break; fi
   done
   newest="$({ find "$BACKUP_DIR" -maxdepth 1 -type f -name 'beside-*.zip' -printf '%T@ %f\n' || true; } | sort -n | tail -n1)"
+  # A VM that was off for hours (or rebuilt from the daily snapshot) runs this before the backend's next xx:05 backup:
+  # its newest zip is old for a good reason, so the age is judged only once the VM has been up DB_STALE_MIN.
+  uptime_s="${UPTIME_S:-$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999999)}"
   if [[ -n "$maintenance" ]]; then
     log "db: maintenance flag $maintenance: the age of the newest backup is not checked"
+  elif ((uptime_s < DB_STALE_MIN * 60)); then
+    log "db: the VM has been up $((uptime_s / 60)) min (< $DB_STALE_MIN): the age of the newest backup is not checked yet"
   elif [[ -z "$newest" ]]; then
     err "no H2 backup zip in $BACKUP_DIR: is the backend's hourly backup (storage.backup.*) running?"
     failed=1

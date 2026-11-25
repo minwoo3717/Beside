@@ -381,7 +381,7 @@ sudo systemctl enable --now beside-backup.timer
 systemctl list-timers beside-backup.timer
 ```
 
-- 실패하면 서비스가 failed 로 남고 다음 정시 20분에 못 보낸 것부터 다시 보낸다. 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 볼륨의 가장 새 H2 zip 이 150분보다 오래됐으면(backend 의 매시 백업이 두 번 빠짐, `DB_STALE_MIN`) 보낼 것이 없어도 실패로 끝낸다. 유지보수 표시(`/etc/beside-maintenance`, `~beside/fault/MAINTENANCE`)가 있으면 보지 않는다(부하 덮어쓰기는 백업을 끈다). 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남기고, 7번 VM 감시가 이것이 3시간 넘게 묵거나(매시 실행 세 번이 실패·누락) 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 감시를 설치하기 전에는 실패해도 저널에만 남는다.
+- 실패하면 서비스가 failed 로 남고 다음 정시 20분에 못 보낸 것부터 다시 보낸다. 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 볼륨의 가장 새 H2 zip 이 150분보다 오래됐으면(backend 의 매시 백업이 두 번 빠짐, `DB_STALE_MIN`) 보낼 것이 없어도 실패로 끝낸다. 유지보수 표시(`/etc/beside-maintenance`, `~beside/fault/MAINTENANCE`)가 있거나(부하 덮어쓰기는 백업을 끈다) VM 이 켜진 지 150분이 안 됐으면(오래 꺼졌거나 스냅샷으로 다시 세운 VM 은 다음 xx:05 백업 전에 이 실행이 돈다) 보지 않는다. 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남기고, 7번 VM 감시가 이것이 3시간 넘게 묵거나(매시 실행 세 번이 실패·누락) 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 감시를 설치하기 전에는 실패해도 저널에만 남는다.
 - 복구 확인(한 번, 개발 PC): `gcloud storage ls gs://beside-514511-backups/db/ | tail -n 1` 의 zip 을 받아 H2 로 열어 작업 수를 본다(FD5 훈련과 같은 `Restore` 절차).
 
 **5. 스냅샷 일정(R2, gcloud)** — 2026-11-20 적용함 **[구현됨: 적용]**(위 '적용 기록'): `bash deploy/gcp/snapshot_schedule.sh`(다시 실행해도 있는 일정과 이미 붙인 디스크는 그대로 둔다). 다음 19:00 UTC 뒤 `gcloud compute snapshots list --filter="sourceDisk~/disks/beside-vm$"` 로 첫 스냅샷을 확인한다(2026-11-20 적용분은 아직 **[계획]**). 스냅샷은 전원을 내린 것과 같은 상태라, 복구한 VM 에서 H2 파일이 열리지 않으면 `storage/backup` 의 최신 zip 으로 되돌린다.
