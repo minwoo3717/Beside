@@ -163,6 +163,10 @@ test('thresholds: the status-class counters stay in the summary per judged scope
   const all = th.errorThresholds(null, true);
   assert.deepEqual(all['load_status5xxCount{status:504}'], ['count>=0']);
   assert.deepEqual(th.abortRules(all), [{ metric: 'load_errorRatio', threshold: 'rate<0.05' }]);
+  // a drill (ABORT_ON_ERRORS=0) keeps the load on: same budget, no abort rule
+  const drill = th.errorThresholds(null, true, true);
+  assert.deepEqual(drill.load_errorRatio, ['rate<0.005']);
+  assert.deepEqual(th.abortRules(drill), []);
 });
 
 test('summary: responses by status class per stage and overall, the 5xx by code (A2 collapse)', async () => {
