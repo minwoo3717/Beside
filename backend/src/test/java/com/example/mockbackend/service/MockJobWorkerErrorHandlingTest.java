@@ -6,15 +6,20 @@ import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.repository.JobRepository;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -71,6 +76,32 @@ class MockJobWorkerErrorHandlingTest {
 
         verify(jobFinisher, never()).fail(any(), any(), any(), any());
         verify(jobFinisher, times(1)).complete(any(), any(), any(), any(), any());
+    }
+
+    /**
+     * Every line of the run (here: inside JobFinisher) carries jobId and attempt (logback-spring.xml, logging.pattern
+     * .level); the pool thread keeps neither for the next job, also after an error.
+     */
+    @Test
+    void theRunsLinesCarryTheJobAndThePoolThreadKeepsNothing() {
+        when(jobRepository.findById(ID)).thenReturn(Optional.of(job(JobStatus.PENDING)));
+        when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
+        Map<String, String> seen = new HashMap<>();
+        doAnswer(call -> {
+            seen.putAll(MDC.getCopyOfContextMap());
+            return null;
+        }).when(jobFinisher).complete(any(Job.class), any(), any(Instant.class), anyString(), any(RunDetails.class));
+
+        worker.dispatch(ID, 1);
+
+        assertThat(seen).containsEntry("jobId", ID).containsEntry("attempt", "1");
+        assertThat(MDC.get("jobId")).isNull();
+        assertThat(MDC.get("attempt")).isNull();
+
+        when(jobRepository.findById(ID)).thenThrow(new IllegalStateException("database closed"));
+        worker.dispatch(ID, 1);
+        assertThat(MDC.get("jobId")).isNull();
+        assertThat(MDC.get("attempt")).isNull();
     }
 
     private static Job job(JobStatus status) {

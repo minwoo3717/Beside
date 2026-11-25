@@ -11,9 +11,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.MDC;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -146,6 +149,39 @@ class RealJobWorkerErrorHandlingTest {
         assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
         assertThat(RealJobWorker.copyFailureCode(InferenceClient.Transfer.UPLOAD, there)).isEqualTo(ErrorCode.INTERNAL_ERROR);
         assertThat(RealJobWorker.copyFailureCode(null, gone)).isEqualTo(ErrorCode.INTERNAL_ERROR);
+    }
+
+    /**
+     * Every line of the run carries jobId and attempt (logback-spring.xml, logging.pattern.level), from the cutout to
+     * the end; the pool thread keeps neither for the next job, also after an error that left run().
+     */
+    @Test
+    void theRunsLinesCarryTheJobAndThePoolThreadKeepsNothing() throws Exception {
+        Job queued = job(JobStatus.PENDING);
+        when(jobRepository.findById(ID)).thenReturn(Optional.of(queued));
+        when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
+        Map<String, String> atCutout = new HashMap<>();
+        Map<String, String> atInfer = new HashMap<>();
+        when(cutoutStage.prepare(any(Job.class))).thenAnswer(call -> {
+            atCutout.putAll(MDC.getCopyOfContextMap());
+            return PreparedPhoto.off();
+        });
+        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenAnswer(call -> {
+            atInfer.putAll(MDC.getCopyOfContextMap());
+            throw new IllegalStateException("bug");
+        });
+
+        worker.dispatch(ID, 1);
+
+        assertThat(atCutout).containsEntry("jobId", ID).containsEntry("attempt", "1");
+        assertThat(atInfer).containsEntry("jobId", ID).containsEntry("attempt", "1");
+        assertThat(MDC.get("jobId")).isNull();
+        assertThat(MDC.get("attempt")).isNull();
+
+        when(jobRepository.findById(ID)).thenThrow(new IllegalStateException("database closed"));
+        worker.dispatch(ID, 1);
+        assertThat(MDC.get("jobId")).isNull();
+        assertThat(MDC.get("attempt")).isNull();
     }
 
     private static Job job(JobStatus status) {
