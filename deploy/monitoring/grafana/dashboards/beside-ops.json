@@ -2948,7 +2948,7 @@
       "id": 38,
       "type": "bargauge",
       "title": "제품 퍼널 (선택 기간)",
-      "description": "서버가 본 단계별 수. 업로드 시도 = 접수(beside_jobs_created_total, v0 포함) + 업로드 거절(beside_jobs_upload_rejected_total) + 대기열 상한 거절(beside_jobs_refused_total{op=\"create\"}). 생성 완료 = COMPLETED 로 끝난 실행(retry 포함). GLB 받기 = beside_asset_downloads_total{outcome=\"ok\"}(같은 작업을 여러 번 받으면 여러 번). 공유 보기 = 뷰어가 링크를 연 수. 같은 사람을 잇는 퍼널이 아니라 단계마다 센 수다. 앱 화면의 단계(AR 배치 등)는 앱 metrics.csv(§3)에 있다.",
+      "description": "서버가 본 단계별 수. 업로드 시도 = 접수(beside_jobs_created_total, v0 포함) + 업로드 거절(beside_jobs_upload_rejected_total) + 대기열 상한 거절(beside_jobs_refused_total{op=\"create\"}). 생성 완료 = COMPLETED 로 끝난 실행(retry 포함). GLB 받기 = beside_asset_downloads_total{outcome=\"ok\"}(같은 작업을 여러 번 받으면 여러 번). 공유 보기 = 뷰어가 링크를 연 수. 같은 사람을 잇는 퍼널이 아니라 단계마다 센 수다. 앱 화면의 단계(AR 배치 등)는 앱 metrics.csv(§3)에 있다. 단계마다 단위가 서로 다르다: 접수는 새 작업, 생성 완료는 끝난 실행(retry 포함), GLB 받기는 다운로드 횟수(다시 받기 포함)다. 그래서 '생성 완료' 가 '접수' 보다 클 수 있고, 막대 사이 비율은 전환율이 아니다(사람 단위 퍼널은 /admin 의 세션 퍼널). backend 를 다시 시작하면 카운터가 0 부터 다시 세고, 처음 생기는 조합의 첫 증가분은 increase() 가 놓칠 수 있다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -3163,7 +3163,7 @@
       "id": 40,
       "type": "timeseries",
       "title": "공유 보기 — 결과별 ($window 창)",
-      "description": "beside_share_views_total{outcome}: 공유 뷰어(/s/{token})가 링크 정보를 연 수. 응답은 모두 404 SHARE_NOT_FOUND 이지만 이유를 나눈다: revoked 취소됨, expired 만료됨(기본 7일), not_found 없는 토큰·작업이 지워진 링크. expired 가 많으면 유효 기간을 다시 본다.",
+      "description": "beside_share_views_total{outcome}: 공유 뷰어(/s/{token})가 링크 정보를 연 수. 응답은 모두 404 SHARE_NOT_FOUND 이지만 이유를 나눈다: revoked 취소됨, expired 만료됨(기본 7일), not_found 없는 토큰(작업을 지우면 그 링크는 먼저 취소되므로 revoked 로 센다). expired 가 많으면 유효 기간을 다시 본다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"

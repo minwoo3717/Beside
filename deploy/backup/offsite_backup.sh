@@ -174,7 +174,7 @@ if [[ -d "$BACKUP_DIR" ]]; then
   while IFS= read -r name <&3; do
     [[ -z "$last" || "$name" > "$last" ]] || continue
     if [[ ! -f "$BACKUP_DIR/$name" ]]; then
-      err "pruned before it was sent, skipped: $name (was the VM off for two days?)"
+      err "pruned before it was sent, skipped: $name (was the VM off longer than STORAGE_BACKUP_KEEP backups?)"
     elif ! zip_ok "$BACKUP_DIR/$name"; then
       err "not a readable zip, skipped: $name"
       failed=1

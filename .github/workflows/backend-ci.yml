@@ -110,7 +110,7 @@ jobs:
           grep -qxF -- '-XX:+ExitOnOutOfMemoryError' jvm-args.txt
           grep -qxF -- '-XX:+HeapDumpOnOutOfMemoryError' jvm-args.txt
           grep -qxF -- '-XX:HeapDumpPath=/app/storage/backend-oom.hprof' jvm-args.txt
-          printf '%s''iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > probe.png
+          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > probe.png
           code="$(curl -s -o /dev/null -w '%{http_code}' -F 'photos=@probe.png;type=image/png' http://127.0.0.1:18080/api/v1/jobs)"
           echo "POST /api/v1/jobs -> $code"
           test "$code" = 202
