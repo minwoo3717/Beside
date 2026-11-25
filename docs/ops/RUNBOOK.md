@@ -15,6 +15,8 @@
 
 ## 먼저 볼 곳
 
+- 2026-11-26 부터(배포 뒤): Grafana **Beside 로그** 에서 서비스별 로그 줄·ERROR·실패 코드를, **Beside 운영** 에서 지표를 본다. Grafana 지표 알림(📈, 팀 채널)은 [deploy/README.md](../../deploy/README.md) '로그 · 알림'. 사후 보고서는 [POSTMORTEM_TEMPLATE.md](POSTMORTEM_TEMPLATE.md), 목표는 [SLO.md](SLO.md).
+
 | 무엇 | 어디서 |
 |---|---|
 | 공개 경로 | `curl -s https://beside-team.duckdns.org/api/v1/healthz` → `{"status":"ok","profile":"real,prod",...}` |
