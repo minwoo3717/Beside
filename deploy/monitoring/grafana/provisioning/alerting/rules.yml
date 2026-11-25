@@ -1,0 +1,202 @@
+# Grafana 알림 규칙(파일 공급). 운영 지표(env="prod")만 본다. 부하 시험·스테이징의 env="loadtest" 는 울리지 않는다.
+# 만든 곳: 2026-11-25 멘토링 '모니터링을 해야 장애 감지가 빠르다'. 그 전에는 지표 알림이 0개였다(대시보드는 사람이 볼 때만 쓸모).
+# 이 파일은 scratchpad 의 생성기에서 만들었다. 규칙을 고칠 때는 아래 구조를 그대로 따른다:
+#   A = 순간 질의, C = A 의 임계값. 데이터 없음(트래픽 없음)은 정상(OK)으로 본다.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: beside-prod
+    folder: Beside 알림
+    interval: 1m
+    rules:
+      - uid: beside-backend-down
+        title: "backend 지표 수집 실패"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "up{job=\"beside-backend\"}", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "lt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        isPaused: false
+        annotations:
+          summary: "🔴 backend 지표를 2분 넘게 못 읽었다. backend 가 죽었거나 멈췄다(VM 감시 R4 가 재시작하는지 RUNBOOK '먼저 볼 곳')."
+        labels:
+          severity: critical
+      - uid: beside-5xx-ratio
+        title: "5xx 비율 (QUEUE_FULL 제외)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "(clamp_min(sum(rate(http_server_requests_seconds_count{env=\"prod\",status=~\"5..\"}[5m])) - (sum(rate(beside_jobs_refused_total{env=\"prod\"}[5m])) or vector(0)), 0) / sum(rate(http_server_requests_seconds_count{env=\"prod\"}[5m]))) and on() (sum(increase(http_server_requests_seconds_count{env=\"prod\",status=~\"5..\"}[5m])) >= 3)", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0.05]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "5xx 응답이 5 %를 넘는다(의도한 503 QUEUE_FULL 제외, 5분에 3건 이상). Grafana 'Beside 로그' 의 backend ERROR 를 본다."
+        labels:
+          severity: warning
+      - uid: beside-poll-latency
+        title: "작업 조회 응답 p95 > 1 s"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"prod\",method=\"GET\",uri=\"/api/v1/jobs/{id}\"}[5m])))", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        isPaused: false
+        annotations:
+          summary: "작업 조회(폴링) p95 가 1 s 를 넘은 지 10분. 평소 약 0.024 s 다. CPU·Caddy 를 본다(1차 부하 시험에서 1,200 요청/s 에 무너졌다)."
+        labels:
+          severity: warning
+      - uid: beside-upload-latency
+        title: "업로드 응답 p95 > 5 s"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"prod\",method=\"POST\",uri=\"/api/v1/jobs\"}[10m])))", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [5]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        isPaused: false
+        annotations:
+          summary: "업로드(POST /api/v1/jobs) p95 가 5 s 를 넘은 지 10분. 사진 검사·배경 제거를 포함해 평소 약 2 s 다."
+        labels:
+          severity: warning
+      - uid: beside-queue-wait
+        title: "대기 시간 p95 > 60 s (증설 기준)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 900, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(beside_job_queued_seconds_bucket{env=\"prod\"}[10m])))", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [60]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        isPaused: false
+        annotations:
+          summary: "GPU 대기 p95 가 60 s 를 넘은 지 10분. GPU 증설 기준 [제안값](TRAFFIC_MODEL 4절)에 닿았다."
+        labels:
+          severity: warning
+      - uid: beside-queue-length
+        title: "대기열 19건 이상"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "max_over_time(beside_jobs_queue{env=\"prod\",state=\"pending\"}[5m])", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [18]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "대기 중 작업이 19건 이상(큐 상한 N 과 같은 수)인 지 5분. 상한이 꺼져 있으면 기다리는 사람이 600 s 를 넘길 수 있다."
+        labels:
+          severity: warning
+      - uid: beside-heap-after-gc
+        title: "GC 뒤 힙 > 75 %"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "max(jvm_memory_usage_after_gc_percent{env=\"prod\",area=\"heap\",pool=\"long-lived\"})", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0.75]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 10m
+        isPaused: false
+        annotations:
+          summary: "GC 뒤에도 long-lived 힙이 75 %를 넘은 지 10분(부하 합격 기준과 같은 선). 메모리 누수나 큰 요청을 의심한다."
+        labels:
+          severity: warning
+      - uid: beside-asset-failures
+        title: "에셋 다운로드 실패율 > 5 %"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "(sum(increase(beside_asset_downloads_total{env=\"prod\",outcome=~\"client_abort|error\"}[1h])) / sum(increase(beside_asset_downloads_total{env=\"prod\",outcome=~\"ok|client_abort|error\"}[1h]))) and on() (sum(increase(beside_asset_downloads_total{env=\"prod\",outcome=~\"client_abort|error\"}[1h])) >= 3)", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0.05]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "지난 1시간 GLB 다운로드 실패(끊김·오류)가 5 %를 넘는다(3건 이상)."
+        labels:
+          severity: warning
+      - uid: beside-job-failures
+        title: "작업 실패가 이어짐"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 3600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "(sum(increase(beside_jobs_finished_total{env=\"prod\",result=\"FAILED\",code!=\"CANCELED\"}[1h])) / sum(increase(beside_jobs_finished_total{env=\"prod\",code!=\"CANCELED\"}[1h]))) and on() (sum(increase(beside_jobs_finished_total{env=\"prod\",result=\"FAILED\",code!=\"CANCELED\"}[1h])) >= 3)", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0.2]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "지난 1시간 끝난 작업의 20 % 넘게 실패했다(3건 이상). 코드별로는 'Beside 운영' 의 '끝난 작업' 패널."
+        labels:
+          severity: warning
+      - uid: beside-backend-errors
+        title: "backend ERROR 로그"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: beside-loki
+            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"}[5m]))", "queryType": "instant"}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "backend 가 지난 5분에 ERROR 로그를 남겼다. Grafana 'Beside 로그' 의 'backend ERROR · WARN' 에서 requestId·jobId 로 따라간다."
+        labels:
+          severity: warning
