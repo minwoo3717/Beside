@@ -29,6 +29,9 @@ info:
     Basic 인증 뒤다(공유 링크 보기 GET /api/v1/shares/{token}… 만 공개).
     브라우저가 다른 사이트의 페이지에서 보낸 /api/v1 쓰기(POST·PUT·PATCH·DELETE, Sec-Fetch-Site 또는 Origin 으로 판단)는
     400 INVALID_REQUEST 로 거절한다. 앱·도구(이 헤더가 없음)와 이 서버의 웹 페이지(같은 출처)는 해당하지 않는다.
+
+    다음 태그 전 추가(v1.3 후보, 2026-11-26 안건 #24): 제품 이벤트 수집 POST /api/v1/events(tag events, 공개)와
+    관리 내보내기 GET /api/v1/admin/events·GET /api/v1/admin/funnel(tag admin). 모두 추가이고 기존 필드·enum·상태 코드는 그대로다.
 servers:
   - url: http://localhost:8080
     description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
@@ -60,6 +63,11 @@ tags:
       보관함에 쓰는 길은 모두 이 인증 뒤 경로다: 공개 POST /api/v1/jobs 는 펫을 정하지 않고(미분류), 보관함 웹은 작업을 만든 뒤
       PUT /api/v1/jobs/{jobId}/pet 을 부른다. JobResponse.petId 는 공개 GET /api/v1/jobs/{jobId} 에도 나오지만 그 UUID 로
       할 수 있는 일은 모두 인증 뒤다.
+  - name: events
+    description: |
+      제품 이벤트(클릭·노출·퍼널) 수집, 2026-11-26 안건 #24. 앱(Unity)과 공유 뷰어(/s/{token})가 화면 보기·버튼 누름을 묶음으로 보낸다.
+      공개(Caddy 인증 없음)이고 POST 만 받는다. 이름·속성은 정해진 목록(enum·작은 정수)만 저장하고 모르는 것은 버리고 센다.
+      IP·파일 이름·서버 주소·공유 토큰·자유 글은 받지 않는다(docs/METRICS.md §6). 읽기는 관리 API(tag admin)만, 보존 30일.
 
 paths:
   /api/v1/jobs:
@@ -1041,6 +1049,136 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/events:
+    post:
+      tags: [events]
+      operationId: recordEvents
+      summary: 제품 이벤트 묶음을 보낸다 (앱·공유 뷰어, 공개)
+      description: |
+        2026-11-26 안건 #24, 다음 태그 전 추가(v1.3 후보). 앱(platform android)과 공유 뷰어(platform web)가 화면 보기·버튼 누름을
+        1~50개씩 묶어 보낸다. 본문은 JSON(ProductEventBatch) 32 KB(32,768 바이트) 이하. 이벤트 이름·속성은 docs/METRICS.md §6 의 표가 기준이다.
+
+        - 묶음 검사(실패하면 아무것도 저장하지 않음): 본문이 32 KB 를 넘으면 413 PAYLOAD_TOO_LARGE. JSON 이 아니거나, installId·sessionId 가
+          UUID 가 아니거나, appVersion 이 `[0-9A-Za-z._+-]` 1~32자가 아니거나, platform 이 android | web 이 아니거나, events 가 1~50개
+          배열이 아니면 400 INVALID_REQUEST.
+        - 이벤트 검사(실패한 이벤트만 버리고 dropped 로 센다, 400 이 아님): 모르는 name, at 이 ISO 8601 시각이 아님, seq 가 0 이상 정수가
+          아님, screen_view 인데 screen 이 없음, 같은 sessionId·seq 가 이미 저장됨(앱이 응답을 못 받고 다시 보낸 경우).
+        - 속성 검사(그 값만 버리고 이벤트는 저장): props 에서 그 이벤트의 표에 없는 키·범위 밖 값, 형식이 다른 jobId, 목록에 없는 screen.
+          표에 없는 이벤트 필드와 묶음 필드(IP·주소·토큰·파일 이름 같은 것)는 읽지 않고 저장하지 않는다.
+        - 서버 전체 요청 수 상한(토큰 버킷, 초당 50 묶음, 순간 100 묶음)을 넘으면 저장하지 않고 202 로 accepted 0, dropped = 이벤트 수를
+          돌려준다(새 상태 코드를 만들지 않으려고 — 429 RATE_LIMITED 는 #22 의 예약 그대로). 클라이언트는 2xx 를 받으면 그 묶음을 지운다.
+        - 서버가 붙이는 값: 받은 시각 receivedAt, 지표 환경 env(local | prod | loadtest). 보존 30일(#23 자동 삭제 전까지 손으로 지운다).
+        브라우저가 다른 사이트의 페이지에서 보낸 요청은 다른 /api/v1 쓰기처럼 400 INVALID_REQUEST 다(같은 출처의 공유 뷰어는 해당 없음).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductEventBatch'
+      responses:
+        '202':
+          description: 받음. accepted 는 저장한 이벤트 수, dropped 는 버린 이벤트 수(속성만 버린 이벤트는 accepted 에 들어간다).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductEventsAccepted'
+        '400':
+          $ref: '#/components/responses/EventsBadRequest'
+        '413':
+          $ref: '#/components/responses/EventsTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/events:
+    get:
+      tags: [admin]
+      operationId: adminEvents
+      summary: 제품 이벤트 내보내기 — JSON 또는 CSV
+      description: |
+        recordEvents 로 저장한 이벤트 한 건이 한 행이다(docs/METRICS.md §6). 열 이름과 순서(CSV 헤더 = JSON 이름):
+        receivedAt, env, platform, appVersion, installId, sessionId, seq, at, name, screen, jobId, props.
+        props 는 JSON 에서는 객체, CSV 에서는 그 객체의 JSON 글(속성이 없으면 빈 칸)이다.
+        CSV 형식은 adminRuns 와 같다(RFC 4180, null 은 빈 칸, 줄 끝 CRLF), 파일명 `product_events.csv`.
+        receivedAt 오름차순(같으면 저장 순서). from·to 는 receivedAt(서버가 받은 시각) 기준이다. 잘못된 format·from·to 는 400 INVALID_REQUEST.
+      parameters:
+        - $ref: '#/components/parameters/ExportFormat'
+        - name: from
+          in: query
+          required: false
+          description: receivedAt 하한(포함). ISO 8601 instant. 생략하면 처음부터.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: receivedAt 상한(제외). ISO 8601 instant. 생략하면 끝까지. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 이벤트 행. format 에 따라 JSON 배열 또는 CSV.
+          headers:
+            Content-Disposition:
+              description: format=csv 일 때만 `attachment; filename="product_events.csv"`
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminProductEvent'
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/admin/funnel:
+    get:
+      tags: [admin]
+      operationId: adminFunnel
+      summary: 세션 퍼널 — 단계별 세션 수·전환율·단계 사이 시간
+      description: |
+        receivedAt 이 [from, to) 인 이벤트를 sessionId 로 묶어 새로 만들기 흐름의 여섯 단계를 센다(docs/METRICS.md §6.2):
+        home(screen_view screen=home) → photos_selected(count 가 0 이 아닌 것) → generate_tap → model_ready →
+        ar(screen_view screen=ar) → model_placed.
+        세션마다 각 단계의 시각은 앞 단계 시각 이후(같은 세션 안에서 at, 같으면 seq 순)에 처음 나온 그 이벤트의 at 이고, 앞 단계에
+        이르지 못한 세션은 뒤 단계에도 세지 않는다. sessions = 그 단계에 이른 서로 다른 세션 수, conversionPct = 첫 단계 대비 %,
+        fromPrevPct = 바로 앞 단계 대비 %(첫 단계 null), medianSecondsFromPrev = 앞 단계에서 이 단계까지 걸린 초의 중앙값
+        (nearest-rank, adminStats 와 같은 방식, 첫 단계·세션 0 이면 null). 분모가 0 이면 % 는 0.
+        이어보기(generate_tap mode=resume)처럼 앞 단계를 건너뛴 세션은 그 뒤 단계에 세지 않는다. 잘못된 from·to 는 400 INVALID_REQUEST.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: receivedAt 하한(포함). ISO 8601 instant.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: receivedAt 상한(제외). ISO 8601 instant. from 보다 앞이면 400.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 단계별 퍼널
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminFunnel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     JobId:
@@ -1207,6 +1345,20 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     ShareNotFound:
       description: 공유 링크 없음 (SHARE_NOT_FOUND) — 없는 토큰·만료·취소·지워진 작업을 구분하지 않는다. error.jobId 는 비운다.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    EventsBadRequest:
+      description: >-
+        잘못된 이벤트 묶음 (INVALID_REQUEST) — JSON 이 아님, installId·sessionId 가 UUID 가 아님, appVersion·platform 형식,
+        events 가 1~50개가 아님(51개 이상 포함), 다른 사이트의 페이지에서 보낸 요청. 아무것도 저장하지 않는다.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    EventsTooLarge:
+      description: 본문이 32 KB(32,768 바이트)를 넘음 (PAYLOAD_TOO_LARGE). 아무것도 저장하지 않는다. 묶음을 나눠 다시 보낸다.
       content:
         application/json:
           schema:
@@ -2267,3 +2419,186 @@ components:
           format: uuid
           nullable: true
           description: 넣을 반려동물. null 이면 펫에서 빼서 미분류로.
+    ProductEventBatch:
+      type: object
+      description: |
+        POST /api/v1/events 본문(tag events). 한 세션의 이벤트 1~50개. 개인을 알아볼 값은 넣지 않는다: installId 는 앱이 설치 때 만든
+        난수 UUID(기기 ID·광고 ID 가 아님), sessionId 는 앱을 켤 때마다(웹은 페이지를 열 때마다) 새로 만든 UUID다.
+        여기 없는 필드는 서버가 읽지 않는다.
+      required: [installId, sessionId, appVersion, platform, events]
+      properties:
+        installId:
+          type: string
+          format: uuid
+          description: 설치마다 한 번 만든 난수 UUID (앱 PlayerPrefs beside.installId, 웹 localStorage)
+        sessionId:
+          type: string
+          format: uuid
+          description: 앱 실행(웹은 페이지 열기)마다 새로 만든 UUID
+        appVersion:
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: '^[0-9A-Za-z._+-]{1,32}$'
+          description: 앱 버전(Unity Application.version), 웹은 `web`
+          example: 0.4.0
+        platform:
+          type: string
+          enum: [android, web]
+          description: android = Unity 앱(에디터 포함), web = 공유 뷰어(/s/{token})
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/ProductEvent'
+    ProductEvent:
+      type: object
+      description: 이벤트 하나. 이름별 props 는 props 설명과 docs/METRICS.md §6.1 표.
+      required: [name, at, seq]
+      properties:
+        name:
+          type: string
+          enum: [screen_view, photos_selected, generate_tap, job_cancel_tap, job_failed_shown, model_ready, fur_toggle,
+                 ar_issue_shown, model_placed, animation_play, photo_saved, start_over]
+          description: 이벤트 이름. 목록에 없는 이름은 서버가 버리고 dropped 로 센다(400 이 아님).
+        at:
+          type: string
+          format: date-time
+          description: 클라이언트 시계로 이벤트가 일어난 시각 (ISO 8601, UTC 권장)
+        seq:
+          type: integer
+          format: int32
+          minimum: 0
+          description: 세션 안에서 0 부터 하나씩 늘린 번호. 같은 sessionId·seq 는 한 번만 저장한다(다시 보낸 묶음).
+        jobId:
+          type: string
+          format: uuid
+          nullable: true
+          description: 이벤트가 관계된 작업(있을 때만). UUID 가 아니면 이 값만 버린다.
+        screen:
+          type: string
+          nullable: true
+          enum: [home, confirm, progress, preview, ar, error, settings, share]
+          description: |
+            이벤트가 일어난 화면. screen_view 에서는 보여 준 화면이며 꼭 있어야 한다(없으면 그 이벤트를 버림).
+            앱 화면 7개(Unity DesignedUIController.Page 이름의 소문자)와 웹 공유 뷰어 share. 목록에 없는 값은 이 값만 버린다.
+        props:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: |
+            이름별 속성. 값은 아래 enum·정수·불리언만이고 그 밖의 키·값은 서버가 버린다(이벤트는 저장).
+            screen_view: 없음(화면은 screen) · photos_selected: source(gallery|camera), count(0~10, 10 = 10장 이상, 0 = 고르지 않고 닫음) ·
+            generate_tap: mode(new|resume|retry), photoCount(0~10) · job_cancel_tap: stage(uploading|queued|processing|downloading|loading),
+            elapsedSec(0~86400) · job_failed_shown: code(ERROR_CODES.md 의 코드 또는 앱 코드 NETWORK_ERROR·BAD_RESPONSE·DOWNLOAD_FAILED·
+            FILE_CORRUPT·LOAD_FAILED·WAIT_TIMEOUT), retryable(bool) · model_ready: cached(bool), loadMs(0~3600000), waitMs(0~3600000) ·
+            fur_toggle: on(bool) · ar_issue_shown: issue(CameraDenied|Unsupported|NeedsInstall|SessionError|NoPlane) ·
+            model_placed: method(tap|center), secSinceArEnter(0~86400) · animation_play: clip(Walk|Sit|TailWag|HeadTilt|Idle) ·
+            photo_saved: 없음 · start_over: from(preview|ar|error).
+    ProductEventsAccepted:
+      type: object
+      description: POST /api/v1/events 의 202 결과.
+      required: [accepted, dropped]
+      properties:
+        accepted:
+          type: integer
+          format: int32
+          description: 저장한 이벤트 수(속성 일부만 버린 이벤트 포함)
+        dropped:
+          type: integer
+          format: int32
+          description: 버린 이벤트 수(모르는 이름·형식 오류·중복·서버 요청 수 상한)
+    AdminProductEvent:
+      type: object
+      description: 제품 이벤트 내보내기 한 행. 이름과 순서는 adminEvents 설명(CSV 헤더와 같다).
+      required: [receivedAt, env, platform, appVersion, installId, sessionId, seq, at, name]
+      properties:
+        receivedAt:
+          type: string
+          format: date-time
+          description: 서버가 받은 시각
+        env:
+          type: string
+          description: 지표 환경(local | prod | loadtest, 서버 설정 management.metrics.tags.env)
+        platform:
+          type: string
+        appVersion:
+          type: string
+        installId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        seq:
+          type: integer
+          format: int32
+        at:
+          type: string
+          format: date-time
+        name:
+          type: string
+        screen:
+          type: string
+          nullable: true
+        jobId:
+          type: string
+          format: uuid
+          nullable: true
+        props:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: 저장한 속성(검사를 통과한 것만). 없으면 null.
+    AdminFunnel:
+      type: object
+      description: GET /api/v1/admin/funnel. 계산 방법은 adminFunnel 설명.
+      required: [sessions, steps]
+      properties:
+        from:
+          type: string
+          format: date-time
+          nullable: true
+          description: 요청한 from(없으면 null)
+        to:
+          type: string
+          format: date-time
+          nullable: true
+          description: 요청한 to(없으면 null)
+        sessions:
+          type: integer
+          format: int64
+          description: 기간 안에 이벤트가 하나라도 있는 서로 다른 세션 수
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminFunnelStep'
+    AdminFunnelStep:
+      type: object
+      description: 퍼널 한 단계.
+      required: [step, event, sessions, conversionPct]
+      properties:
+        step:
+          type: string
+          description: 단계 이름(home, photos_selected, generate_tap, model_ready, ar, model_placed)
+        event:
+          type: string
+          description: 세는 이벤트, 예 `screen_view(screen=ar)`
+        sessions:
+          type: integer
+          format: int64
+        conversionPct:
+          type: number
+          format: double
+          description: 첫 단계 세션 대비 % (0~100)
+        fromPrevPct:
+          type: number
+          format: double
+          nullable: true
+          description: 바로 앞 단계 세션 대비 %. 첫 단계는 null.
+        medianSecondsFromPrev:
+          type: number
+          format: double
+          nullable: true
+          description: 앞 단계에서 이 단계까지 걸린 초의 중앙값(nearest-rank). 첫 단계·세션 0 이면 null.

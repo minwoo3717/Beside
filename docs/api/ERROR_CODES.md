@@ -17,7 +17,7 @@
 | `ANIMAL_TOO_SMALL` | 400 | POST /jobs (대표 사진 검사) | 감지된 동물 박스의 긴 변이 원본 화소로 기준(제안 224 px)보다 짧음 | 반려동물이 너무 작게 나왔어요. 더 가까이에서 찍은 사진을 골라 주세요. | 다른 사진으로 |
 | `IMAGE_TOO_DARK` | 400 | POST /jobs (대표 사진 검사) | 동물 박스 안 밝기의 90백분위가 기준(제안 50/255)보다 낮음. 평균이 아니라 밝은 쪽을 봐서 검은 털은 걸리지 않게 함 | 대표 사진이 너무 어두워요. 밝은 곳에서 찍은 사진을 골라 주세요. | 다른 사진으로 |
 | `IMAGE_TOO_BLURRY` | 400 | POST /jobs (대표 사진 검사) | 동물 박스(긴 변 512 px 이하로 줄임)의 라플라시안 분산이 기준(제안 50)보다 작음 | 대표 사진이 흔들렸어요. 선명한 사진을 골라 주세요. | 다른 사진으로 |
-| `PAYLOAD_TOO_LARGE` | 413 | POST /jobs | 장당 5 MB 또는 요청 전체 20 MB 초과 | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
+| `PAYLOAD_TOO_LARGE` | 413 | POST /jobs, POST /events | 장당 5 MB 또는 요청 전체 20 MB 초과. 제품 이벤트 묶음(`POST /events`)은 본문 32 KB 초과(앱은 문구를 보여 주지 않고 묶음을 버린다, 아래 '제품 이벤트') | 사진 용량이 너무 커요. 장당 5MB, 전체 20MB 이하로 줄여 주세요. | 용량 줄인 후 |
 | `JOB_NOT_FOUND` | 404 | /jobs/{id}, /asset, /retry, /cancel, /pet, /shares(만들기), /ratings, /admin/jobs/{id} | 알 수 없는 jobId(서버 DB 를 지웠거나 다른 서버·프로파일에 연결한 경우 포함) | 작업을 찾을 수 없어요. 사진을 다시 올려 주세요. | 새 작업으로 |
 | `ASSET_NOT_FOUND` | 404 | /asset, /shares(만들기) | 작업은 완료됐지만 GLB 파일이 서버에 없음(`variant` 는 `base` 하나뿐). 보존 기간이 지나 지운 작업도 이 코드로 답하기로 했다(2026-11-21, 자동 삭제는 [계획]) | 요청한 모델 파일이 없어요. | 새 작업으로 |
 | `NOT_FOUND` | 404 | 그 외 경로 | 알 수 없는 v1 경로·리소스 | 요청한 정보를 찾을 수 없어요. | 무의미 |
@@ -74,6 +74,12 @@
 | `CONVERSION_FAILED` | 추론 서비스·워커 | OBJ/PNG → GLB 변환 실패 또는 GLB_SPEC 검증 실패. real 워커가 받은 GLB 가 없거나 glTF 2.0 바이너리가 아닐 때도 | 모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요. | 예 |
 | `INTERNAL_ERROR` | 서버 | 서버 재시작·워커 중단으로 작업이 끊김(재시작 때 PENDING/PROCESSING 이던 작업), 워커(mock·real)의 예기치 못한 오류, 또는 이 서버가 받은 GLB 를 디스크에 쓰거나 결과 폴더로 복사하지 못함(디스크 가득 참 등, 장애 훈련 FD4 — 전에는 `CONVERSION_FAILED`) (HTTP 오류 코드와 같은 이름) | 서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요. | 예 |
 | `CANCELED` | 사용자(POST /cancel) | PENDING 이던 작업을 사용자가 취소함. 워커는 시작하지 않고 추론 서비스를 부르지 않는다. 실행 기록(`job_runs`·`events.jsonl`)과 운영 지표(`beside_jobs_finished_total{code="CANCELED"}`)에는 남으므로 실패율·성공률 통계에서는 뺀다(관리 stats `canceled`, METRICS §5.3·Grafana 성공률 분모의 `code!="CANCELED"`). 팀 알림(Discord)으로는 보내지 않는다 | 취소한 작업이에요. 다시 시도하면 처음부터 만들어요. | 예(처음부터) |
+
+## 제품 이벤트 (`POST /events`, 2026-11-26 안건 #24)
+
+- 새 코드·새 상태 코드는 없다. 묶음이 잘못되면(JSON 이 아님, `installId`·`sessionId` 가 UUID 가 아님, `appVersion`·`platform` 형식, `events` 가 1~50개가 아님) 400 `INVALID_REQUEST`, 본문이 32 KB 를 넘으면 413 `PAYLOAD_TOO_LARGE`. 둘 다 아무것도 저장하지 않는다.
+- 묶음 안의 이벤트 하나가 잘못된 것(모르는 이름, 시각·번호 형식, 이미 받은 번호)은 오류가 아니다: 202 응답의 `dropped` 로 세고 나머지는 저장한다. 서버 전체 요청 수 상한(초당 50 묶음)을 넘은 묶음도 202 로 `accepted: 0`, `dropped: 이벤트 수` 다 — 429 `RATE_LIMITED`(아래 예약)를 이 경로에 쓰지 않기로 했다(새 상태 코드를 만들지 않으려고).
+- 앱은 이 응답을 사용자에게 보여 주지 않는다. 4xx 를 받으면 그 묶음을 버리고, 연결 오류·5xx 면 파일에 남겨 나중에 다시 보낸다([METRICS.md](../METRICS.md) §6).
 
 ## 예약된 코드 (구현 없음)
 
