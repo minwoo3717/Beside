@@ -104,7 +104,13 @@ jobs:
           docker exec beside-smoke id
           # the Dockerfile's USER beside (uid 10001): fail here if the container runs as anyone else, e.g. root
           test "$(docker exec beside-smoke id -u)" = 10001
-          printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > probe.png
+          # OOM readiness (backend/Dockerfile): the JVM (PID 1) took the exit-on-OOM and heap-dump flags and started with
+          # them; the dump goes to a file in the storage volume, which uid 10001 can write
+          docker exec beside-smoke cat /proc/1/cmdline | tr '\0' '\n' > jvm-args.txt
+          grep -qxF -- '-XX:+ExitOnOutOfMemoryError' jvm-args.txt
+          grep -qxF -- '-XX:+HeapDumpOnOutOfMemoryError' jvm-args.txt
+          grep -qxF -- '-XX:HeapDumpPath=/app/storage/backend-oom.hprof' jvm-args.txt
+          printf '%s''iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' | base64 -d > probe.png
           code="$(curl -s -o /dev/null -w '%{http_code}' -F 'photos=@probe.png;type=image/png' http://127.0.0.1:18080/api/v1/jobs)"
           echo "POST /api/v1/jobs -> $code"
           test "$code" = 202
@@ -167,11 +173,15 @@ jobs:
           capped=(docker compose -f deploy/docker-compose.yml --env-file capped.env)
           "${capped[@]}" config --format json > compose-capped.json
           "${capped[@]}" "${loadtest[@]}" config --format json > compose-loadtest-capped.json
-          python3 - compose-base.json compose-monitoring.json compose-loadtest.json compose-capped.json compose-loadtest-capped.json <<'PY'
+          # a deploy/.env without the H2 backup lines (STORAGE_BACKUP_*, .env.example sets the VM's 5-minute values)
+          grep -v '^STORAGE_BACKUP_' deploy/.env.example > nobackup.env
+          docker compose -f deploy/docker-compose.yml --env-file nobackup.env config --format json > compose-nobackup.json
+          python3 - compose-base.json compose-monitoring.json compose-loadtest.json compose-capped.json compose-loadtest-capped.json \
+            compose-nobackup.json <<'PY'
           import json
           import sys
 
-          base, mon, lt, capped, lt_capped = (json.load(open(path)) for path in sys.argv[1:6])
+          base, mon, lt, capped, lt_capped, nobackup = (json.load(open(path)) for path in sys.argv[1:7])
           # only caddy publishes to the network: backend 8080/8081 (Actuator) and grafana 3000 stay internal,
           # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py)
           for name, svc in mon["services"].items():
@@ -197,6 +207,21 @@ jobs:
           # prod does not start on a missing H2 file (failure drill FD5); only a new server overrides it from the shell
           assert mon["services"]["backend"]["environment"]["STORAGE_DB_CREATEIFMISSING"] == "false"
 
+          # H2 backup schedule (REDUNDANCY Phase 1-1): without the deploy/.env lines compose passes the prod profile's own
+          # values (what DatabaseBackupScheduleTest checks), and .env.example's 5-minute values reach the backend
+          def key_values(path):
+              return dict(line.split("=", 1) for line in open(path, encoding="utf-8").read().splitlines()
+                          if "=" in line and not line.lstrip().startswith("#"))
+          prod_props = key_values("backend/src/main/resources/application-prod.properties")
+          example = key_values("deploy/.env.example")
+          backup_keys = ("STORAGE_BACKUP_CRON", "STORAGE_BACKUP_KEEP")
+          got = {k: nobackup["services"]["backend"]["environment"].get(k) for k in backup_keys}
+          want_default = {"STORAGE_BACKUP_CRON": prod_props["storage.backup.cron"], "STORAGE_BACKUP_KEEP": prod_props["storage.backup.keep"]}
+          assert got == want_default, f"compose defaults {got} differ from application-prod.properties {want_default}"
+          got = {k: mon["services"]["backend"]["environment"].get(k) for k in backup_keys}
+          assert got == {k: example.get(k) for k in backup_keys} == {"STORAGE_BACKUP_CRON": "0 */5 * * * *", "STORAGE_BACKUP_KEEP": "288"}, \
+              f".env.example backup lines: backend gets {got}"
+
           def mem_bytes(value):
               # compose prints mem_limit as bytes; accept a unit suffix too, in case a version keeps "2g"
               text = str(value).strip().lower()
@@ -221,6 +246,9 @@ jobs:
           assert mem_bytes(base["services"]["backend"]["mem_limit"]) == 3 * 1024**3, base["services"]["backend"]["mem_limit"]
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
+              # each json-file line carries the compose service name (attrs), for a log agent without docker.sock
+              labels = svc["logging"]["options"].get("labels", "").split(",")
+              assert "com.docker.compose.service" in labels, f"{name}: log lines without the service label ({labels})"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token
           be = lt["services"]["backend"]
           env = be["environment"]

@@ -1,9 +1,9 @@
 # One watchdog pass: backend health on the management port (restart after 3 failures, at most every 10 min), disk use,
-# age of the last good off-VM backup (deploy/backup).
+# age of the last good off-VM backup (deploy/backup), Docker restarts of backend and caddy (OOM kills too), a stopped caddy.
 # Install: deploy/README.md '운영 대응 설치' (copies deploy/watchdog/beside-watchdog.sh to /usr/local/sbin/beside-watchdog).
 # Logs (changes only): journalctl -u beside-watchdog. Pause restarts: sudo touch /etc/beside-maintenance (rm to resume).
 [Unit]
-Description=Beside backend watchdog (health, restart, disk and backup warnings)
+Description=Beside backend watchdog (health, restart, Docker restarts, caddy, disk and backup warnings)
 After=docker.service
 
 [Service]
@@ -13,5 +13,8 @@ ExecStart=/usr/local/sbin/beside-watchdog
 StateDirectory=beside-watchdog
 StateDirectoryMode=0700
 SyslogIdentifier=beside-watchdog
+# The off-VM backup (deploy/backup) runs every 5 minutes: a last good run 30 min old = 6 missed or failed runs. Goes
+# with the 5-minute beside-backup.timer (with an hourly one this would report a stopped backup every 6 h).
+Environment=BACKUP_STALE_S=1800
 # docker restart waits up to 20 s for a clean stop, then kills; the script gives it 120 s.
 TimeoutStartSec=180
