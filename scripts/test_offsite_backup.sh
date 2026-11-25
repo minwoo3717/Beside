@@ -4,7 +4,8 @@
 # Checks: zips go oldest first and only once, an unreadable zip is reported and skipped, a failed upload stops the db
 # order and is sent on the next run, photos/GLBs go once a day (or with FORCE_FILES=1), a file deleted after the run
 # listed it is skipped without failing, only a good run writes last.ok, a lost state never overwrites what the bucket
-# has, a VM without the write scope uploads nothing, and the token is never on a command line or printed.
+# has, a newest H2 zip older than 150 min fails the run (not under a maintenance flag or in the first 150 min after a boot), a VM without the write scope
+# uploads nothing, and the token is never on a command line or printed.
 #   bash scripts/test_offsite_backup.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -88,6 +89,7 @@ file_at() {  # file_at <relative path> <minutes ago>
 run() {
   local rc=0
   env STATE_DIRECTORY="$WORK/state" BESIDE_BACKUP_CONFIG="$WORK/backup.env" METADATA_URL=http://meta.test \
+    BESIDE_MAINTENANCE_FILES="$WORK/maintenance" UPTIME_S=999999 \
     GCS_UPLOAD_URL=https://gcs.test/upload/storage/v1 "$@" bash "$SCRIPT" > "$WORK/out.txt" 2>&1 || rc=$?
   cat "$WORK/out.txt" >> "$WORK/all.txt"
   return "$rc"
@@ -187,6 +189,29 @@ before="$(writes)"
 run FORCE_FILES=1 || fail "run with lost state"
 [[ "$(writes)" == "$before" ]] || fail "objects written again after the state was lost"
 grep -q "already in the bucket, kept as it is: db/beside-20261120-090500-001.zip" "$WORK/out.txt" || fail "412 not treated as sent"
+
+# the backend's hourly backup stopped (review finding 2026-11-25): a newest zip 3 h old fails the run, so last.ok stays
+# and the VM watchdog reports it; not under a maintenance flag (load tests turn the backup off); a new zip is good again
+for zip in "$WORK/vol/backup/"beside-*.zip; do touch -d "180 minutes ago" "$zip"; done
+echo 1 > "$WORK/state/last.ok"
+if run; then fail "a run whose newest zip is 3 h old succeeded"; fi
+grep -q "the newest H2 backup beside-.*zip is 1[78][0-9] min old (limit 150)" "$WORK/out.txt" || fail "stale backup not reported"
+[[ "$(cat "$WORK/state/last.ok")" == 1 ]] || fail "a run with a stale backup moved last.ok"
+touch "$WORK/maintenance"
+run || fail "a stale backup failed the run under a maintenance flag"
+grep -q "maintenance flag" "$WORK/out.txt" || fail "maintenance flag not logged"
+rm "$WORK/maintenance"
+# a VM just booted after hours off (or rebuilt from a snapshot) runs before the backend's next backup: not judged yet
+run UPTIME_S=600 || fail "a stale backup failed the first run after a boot"
+grep -q "up 10 min (< 150): the age of the newest backup is not checked yet" "$WORK/out.txt" || fail "boot grace not logged"
+echo 1 > "$WORK/state/last.ok"
+zip_at beside-20261120-200500-001.zip 15
+run || fail "run after a new backup"
+(($(cat "$WORK/state/last.ok") > 1)) || fail "the good run after a new backup did not move last.ok"
+mv "$WORK/vol/backup" "$WORK/backup-away" && mkdir "$WORK/vol/backup"
+if run; then fail "a run without any zip succeeded"; fi
+grep -q "no H2 backup zip" "$WORK/out.txt" || fail "a backup folder without zips not reported"
+rmdir "$WORK/vol/backup" && mv "$WORK/backup-away" "$WORK/vol/backup"
 
 # the token is never on a command line and never printed
 grep -qF "$TOKEN_VALUE" "$WORK/argv" && fail "token on a curl command line"

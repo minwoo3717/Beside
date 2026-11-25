@@ -5,7 +5,7 @@
 #     because a restart frees no disk (the disk warning below covers that). 3 failures in a row while the container
 #     runs -> `docker restart` of the backend + a Discord message. Docker's own healthcheck only marks the container
 #     unhealthy and never restarts it, so a frozen backend (FD2) stayed down until someone looked. At most one restart
-#     per 10 min; a container that started less than 90 s ago is not judged (booting); a stopped or restarting
+#     try per 10 min, a failed one included (one 🔴 per try); a container that started less than 90 s ago is not judged (booting); a stopped or restarting
 #     container is left to Docker and the operator (compose stop for a backup must not be undone here).
 #   - Crash loop: a backend that exits right after starting (prod without its H2 file, failure drill FD5; a bad setting)
 #     is restarted by Docker's policy, never runs 90 s and so is never judged above. When Docker's RestartCount has gone
@@ -131,13 +131,13 @@ check_backup() {
   fi
   last="$(get backup.alerted 0)"
   if ((NOW - last >= BACKUP_EVERY_S)); then
-    notify "🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · $HOST) — $reason. journalctl -u beside-backup -n 30 으로 원인(서비스 계정·범위, 버킷)을 확인해 주세요"
+    notify "🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · $HOST) — $reason. journalctl -u beside-backup -n 30 으로 원인(서비스 계정·범위, 버킷, backend 의 매시 DB 백업)을 확인해 주세요"
     put backup.alerted "$NOW"
   fi
 }
 
 check_backend() {
-  local flag age cid status started started_s fails last_check last restarted count base
+  local flag age cid status started started_s fails last_check last restarted count base failed_at next
   for flag in $MAINTENANCE_FILES; do
     [[ -e "$flag" ]] || continue
     put fails 0
@@ -183,8 +183,13 @@ check_backend() {
       notify "✅ backend 가 다시 정상으로 떴어요 (VM 감시 · $HOST) — 시작하자마자 꺼지던 것이 멈췄어요"
       del crashloop.alerted
     fi
+    # One ✅: after a failed restart the earlier good restart's "N초 뒤" would read as if a restart brought it back.
     restarted="$(get restarted.at)"
-    if [[ -n "$restarted" ]]; then
+    if [[ -n "$(get restart.failed)" ]]; then
+      notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작이 실패했던 backend 가 다시 정상이에요"
+      del restart.failed
+      del restarted.at
+    elif [[ -n "$restarted" ]]; then
       notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작 $((NOW - restarted))초 뒤 확인"
       del restarted.at
     fi
@@ -209,14 +214,32 @@ check_backend() {
     fi
     return 0
   fi
+  # A restart that failed (the stop hit the 120 s timeout, dockerd refused) waits out the cooldown too: its 🔴 went out
+  # with it. Without this, restart.last (written only on success) let the next run 30 s later try again and send
+  # another 🔴, every run until someone looked (review finding, 2026-11-25).
+  failed_at="$(get restart.failed 0)"
+  if ((NOW - failed_at < COOLDOWN_S)); then
+    warn "docker restart failed $((NOW - failed_at)) s ago: next try after the $((COOLDOWN_S / 60)) min cooldown"
+    return 1
+  fi
   if timeout 120 docker restart -t 20 "$cid" >/dev/null 2>&1; then
     put restart.last "$NOW"
     put restarted.at "$NOW"
     put fails 0
+    del restart.failed
     notify "🔁 backend 를 다시 시작했어요 (VM 감시 · $HOST) — 관리 포트 health 가 ${FAILS_TO_RESTART}번 연속 실패. 그때 PENDING·PROCESSING 이던 작업은 INTERNAL_ERROR 로 끝나요(앱에서 다시 시도)"
   else
+    put restart.failed "$NOW"
     printf '%s%s\n' "$E" "docker restart $cid failed"
-    notify "🔴 backend 재시작 실패 (VM 감시 · $HOST) — docker restart 가 실패했어요. 손으로 확인해 주세요"
+    # A restart whose stop worked but start failed leaves the container exited, which the watchdog leaves to the
+    # operator: say which case this is instead of promising a retry that will not come.
+    status="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)"
+    if [[ "$status" == running ]]; then
+      next="컨테이너가 실행 중으로 남아 있어 $((COOLDOWN_S / 60))분 뒤 한 번 더 시도해요"
+    else
+      next="컨테이너가 ${status} 상태로 남았어요(자동으로 다시 시도하지 않아요): compose up -d backend 로 올려 주세요"
+    fi
+    notify "🔴 backend 재시작 실패 (VM 감시 · $HOST) — docker restart 가 실패했어요. 손으로 확인해 주세요. $next"
     return 1
   fi
 }

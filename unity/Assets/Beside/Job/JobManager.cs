@@ -71,6 +71,7 @@ namespace Beside.Job
         List<Photo> lastPhotos;   // copy of the photos until the server accepts them (202), so Retry can send them again
         string uploadKey;         // Idempotency-Key of those photos: a repeated upload returns the same jobId
         int loadGen;              // bumped by CancelJob: a model load that finishes after a cancel is dropped
+        int cancelGen;            // bumped by CancelByUser while a request is on its way: that flow cancels what it made
 
         /// <summary>Server timings of the job being waited for (null before the first status). Real jobs take minutes
         /// and report no progress, so the UI shows elapsed time from these.</summary>
@@ -182,9 +183,59 @@ namespace Beside.Job
             SetState(State.Idle, "");
         }
 
+        /// <summary>
+        /// The user's "취소": stops the app's flow like <see cref="CancelJob"/> (or forgets the job too, like
+        /// <see cref="ClearSavedJob"/>, when <paramref name="forget"/>) and has the server drop what it would still make
+        /// (POST /cancel, API v1.2). Before, a canceled job stayed PENDING and later took the GPU for a model nobody
+        /// would download (review finding, 2026-11-25).
+        /// <list type="bullet">
+        /// <item>Waiting (not PROCESSING): POST /cancel now.</item>
+        /// <item>Uploading (new photos or POST /retry): the request is already on its way and stopping the coroutine
+        /// would not stop it, so the flow carries on unseen and cancels the job the server accepted (cancelGen).</item>
+        /// </list>
+        /// The answer is only logged: 409 JOB_NOT_PENDING means generation already started. A canceled job is forgotten
+        /// even when <paramref name="forget"/> is false: kept, it would only reopen as the canceled-job screen.
+        /// </summary>
+        public void CancelByUser(bool forget)
+        {
+            string jobId = CurrentJobId;
+            if (CurrentState == State.Uploading)
+            {
+                cancelGen++;   // Flow / RetryOnServer see it when their request returns
+                running = null;
+                loadGen++;
+                if (forget) ForgetJob();
+                SetState(State.Idle, "");
+                return;
+            }
+            bool queuedOnServer = CurrentState == State.Waiting && !string.IsNullOrEmpty(jobId)
+                && (LastJobStatus == null || LastJobStatus.Status != JobStatus.Processing);
+            if (forget) ClearSavedJob();
+            else CancelJob();
+            if (queuedOnServer) CancelOnServer(jobId);
+        }
+
+        void CancelOnServer(string jobId)
+        {
+            StartCoroutine(api.CancelJob(jobId, Guid.NewGuid().ToString("N"),
+                job =>
+                {
+                    Debug.Log($"[JobManager] cancel {jobId}: {(job != null ? job.Status.ToString() : "ok")}");
+                    if (!IsBusy && SavedJobId == jobId) ForgetJob();   // FAILED(CANCELED) now
+                },
+                error => Debug.Log($"[JobManager] cancel {jobId} not done on the server: {error}")));
+        }
+
         public void ClearSavedJob()
         {
+            // Forget first: CancelJob raises StateChanged(Idle), and a listener reading SavedJobId then must not see the
+            // job being dropped (after a server change the home 이어보기 card stayed on for it, review 2026-11-25).
+            ForgetJob();
             CancelJob();
+        }
+
+        void ForgetJob()
+        {
             PlayerPrefs.DeleteKey(JobIdPrefKey);
             PlayerPrefs.Save();
             CurrentJobId = null;
@@ -237,6 +288,7 @@ namespace Beside.Job
         IEnumerator Flow(IList<Photo> photos, string existingJobId)
         {
             requestId = Guid.NewGuid().ToString("N");
+            int myCancelGen = cancelGen;
             var e2e = Stopwatch.StartNew();
             var row = new MetricsRecorder.Row();
 
@@ -249,6 +301,11 @@ namespace Beside.Job
                 yield return api.UploadPhotos(photos, requestId, r => jobId = r.jobId, e => err = e, uploadKey);
                 row.uploadMs = sw.ElapsedMilliseconds;
                 MetricsRecorder.Log(requestId, jobId, "upload", row.uploadMs, err?.code, err?.message);
+                if (myCancelGen != cancelGen)   // canceled while uploading: drop the job the server made, touch nothing here
+                {
+                    if (jobId != null) CancelOnServer(jobId);
+                    yield break;
+                }
                 if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // CurrentJobId stays null
 
                 lastPhotos = null;   // accepted: later retries go through the jobId
@@ -357,10 +414,16 @@ namespace Beside.Job
         IEnumerator RetryOnServer(string jobId)
         {
             requestId = Guid.NewGuid().ToString("N");
+            int myCancelGen = cancelGen;
             SetState(State.Uploading, "다시 시도하는 중이에요");
             ApiError err = null;
             yield return api.RetryJob(jobId, requestId, _ => { }, e => err = e);
             MetricsRecorder.Log(requestId, jobId, "retry", 0, err?.code, err?.message);
+            if (myCancelGen != cancelGen)   // canceled while the retry was on its way: the accepted retry is canceled again
+            {
+                if (err == null) CancelOnServer(jobId);
+                yield break;
+            }
             if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // QUEUE_FULL: the job is still FAILED
             running = StartCoroutine(Flow(null, jobId));
         }

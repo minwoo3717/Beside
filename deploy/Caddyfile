@@ -8,6 +8,22 @@
 #   - * 는 끝(접두사), 앞(접미사), 양끝(부분 문자열), 가운데(한 경로 조각) 에 쓸 수 있다.
 # 디렉티브는 적은 순서가 아니라 Caddy 의 정해진 순서로 돈다: request_body → basic_auth → respond → reverse_proxy.
 
+# 전역 옵션: 기본 로거(접근 로그 밖 — 업스트림 502 오류 로그, reverse_proxy 의 응답 중단 경고)도 요청 경로의 공유 토큰을
+# 앞 6자만 남긴다. 사이트 블록 끝의 log 와 같은 규칙(2026-11-25 리뷰: 이 두 로그에는 토큰 전체가 남았다).
+{
+	log default {
+		# 접근 로그는 사이트의 log 가 쓴다(여기서 다시 쓰지 않게 뺀다)
+		exclude http.log.access
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "(?i)^(/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+" "$1$2..."
+				resp_headers>Location regexp "(?i)^((?:https?://[^/]+)?/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+" "$1$2..."
+			}
+		}
+	}
+}
+
 {$BESIDE_DOMAIN} {
 	# 업로드 본문 상한. Spring 은 요청 20MB(사진 5MB)를 넘으면 v1 오류 봉투로 413 을 주고,
 	# 그보다 훨씬 큰 본문은 여기서 413 으로 끊는다(25MB = 25,000,000 바이트).
@@ -106,5 +122,18 @@
 	}
 
 	# 접근 로그 → docker compose logs caddy. Authorization 헤더는 Caddy 가 기본으로 가린다.
-	log
+	# 공유 링크(/s/{token}, /api/v1/shares/{token}[/asset])의 토큰은 링크의 유일한 비밀이라 앞 6자만 남긴다
+	# (openapi revokeJobShares 의 '서버 로그에는 앞 6자만'. Spring 쪽은 GlobalExceptionHandler.pathForLog).
+	# 요청 경로(request>uri)와 공유 링크를 만든 201 의 Location 응답 헤더를 가린다. 오류 로그(502 등)와 reverse_proxy
+	# 경고는 접근 로그가 아니라 기본 로거로 가므로 맨 위 전역 옵션의 log default 가 같은 규칙으로 가린다.
+	# 공유 뷰어(share.html)는 no-referrer 라 Referer 헤더에는 토큰이 없다. test_caddy_routes.sh 가 확인한다.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "(?i)^(/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+" "$1$2..."
+				resp_headers>Location regexp "(?i)^((?:https?://[^/]+)?/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+" "$1$2..."
+			}
+		}
+	}
 }

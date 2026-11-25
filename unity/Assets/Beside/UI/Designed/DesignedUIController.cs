@@ -65,6 +65,7 @@ namespace Beside.UI.Designed
         // home
         RectTransform resumeCard; RawImage resumeThumb; Text resumeSub;
         Image serverDot; Text serverStatus; float healthCheckedAt; bool healthBusy, healthKnown, healthWanted;
+        int healthGen;   // bumped when the server address changes; health answers of an older generation are dropped
         // settings
         InputField urlInput; Text settingsStatus;
         // confirm
@@ -728,12 +729,20 @@ namespace Beside.UI.Designed
         void SaveServer()
         {
             if (jobManager.IsBusy) { SetSettingsStatus("만드는 중이라 지금은 바꿀 수 없어요.", DesignKit.Danger); return; }
+            string before = jobManager.BaseUrl;
             jobManager.SetBaseUrl(urlInput.text);
             urlInput.text = jobManager.BaseUrl;
+            // Only a new address drops the saved job (SetBaseUrl keeps it for the same one), so only then its photo goes:
+            // saving the same address used to delete the photo of a job that stayed (review finding, 2026-11-25).
+            if (jobManager.BaseUrl != before)
+            {
+                healthGen++;           // an answer still coming from the old address is dropped
+                healthBusy = false;
+                healthKnown = false;   // the home row checks the new address
+                DeleteHeroFiles();     // SetBaseUrl dropped the saved job (another server's job)
+                SetHero(null, null);
+            }
             SetSettingsStatus("저장했어요 · " + jobManager.BaseUrl, DesignKit.Success);
-            healthKnown = false;   // the home row checks the new address
-            DeleteHeroFiles();     // SetBaseUrl dropped the saved job (another server's job)
-            SetHero(null, null);
         }
 
         void BuildError(Transform root)
@@ -819,10 +828,11 @@ namespace Beside.UI.Designed
             if (healthBusy) return;
             if (!force && healthKnown && Time.unscaledTime - healthCheckedAt < 30f) return;
             healthBusy = true;
+            int gen = healthGen;   // SaveServer bumps it: a late answer from the old address must not paint the new one
             if (!healthKnown) SetServerStatus("확인 중", DesignKit.InkMuted);
             jobManager.CheckHealth(
-                h => { OnHealth(); SetServerStatus("연결됨", DesignKit.Success); },
-                e => { OnHealth(); SetServerStatus("연결 안 됨", DesignKit.Danger); });
+                h => { if (gen != healthGen) return; OnHealth(); SetServerStatus("연결됨", DesignKit.Success); },
+                e => { if (gen != healthGen) return; OnHealth(); SetServerStatus("연결 안 됨", DesignKit.Danger); });
         }
 
         void OnHealth() { healthBusy = false; healthKnown = true; healthCheckedAt = Time.unscaledTime; }
@@ -844,7 +854,10 @@ namespace Beside.UI.Designed
                     if (!progress.gameObject.activeSelf) Show(Page.Progress);
                     break;
                 case JobManager.State.Idle:
-                    if (!home.gameObject.activeSelf && !confirm.gameObject.activeSelf) Show(Page.Home);
+                    // Not from the settings page: saving a new address drops the saved job (Idle) while the page still
+                    // has to show "저장했어요"; its back button goes home.
+                    if (!home.gameObject.activeSelf && !confirm.gameObject.activeSelf && !settings.gameObject.activeSelf)
+                        Show(Page.Home);
                     break;
             }
         }
@@ -1024,7 +1037,7 @@ namespace Beside.UI.Designed
 
         void CancelProgress()
         {
-            jobManager.ClearSavedJob();
+            jobManager.CancelByUser(forget: true);   // also drops a job still waiting in the server's queue (POST /cancel)
             DeleteHeroFiles();
             SetHero(null, null);
             Show(Page.Home);

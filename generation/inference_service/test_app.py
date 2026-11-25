@@ -1449,6 +1449,8 @@ def _has_numpy():
 class _RigCase(unittest.TestCase):
     """A two-joint pyramid template and pyramid base GLBs for tools/rig_transfer.py."""
 
+    TEMPLATE_UV = None   # per-vertex TEXCOORD_0 of the template, or None for a template without UVs
+
     def setUp(self):
         import numpy as np
 
@@ -1464,7 +1466,8 @@ class _RigCase(unittest.TestCase):
             "scene": 0, "scenes": [{"nodes": [0, 1]}],
             "nodes": [{"name": "base", "mesh": 0, "skin": 0}, {"name": "Root", "children": [2]},
                       {"name": "Pelvis", "translation": [0, 0.5, 0]}],
-            "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1, "JOINTS_0": 3, "WEIGHTS_0": 4},
+            "meshes": [{"primitives": [{"attributes": dict({"POSITION": 0, "NORMAL": 1, "JOINTS_0": 3, "WEIGHTS_0": 4},
+                                                           **({} if self.TEMPLATE_UV is None else {"TEXCOORD_0": 8})),
                                         "indices": 2}]}],
             "skins": [{"joints": [1, 2], "inverseBindMatrices": 5}],
             "animations": [{"name": "Idle", "samplers": [{"input": 6, "output": 7}],
@@ -1472,18 +1475,21 @@ class _RigCase(unittest.TestCase):
         }, [pos, self.normals(pos), np.array(PYRAMID_FACES, np.uint16).reshape(-1),
             np.tile(np.array([0, 1, 0, 0], np.uint8), (5, 1)), np.tile(np.array([0.5, 0.5, 0, 0], np.float32), (5, 1)),
             np.tile(np.eye(4, dtype=np.float32).reshape(16), (2, 1)),
-            np.array([0, 1], np.float32), np.array([[0, 0.5, 0], [0, 0.6, 0]], np.float32)])
+            np.array([0, 1], np.float32), np.array([[0, 0.5, 0], [0, 0.6, 0]], np.float32)]
+            + ([] if self.TEMPLATE_UV is None else [np.array(self.TEMPLATE_UV, np.float32)]))
 
     def normals(self, pos):
         n = pos - pos.mean(0)
         return (n / self.np.linalg.norm(n, axis=1, keepdims=True)).astype(self.np.float32)
 
-    def base(self, pos, faces):
+    def base(self, pos, faces, uv=None):
         path = self.folder / "base.glb"
         pos = self.np.asarray(pos, self.np.float32)
+        attributes = {"POSITION": 0, "NORMAL": 1} if uv is None else {"POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 3}
         _write_glb(path, {"scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"name": "base", "mesh": 0}],
-                          "meshes": [{"primitives": [{"attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2}]}]},
-                   [pos, self.normals(pos), self.np.array(faces, self.np.uint16).reshape(-1)])
+                          "meshes": [{"primitives": [{"attributes": attributes, "indices": 2}]}]},
+                   [pos, self.normals(pos), self.np.array(faces, self.np.uint16).reshape(-1)]
+                   + ([] if uv is None else [self.np.asarray(uv, self.np.float32)]))
         return path
 
 
@@ -1527,12 +1533,17 @@ class ReorderRigTemplateTest(_RigCase):
     """tools/reorder_rig_template.py renumbers a template's vertices to a converter output's numbering once, so the
     real SMAL-derived template (np.unique numbering) passes rig_transfer's vertex-order check (2026-11-21)."""
 
-    ORDER = [0, 4, 2, 3, 1]   # reference vertex k is template vertex ORDER[k]; faces keep the template's order
+    # reference vertex k is template vertex ORDER[k]; faces keep the template's order. A 5-cycle, not its own inverse:
+    # the old [0, 4, 2, 3, 1] only swapped 1 and 4, so data moved the wrong way (perm for inverse) passed every check
+    # here (review finding, 2026-11-25).
+    ORDER = [1, 2, 3, 4, 0]
+    TEMPLATE_UV = [[0, 0], [1, 0], [1, 1], [0, 1], [0.5, 0.5]]   # distinct per vertex, so the UV checks run
 
-    def reference(self, scale=1.0):
+    def reference(self, scale=1.0, uv=None):
         renumber = {old: new for new, old in enumerate(self.ORDER)}
         faces = [[renumber[v] for v in face] for face in PYRAMID_FACES]
-        return self.base(self.np.array(PYRAMID)[self.ORDER] * scale, faces)
+        uv = self.np.array(self.TEMPLATE_UV)[self.ORDER] if uv is None else uv
+        return self.base(self.np.array(PYRAMID)[self.ORDER] * scale, faces, uv)
 
     def test_a_renumbered_template_rigs_a_base_the_original_template_refuses(self):
         import reorder_rig_template
@@ -1547,7 +1558,7 @@ class ReorderRigTemplateTest(_RigCase):
             code = reorder_rig_template.main(["--template", str(self.template), "--reference", str(base),
                                               "--out", str(fixed)])
         self.assertEqual(code, 0)
-        self.assertIn("2 of 5 vertices renumbered", stdout.getvalue())
+        self.assertIn("5 of 5 vertices renumbered", stdout.getvalue())
         info = self.rig.transfer(str(base), None, str(fixed), str(out))
         self.assertEqual((info["joints"], info["clips"]), (2, ["Idle"]))
         rigged = self.rig.Glb(str(out))
@@ -1556,8 +1567,24 @@ class ReorderRigTemplateTest(_RigCase):
         # the skin follows its vertex: renumbered template vertex k carries original template vertex ORDER[k]
         tpl, new = self.rig.Glb(str(self.template)), self.rig.Glb(str(fixed))
         attrs = tpl.json["meshes"][0]["primitives"][0]["attributes"]
-        for name in ("POSITION", "NORMAL", "JOINTS_0", "WEIGHTS_0"):
+        for name in ("POSITION", "NORMAL", "TEXCOORD_0", "JOINTS_0", "WEIGHTS_0"):
             np.testing.assert_array_equal(new.read(attrs[name]), tpl.read(attrs[name])[self.ORDER])
+        # a direction error (the inverse of ORDER) gives other per-vertex data for this 5-cycle
+        inverse = np.argsort(self.ORDER)
+        self.assertFalse(np.array_equal(tpl.read(attrs["POSITION"])[inverse], tpl.read(attrs["POSITION"])[self.ORDER]))
+
+    def test_a_reference_with_another_uv_layout_is_refused(self):
+        import reorder_rig_template
+
+        uv = self.np.array(self.TEMPLATE_UV)[self.ORDER][::-1]   # same triangles, UVs of other vertices
+        base = self.reference(uv=uv)
+        fixed = self.folder / "template-rigged.glb"
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            code = reorder_rig_template.main(["--template", str(self.template), "--reference", str(base),
+                                              "--out", str(fixed)])
+        self.assertEqual(code, 2)
+        self.assertIn("UVs differ", stderr.getvalue())
+        self.assertFalse(fixed.exists())
 
     def test_a_reference_with_another_face_order_is_refused_and_nothing_is_written(self):
         import reorder_rig_template

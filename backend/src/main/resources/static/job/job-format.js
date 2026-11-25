@@ -28,7 +28,8 @@
     INFERENCE_TIMEOUT: "생성 시간이 너무 오래 걸려 중단됐어요. 다시 시도해 주세요.",
     INFERENCE_UNAVAILABLE: "생성 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.",
     CONVERSION_FAILED: "모델 파일을 만드는 중 문제가 생겼어요. 다시 시도해 주세요.",
-    INTERNAL_ERROR: "서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요."
+    INTERNAL_ERROR: "서버에 문제가 생겼어요. 잠시 후 다시 시도해 주세요.",
+    CANCELED: "취소한 작업이에요. 다시 시도하면 처음부터 만들어요."
   });
   // HTTP error codes this page can meet when saving a rating or creating a share link.
   const REQUEST_ERROR_TEXT = Object.freeze({

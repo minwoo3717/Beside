@@ -14,6 +14,7 @@
     pets: [],
     pet: null,          // PetDetailResponse on screen
     active: null,       // { jobId, petId, petName, startedAt, timer } of the model being made here
+    uploading: false,   // POST /jobs (+ PUT pet) in flight: the create button stays off until it ends
     refreshTimer: null,
     flash: null,        // message for the view after the next hash change: text (success) or { text, kind }
     viewerJobId: null,
@@ -203,6 +204,9 @@
         win.location.hash = "#/";
         return;
       }
+      // Any failed read (the timer's, a button's, the first one of the route) tries again while this pet is on
+      // screen: the timer was cleared above, and a refresh that failed used to stop for good (review 2026-11-25).
+      if (L.parseRoute(win.location.hash).petId === petId) scheduleRefresh(petId);
       throw error;
     }
     if (L.parseRoute(win.location.hash).petId !== petId) return; // navigated away meanwhile
@@ -211,9 +215,16 @@
     const shown = keepViewer && pet.jobs.find((job) => job.id === state.viewerJobId && job.status === "COMPLETED");
     showInViewer(shown || L.viewerJob(pet));
     renderProgressArea();
-    if (pet.jobs.some((job) => !L.isFinished(job.status))) {
-      state.refreshTimer = setTimeout(() => loadPet(petId, true).catch(() => {}), DETAIL_REFRESH_MS);
-    }
+    if (pet.jobs.some((job) => !L.isFinished(job.status))) scheduleRefresh(petId);
+  }
+
+  /**
+   * The next refresh of the pet on screen. A failed one schedules the next itself (loadPet): it used to stop for good,
+   * leaving jobs made in the app or another tab at "생성 중" (review 2026-11-25).
+   */
+  function scheduleRefresh(petId) {
+    clearTimeout(state.refreshTimer);
+    state.refreshTimer = setTimeout(() => loadPet(petId, true).catch(() => {}), DETAIL_REFRESH_MS);
   }
 
   function renderPet(pet) {
@@ -450,7 +461,9 @@
   function updateCreateButton() {
     const files = byId("create-photos").files;
     const problem = files && files.length ? L.checkPhotos(files) : "none";
-    byId("create-button").disabled = Boolean(problem) || Boolean(state.active) || !state.pet;
+    // state.uploading: a background refresh during a slow upload used to turn the button back on, and a second
+    // press made a second job with the same photos (review finding, 2026-11-25).
+    byId("create-button").disabled = Boolean(problem) || Boolean(state.active) || state.uploading || !state.pet;
   }
 
   function askNotificationPermission() {
@@ -557,9 +570,10 @@
       event.preventDefault();
       const pet = state.pet;
       const files = Array.from(input.files || []);
-      if (!pet || state.active || L.checkPhotos(files)) return;
+      if (!pet || state.active || state.uploading || L.checkPhotos(files)) return;
       askNotificationPermission();
       const button = byId("create-button");
+      state.uploading = true;
       button.disabled = true;
       errorEl.hidden = true;
       const data = new FormData();
@@ -579,18 +593,21 @@
       }).then((created) => {
         if (assignProblem) setMessage(assignProblem);
         state.active = { jobId: created.jobId, petId: pet.id, petName: pet.name, startedAt: Date.now(), timer: null };
-        const box = byId("create-progress");
-        box.dataset.petId = pet.id;
-        box.hidden = false;
+        byId("create-progress").dataset.petId = pet.id;
+        // Shown only when this pet is still on screen: after moving to another pet during the upload, the box and
+        // its cancel button used to open on that pet's view (review finding, 2026-11-25).
+        renderProgressArea();
         renderProgress(null, "접수했어요. 순서를 확인하는 중…");
         input.value = "";
         selection.textContent = defaultHint;
-        loadPet(pet.id, true).catch(() => {});
+        // Only for the pet on screen: loadPet first clears the refresh timer, which would stop the other pet's.
+        if (state.pet && state.pet.id === pet.id) loadPet(pet.id, true).catch(() => {});
         poll();
       }).catch((error) => {
         errorEl.textContent = error.message;
         errorEl.hidden = false;
       }).finally(() => {
+        state.uploading = false;
         button.textContent = "이 펫으로 만들기";
         updateCreateButton();
       });
@@ -654,6 +671,13 @@
       route();
     });
     win.addEventListener("pagehide", () => { if (state.active) clearTimeout(state.active.timer); });
+    // Back from the back/forward cache the page keeps state.active but its poll was stopped above: start it again,
+    // or the progress box stays frozen and the create button stays off until a reload (review 2026-11-25).
+    win.addEventListener("pageshow", (event) => {
+      if (!event.persisted || !state.active) return;
+      clearTimeout(state.active.timer);
+      poll();
+    });
     route();
   }
 

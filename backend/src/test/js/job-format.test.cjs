@@ -81,6 +81,20 @@ test("scores, errors and states read as Korean", () => {
   assert.equal(J.isInFlight("SOMETHING_NEW"), false);
 });
 
+// Review finding 2026-11-25: v1.2 added the job failure code CANCELED to library-core.js but not here, so a canceled
+// job read "알 수 없는 이유로 실패했어요." on this page. Every job failure code of the document gets its own copy.
+test("every job failure code of docs/api/ERROR_CODES.md has the document's copy", () => {
+  const fs = require("node:fs");
+  const doc = fs.readFileSync(path.resolve(__dirname, "../../../../docs/api/ERROR_CODES.md"), "utf8");
+  const section = doc.slice(doc.indexOf("## Job 실패 코드"), doc.indexOf("## 예약된 코드"));
+  const rows = [...section.matchAll(/^\| `([A-Z_]+)` \| [^|]*\| [^|]*\| ([^|]+?) \|/gm)];
+  const codes = rows.map((row) => row[1]);
+  for (const code of ["INFERENCE_FAILED", "INTERNAL_ERROR", "CANCELED"]) {
+    assert.ok(codes.includes(code), `ERROR_CODES.md job failure row for ${code} was read`);
+  }
+  for (const [, code, copy] of rows) assert.equal(J.jobErrorText(code), copy, code);
+});
+
 test("the form is prefilled with the rater's own rating", () => {
   const list = { items: [{ rater: "alice", faceShape: 5 }, { rater: "bob", faceShape: 2 }], average: null };
   assert.equal(J.ratingOf(list, "bob").faceShape, 2);

@@ -185,7 +185,7 @@ namespace Beside.UI
                 case JobManager.State.Waiting:
                 case JobManager.State.Downloading:
                 case JobManager.State.Loading:
-                    UiKit.Button("Cancel", actionsRow, "취소", UiKit.ButtonBg, () => { jobManager.CancelJob(); RenderState(JobManager.State.Idle, IdleText); });
+                    UiKit.Button("Cancel", actionsRow, "취소", UiKit.ButtonBg, () => { jobManager.CancelByUser(forget: false); RenderState(JobManager.State.Idle, IdleText); });
                     break;
                 case JobManager.State.Failed:
                     if (jobManager.LastErrorRetryable)

@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * One handler, two response shapes:
@@ -38,6 +39,9 @@ import java.util.Set;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     static final String V1_PREFIX = "/api/v1/";
+    /** /s/{token}, /api/v1/shares/{token}[/asset]: group 1 the prefix, group 2 the token's first 6 characters. */
+    private static final Pattern SHARE_TOKEN_IN_PATH =
+            Pattern.compile("^(/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+", Pattern.CASE_INSENSITIVE);
     private static final String UPLOAD_TOO_LARGE = "Upload too large: maximum 5 MB per photo and 20 MB per request";
     private static final Set<String> DISCONNECT_TYPE_NAMES =
             Set.of("ClientAbortException", "EOFException", "EofException", "AsyncRequestNotUsableException");
@@ -48,9 +52,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<?> handleApi(ApiException ex, HttpServletRequest request) {
         if (ex.getRetryAfterSeconds() != null) {
             // QUEUE_FULL: an intended refusal under load, logged once with the queue numbers by AdmissionGate.
-            log.debug("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
+            log.debug("{} {} {}: {}", request.getMethod(), pathForLog(request.getRequestURI()), ex.getCode(), forLog(ex.getMessage()));
         } else {
-            log.warn("{} {} {}: {}", request.getMethod(), request.getRequestURI(), ex.getCode(), forLog(ex.getMessage()));
+            log.warn("{} {} {}: {}", request.getMethod(), pathForLog(request.getRequestURI()), ex.getCode(), forLog(ex.getMessage()));
         }
         if (isV1(request)) {
             ResponseEntity<ErrorResponse> body = v1(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getJobId());
@@ -137,7 +141,7 @@ public class GlobalExceptionHandler {
         // something was committed: on an uncommitted response null would leave an empty 200, so it gets the 500 below.
         if (isClientGone(ex) && response != null && response.isCommitted()) {
             log.debug("{} {}: the client went away ({})", request == null ? null : request.getMethod(),
-                    request == null ? null : forLog(request.getRequestURI()), ex.getClass().getSimpleName());
+                    request == null ? null : pathForLog(request.getRequestURI()), ex.getClass().getSimpleName());
             return null;
         }
         // Preserve framework HTTP errors (e.g. wrong method / media type), not 500.
@@ -159,6 +163,16 @@ public class GlobalExceptionHandler {
             return v1(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR, "Internal server error", null);
         }
         return flat(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
+    }
+
+    /**
+     * A request path for a log line: {@link #forLog} plus a share-link token cut to its first 6 characters, as
+     * ShareService logs it. The token is the link's only secret, and openapi (revokeJobShares) says the server logs
+     * keep only those 6; a SHARE_NOT_FOUND warning used to log the whole token with the path (review finding,
+     * 2026-11-25). deploy/Caddyfile cuts it the same way in the access log.
+     */
+    public static String pathForLog(String uri) {
+        return uri == null ? null : forLog(SHARE_TOKEN_IN_PATH.matcher(uri).replaceFirst("$1$2..."));
     }
 
     /**

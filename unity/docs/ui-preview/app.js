@@ -265,6 +265,8 @@
     },
     save: () => {
       const url = normalize($("#url").value);
+      // like JobManager.SetBaseUrl: only another server drops the job; empty means the default address
+      if ((url || DEFAULT_URL) !== (state.url || DEFAULT_URL)) state.savedJob = false;
       state.url = url || "";
       $("#url").value = url || DEFAULT_URL;
       setSettingsStatus("저장했어요 · " + (url || DEFAULT_URL), COLORS.success);

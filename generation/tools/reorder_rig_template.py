@@ -86,9 +86,17 @@ def reorder(template_path: str, reference_path: str, out_path: str) -> dict:
         template.write(i, template.read(i)[inverse])
     faces = perm[template.read(prim["indices"]).astype(np.int64)]
     template.write(prim["indices"], faces)
-    r_idx = reference.read(_primitive(reference)["indices"]).astype(np.int64).reshape(-1, 3)
+    r_prim = _primitive(reference)
+    r_idx = reference.read(r_prim["indices"]).astype(np.int64).reshape(-1, 3)
     if not np.array_equal(_triangle_set(faces.reshape(-1, 3)), _triangle_set(r_idx)):
         raise RigError("renumbered triangles still differ from the reference")
+    # Read back what was written: per-vertex data moved the wrong way (perm for inverse) keeps every triangle above and
+    # rig_transfer's own check, so only a per-vertex value can catch it (review finding, 2026-11-25).
+    if "TEXCOORD_0" in prim["attributes"] and "TEXCOORD_0" in r_prim["attributes"]:
+        written = template.read(prim["attributes"]["TEXCOORD_0"]).astype(np.float64)
+        diff = float(np.abs(written - reference.read(r_prim["attributes"]["TEXCOORD_0"]).astype(np.float64)).max())
+        if diff > UV_TOLERANCE:
+            raise RigError(f"written UVs differ from the reference (max {diff:.2e}): vertex data not moved with its number")
     size = template.save(out_path)
     return {"vertices": int(len(perm)), "moved": int((perm != np.arange(len(perm))).sum()), "bytes": size}
 
