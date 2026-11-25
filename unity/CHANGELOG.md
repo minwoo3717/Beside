@@ -2,6 +2,14 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-26 (제품 이벤트, 안건 #24)
+
+- `Metrics/ProductEvents.cs`(새 파일, `.meta` GUID 새로 매김): 화면 보기·버튼 누름을 `POST /api/v1/events`(서버 "다음 태그 전 추가", [docs/METRICS.md](../docs/METRICS.md) §6)로 보낸다. `installId` = PlayerPrefs `beside.installId` 의 난수 GUID(기기 ID 아님), `sessionId` = 실행마다 새 GUID, `appVersion` = `Application.version`(`[0-9A-Za-z._+-]` 32자로 다듬음), platform `android`(에디터 포함). 메모리 큐 + `persistentDataPath/metrics/events.jsonl`(오프라인 보관, 최대 500줄), 30초마다·20개가 쌓이면·`OnApplicationPause(true)` 에 보냄. 2xx·4xx 는 지우고, 연결 오류·5xx 는 남겨 5·10·20초 뒤 다시, 그 뒤는 30초마다. 서버 주소는 `JobManager.BaseUrl`, 요청은 `BesideApiClient.PostEvents`(`X-Request-Id` 같은 헤더). 로그 `[BesideEvent]`
+- 씬은 고치지 않았다: 씬 YAML 에 컴포넌트를 손으로 넣으면 fileID·GUID 를 맞춰야 해서, 씬에 없으면 `[RuntimeInitializeOnLoadMethod]` 로 스스로 생긴다(`BesideProductEvents`, DontDestroyOnLoad). 끄는 법: 씬에 `ProductEvents` 를 두고 Inspector `Send Events` 끄기, 또는 Scripting Define Symbol `BESIDE_NO_PRODUCT_EVENTS`
+- 이벤트 12개: 디자인 UI 의 한 줄 호출 — `Show(Page)` → `screen_view`(같은 화면 연속은 한 번), 갤러리·화면 촬영 → `photos_selected`, "이 사진으로 만들기"·이어보기 카드·"다시 시도" → `generate_tap`(new·resume·retry), 진행 화면 "취소" → `job_cancel_tap`(단계·경과 초), 털 표현 → `fur_toggle`, "사진 찍기" → `photo_saved`, "다른 사진으로 다시 만들기"·"새로 만들기"·"다른 사진 고르기" → `start_over`, "화면 가운데에 바로 놓기" → 다음 배치가 `method=center`. `ProductEvents` 가 직접 구독: `JobManager.JobFailed`→`job_failed_shown`, `ModelReady`→`model_ready`(캐시·loadMs·waitMs — `JobManager.LastReady` 추가), `ModelPlaced`→`model_placed`, `ARGuidance.GuidanceChanged`→`ar_issue_shown`, `PetAnimationPlayer.ClipStarted`→`animation_play`. 기본 UI(`MainUIController`)는 화면·버튼 이벤트를 보내지 않는다(구독한 다섯은 보냄)
+- `ApiV1Routes.Events`·`MaxEventsPerBatch`, DTO `ProductEventBatch`·`ProductEvent`·`ProductEventsAccepted`(Newtonsoft 전용이라 앞의 둘은 `[Serializable]` 없음 — 붙이면 props 사전 때문에 분석기 경고 UAC1015)
+- 확인: Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일 오류 0, 경고 39 — 바꾸기 전(50efc57)과 같은 경고(줄 번호만 다름). `UNITY_ANDROID` + `BESIDE_NATIVEGALLERY`(에디터 기호 뺌)와 `BESIDE_NO_PRODUCT_EVENTS` 로도 오류 0·경고 39. 에디터 Play·기기에서 실제로 보내 보기는 [계획]
+
 ## 2026-11-25 (코드 리뷰 고침)
 
 - 취소가 서버에도 간다: `JobManager.CancelByUser(forget)` 가 앱 흐름을 멈추고, 작업이 서버 대기열에 있으면(Waiting, PROCESSING 아님) `POST /api/v1/jobs/{id}/cancel`(API v1.2)을 보낸다. 업로드·`/retry` 요청이 가는 중(Uploading)에 누르면 요청은 이미 떠났으므로 흐름이 화면 밖에서 끝까지 기다렸다가 서버가 받은 작업을 취소한다(`cancelGen`). 디자인 UI 진행 화면 '취소'(저장된 작업도 잊음)와 기본 UI '취소'(작업은 남김, 단 서버에서 취소된 작업은 잊음 — 남기면 다음 실행에 취소 화면만 다시 뜬다)가 이것을 쓴다. 응답은 로그만(409 `JOB_NOT_PENDING` = 이미 생성 시작이라 작업을 남김). 전에는 앱만 멈춰 버린 작업이 GPU 를 썼다. `BesideApiClient.CancelJob`·`ApiV1Routes.Cancel` 추가
