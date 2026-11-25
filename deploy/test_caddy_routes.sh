@@ -47,6 +47,8 @@ class Upstream(BaseHTTPRequestHandler):
         leaked = any(self.headers.get(h) is not None for h in MUST_BE_STRIPPED)
         auth_leaked = self.path.startswith("/grafana") and self.headers.get("Authorization")
         self.send_response(418 if leaked else 400 if auth_leaked else 200)
+        if self.command == "POST" and self.path.endswith("/shares"):
+            self.send_header("Location", "/api/v1/shares/AbCdEf123")   # like the 201 of createJobShare
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -222,17 +224,33 @@ echo "-- 413: body over request_body max_size (25MB)"
 head -c 26000000 /dev/zero > "$WORK/big.bin"
 check 413 POST /api/v1/jobs --http1.1 -H 'Content-Type: application/octet-stream' --data-binary "@$WORK/big.bin"
 
-echo "-- access log keeps only the first 6 characters of a share token (the share checks above sent AbCdEf123)"
+echo "-- 502 with the backend down: the error log (default logger, not the access log) for a share path"
+kill "$UPSTREAM_PID" 2>/dev/null || true
+wait "$UPSTREAM_PID" 2>/dev/null || true
+UPSTREAM_PID=""
+check 502 GET /s/AbCdEf123
+
+echo "-- Caddy logs keep only the first 6 characters of a share token (the checks above sent AbCdEf123)"
 caddy_log="$(docker logs "$NAME" 2>&1 || true)"
+log_check() { # log_check <description> <grep -E pattern that must match one line>
+  if grep -qE "$2" <<<"$caddy_log"; then
+    printf 'ok   %s\n' "$1"
+  else
+    printf 'FAIL %s\n' "$1"
+    failures=$((failures + 1))
+  fi
+}
 if grep -q 'AbCdEf123' <<<"$caddy_log"; then
-  echo 'FAIL the access log has a whole share token'
-  failures=$((failures + 1))
-elif ! grep -q '"uri":"/s/AbCdEf\.\.\."' <<<"$caddy_log" || ! grep -q '"uri":"/api/v1/shares/AbCdEf\.\.\./asset"' <<<"$caddy_log"; then
-  echo 'FAIL the access log has no cut share path (is the log filter still JSON?)'
+  echo 'FAIL a Caddy log line has a whole share token:'
+  grep 'AbCdEf123' <<<"$caddy_log" | head -3
   failures=$((failures + 1))
 else
-  echo 'ok   share tokens cut to 6 characters in the access log'
+  echo 'ok   no whole share token in the Caddy logs'
 fi
+log_check "access log: cut viewer path" '"uri":"/s/AbCdEf\.\.\."'
+log_check "access log: cut asset path" '"uri":"/api/v1/shares/AbCdEf\.\.\./asset"'
+log_check "access log: cut Location of a new share link" '"Location":\["/api/v1/shares/AbCdEf\.\.\."\]'
+log_check "error log of the 502: cut path" '"level":"error".*"uri":"/s/AbCdEf\.\.\."'
 
 if (( failures > 0 )); then
   echo "$failures check(s) failed. Caddy log:"
