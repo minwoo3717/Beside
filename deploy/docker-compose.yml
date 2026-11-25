@@ -183,15 +183,63 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      # Grafana 알림(provisioning/alerting/contact-points.yml)의 Discord 웹훅. 2026-11-26 결정으로 기본은 backend 알림과
+      # 같은 팀 채널(NOTIFY_WEBHOOK_URL). 둘 다 비면 보내지 않는 자리 주소(Grafana 는 뜬다).
+      GRAFANA_ALERT_WEBHOOK_URL: ${GRAFANA_ALERT_WEBHOOK_URL:-${NOTIFY_WEBHOOK_URL:-http://127.0.0.1:9/unset}}
     volumes:
       # 데이터소스(Prometheus)와 대시보드 'Beside 운영'을 파일로 넣는다. 폴더 마운트라 git pull 이 바로 보인다.
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      # 지표 알림 규칙 10개 → Discord(2026-11-26). 웹훅은 아래 GRAFANA_ALERT_WEBHOOK_URL.
+      - ./monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
       # 사용자·세션·직접 만든 대시보드(SQLite).
       - grafana_data:/var/lib/grafana
     expose:
       - "3000"
+    mem_limit: 256m
+    logging: *default-logging
+
+  # ---- 로그 (monitoring 프로필, 2026-11-26): Alloy 가 Docker 로그 파일을 읽어 Loki 로 보낸다 ----
+  # 왜: 로그는 서비스마다 json-file 50 MB 에서 지워져 부하 중에는 몇 분이면 사라지고, VM 과 함께 없어진다. 2026-11-25
+  # 멘토링('로그를 서버로 보내 대시보드로', '부하 시험 중 로그가 튀는 정도'). Grafana 'Beside 로그' 대시보드가 이것을 본다.
+  # 메모리: loki 384m + alloy 256m 를 더해 한도 합 약 7.25 GiB(8 GB VM). 공개 포트 없음.
+  loki:
+    image: grafana/loki:3.2.1
+    profiles: [monitoring]
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    environment:
+      # Go GC 가 한도의 약 80 % 에서 더 자주 돈다(caddy 와 같은 방식)
+      GOMEMLIMIT: 300MiB
+    volumes:
+      - ./monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki_data:/loki
+    expose:
+      - "3100"
+    mem_limit: 384m
+    logging: *default-logging
+
+  alloy:
+    image: grafana/alloy:v1.4.3
+    profiles: [monitoring]
+    restart: unless-stopped
+    # Docker 의 로그 폴더는 root 만 읽는다(읽기 전용 마운트라 바꿀 수는 없다)
+    user: "0"
+    depends_on:
+      - loki
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=127.0.0.1:12345
+      - /etc/alloy/config.alloy
+    environment:
+      GOMEMLIMIT: 200MiB
+    volumes:
+      - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # Docker 의 json-file 로그(읽기만). docker.sock 은 붙이지 않는다(읽기 전용이어도 사실상 root 권한).
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - alloy_data:/var/lib/alloy/data
     mem_limit: 256m
     logging: *default-logging
 
@@ -203,3 +251,5 @@ volumes:
   caddy_config:
   prometheus_data:
   grafana_data:
+  loki_data:
+  alloy_data:

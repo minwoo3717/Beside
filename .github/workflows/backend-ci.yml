@@ -57,6 +57,8 @@ jobs:
           bash scripts/test_offsite_backup.sh
           bash scripts/test_block_metadata.sh
           bash scripts/test_gcp_ops.sh
+          bash scripts/test_clone_vm.sh
+          bash scripts/test_failover_vm.sh
 
       - name: systemd units of deploy/backup and deploy/watchdog (systemd-analyze verify)
         run: |
@@ -163,7 +165,7 @@ jobs:
           "${compose[@]}" --profile monitoring "${loadtest[@]}" config -q
           # prometheus and grafana start only with --profile monitoring
           test "$("${compose[@]}" config --services | sort | xargs)" = "backend caddy"
-          test "$("${compose[@]}" --profile monitoring config --services | sort | xargs)" = "backend caddy grafana prometheus"
+          test "$("${compose[@]}" --profile monitoring config --services | sort | xargs)" = "alloy backend caddy grafana loki prometheus"
           "${compose[@]}" config --format json > compose-base.json
           "${compose[@]}" --profile monitoring config --format json > compose-monitoring.json
           "${compose[@]}" "${loadtest[@]}" config --format json > compose-loadtest.json
@@ -249,6 +251,16 @@ jobs:
               # each json-file line carries the compose service name (attrs), for a log agent without docker.sock
               labels = svc["logging"]["options"].get("labels", "").split(",")
               assert "com.docker.compose.service" in labels, f"{name}: log lines without the service label ({labels})"
+          # log pipeline (2026-11-26): alloy reads the json-file logs read-only, never docker.sock; loki and alloy have caps
+          alloy = mon["services"]["alloy"]
+          vols = [v.get("source", "") + ":" + v.get("target", "") for v in alloy.get("volumes", [])]
+          assert not any("docker.sock" in v for v in vols), f"alloy mounts docker.sock: {vols}"
+          assert any(v.get("target") == "/var/lib/docker/containers" and v.get("read_only") for v in alloy["volumes"]), vols
+          for name in ("loki", "alloy"):
+              assert mem_bytes(mon["services"][name]["mem_limit"]) <= 384 * 1024**2, (name, mon["services"][name]["mem_limit"])
+          graf = mon["services"]["grafana"]
+          assert any(v.get("target") == "/etc/grafana/provisioning/alerting" for v in graf["volumes"]), "grafana without alert rules"
+          assert graf["environment"]["GRAFANA_ALERT_WEBHOOK_URL"], "grafana alert webhook empty"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token
           be = lt["services"]["backend"]
           env = be["environment"]
@@ -294,6 +306,32 @@ jobs:
             -e BESIDE_DOMAIN=beside.example.com -e BASIC_AUTH_USER=ci -e BASIC_AUTH_HASH="$hash" \
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             "$image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: log pipeline and Grafana provisioning load (Loki config, Alloy syntax, datasources, dashboards, alert rules)
+        run: |
+          img() { grep -m1 -oE "$1:[^\"[:space:]]+" deploy/docker-compose.yml; }
+          docker run --rm -v "$PWD/deploy/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro" "$(img grafana/loki)" \
+            -config.file=/etc/loki/loki.yml -verify-config
+          docker run --rm -v "$PWD/deploy/monitoring/alloy/config.alloy:/tmp/config.alloy:ro" "$(img grafana/alloy)" \
+            fmt /tmp/config.alloy > /dev/null
+          # Grafana starts with the same provisioning as the VM (no Prometheus/Loki behind it: only loading is checked)
+          docker run -d --name ci-grafana -p 127.0.0.1:3300:3000 \
+            -e GF_SECURITY_ADMIN_PASSWORD=ci-dummy -e GRAFANA_ALERT_WEBHOOK_URL=http://127.0.0.1:9/ci \
+            -v "$PWD/deploy/monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro" \
+            -v "$PWD/deploy/monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro" \
+            -v "$PWD/deploy/monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro" \
+            -v "$PWD/deploy/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro" \
+            "$(img grafana/grafana-oss)"
+          for _ in $(seq 1 60); do curl -fs http://127.0.0.1:3300/api/health > /dev/null && break; sleep 2; done
+          A=(-fsS -u admin:ci-dummy)
+          curl "${A[@]}" http://127.0.0.1:3300/api/datasources | python3 -c 'import json,sys; u={d["uid"] for d in json.load(sys.stdin)}; assert {"beside-prometheus","beside-loki"} <= u, u'
+          curl "${A[@]}" "http://127.0.0.1:3300/api/search?type=dash-db" | python3 -c 'import json,sys; u={d["uid"] for d in json.load(sys.stdin)}; assert {"beside-ops","beside-logs"} <= u, u'
+          n="$(curl "${A[@]}" http://127.0.0.1:3300/api/v1/provisioning/alert-rules | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
+          want="$(grep -c '^      - uid: ' deploy/monitoring/grafana/provisioning/alerting/rules.yml)"
+          test "$n" = "$want" || { docker logs ci-grafana | tail -50; echo "alert rules loaded: $n, in the file: $want"; exit 1; }
+          docker logs ci-grafana 2>&1 | grep -iE 'level=error.*provision' && exit 1 || true
+          docker rm -f ci-grafana > /dev/null
+          echo "loki, alloy and grafana provisioning ok ($n alert rules)"
 
       - name: Caddy route rules (404 / 401 / public / 413)
         run: bash deploy/test_caddy_routes.sh
