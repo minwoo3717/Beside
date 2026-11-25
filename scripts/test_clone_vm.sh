@@ -117,11 +117,12 @@ reset_root() {
 
 reset_root
 if BESIDE_HOSTNAME=beside-vm bash "$INIT" staging > "$WORK/out.txt" 2>&1; then fail "clone_init ran on prod"; fi
+if BESIDE_HOSTNAME=beside-vm.asia-northeast3-a.c.beside-514511.internal bash "$INIT" staging > "$WORK/out.txt" 2>&1; then fail "clone_init ran on prod (FQDN)"; fi
 if BESIDE_HOSTNAME=beside-standby bash "$INIT" staging > "$WORK/out.txt" 2>&1; then fail "role and host differ"; fi
 [[ -s "$WORK/sys" ]] && fail "refused run still changed something"
 
 reset_root
-CLONE_WEBHOOK_URL=http://drill-hook:8080/h BESIDE_HOSTNAME=beside-staging bash "$INIT" staging > "$WORK/out.txt" 2>&1 \
+CLONE_WEBHOOK_URL=http://drill-hook:8080/h BESIDE_HOSTNAME=beside-staging.asia-northeast3-b.c.beside-514511.internal bash "$INIT" staging > "$WORK/out.txt" 2>&1 \
   || fail "clone_init staging"
 [[ "$(cat "$R/etc/beside-role")" == staging ]] || fail "role file"
 [[ -e "$R/etc/beside-maintenance" ]] || fail "maintenance flag"
