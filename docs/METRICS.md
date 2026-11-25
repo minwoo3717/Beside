@@ -228,7 +228,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 
 `beside.jobs.upload.rejected` 의 `code`(docs/api/ERROR_CODES.md 와 같은 이름): `INVALID_REQUEST`(빈 파일, 깨진 multipart, 128자 넘는 Idempotency-Key), `NO_PHOTOS`(`photos` 파트 없음 포함), `TOO_MANY_PHOTOS`, `UNSUPPORTED_IMAGE_TYPE`, `PAYLOAD_TOO_LARGE`, 대표 사진 검사 7개 `UNREADABLE_IMAGE`·`IMAGE_TOO_SMALL`·`NO_ANIMAL_DETECTED`·`TOO_MANY_ANIMALS`·`ANIMAL_TOO_SMALL`·`IMAGE_TOO_DARK`·`IMAGE_TOO_BLURRY`(검사가 켜진 real·prod 에서만 0 이 아니다). 업로드 시도는 `beside_jobs_created_total + beside_jobs_upload_rejected_total + beside_jobs_refused_total{op="create"}` 로 본다(`created` 에는 v0 도 들어 있다).
 
-추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽 기록은 [계획]). `health` 에는 붙지 않는다.
+추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽은 줄마다 `rid=` 로 남긴다, 2026-11-26 **[구현됨, 배포 전]**). `health` 에는 붙지 않는다. 같은 요청들은 작업 실행 트레이스(`beside.job.run`, Grafana Tempo)의 client span 이기도 하고 W3C `traceparent` 를 함께 보낸다(2026-11-26 **[구현됨, 배포 전]**, [CONTRACT.md](CONTRACT.md) §6). 트레이스는 span 만 남기고 지표를 더하지 않는다: 시간은 이 절의 타이머와 같은 것이다.
 
 버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30. 추론 요청 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600(health 는 수십 ms, A40 한 실행은 8.7초, `inference.timeout-ms` 는 real 120초).
 
