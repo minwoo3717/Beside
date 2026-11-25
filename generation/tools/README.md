@@ -1,6 +1,6 @@
 # tools — 에셋 변환 도구 (3D Generation 트랙)
 
-상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 이 폴더에는 시험 파일이 없고, 두 도구의 시험은 모두 [`inference_service/test_app.py`](../inference_service/test_app.py) 에 있다(numpy·trimesh·pillow 가 없으면 건너뜀). 털 맵(2026-11-21, PR #25): `FurMapsInGlbTest` 가 `convert()` 를 직접 돌려 앱과 같은 방식으로 GLB 안 털 맵을 읽고(`hair.npz` 없음·읽지 못함·해상도 상한 포함), `RigTransferFurMapsTest` 가 `transfer()` 가 털 맵을 옮기고 템플릿 것은 버리는지 본다. 추론 서비스 시험 `RealConversionCancelTest`(2026-11-19)가 합성 출력으로 `convert()` 를 실제로 돌려 쓰기 위치와 `make_dirs=False`(출력 폴더를 만들지 않고, 없으면 `ConversionError`. 추론 서비스가 쓴다. CLI 는 지금처럼 만든다)를 본다. `rig_transfer.py` 의 정점 순서 확인은 `RigTransferVertexOrderTest`(합성 GLB 로 `transfer()`·CLI 종료 코드 2), 리깅 결과의 크기 상한·`base.metrics.json` 다시 쓰기는 `RiggedResultTest`·`OversizeRiggedResultTest`(가짜 `rig_transfer`)가 본다(2026-11-20). 브랜치 `Unity`(2d2e235)에서 옮긴 선택 기능(2026-11-21)은 `PadTextureTest`·`HairMetaTest`(변환기), `ConverterSwitchTest`·`PaddedTextureRigTest`·`RealEmbedHairOffTest`(추론 서비스)가 본다. convertMs·삼각형 수는 [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md) 에 있다 [실험 결과]. gltf-validator 결과는 **[계획]** (exp-02).
+상태: `convert_asset.py`·`rig_transfer.py` 는 #1(2026-10-14)로 머지됐고 추론 서비스(`inference_service/app.py`)가 작업마다 부른다. 이 폴더의 시험 파일은 3D A/B 평가 도구의 `test_eval3d.py`(아래 'A/B 평가 도구' 절) 하나뿐이고, 두 도구의 시험은 모두 [`inference_service/test_app.py`](../inference_service/test_app.py) 에 있다(numpy·trimesh·pillow 가 없으면 건너뜀). 털 맵(2026-11-21, PR #25): `FurMapsInGlbTest` 가 `convert()` 를 직접 돌려 앱과 같은 방식으로 GLB 안 털 맵을 읽고(`hair.npz` 없음·읽지 못함·해상도 상한 포함), `RigTransferFurMapsTest` 가 `transfer()` 가 털 맵을 옮기고 템플릿 것은 버리는지 본다. 추론 서비스 시험 `RealConversionCancelTest`(2026-11-19)가 합성 출력으로 `convert()` 를 실제로 돌려 쓰기 위치와 `make_dirs=False`(출력 폴더를 만들지 않고, 없으면 `ConversionError`. 추론 서비스가 쓴다. CLI 는 지금처럼 만든다)를 본다. `rig_transfer.py` 의 정점 순서 확인은 `RigTransferVertexOrderTest`(합성 GLB 로 `transfer()`·CLI 종료 코드 2), 리깅 결과의 크기 상한·`base.metrics.json` 다시 쓰기는 `RiggedResultTest`·`OversizeRiggedResultTest`(가짜 `rig_transfer`)가 본다(2026-11-20). 브랜치 `Unity`(2d2e235)에서 옮긴 선택 기능(2026-11-21)은 `PadTextureTest`·`HairMetaTest`(변환기), `ConverterSwitchTest`·`PaddedTextureRigTest`·`RealEmbedHairOffTest`(추론 서비스)가 본다. convertMs·삼각형 수는 [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md) 에 있다 [실험 결과]. gltf-validator 결과는 **[계획]** (exp-02).
 
 의존성: [requirements.txt](requirements.txt) (numpy, pillow, trimesh, scipy). 추론 서비스와 같은 env 에 설치한다.
 
@@ -48,6 +48,86 @@ python tools/reorder_rig_template.py --template <리포 밖>/animallift_template
 - 무엇을: `--reference`(변환기가 쓴 아무 `base.glb`)와 면 순서대로 꼭짓점을 맞춰 정점 번호표를 구하고, 템플릿의 정점별 값(위치·법선·UV·`JOINTS_0`·`WEIGHTS_0`·모프)과 삼각형 번호를 그 번호로 다시 쓴다. 뼈대·클립·머티리얼은 그대로다. UV 가 1e-4 넘게 다르거나 면 순서가 다르면 종료 코드 2(`REORDER_FAILED`)이고 아무것도 쓰지 않는다.
 - 2026-11-21 실제 템플릿(4310 정점)에서 417개 정점 번호가 바뀌었고, 바꾼 템플릿으로 그날 VM 결과 3건이 모두 리깅되었다(뼈 36개, 클립 5개, 털 맵 유지, 1.76~1.78 MB — `--texture` 없이 잰 값). 시험: `ReorderRigTemplateTest`(합성 피라미드).
 - 앱(`unity/Assets/Beside/Pet/PetAnimationPlayer.cs`)은 GLB 안의 클립 `Idle`·`Walk`·`Sit`·`TailWag`·`HeadTilt` 를 칩으로 보여 준다.
+
+## 3D A/B 평가 도구 — `eval_arms.py`·`eval_metrics.py`·`eval_board.py` (2026-11-26)
+
+상태: 코드와 시험은 **[구현됨]**(`test_eval3d.py` 24개, torch·GPU 없이 돈다). Pod 실행(11/27)과 사람 채점(11/28)은 **[계획]**. 실험 계획은 [exp-04 기록](../experiments/2026-11-26_exp-04_ab-input-texture.md)이다.
+
+흐름: PC `preprocessBatch` → Pod `eval_arms.py` → PC `eval_metrics.py` → PC `eval_board.py build` → 평가자 → `eval_board.py score`.
+
+### 0. 입력 준비 (PC)
+
+- 사진 12장을 한 폴더에 모은다. CC0 3장(`backend/src/test/resources/photos/` 의 `dog.jpg`·`dog-single-black.jpg`·`dog-single-edge.jpg`)과 팀 개 3마리 × 3장이다.
+- 팀 사진 이름은 `<개>_<n>.jpg` 로 한다(예 `coco_1.jpg`). `_<n>` 앞이 개 이름이 되고 `sameDogId` 가 그것을 쓴다.
+- 백엔드 폴더 일괄 도구로 세 입력을 만든다: `.\gradlew.bat preprocessBatch --args="--in <사진 폴더> --out <pre 폴더>"`([backend/README.md](../../backend/README.md)). 사진마다 `NN_<이름>/` 에 `model_in_before.png`·`crop_pad.png`·`cutout.png`·`original.jpg` 가 생기고, 맨 위에 `report.csv` 가 생긴다.
+- 지금 코드로 다시 만든다. 2026-11-04 출력(`C:\beside\pre-out`)은 둘째 동물 기준(0.40)을 바꾸기 전이라 판정이 다르다.
+- `<pre 폴더>` 를 Pod 의 `/workspace/eval/pre` 로 올린다(scp 또는 `runpodctl send`).
+
+### 1. `eval_arms.py` — Pod 에서 생성 (GPU)
+
+```bash
+cd /workspace/Beside   # 이 도구가 든 커밋으로 맞춘 뒤
+PY=/workspace/miniconda3/envs/animallift/bin/python   # deploy/runpod/install_animallift.sh 의 conda env
+$PY generation/tools/eval_arms.py --photos-dir /workspace/eval/pre --out /workspace/eval/out --list   # 목록만 확인
+$PY generation/tools/eval_arms.py --photos-dir /workspace/eval/pre --out /workspace/eval/out --model-dir /workspace/AnimalLift
+```
+
+- 입력 안 세 가지: `off` = `model_in_before.png`(사진 전체를 정사각형으로 늘림), `keep` = `crop_pad.png`(크롭+패딩, 배경 유지), `remove` = `cutout.png`(크롭+배경 제거, 운영 입력).
+- 모델은 한 번만 올린다. 사진 × 안마다 predict 를 한 번 한다(시드 42, runner 가 predict 마다 다시 시드). 재기 전에 버리는 predict 를 한 번 한다(warm-up, `--no-warmup` 으로 끔).
+- 변환은 두 번 한다. pad 끔 → `<out>/<안>/<사진>/base.glb`, pad 켬 → `<out>/<안>+pad/<사진>/base.glb`. 리깅은 끄고, 털 맵은 운영처럼 넣는다.
+- `<out>/runs.csv`: `photo, dog, arm, pad, inferMs, gpuPeakMB, convertMs, outputVertices, outputTriangles, textureSize, glbBytes` 뒤에 `variant, modelParams, modelVersion, input, error`. pad 두 행은 같은 predict 라 `inferMs` 가 같다.
+- `<out>/env.json`: GPU·드라이버·torch·CUDA·`modelVersion`·`ctrlSize`·`nfe`·시드·Beside 커밋·모델 로딩 시간. 실험 기록의 환경 칸에 옮긴다.
+- 끊기면 같은 명령을 다시 실행한다. `predict.json` 이 있는 것은 건너뛴다(`--force` 로 다시 함).
+- `report.csv` 에서 사진 검사에 거절된 사진은 뺀다(`--include-refused` 로 넣음). 입력 파일이 없는 안(전처리 폴백)은 `error` 칸에 적고 넘어간다.
+- 재는 동안 같은 Pod 의 추론 서비스에 작업을 보내지 않는다. GPU 를 나눠 쓰면 `inferMs` 가 늘어난다.
+- 걸리는 시간은 아직 재지 않았다. exp-01 의 inferMs(3.9~5.7 s)·convertMs(약 1 s)로 어림하면 predict 36번과 변환 72번에 5분 안팎이다(추정).
+- 결과를 PC 로 가져온다: `tar czf /workspace/eval/out.tgz -C /workspace/eval out`.
+
+### 2. `eval_metrics.py` — PC 에서 자동 지표 (numpy·Pillow)
+
+```powershell
+python -I generation/tools/eval_metrics.py --eval-dir <out> --photos-dir <pre 폴더>
+```
+
+- 출력은 `<out>/metrics/` 의 `metrics.csv`(사진 × 안 한 행), `summary.csv`, `summary.md`(안별 평균, 기준 `remove` 대비 짝 비교)다.
+
+| 지표 | 무엇 | 좋은 쪽 |
+|---|---|---|
+| `furColorDeltaE` | 사진 전경(`cutout.png` 알파 > 0.5, 3 px 깎음)의 Lab 중앙값과 텍스처 UV 섬 텍셀의 Lab 중앙값 사이 CIEDE2000. 섬 = 순수 초록 배경이 아닌 곳(`convert_asset.pad_texture` 와 같은 판정, pad 전 `uv.png` 로 정함) | 낮음 |
+| `furHueErrorDeg` | 두 중앙값의 색상각 atan2(b, a) 차이(0~180°). 회색에 가까우면 흔들린다 | 낮음 |
+| `seamGreenRatio@mip1/2/3` | GLB 에 실제로 든 텍스처(+pad 안은 pad 된 것)를 2·4·8배 박스 필터로 줄인 뒤, 섬 텍셀(덮임 ≥ 0.5) 중 배경에서 4 텍셀 안인 것에서 G − max(R, B) > 0.15 인 비율. exp-04 주 지표 | 낮음 |
+| `shapeDeltaPct` | 같은 사진의 `remove` 안 `mesh.obj` 와 정점별 거리 평균 ÷ 그 바운딩 박스 대각선(%). AnimalLift 출력은 위상이 같아 정점 번호가 맞는다(리포 샘플 `mesh.obj` 는 `v` 3,889줄, GLB 는 UV 이음매에서 나뉘어 4,310) | 차이일 뿐 |
+| `sameDogId` | 같은 안 안에서 텍스처 Lab 중앙값의 최근접 이웃(한 장 빼기)이 같은 개면 1. 사진이 한 장뿐인 개는 묻지 않는다. `chance` = 1 / 개 수, `chanceNN` = 무작위 이웃의 정확한 확률 | 높음 |
+
+- 짝 비교는 사진마다 (안 − remove) 다. "같음" 범위는 미리 정했다: ΔE 1.0, 색상각 2°, seam 비율 0.005, sameDogId 0. 부호 검정은 양측이고 같음은 뺀다.
+- CIEDE2000·sRGB→Lab 은 직접 구현했고 Sharma(2005) 표 15쌍으로 시험한다.
+- 도구 확인(실험 결과 아님): 리포 샘플 `unity/Assets/Models/n02085782_186 (1)_uv.png`(1024²) 를 손으로 만든 GLB 에 넣어 돌렸다. `seamGreenRatio@mip2` 는 pad 전 0.064, `pad_texture` 와 같은 방식으로 채운 뒤 0.011 이었다. pad 뒤에도 0 이 아닌 까닭은, pad 가 엄격한 초록 판정에 걸리는 텍셀만 채우고 섬 가장자리의 덜 초록인 텍셀은 남기기 때문으로 보인다(사진 1장).
+
+### 3. `eval_board.py` — 블라인드 채점
+
+```powershell
+python -I generation/tools/eval_board.py build --eval-dir <out> --photos-dir <pre 폴더> --out <rating 폴더>
+python -m http.server 8000 --directory <rating 폴더>/board     # 브라우저로 http://localhost:8000/
+python -I generation/tools/eval_board.py score --key <rating 폴더>/_private/key.csv --ratings kim.csv lee.csv park.csv
+```
+
+- 기본 안은 `off, keep, remove, remove+pad` 이다(12장이면 48개). 코드 A01.. 의 순서는 시드 20261128 로 섞는다. 같은 입력·시드면 어느 PC 에서도 같다.
+- 평가자에게는 `board/` 만 준다: `A01.glb`.., `photos/P01.jpg`(입력 사진, 긴 변 ≤ 1024 px, EXIF 없음), `index.html`, `ratings_template.csv`.
+- `_private/key.csv`(코드 → 사진·개·안)는 채점이 끝날 때까지 열지 않는다. build 가 경고를 출력한다.
+- `index.html` 은 model-viewer 3.5.0 을 jsDelivr 에서 받는다(인터넷 필요). `file://` 로 열면 모델이 뜨지 않으므로 `http.server` 로 연다.
+- 웹 뷰어에는 앱의 셸 털이 없다. 털 색·무늬는 텍스처로만 본다.
+- 평가자는 `ratings_template.csv` 를 복사해 `rater` 칸에 이름을 쓰고, 6항목(`faceShape, ears, bodyProportion, furColor, pattern, textureArtifacts`, [METRICS §4](../../docs/METRICS.md))을 1~5 정수로 채운다. 빈 칸은 건너뛴다. 범위 밖 값은 파일과 줄을 알려 주고 멈춘다.
+- `score` 출력(기본 `_private/scores/`): `scores_by_arm.csv`, `scores_paired.csv`, `agreement.csv`, `scores_summary.md`. 안 이름이 드러나므로 `_private` 에 둔다.
+- 점수는 코드마다 평가자 평균을 낸 뒤 안별로 평균한다. 평가자 일치는 평가자 쌍마다 정확히 같은 비율, ±1 안 비율, 이차 가중 kappa 다.
+- 로컬 확인: 실제 변환 GLB 1개를 넣은 보드를 `http.server` 로 열어 사진과 모델이 함께 뜨는 것을 봤다(2026-11-26).
+
+### 시험
+
+```powershell
+python -I -m unittest discover -s generation/tools -p "test_eval3d.py"
+```
+
+- 24개다. torch·GPU·trimesh 없이 돈다. numpy 가 필요하고, Pillow 가 없으면 이미지를 쓰는 5개를 건너뛴다.
 
 ## 검증 ([계획])
 

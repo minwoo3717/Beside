@@ -9,8 +9,9 @@ AnimalLift 베이스라인 재현부터 품질·속도 개선까지 모든 실�
 
 | 날짜 | 파일 | 한 줄 결론 |
 |---|---|---|
+| 2026-11-26 (계획) | [2026-11-26_exp-04_ab-input-texture.md](2026-11-26_exp-04_ab-input-texture.md) | **[계획]** exp-02 베이스라인 품질, exp-03 입력 3안, exp-04 텍스처 패딩을 한 세션으로(11/27 Pod 생성, 11/28 블라인드 채점). 주 지표를 미리 정함. 도구 `tools/eval_*.py` 는 [구현됨] |
 | 2026-11-17 | [2026-11-17_exp-01_baseline-runpod.md](2026-11-17_exp-01_baseline-runpod.md) | **[실험 결과]** 베이스라인 1건: A40 에서 inferMs 3.9~5.7 s, convertMs 0.85~1.1 s, gpuPeakMB 5,120, 삼각형 7,774, GLB 약 1.3 MB(표본 4건). 공개 주소 전체 12~16 s 중 5~7 s 는 VM ↔ Pod 중계 전송. 품질 채점은 [계획] |
-| 2026-11-05 (틀만) | [2026-11-05_exp-03_input-preprocess.md](2026-11-05_exp-03_input-preprocess.md) | **[계획]** 원본(늘림) / 크롭+패딩 / 크롭+배경 제거 3D 비교 — 절차와 표만, 실행 전 |
+| 2026-11-05 (틀만) | [2026-11-05_exp-03_input-preprocess.md](2026-11-05_exp-03_input-preprocess.md) | **[계획]** 원본(늘림) / 크롭+패딩 / 크롭+배경 제거 3D 비교 — 절차와 표만, 실행 전. 실행은 2026-11-26 기록의 세션으로 옮김 |
 | 2026-11-05 | [2026-11-05_animallift-robustness.md](2026-11-05_animallift-robustness.md) | **[실험 결과]** AnimalLift 는 동물이 없는 사진에도 강아지를 냄 → 서버 입력 검사 필요. 사진 선택이 전처리보다 영향이 큼(RTX 4060 Ti, 공개 사진 6장 + AI 생성 사진) |
 | 2026-11-05 | [2026-11-05_animallift-consistency.md](2026-11-05_animallift-consistency.md) | **[실험 결과]** 같은 개 식별 86~90%, 거의 털색으로 구분. 배경 제거가 가장 일관적이나 차이는 작음(AI 생성 5마리) |
 | 2026-11-04 | [2026-11-04_model-comparison.md](2026-11-04_model-comparison.md) | **[실험 결과]** 1장당 생성 시간 SF3D 0.67 s, TripoSR 1.63 s, AnimalLift 5.31 s(RTX 4060 Ti). 고정 토폴로지·털 정보는 AnimalLift 만 |
