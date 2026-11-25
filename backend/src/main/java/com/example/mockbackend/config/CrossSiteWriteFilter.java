@@ -3,6 +3,7 @@ package com.example.mockbackend.config;
 import com.example.mockbackend.api.v1.dto.ErrorDetail;
 import com.example.mockbackend.api.v1.dto.ErrorResponse;
 import com.example.mockbackend.exception.ErrorCode;
+import com.example.mockbackend.exception.GlobalExceptionHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -62,7 +63,8 @@ public class CrossSiteWriteFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        log.warn("Cross-site {} {} refused (Sec-Fetch-Site={}, Origin={})", request.getMethod(), request.getRequestURI(),
+        log.warn("Cross-site {} {} refused (Sec-Fetch-Site={}, Origin={})", request.getMethod(),
+                GlobalExceptionHandler.pathForLog(request.getRequestURI()),
                 request.getHeader("Sec-Fetch-Site"), request.getHeader("Origin"));
         response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);

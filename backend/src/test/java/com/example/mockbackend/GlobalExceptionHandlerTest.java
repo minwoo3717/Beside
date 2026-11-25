@@ -159,6 +159,24 @@ class GlobalExceptionHandlerTest {
                 .doesNotContain("\n2026-10-31T13:00:00.000Z  INFO").doesNotContain("\u001b");
     }
 
+    /** Review finding 2026-11-25: openapi says the server logs keep only a share token's first 6 characters. */
+    @Test
+    void aShareTokenInTheLoggedPathIsCutToItsFirstSixCharacters(CapturedOutput output) {
+        String token = "AbCdEfGhIjKlMnOpQrStUv";
+        ApiException notFound = new ApiException(org.springframework.http.HttpStatus.NOT_FOUND,
+                com.example.mockbackend.exception.ErrorCode.SHARE_NOT_FOUND, "Share link not found or expired", null);
+        handler.handleApi(notFound, new MockHttpServletRequest("GET", "/api/v1/shares/" + token + "/asset"));
+        handler.handleApi(notFound, new MockHttpServletRequest("GET", "/api/v1/shares/" + token));
+        assertThat(output.getOut()).contains("/api/v1/shares/AbCdEf.../asset SHARE_NOT_FOUND")
+                .contains("/api/v1/shares/AbCdEf... SHARE_NOT_FOUND").doesNotContain(token);
+
+        assertThat(GlobalExceptionHandler.pathForLog("/s/" + token)).isEqualTo("/s/AbCdEf...");
+        assertThat(GlobalExceptionHandler.pathForLog("//API/v1/shares/" + token)).isEqualTo("//API/v1/shares/AbCdEf...");
+        assertThat(GlobalExceptionHandler.pathForLog("/api/v1/jobs/" + token + "/shares"))
+                .as("only share-link paths").isEqualTo("/api/v1/jobs/" + token + "/shares");
+        assertThat(GlobalExceptionHandler.pathForLog("/s/AbCdE")).as("too short to be a token: kept").isEqualTo("/s/AbCdE");
+    }
+
     private static MockHttpServletResponse committed() {
         MockHttpServletResponse response = new MockHttpServletResponse();
         response.setCommitted(true);

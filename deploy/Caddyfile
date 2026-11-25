@@ -106,5 +106,15 @@
 	}
 
 	# 접근 로그 → docker compose logs caddy. Authorization 헤더는 Caddy 가 기본으로 가린다.
-	log
+	# 공유 링크(/s/{token}, /api/v1/shares/{token}[/asset])의 토큰은 링크의 유일한 비밀이라 앞 6자만 남긴다
+	# (openapi revokeJobShares 의 '서버 로그에는 앞 6자만'. Spring 쪽은 GlobalExceptionHandler.pathForLog).
+	# 공유 뷰어(share.html)는 no-referrer 라 Referer 헤더에는 토큰이 없다. test_caddy_routes.sh 가 확인한다.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "(?i)^(/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+" "$1$2..."
+			}
+		}
+	}
 }

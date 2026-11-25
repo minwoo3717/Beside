@@ -222,6 +222,18 @@ echo "-- 413: body over request_body max_size (25MB)"
 head -c 26000000 /dev/zero > "$WORK/big.bin"
 check 413 POST /api/v1/jobs --http1.1 -H 'Content-Type: application/octet-stream' --data-binary "@$WORK/big.bin"
 
+echo "-- access log keeps only the first 6 characters of a share token (the share checks above sent AbCdEf123)"
+caddy_log="$(docker logs "$NAME" 2>&1 || true)"
+if grep -q 'AbCdEf123' <<<"$caddy_log"; then
+  echo 'FAIL the access log has a whole share token'
+  failures=$((failures + 1))
+elif ! grep -q '"uri":"/s/AbCdEf\.\.\."' <<<"$caddy_log" || ! grep -q '"uri":"/api/v1/shares/AbCdEf\.\.\./asset"' <<<"$caddy_log"; then
+  echo 'FAIL the access log has no cut share path (is the log filter still JSON?)'
+  failures=$((failures + 1))
+else
+  echo 'ok   share tokens cut to 6 characters in the access log'
+fi
+
 if (( failures > 0 )); then
   echo "$failures check(s) failed. Caddy log:"
   docker logs --tail 50 "$NAME" 2>&1 || true
