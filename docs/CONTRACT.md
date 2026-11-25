@@ -230,7 +230,7 @@ DELETE /artifacts/{jobId}            → 204 작업 폴더(업로드 사진·결
 | `GET glbUrl` 이 200 아님·연결 실패·시간 초과 | 업로드 | `CONVERSION_FAILED` |
 | 그 밖 | 업로드 | 위 표 그대로 |
 
-Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 120000 — 2026-11-21 #7 로 600000 에서 줄였다. 그 작업 자신의 요청에만 걸리고 PENDING 대기는 세지 않는다. 앱의 최대 대기 600 s 는 그대로. 운영 VM 은 이 값을 담은 main 을 배포한 뒤부터 [계획]), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
+Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `http://localhost:8001`), `inference.timeout-ms`(기본 120000 — 2026-11-21 #7 로 600000 에서 줄였다. 그 작업 자신의 요청에만 걸리고 PENDING 대기는 세지 않는다. 앱의 최대 대기 600 s 는 그대로. 운영 VM 에는 2026-11-21 main `fe10683` 배포로 들어갔다), `inference.max-concurrency`(기본 1), `inference.transfer`(기본 `path`), `inference.token`(기본 빈 값 = 헤더 안 보냄), `storage.result.dir`(기본 `storage/results`), `storage.tmp.dir`(기본 `storage/tmp`, 업로드 모드의 임시 GLB).
 
 ---
 
