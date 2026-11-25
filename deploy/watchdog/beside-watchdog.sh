@@ -137,7 +137,7 @@ check_backup() {
 }
 
 check_backend() {
-  local flag age cid status started started_s fails last_check last restarted count base failed_at
+  local flag age cid status started started_s fails last_check last restarted count base failed_at next
   for flag in $MAINTENANCE_FILES; do
     [[ -e "$flag" ]] || continue
     put fails 0
@@ -183,14 +183,15 @@ check_backend() {
       notify "✅ backend 가 다시 정상으로 떴어요 (VM 감시 · $HOST) — 시작하자마자 꺼지던 것이 멈췄어요"
       del crashloop.alerted
     fi
+    # One ✅: after a failed restart the earlier good restart's "N초 뒤" would read as if a restart brought it back.
     restarted="$(get restarted.at)"
-    if [[ -n "$restarted" ]]; then
-      notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작 $((NOW - restarted))초 뒤 확인"
-      del restarted.at
-    fi
     if [[ -n "$(get restart.failed)" ]]; then
       notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작이 실패했던 backend 가 다시 정상이에요"
       del restart.failed
+      del restarted.at
+    elif [[ -n "$restarted" ]]; then
+      notify "✅ backend health 정상 (VM 감시 · $HOST) — 재시작 $((NOW - restarted))초 뒤 확인"
+      del restarted.at
     fi
     put last.check "$NOW"
     return 0
@@ -230,7 +231,15 @@ check_backend() {
   else
     put restart.failed "$NOW"
     printf '%s%s\n' "$E" "docker restart $cid failed"
-    notify "🔴 backend 재시작 실패 (VM 감시 · $HOST) — docker restart 가 실패했어요. 손으로 확인해 주세요 ($((COOLDOWN_S / 60))분 뒤 한 번 더 시도해요)"
+    # A restart whose stop worked but start failed leaves the container exited, which the watchdog leaves to the
+    # operator: say which case this is instead of promising a retry that will not come.
+    status="$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo unknown)"
+    if [[ "$status" == running ]]; then
+      next="컨테이너가 실행 중으로 남아 있어 $((COOLDOWN_S / 60))분 뒤 한 번 더 시도해요"
+    else
+      next="컨테이너가 ${status} 상태로 남았어요(자동으로 다시 시도하지 않아요): compose up -d backend 로 올려 주세요"
+    fi
+    notify "🔴 backend 재시작 실패 (VM 감시 · $HOST) — docker restart 가 실패했어요. 손으로 확인해 주세요. $next"
     return 1
   fi
 }

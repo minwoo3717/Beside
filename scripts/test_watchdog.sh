@@ -25,9 +25,13 @@ case "$*" in
   "inspect -f {{.State.Status}} {{.State.StartedAt}} {{.RestartCount}} c0ffee")
     echo "$(cat "$F/status") $(cat "$F/started") $(cat "$F/restartcount" 2>/dev/null || echo 0)" ;;
   "exec c0ffee curl -fsS -m 5 -o /dev/null http://localhost:8081/actuator/health") [[ -f "$F/healthy" ]] ;;
+  "inspect -f {{.State.Status}} c0ffee") cat "$F/status" ;;
   "restart -t 20 c0ffee")
     echo "$WATCHDOG_NOW" >> "$F/restart-tries"
-    [[ -f "$F/restart-fails" ]] && exit 1
+    if [[ -f "$F/restart-fails" ]]; then
+      [[ -f "$F/restart-exits" ]] && echo exited > "$F/status"   # the stop worked, the start did not
+      exit 1
+    fi
     echo "$WATCHDOG_NOW" >> "$F/restarts"
     date -u -d "@$WATCHDOG_NOW" +%Y-%m-%dT%H:%M:%S.123456789Z > "$F/started" ;;
   *) echo "fake docker: unexpected $*" >&2; exit 1 ;;
@@ -201,8 +205,29 @@ touch "$WORK/fake/healthy"
 step 20690 || fail "healthy run after a failed restart"
 step 20720 || fail "second healthy run after a failed restart"
 [[ "$(count '재시작이 실패했던 backend 가 다시 정상')" == 1 ]] || fail "recovery after a failed restart not reported once"
+[[ "$(count '재시작 .*초 뒤 확인')" == 1 ]] || fail "a second ✅ (the old good restart's) after the failed one"
+[[ "$(count '실행 중으로 남아 있어 10분 뒤 한 번 더')" == 2 ]] || fail "the 🔴 of a container left running does not say it is tried again"
+# the stop worked but the start failed: the container is exited and left alone, so the 🔴 asks for compose up
 rm "$WORK/fake/healthy"
+touch "$WORK/fake/restart-exits"
+step 21000; step 21030; step 21060 || true
+[[ "$(count 'exited 상태로 남았어요')" == 1 ]] || fail "the 🔴 of an exited container does not say so"
+echo running > "$WORK/fake/status"
+rm "$WORK/fake/restart-exits" "$WORK/fake/restart-fails"
+# a good restart, still failing, then a failed one, then it recovers by itself: one ✅ (the failed one's), not also
+# the good restart's "N초 뒤 확인" that would read as if a restart brought it back
+good_before="$(count '재시작 .*초 뒤 확인')"
+step 22000; step 22030; step 22060 || fail "good restart run"
+for t in 22200 22230 22260 22400; do step "$t" || fail "cooldown run $t"; done
+touch "$WORK/fake/restart-fails"
+step 22660 || true
+[[ "$(count '재시작 실패')" == 4 ]] || fail "no failed restart after the good one: $(count '재시작 실패') 🔴"
 rm "$WORK/fake/restart-fails"
+touch "$WORK/fake/healthy"
+step 22700 || fail "recovery after good + failed restart"
+[[ "$(count '재시작이 실패했던 backend 가 다시 정상')" == 2 ]] || fail "no ✅ after good + failed restart"
+[[ "$(count '재시작 .*초 뒤 확인')" == "$good_before" ]] || fail "two ✅ after good + failed restart"
+rm "$WORK/fake/healthy"
 
 # disk: 85 % -> one warning, again only after an hour; 79 % -> none
 touch "$WORK/fake/healthy"
