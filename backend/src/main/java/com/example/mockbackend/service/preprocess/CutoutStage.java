@@ -93,6 +93,8 @@ public class CutoutStage {
             log.warn("jobId={} no cutout, the stored photo cannot be decoded: {}", job.getId(), e.getMessage());
             return new PreparedPhoto(null, null, ms(work), "FALLBACK:DECODE_FAILED", version);
         } catch (Exception | OutOfMemoryError e) {
+            // Heap OOMs end the JVM since 2026-11-26 (-XX:+ExitOnOutOfMemoryError, backend/Dockerfile), so the
+            // OutOfMemoryError here is only what that flag does not cover (e.g. direct buffer memory).
             log.warn("jobId={} no cutout: {} — the original photo goes", job.getId(), e.toString());
             return new PreparedPhoto(null, null, ms(work), "FALLBACK:ERROR", version);
         } finally {

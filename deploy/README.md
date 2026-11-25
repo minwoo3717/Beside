@@ -239,6 +239,8 @@ free -h                                   # Swap: 2.0Gi
 
 - 두 가지가 있다.
   - **Java 힙 부족**(`java.lang.OutOfMemoryError`, 힙은 `mem_limit` 의 40 %): JVM 이 종료 코드 3 으로 스스로 끝난다(`-XX:+ExitOnOutOfMemoryError`, [backend/Dockerfile](../backend/Dockerfile)). 전에는 스레드 일부만 죽은 채 계속 떠 있을 수 있었다.
+    - 대가: 사진 한 장을 읽다 힙이 모자라면 전에는 그 사진만 검사 없이 넘겼는데(`UploadCheck`·`CutoutStage`), 이제는 서버 전체가 다시 시작한다. 반쯤 죽은 JVM 이 더 위험하다고 보고 2026-11-26 에 이쪽을 골랐다.
+    - 힙 덤프 `backend-oom.hprof` 에는 메모리에 있던 비밀값(`INFERENCE_TOKEN`, 웹훅 주소)과 사진이 들어 있다. `deploy/.env` 처럼 다루고, 분석한 뒤 개발 PC 사본까지 지운다. 아래 볼륨 백업(tar)에서는 뺀다.
   - **컨테이너 한도 초과**(커널의 OOM kill, 힙 밖 ONNX Runtime 메모리 포함): 커널이 SIGKILL 로 끝낸다. Docker 는 `State.OOMKilled` 와 `oom` 이벤트를 남긴다.
 - 둘 다 `restart: unless-stopped` 로 Docker 가 다시 띄운다. 그때 진행 중이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱에서 다시 시도).
 - VM 감시(아래 '운영 대응 설치' 7번)가 Docker 의 `RestartCount` 가 는 것을 보고 디스코드로 알린다. 메모리 때문이면 🧠, 다른 이유면 ♻️ 다.
@@ -316,7 +318,7 @@ cd ~/Beside && mkdir -p deploy/backups
 C="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
 $C stop backend
 docker run --rm -v beside-storage:/data:ro -v "$PWD/deploy/backups:/backup" alpine:3.22 \
-  tar czf "/backup/beside-storage-$(date +%F-%H%M).tgz" -C /data .
+  tar czf "/backup/beside-storage-$(date +%F-%H%M).tgz" --exclude=./backend-oom.hprof -C /data .
 $C start backend
 # 개발 PC 로 가져오기: scp <user@VM>:~/Beside/deploy/backups/*.tgz .
 ```
@@ -455,7 +457,7 @@ journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 
   - 🧠 메모리로 꺼짐 **[구현됨, 배포 전]**: 커널 OOM kill(`State.OOMKilled` 또는 Docker 의 `oom` 이벤트. Docker 는 다시 띄울 때 `OOMKilled` 를 지울 수 있어서 지난 확인 뒤의 이벤트 기록도 본다. VM 에서 재현하지는 않았다) 또는 backend 의 종료 코드 3(Java 힙 부족, 힙 덤프 안내 — 위 '메모리')
   - 🚪 caddy 가 멈춰 있음(실행 중도 재시작 중도 아님, 지워짐 포함) **[구현됨, 배포 전]**: 30초 간격 두 번 연속이면(배포의 다시 만들기는 그 안에 끝난다) 알리고 1시간마다 다시 · ✅ caddy 가 다시 실행 중
   - 💾 디스크 80 % 이상(1시간마다) · 🗄️ VM 밖 백업이 멈춤(6시간마다) · ✅ VM 밖 백업이 다시 성공 · 🛠️ 유지보수 표시가 12시간 넘게 있음
-  - 유지보수 표시가 있는 동안 ♻️·🧠·🚪 도 오지 않고, 그동안의 재시작·정지는 표시를 지운 뒤에도 알리지 않는다.
+  - 유지보수 표시가 있는 동안 ♻️·🧠·🚪 도 오지 않는다. 그동안의 재시작은 표시를 지운 뒤에도 알리지 않지만, 표시를 지웠는데 caddy 가 아직 멈춰 있으면 약 1분 안에 🚪 가 온다.
 - **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. 표시가 있는 동안은 backend 검사를 통째로 건너뛰므로 재시작뿐 아니라 아래 재시작 반복 알림(🧱)도 오지 않는다 — FD5 를 다시 재현해 🧱 를 확인할 때는 표시 없이 한다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
 - 재시작하면 그때 PENDING·PROCESSING 이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱은 retry). GPU·추론 서비스 상태는 보지 않는다(backend 의 GPU 알림이 맡는다).
 - 재시작 반복: backend 가 시작하자마자 꺼지면(prod 에 H2 DB 파일이 없을 때 — 장애 훈련 FD5, 또는 잘못된 설정) Docker 가 계속 다시 띄우지만 90초를 넘기지 못해 위 판단에 걸리지 않는다. 마지막 정상 확인 뒤 Docker 의 `RestartCount` 가 3 이상 늘면 🧱 를 보내고(1시간마다 다시), 정상이 되면 한 번 알린다. 감시 스크립트의 `docker restart` 는 이 수를 늘리지 않는다 [구현됨: PR #22, `scripts/test_watchdog.sh`]. VM 에는 2026-11-20 15:53 UTC 에 위 설치 명령으로 다시 설치했다 [구현됨: 적용]. FD5 재현은 2026-11-21 5차 부하 시험에서 했다 **[실험 결과]**: 훈련 backend 가 DB 파일 없이 시작을 거부했고(재시작 10번), 따로 띄운 감시 인스턴스가 시작 44.6 s 뒤 🧱 를 VM 안 훈련 수집기로 보냈다([5차](../docs/perf/load/2026-11-21_vm-5th.md) 7절 FD5). 운영 웹훅(팀 디스코드)으로 🧱 를 받은 기록은 없다.
