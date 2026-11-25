@@ -81,7 +81,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 ### 요청 id `X-Request-Id` (다음 태그 전 추가) — [구현됨]
 
 - 요청 헤더 `X-Request-Id`(선택): 앱은 요청마다 보낸다(`BesideApiClient.Prepare`). 서버는 1~64자의 `A-Z a-z 0-9 . _ : -` 만 그대로 쓴다. 없거나 규칙 밖이면 새 UUID 를 만든다.
-- 응답 헤더 `X-Request-Id`: 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다.
+- 응답 헤더 `X-Request-Id`: backend(Spring)가 쓰는 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다. backend 까지 오지 않는 응답에는 없다: Caddy 가 직접 답하는 404(막은 경로)·401(Basic 인증)·413(25 MB 초과), Tomcat 이 답하는 잘못된 요청의 400, 관리 포트.
 - 서버 로그는 이 id 로 찾는다(텍스트 로그 `rid=`, prod JSON 로그 필드 `requestId`, [ops/RUNBOOK.md](ops/RUNBOOK.md) '먼저 볼 곳'). 앱은 응답 헤더를 읽지 않아도 된다. 모르는 헤더는 무시한다(필드 추가와 같은 규칙).
 - [api/openapi.yaml](api/openapi.yaml) 에는 아직 없다. 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만). 다음 태그 때 openapi 에 옮긴다 [계획].
 
@@ -204,6 +204,8 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 | 그 밖의 4xx·5xx | 없음·모르는 코드 | `INFERENCE_FAILED` |
 | 200 | — (`glbPath` 없음·파일 없음·glTF 2.0 바이너리 아님) | `CONVERSION_FAILED` |
 | 연결 실패 / 타임아웃 | — | `INFERENCE_UNAVAILABLE` / `INFERENCE_TIMEOUT` |
+
+요청 id(2026-11-26, [구현됨]): Spring 은 작업마다 `POST /infer`·`/infer/upload`, GLB `GET`, `DELETE /artifacts` 에 `X-Request-Id: <jobId>-<attempt>`(형식 `[A-Za-z0-9._-]{1,128}`)를 붙인다. 본문은 바뀌지 않는다. 추론 서비스는 이 헤더를 무시해도 되고, 로그에 남기는 것은 [계획]이다(같은 작업의 retry 를 서비스 로그에서 가르기 위해). `/healthz` 에는 붙이지 않는다.
 
 `detail.code` 가 Job 실패 코드면 HTTP 상태와 관계없이 그 코드를 쓴다. Spring 은 `/infer` 를 `inference.max-concurrency`(기본 1)건만 동시에 부르고, `error.message` 에 경로·내부 주소·추론 서비스 원문 메시지를 싣지 않는다(서버 로그에만).
 

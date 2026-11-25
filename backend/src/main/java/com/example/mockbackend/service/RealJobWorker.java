@@ -195,7 +195,8 @@ public class RealJobWorker implements JobWorker {
         log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.requestUri());
 
         try {
-            InferenceClient.Result result = inferenceClient.infer(jobId, photo.paths(imagePaths(job)),
+            // attempt goes out as X-Request-Id <jobId>-<attempt>, so the service's log tells retries apart
+            InferenceClient.Result result = inferenceClient.infer(jobId, attempt, photo.paths(imagePaths(job)),
                     photo.names(filenames(job)), restartWatch(waited.ready()));
             StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
             jobFinisher.complete(job, stored.path().toString(), start, type(),
@@ -219,7 +220,7 @@ public class RealJobWorker implements JobWorker {
         } finally {
             // Upload mode: the downloaded temporary GLB and the service's job folder. After the run has ended and
             // never throwing, so a failed cleanup cannot change the result. Path mode: nothing to do.
-            inferenceClient.cleanup(jobId);
+            inferenceClient.cleanup(jobId, attempt);
         }
     }
 

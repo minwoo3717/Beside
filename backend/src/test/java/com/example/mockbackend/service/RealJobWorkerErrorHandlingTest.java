@@ -22,6 +22,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -74,7 +75,7 @@ class RealJobWorkerErrorHandlingTest {
         // The copy read again, not the one whose save failed half way (it says PROCESSING in memory only).
         verify(jobFinisher).fail(same(reread), eq(ErrorCode.INTERNAL_ERROR),
                 eq("Real worker error (IllegalStateException)"), eq("real"), any(RunDetails.class));
-        verify(inferenceClient, never()).infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class));
+        verify(inferenceClient, never()).infer(anyString(), anyInt(), anyList(), anyList(), any(InferenceClient.Watch.class));
     }
 
     @Test
@@ -95,7 +96,7 @@ class RealJobWorkerErrorHandlingTest {
         when(jobRepository.findById(ID)).thenReturn(Optional.of(queued), Optional.of(queued), Optional.of(queued),
                 Optional.of(job(JobStatus.FAILED)));
         when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
-        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenThrow(new IllegalStateException("bug"));
+        when(inferenceClient.infer(anyString(), anyInt(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenThrow(new IllegalStateException("bug"));
         // run() records INTERNAL_ERROR itself; something after its save throws.
         doThrow(new IllegalStateException("after the save")).when(jobFinisher)
                 .fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(), any(RunDetails.class));
@@ -104,7 +105,7 @@ class RealJobWorkerErrorHandlingTest {
 
         verify(jobFinisher, times(1)).fail(any(Job.class), any(ErrorCode.class), anyString(), anyString(),
                 any(RunDetails.class));
-        verify(inferenceClient).cleanup(ID);
+        verify(inferenceClient).cleanup(ID, 1);
     }
 
     /**
@@ -121,7 +122,7 @@ class RealJobWorkerErrorHandlingTest {
         Job queued = job(JobStatus.PENDING);
         when(jobRepository.findById(ID)).thenReturn(Optional.of(queued));
         when(jobRepository.save(any(Job.class))).thenAnswer(call -> call.getArgument(0));
-        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class)))
+        when(inferenceClient.infer(anyString(), anyInt(), anyList(), anyList(), any(InferenceClient.Watch.class)))
                 .thenReturn(new InferenceClient.Result(glb, null, false, null));
 
         full.dispatch(ID, 1);
@@ -166,7 +167,7 @@ class RealJobWorkerErrorHandlingTest {
             atCutout.putAll(MDC.getCopyOfContextMap());
             return PreparedPhoto.off();
         });
-        when(inferenceClient.infer(anyString(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenAnswer(call -> {
+        when(inferenceClient.infer(anyString(), anyInt(), anyList(), anyList(), any(InferenceClient.Watch.class))).thenAnswer(call -> {
             atInfer.putAll(MDC.getCopyOfContextMap());
             throw new IllegalStateException("bug");
         });
