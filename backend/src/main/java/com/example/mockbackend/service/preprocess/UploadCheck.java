@@ -74,6 +74,8 @@ public class UploadCheck {
                     result.decodeMs(), result.detectMs());
             return new Outcome(checkMs, "PASSED", null, result.detail());
         } catch (Exception | OutOfMemoryError e) {
+            // Heap OOMs end the JVM since 2026-11-26 (-XX:+ExitOnOutOfMemoryError, backend/Dockerfile), so the
+            // OutOfMemoryError here is only what that flag does not cover (e.g. direct buffer memory).
             log.warn("photo check could not run, '{}' accepted unchecked (SKIPPED:ERROR): {}",
                     first.getOriginalFilename(), e.toString());
             return new Outcome(ms(start), "SKIPPED:ERROR", null, null);

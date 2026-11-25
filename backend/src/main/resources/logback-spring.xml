@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Console logging. docs/ops/RUNBOOK.md '먼저 볼 곳' says how to find a request or a job in it.
+  - Every profile but prod: Spring Boot's own text console. application.properties logging.pattern.level adds
+    [rid=<requestId> job=<jobId>] (RequestIdFilter, the job workers).
+  - prod: one JSON object per line (LogstashEncoder), so Docker's log and a log server can read fields without parsing
+    text: @timestamp in UTC, level, logger_name, thread_name, message, the MDC keys requestId / jobId / attempt (only
+    these), and the stack trace in the one field stack_trace (JSON escapes its newlines: no extra lines).
+    The stack is cut to 8 KB with framework frames (Tomcat, servlet, Spring proxies) folded, root cause first, class names in full (grep):
+    Docker's json-file driver splits a message over 16 KB into partial entries, which a log server then stores as
+    pieces. The full stack of a request thread can pass 16 KB.
+  Spring Boot initialises logging once per JVM, with the profiles of the first context (tests: LoggingFormatTest).
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProfile name="!prod">
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="prod">
+        <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <timeZone>UTC</timeZone>
+                <includeMdcKeyName>requestId</includeMdcKeyName>
+                <includeMdcKeyName>jobId</includeMdcKeyName>
+                <includeMdcKeyName>attempt</includeMdcKeyName>
+                <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
+                    <maxLength>8192</maxLength>
+                    <rootCauseFirst>true</rootCauseFirst>
+                    <exclude>^org\.apache\.catalina\.</exclude>
+                    <exclude>^org\.apache\.coyote\.</exclude>
+                    <exclude>^org\.apache\.tomcat\.</exclude>
+                    <exclude>^jakarta\.servlet\.</exclude>
+                    <exclude>^org\.springframework\.web\.filter\.</exclude>
+                    <exclude>^org\.springframework\.aop\.</exclude>
+                    <exclude>^org\.springframework\.cglib\.</exclude>
+                    <exclude>^java\.base/jdk\.internal\.reflect\.</exclude>
+                </throwableConverter>
+                <fieldNames>
+                    <version>[ignore]</version>
+                    <levelValue>[ignore]</levelValue>
+                </fieldNames>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON_CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

@@ -408,6 +408,8 @@ export function buildReport(data, info, cfg, endedAt) {
     rttBaseMsUsed: cfg.rttBaseMs,
     rttBaseMsMeasured: round(value(metrics, 'load_healthzMs', 'med'), 3),
     uplinkMbps: cfg.uplinkMbps,
+    // ABORT_ON_ERRORS=0 (lib/config.js holdAtBreak): a failure drill, never a capacity result (collect.py)
+    drill: cfg.holdAtBreak === true,
     stages,
     status: '[실험 결과] 후보 — 조건(VM 사양, 커밋 SHA, k6 버전, 업링크, 사진 크기)은 collect.py 의 run.json 에 붙인다. 로컬 실행은 동작 확인용으로만 쓴다.',
   }, info.extra || {});

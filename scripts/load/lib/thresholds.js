@@ -2,6 +2,7 @@
 // Latency limits are relative to RTT_base (the healthz p50 that smoke.js measured), scoped by the endpoint tag and,
 // where the script has stages, by the stage/phase tags so each level's hold part is judged on its own.
 import { STATUS_5XX_CODES, STATUS_CLASSES, STATUS_METRIC } from './classify.js';
+import { CONFIG } from './config.js';
 
 export function criteria(rttMs) {
   const rtt = Number(rttMs) || 0;
@@ -88,10 +89,11 @@ export function statusCountThresholds(scope) {
 // by the cumulative rate evaluated only after the first minute; lib/guard.js adds the real one-minute window from
 // Prometheus when PROM_URL is set. The status-class counters of the same scope come along (statusCountThresholds), so
 // every script and stage whose errors are judged also keeps what came back (status 0, 4xx, 5xx).
-export function errorThresholds(scope, withAbort) {
+// holdAtBreak (ABORT_ON_ERRORS=0, lib/config.js): a drill keeps the load on, so the abort rule is left out.
+export function errorThresholds(scope, withAbort, holdAtBreak = CONFIG.holdAtBreak) {
   const out = statusCountThresholds(scope);
   const list = ['rate<0.005'];
-  if (withAbort) list.push({ threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '1m' });
+  if (withAbort && !holdAtBreak) list.push({ threshold: 'rate<0.05', abortOnFail: true, delayAbortEval: '1m' });
   out[key('load_errorRatio', null, scope)] = list;
   return out;
 }

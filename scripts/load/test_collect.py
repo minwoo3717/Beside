@@ -302,6 +302,13 @@ class OutcomeTest(unittest.TestCase):
         self.assertFalse(doc["resultCandidate"])
         self.assertTrue(doc["status"].startswith("인용하지 않는다 — k6 요약에 verdict.aborted 가 없다"))
 
+    def test_drill_run_is_never_a_result(self):
+        summary = summary_with(guard=GUARD_OK)
+        summary["meta"]["drill"] = True
+        doc = self.doc(summary)
+        self.assertFalse(doc["resultCandidate"])
+        self.assertEqual(doc["status"], collect.DRILL)
+
     def test_local_aborted_run_says_both(self):
         summary = summary_with(aborted=aborted("guard", "disk 90.0 % used > GUARD_MAX_DISK_RATIO 0.8"), guard=GUARD_BLIND, guard_abort=2)
         doc = self.doc(summary, "--base-url", "http://localhost:18740")

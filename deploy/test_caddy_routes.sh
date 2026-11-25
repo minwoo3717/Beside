@@ -175,6 +175,17 @@ check 401 POST "/api/v1/jobs/$JOB/shares/"
 check 401 DELETE /api/v1/shares/AbCdEf123
 check 401 delete /api/v1/shares/AbCdEf123
 check 401 PATCH /api/v1/shares/AbCdEf123
+# 제품 이벤트(2026-11-26 #24): 수집은 POST 만 공개, 같은 경로의 다른 method 와 읽기(관리 API)는 인증
+check 401 GET  /api/v1/events
+check 401 get  /api/v1/events
+check 401 HEAD /api/v1/events
+check 401 PUT  /api/v1/events
+check 401 DELETE /api/v1/events
+check 401 post /api/v1/events
+check 401 GET  /api/v1/events/
+check 401 GET  /api/v1/events/x
+check 401 GET  "/api/v1/admin/events?format=csv"
+check 401 GET  /api/v1/admin/funnel
 check 401 GET  /api/v1/jobs -u "$AUTH_USER:wrong-password"
 
 echo "-- 200 with credentials"
@@ -188,6 +199,9 @@ check 200 DELETE /api/v1/shares/AbCdEf123 "${AUTH[@]}"
 check 200 POST "/api/v1/jobs/$JOB/shares" "${AUTH[@]}"
 check 200 DELETE "/api/v1/jobs/$JOB/shares" "${AUTH[@]}"
 check 200 PUT  "/api/v1/jobs/$JOB/ratings/minwoo" "${AUTH[@]}"
+check 200 GET  "/api/v1/admin/events?format=csv" "${AUTH[@]}"
+check 200 GET  /api/v1/admin/funnel "${AUTH[@]}"
+check 200 GET  /api/v1/events "${AUTH[@]}"
 
 echo "-- 200 public: app API, healthz, share links, static files"
 check 200 GET  /api/v1/healthz
@@ -196,6 +210,8 @@ check 200 GET  "/api/v1/jobs/$JOB"
 check 200 GET  "/api/v1/jobs/$JOB/asset?variant=base"
 check 200 POST "/api/v1/jobs/$JOB/retry"
 check 200 POST "/api/v1/jobs/$JOB/cancel"
+check 200 POST /api/v1/events
+check 200 POST /api/v1/events -H 'Content-Type: application/json' --data '{"events":[]}'
 check 200 GET  /styles.css
 check 200 GET  /s/AbCdEf123
 check 200 GET  /share.html

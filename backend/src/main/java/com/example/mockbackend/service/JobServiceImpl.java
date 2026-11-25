@@ -55,6 +55,8 @@ public class JobServiceImpl implements JobService {
     private final IdempotencyKeyRepository idempotencyKeys;
     private final JobWorker jobWorker;
     private final JobMetrics jobMetrics;
+    /** beside.jobs.upload.rejected: every refusal of the upload below (docs/METRICS.md §5.1). */
+    private final ProductMetrics productMetrics;
     /** First-photo check before the 202 (off unless preprocess.check.enabled). */
     private final UploadCheck uploadCheck;
     /** Queue cap for v1 create and retry (REVIEW_CHECKLIST #21, decided 2026-11-21; off unless admission.max-pending > 0). */
@@ -108,31 +110,31 @@ public class JobServiceImpl implements JobService {
     @Override
     public Job submitJobV1(List<MultipartFile> photos, String idempotencyKey) {
         if (photos == null || photos.isEmpty()) {
-            throw ApiException.badRequest(ErrorCode.NO_PHOTOS, "At least one photo is required in the 'photos' part");
+            throw uploadRejected(ErrorCode.NO_PHOTOS, "At least one photo is required in the 'photos' part");
         }
         if (photos.size() > MAX_PHOTOS) {
-            throw ApiException.badRequest(ErrorCode.TOO_MANY_PHOTOS,
+            throw uploadRejected(ErrorCode.TOO_MANY_PHOTOS,
                     "At most " + MAX_PHOTOS + " photos per job, got " + photos.size());
         }
         for (MultipartFile file : photos) {
             if (file.isEmpty()) {
-                throw ApiException.badRequest(ErrorCode.INVALID_REQUEST, "Empty file: " + safeName(file));
+                throw uploadRejected(ErrorCode.INVALID_REQUEST, "Empty file: " + safeName(file));
             }
             String type = file.getContentType();
             if (type == null || !ALLOWED_IMAGE_TYPES.contains(type.toLowerCase(Locale.ROOT))) {
-                throw ApiException.badRequest(ErrorCode.UNSUPPORTED_IMAGE_TYPE, "Unsupported Content-Type '" + type
+                throw uploadRejected(ErrorCode.UNSUPPORTED_IMAGE_TYPE, "Unsupported Content-Type '" + type
                         + "' for " + safeName(file) + "; allowed: image/jpeg, image/png, image/webp");
             }
             // Fail here rather than after minutes in the GPU queue (the model cannot read a non-image).
             if (verifyMagic && !hasImageSignature(file)) {
-                throw ApiException.badRequest(ErrorCode.UNSUPPORTED_IMAGE_TYPE,
+                throw uploadRejected(ErrorCode.UNSUPPORTED_IMAGE_TYPE,
                         "The content of " + safeName(file) + " is not a JPEG, PNG or WEBP image");
             }
         }
         boolean keyed = idempotencyKey != null && !idempotencyKey.isBlank();
         if (keyed) {
             if (idempotencyKey.length() > MAX_IDEMPOTENCY_KEY_LENGTH) {
-                throw ApiException.badRequest(ErrorCode.INVALID_REQUEST,
+                throw uploadRejected(ErrorCode.INVALID_REQUEST,
                         "Idempotency-Key must be 1~" + MAX_IDEMPOTENCY_KEY_LENGTH + " characters");
             }
             Optional<Job> replay = findJobForKey(idempotencyKey);
@@ -161,7 +163,7 @@ public class JobServiceImpl implements JobService {
             // request leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
             UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
             if (check.isRefused()) {
-                throw ApiException.badRequest(ErrorCode.valueOf(check.refused().name()),
+                throw uploadRejected(ErrorCode.valueOf(check.refused().name()),
                         "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
             }
             try {
@@ -195,6 +197,12 @@ public class JobServiceImpl implements JobService {
             throw shuttingDown;
         }
         return job;
+    }
+
+    /** A 400 for the upload itself, counted by code in beside.jobs.upload.rejected (docs/METRICS.md §5.1). */
+    private ApiException uploadRejected(ErrorCode code, String message) {
+        productMetrics.uploadRejected(code);
+        return ApiException.badRequest(code, message);
     }
 
     @Override

@@ -28,6 +28,7 @@ base URL 예: `http://<PC IP>:8080`. 모든 경로는 `/api/v1` 아래. 인증 �
 | `GET /api/v1/jobs?limit=&cursor=` | `limit` 1~100(기본 20), `cursor` = 이전 `nextCursor` | **200** `{ items: JobResponse[], nextCursor: string\|null }` 최신순 | 400 `INVALID_REQUEST`, 500 |
 | `GET /api/v1/healthz` | — | **200** `{ status: "ok", profile, workerType: "mock"\|"real" }`. `profile` 은 활성 Spring 프로파일을 활성화 순서대로 쉼표로 이은 값(공백 없음, 예 `mock`·`real`, 공개 서버는 `real,prod`, 활성 프로파일이 없으면 `mock`). 앱은 `mock`\|`real` 둘 중 하나라고 가정하지 않는다(워커 종류는 `workerType`) | — |
 | `POST /api/v1/jobs/{jobId}/cancel` (v1.2) | 본문 없음. PENDING 일 때만 | **200** `JobResponse`(status=FAILED, `error.code=CANCELED`). 워커는 시작하지 않는다 | 409 `JOB_NOT_PENDING`(PROCESSING 은 GPU 연산을 멈출 수 없음, 이미 끝난·취소한 작업 포함), 404, 500 |
+| `POST /api/v1/events` (다음 태그 전 추가, #24) | JSON `ProductEventBatch` ≤ 32 KB: `installId`·`sessionId`(UUID), `appVersion`, `platform` `android\|web`, `events` 1~50개(`name` enum 12개, `at`, `seq`, `jobId?`, `screen?`, `props?`) | **202** `{ accepted, dropped }`. 모르는 이름·속성은 버리고 센다(400 아님). 서버 요청 수 상한(초당 50 묶음)을 넘으면 202 `accepted 0` | 400 `INVALID_REQUEST`(묶음 형식, 51개 이상), 413 `PAYLOAD_TOO_LARGE`(32 KB 초과), 500 |
 
 v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](api/openapi.yaml)) — [구현됨] 브랜치 `feat/api-v1.2`(검토 브랜치 2026-10-30 → 2026-11-21 #11 로 고름) → PR #27 main 병합·태그 `api-v1.2`(2026-11-22):
 
@@ -77,6 +78,13 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 ```
 
 상태 코드는 400 / 404 / 409 / 413 / 500 / 503 여섯 가지. 503 은 `QUEUE_FULL` 전용이다(2026-11-21 #21 결정, `api-v1.1` 에서 더함. 상한을 켠 서버만 보낸다). 429 `RATE_LIMITED` + `Retry-After`(클라이언트별 요청 제한)는 이름만 예약했다(2026-11-21 #22, 구현·한도는 [계획]). v0 `/api/jobs` 의 오류는 평면 `{ "error": "문자열" }` 이며 이 규칙을 따르지 않는다.
+
+### 요청 id `X-Request-Id` (다음 태그 전 추가) — [구현됨]
+
+- 요청 헤더 `X-Request-Id`(선택): 앱은 요청마다 보낸다(`BesideApiClient.Prepare`). 서버는 1~64자의 `A-Z a-z 0-9 . _ : -` 만 그대로 쓴다. 없거나 규칙 밖이면 새 UUID 를 만든다.
+- 응답 헤더 `X-Request-Id`: backend(Spring)가 쓰는 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다. backend 까지 오지 않는 응답에는 없다: Caddy 가 직접 답하는 404(막은 경로)·401(Basic 인증)·413(25 MB 초과), Tomcat 이 답하는 잘못된 요청의 400, 관리 포트.
+- 서버 로그는 이 id 로 찾는다(텍스트 로그 `rid=`, prod JSON 로그 필드 `requestId`, [ops/RUNBOOK.md](ops/RUNBOOK.md) '먼저 볼 곳'). 앱은 응답 헤더를 읽지 않아도 된다. 모르는 헤더는 무시한다(필드 추가와 같은 규칙).
+- [api/openapi.yaml](api/openapi.yaml) 에는 아직 없다. 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만). 다음 태그 때 openapi 에 옮긴다 [계획].
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
@@ -165,6 +173,7 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 | 서버 | H2 테이블 `job_runs` (`beside-{mock,real}.mv.db`, 실행마다 한 행, PK `jobId:attempt`) | 위 줄과 같은 필드를 snake_case 로 + `status, error_code`. 측정표는 관리 API `GET /api/v1/admin/runs?format=csv`(개발 PC 는 h2-console SQL 도 가능)로 뽑는다(METRICS §1.1) | [구현됨] 2026-10-06 |
 | 추론 서비스 | `/infer` 응답 `metrics`, 실험 기록 | `inferMs, gpuPeakMB, modelParams, outputVertices, outputTriangles, convertMs` (+ 선택 `modelVersion`). `convertMs` 는 리깅이 성공한 실행이면 리깅 시간을 포함한다(#16) | 서비스가 채움 [구현됨](#1, `animallift_runner.py`·`convert_asset.py`), Spring 저장 [구현됨]. 값은 [실험 결과]: [exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(4건 + 2차 부하 시험 539건, 리깅 없음) |
 | 앱 | `persistentDataPath/metrics/metrics.csv` 헤더 순서 고정 | `jobId, uploadMs, waitMs, downloadMs, loadMs, e2eMs, avgFps, minFps, memMB, device`. 서버로 가져오기 `POST /api/v1/admin/client-metrics`(헤더가 정확히 같아야 함), 서버·추론과 합친 표 `GET /api/v1/admin/e2e?format=csv`(서버 uploadMs 는 `serverUploadMs`)는 METRICS §3.1 | 기록 코드 [구현됨](`MetricsRecorder.cs`, `JobManager.cs` 가 채움 — 실기기 실행 증빙은 리포에 없음). 측정값 0건, 기기 FPS 포함 [계획] · 서버 가져오기·결합 [구현됨](API v1.2) |
+| 제품 이벤트 (앱·공유 뷰어, 2026-11-26 #24) | `POST /api/v1/events` → H2 `product_events`(30일 보존), 앱은 보내기 전 `persistentDataPath/metrics/events.jsonl` 에 남김 | 이름 12개(`screen_view` … `start_over`)와 이름별 속성(enum·작은 정수·불리언), 관리 `GET /api/v1/admin/events?format=csv`·세션 퍼널 `GET /api/v1/admin/funnel`, Prometheus `beside_app_events_total{name,platform}`·`beside_app_events_dropped_total{reason}`(METRICS §6) | 서버·웹·앱 코드 [구현됨](브랜치 `w7/product-events`, Unity 는 컴파일만) · 배포·실제 수치 [계획] |
 | 3D 품질 (사람, 1~5점, 평가자 2명 이상) | 작업 상세 웹 페이지 `/job/?id=` → `PUT /api/v1/jobs/{jobId}/ratings/{rater}`, H2 `job_ratings` | `faceShape`(얼굴 형태), `ears`(귀 모양/위치), `bodyProportion`(체형 비율), `furColor`(털 색상), `pattern`(무늬 재현), `textureArtifacts`(텍스처 번짐/seam). 측정표 `GET /api/v1/admin/ratings?format=csv`, modelVersion 별 평균 `GET /api/v1/admin/ratings/summary`(METRICS §4.1) | 저장·내보내기 [구현됨](API v1.2) · 실제 평가 [계획] (exp-01 표의 품질 칸은 비어 있음) |
 
 단위: 시간 ms 정수, 크기 bytes/MB 정수. 환경(GPU, 드라이버, 해상도, 커밋) 함께 기록. 자세한 정의는 [METRICS.md](METRICS.md).
@@ -197,6 +206,8 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 | 그 밖의 4xx·5xx | 없음·모르는 코드 | `INFERENCE_FAILED` |
 | 200 | — (`glbPath` 없음·파일 없음·glTF 2.0 바이너리 아님) | `CONVERSION_FAILED` |
 | 연결 실패 / 타임아웃 | — | `INFERENCE_UNAVAILABLE` / `INFERENCE_TIMEOUT` |
+
+요청 id(2026-11-26, [구현됨]): Spring 은 작업마다 `POST /infer`·`/infer/upload`, GLB `GET`, `DELETE /artifacts` 에 `X-Request-Id: <jobId>-<attempt>`(형식 `[A-Za-z0-9._-]{1,128}`)를 붙인다. 본문은 바뀌지 않는다. 추론 서비스는 이 헤더를 무시해도 되고, 로그에 남기는 것은 [계획]이다(같은 작업의 retry 를 서비스 로그에서 가르기 위해). `/healthz` 에는 붙이지 않는다.
 
 `detail.code` 가 Job 실패 코드면 HTTP 상태와 관계없이 그 코드를 쓴다. Spring 은 `/infer` 를 `inference.max-concurrency`(기본 1)건만 동시에 부르고, `error.message` 에 경로·내부 주소·추론 서비스 원문 메시지를 싣지 않는다(서버 로그에만).
 
@@ -242,6 +253,7 @@ Spring 설정: `application-real.properties` 의 `inference.base-url`(기본 `ht
 - `api-v1.1` 에 넣는 것: 작업 대기열 상한(503 `QUEUE_FULL` + `Retry-After`, N=19·165 s, 기본 꺼짐 — #21, PR #19, main 병합·태그 `api-v1.1` `fe10683`). 운영에서 켜는 것은 Unity 새 빌드 설치 뒤 **[계획]**(5차 부하 시험은 2026-11-21 에 N 19 를 확인 — PR #28, 2026-11-25 확인).
 - `api-v1.2` 에 넣는 것: v1.1 검토 브랜치에서 고른 기능 — 대기 정보(`queue`·`estimate`, 상한을 켜면 상한과 같은 행을 셈)·대기 취소·공유 링크·반려동물 보관함·관리 API/화면·품질 평가와 오류 코드 `CANCELED`·`JOB_NOT_PENDING`·`JOB_IN_PROGRESS`·`SHARE_NOT_FOUND`·`PET_NOT_FOUND`(#11·#12). 작업 삭제·썸네일·입력 사진 엔드포인트와 `thumbnailUrl` 은 뺐다. `+rig` 는 그 작업의 리깅이 성공했을 때만(#18, 추론 서비스 `/healthz` 의 `modelVersion` 도 `+rig` 없이). 서버·웹과 시험 **[구현됨]**(브랜치 `feat/api-v1.2`). main 병합(PR #27 `f6dfa66`, 2026-11-22)·태그 `api-v1.2`·운영 VM 배포(main `625c2a5`, 2026-11-22)는 끝났다(2026-11-25 확인: `git tag -l`, `gh pr view 27`, VM `~/Beside` 커밋). Unity 는 바꾸지 않음(새 필드·코드를 무시·일반 문구로 처리).
 - 남은 것 **[계획]**: 보존 정책의 자동 삭제 구현(사진 7일·GLB 30일, 공개 베타 전 — #23), 요청 제한의 키·한도·구현(#22), 앱에서 `queue`·`estimate`·취소 쓰기.
+- 2026-11-26 추가(#24, 같은 방식의 Backend 담당 결정): 제품 이벤트 수집 `POST /api/v1/events`(공개)와 관리 `GET /api/v1/admin/events`·`/admin/funnel` — 모두 추가라 다음 태그(v1.3 후보) 전 추가로 둔다. 새 오류 코드·상태 코드 없음(요청 수 상한 초과는 202 로 받되 저장하지 않음). 개인정보 범위·보존 30일은 [METRICS.md](METRICS.md) §6.
 
 ## 8. 원본 문서
 

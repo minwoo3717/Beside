@@ -7,7 +7,7 @@
 | 코드 커밋 | 실행할 때 `git rev-parse --short HEAD` 를 적는다. 전처리는 브랜치 `feat/preprocess` |
 | 환경 | GPU 모델 / 드라이버·CUDA / torch 버전 / AnimalLift `ctrl_size` / 입력 사진 수·해상도 — 실행할 때 채운다 |
 | 입력 데이터 | 팀 사진(개·고양이, 마리별 3장 이상)을 쓴다. 시험용 CC0 사진 6장은 `backend/src/test/resources/photos/` 에 있다 |
-| 상태 | **[계획]** — 실행 전 |
+| 상태 | **[계획]** — 실행 전. 2026-11-26: 실행은 [exp-04 기록](2026-11-26_exp-04_ab-input-texture.md) 의 한 세션으로 한다. 아래 4절의 '서버를 세 번 띄우기' 대신 `tools/eval_arms.py` 를 쓰고, baseline 은 운영 설정(크롭+배경 제거)이다 |
 
 ## 1. 실패 사례 (무엇이 안 되는가)
 

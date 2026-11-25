@@ -5,7 +5,8 @@
 # order and is sent on the next run, photos/GLBs go once a day (or with FORCE_FILES=1), a file deleted after the run
 # listed it is skipped without failing, only a good run writes last.ok, a lost state never overwrites what the bucket
 # has, a newest H2 zip older than 150 min fails the run (not under a maintenance flag or in the first 150 min after a boot), a VM without the write scope
-# uploads nothing, and the token is never on a command line or printed.
+# uploads nothing, the 5-minute mode of beside-backup.service (its FORCE_FILES and DB_STALE_MIN) sends new files every
+# run and fails on a 25-minute-old newest zip, and the token is never on a command line or printed.
 #   bash scripts/test_offsite_backup.sh
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -213,8 +214,45 @@ if run; then fail "a run without any zip succeeded"; fi
 grep -q "no H2 backup zip" "$WORK/out.txt" || fail "a backup folder without zips not reported"
 rmdir "$WORK/vol/backup" && mv "$WORK/backup-away" "$WORK/vol/backup"
 
+# the unit's 5-minute mode (beside-backup.service, REDUNDANCY Phase 1-1), with the values the unit sets: FORCE_FILES=1
+# sends a new photo or GLB on the next run and nothing twice; a zip 3 min old (the timer runs 3 min after the backend's
+# 5-minute backup) goes; DB_STALE_MIN fails a run whose newest zip is 25 min old but not one 15 min old, and its boot
+# grace is as short
+unit_env() { sed -n "s/^Environment=$1=//p" "$HERE/../deploy/backup/beside-backup.service"; }
+force="$(unit_env FORCE_FILES)"
+stale="$(unit_env DB_STALE_MIN)"
+[[ "$force" == 1 ]] || fail "beside-backup.service does not set FORCE_FILES=1: '$force'"
+[[ "$stale" =~ ^[0-9]+$ ]] && ((stale > 8 && stale <= 30)) || fail "DB_STALE_MIN in beside-backup.service: '$stale' (5-minute backups)"
+unit=(FORCE_FILES="$force" DB_STALE_MIN="$stale")
+zip_at beside-20261120-210000-001.zip 3
+zip_at beside-20261120-210500-001.zip 0          # being written
+file_at uploads/cccc_dog.jpg 3
+file_at results/cccc/base.glb 3
+before="$(writes)"
+run "${unit[@]}" || fail "5-minute run"
+in_bucket db/beside-20261120-210000-001.zip || fail "5-minute run: a zip 3 min old was not sent"
+in_bucket files/uploads/cccc_dog.jpg && in_bucket files/results/cccc/base.glb || fail "5-minute run: new photo or GLB not sent"
+in_bucket db/beside-20261120-210500-001.zip && fail "5-minute run: a zip still being written was sent"
+[[ "$(writes)" == $((before + 3)) ]] || fail "5-minute run wrote $(($(writes) - before)) objects, want 3"
+run "${unit[@]}" || fail "second 5-minute run"
+[[ "$(writes)" == $((before + 3)) ]] || fail "second 5-minute run sent something again"
+file_at uploads/dddd_cat.jpg 3
+run "${unit[@]}" || fail "third 5-minute run"
+in_bucket files/uploads/dddd_cat.jpg || fail "5-minute run on the same day did not send a new photo"
+for zip in "$WORK/vol/backup/"beside-*.zip; do touch -d "25 minutes ago" "$zip"; done
+echo 1 > "$WORK/state/last.ok"
+if run "${unit[@]}"; then fail "5-minute mode: a run whose newest zip is 25 min old succeeded"; fi
+grep -q "the newest H2 backup beside-.*zip is 2[56] min old (limit $stale)" "$WORK/out.txt" || fail "5-minute mode: stale backup not reported"
+[[ "$(cat "$WORK/state/last.ok")" == 1 ]] || fail "5-minute mode: a run with a stale backup moved last.ok"
+run "${unit[@]}" UPTIME_S=600 || fail "5-minute mode: a stale backup failed a run 10 min after a boot"
+grep -q "up 10 min (< $stale): the age of the newest backup is not checked yet" "$WORK/out.txt" || fail "5-minute boot grace not logged"
+if run "${unit[@]}" UPTIME_S=$((stale * 60 + 60)); then fail "5-minute mode: boot grace longer than DB_STALE_MIN"; fi
+zip_at beside-20261120-213000-001.zip 15
+run "${unit[@]}" || fail "5-minute mode: a newest zip 15 min old failed the run"
+(($(cat "$WORK/state/last.ok") > 1)) || fail "5-minute mode: a good run did not move last.ok"
+
 # the token is never on a command line and never printed
 grep -qF "$TOKEN_VALUE" "$WORK/argv" && fail "token on a curl command line"
 grep -qF "$TOKEN_VALUE" "$WORK/all.txt" && fail "token printed"
 [[ "$(stat -c %a "$WORK/state")" == 700 ]] || fail "state folder is not 700"
-echo "offsite_backup.sh: order, once-only, daily files, vanished files, last.ok, 412 keep, scope check and token handling ok"
+echo "offsite_backup.sh: order, once-only, daily files, vanished files, last.ok, 412 keep, scope check, 5-minute unit mode and token handling ok"

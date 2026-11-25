@@ -62,6 +62,10 @@ export function parseConfig(env) {
     minAssetBytes: readNum(env, 'MIN_ASSET_BYTES', 0),
     healthzPerFlow: readNum(env, 'HEALTHZ_PER_FLOW', 1) > 0,
     queueRetryAfterS: retryAfterS,
+    // ABORT_ON_ERRORS=0: a failure DRILL keeps the breaking load on while the team detects, diagnoses and fixes
+    // (2026-11-25 mentoring 'break it once and practise the response'). The 5 %-error abort rule is left out and the
+    // summary says drill: true, so collect.py never offers the run as a capacity result.
+    holdAtBreak: readStr(env, 'ABORT_ON_ERRORS', '1') === '0',
     summaryPath: readStr(env, 'SUMMARY_PATH', `scripts/load/out/k6-summary-${runId}.json`),
     uplinkMbps: readNum(env, 'UPLINK_MBPS', null),
     tier: readStr(env, 'TIER', ''),

@@ -1,0 +1,549 @@
+{
+  "uid": "beside-logs",
+  "title": "Beside 로그",
+  "description": "Loki 로 모은 컨테이너 로그(Alloy 가 Docker 로그 파일에서 읽음). 보관 7일. 2026-11-25 멘토링: 로그를 서버로 모아 대시보드로 보고, 부하 시험 중 로그가 얼마나 튀는지 본다.",
+  "tags": [
+    "beside",
+    "logs"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "q",
+        "label": "찾을 글자",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "description": "jobId, requestId, 오류 코드 등"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": [
+    {
+      "title": "Beside 운영",
+      "type": "dashboards",
+      "tags": [
+        "beside"
+      ],
+      "asDropdown": false,
+      "includeVars": false,
+      "keepTime": true
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "로그 양 — 부하 시험·장애 때 얼마나 튀는가",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "서비스별 로그 줄/분",
+      "description": "모든 compose 컨테이너의 로그 줄 수(1분). 부하 시험이나 장애 때 어느 서비스의 로그가 튀는지 본다. compose 밖 컨테이너는 other.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "sum by (service) (count_over_time({service=~\".+\"}[1m]))",
+          "legendFormat": "{{service}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "backend 수준별 줄/분",
+      "description": "backend 의 ERROR·WARN·INFO 줄 수(1분). prod 는 JSON 로그라 level 라벨이 있다. 텍스트 로그(prod 가 아닌 프로파일)는 라벨이 없어 여기에 안 나온다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "sum by (level) (count_over_time({service=\"backend\", level=~\".+\"}[1m]))",
+          "legendFormat": "{{level}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Caddy 응답 상태별 줄/분",
+      "description": "Caddy JSON 접근 로그의 status 별 응답 수(1분). 앞단에서 본 응답이라 backend 까지 오지 못한 502·504 도 보인다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "sum by (status) (count_over_time({service=\"caddy\"} | json | status=~\".+\" [1m]))",
+          "legendFormat": "{{status}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Caddy 응답 시간 p95 (method 별, 5분 창)",
+      "description": "Caddy 접근 로그의 duration(초) p95. TLS·프록시를 포함한 앞단 지연이다(Spring 의 http_server_requests 는 backend 안만 잰다). 1차 부하 시험의 붕괴는 이쪽에서만 보였다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | status=~\".+\" | unwrap duration | __error__=\"\" [5m]) by (request_method)",
+          "legendFormat": "{{request_method}}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "오류",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "backend ERROR · WARN",
+      "description": "backend 의 ERROR·WARN 줄. 줄을 펼치면 requestId·jobId 로 같은 요청·작업의 다른 로그나 작업 페이지로 간다(데이터소스의 derived field).",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "{service=\"backend\", level=~\"ERROR|WARN\"}",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "작업 실패 코드별 (선택 기간)",
+      "description": "작업 워커의 'stage=FAILED code=<코드>' 줄을 코드별로 센다. 같은 값은 Prometheus beside_jobs_finished_total{result=\"FAILED\"} 에도 있다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "sum by (code) (count_over_time({service=\"backend\"} |~ \"stage=FAILED\" | regexp \"code=(?P<code>[A-Z_]+)\" | __error__=\"\" [$__range]))",
+          "legendFormat": "{{code}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Caddy 5xx — uri 별 상위 10 (선택 기간)",
+      "description": "앞단이 5xx 로 답한 요청의 uri. backend 가 의도해서 낸 503 QUEUE_FULL 도 여기에 들어간다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "topk(10, sum by (request_uri) (count_over_time({service=\"caddy\"} | json | status >= 500 [$__range])))",
+          "legendFormat": "{{request_uri}}",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "logs",
+      "title": "느린 요청 (Caddy, 2초 넘게)",
+      "description": "앞단에서 2초 넘게 걸린 요청. 업로드(사진 검사·배경 제거 포함)는 보통 1~3초다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "{service=\"caddy\"} | json | duration > 2",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "찾기",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "ID·글자로 찾기 ($q)",
+      "description": "위 상자에 jobId·requestId(앱이 보내는 X-Request-Id)·오류 코드 같은 글자를 넣으면 모든 서비스의 로그에서 찾는다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "{service=~\".+\"} |= \"$q\"",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ]
+    }
+  ]
+}

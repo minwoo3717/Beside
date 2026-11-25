@@ -1,0 +1,21 @@
+# Grafana 알림 보낼 곳: Discord 웹훅 하나.
+# 2026-11-26 사용자 결정: 기존 팀 채널로 보낸다. 그래서 deploy/.env 에 따로 넣지 않으면 compose 가 backend 알림과 같은
+# NOTIFY_WEBHOOK_URL 을 GRAFANA_ALERT_WEBHOOK_URL 로 넘긴다. 채널을 나누려면 deploy/.env 에 GRAFANA_ALERT_WEBHOOK_URL 만
+# 넣으면 된다. 둘 다 비면 보내지 않는 자리 주소가 들어간다(Grafana 가 뜨기는 한다).
+# 비밀값이라 리포에 두지 않는다. Grafana 가 '$VAR' 를 환경 변수로 바꾼다.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: beside-discord
+    receivers:
+      - uid: beside-discord
+        type: discord
+        disableResolveMessage: false
+        settings:
+          url: ${GRAFANA_ALERT_WEBHOOK_URL}
+          use_discord_username: false
+          title: 'Beside 지표 알림'
+          message: |-
+            {{ range .Alerts }}{{ if eq .Status "firing" }}📈 {{ else }}✅ 해제: {{ end }}{{ .Annotations.summary }}
+            {{ end }}

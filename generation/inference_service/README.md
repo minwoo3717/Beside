@@ -4,6 +4,8 @@ Spring 의 real 워커만 호출하는 **내부 전용** 서비스다. Unity 는
 
 상태: **[구현됨]** 스키마·`/healthz`·501/503 응답·패스스루 모드, 업로드 모드(`POST /infer/upload`·`/artifacts`)와 `X-Inference-Token`(2026-10-30, 아래 '전송 모드'). AnimalLift 모델 로드·추론(`animallift_runner.py`, 같은 프로세스·첫 사진 1장), `tools/convert_asset.py` 변환, 자동 리깅(`BESIDE_RIG_TEMPLATE` 이 있을 때 `tools/rig_transfer.py`)은 #1(2026-10-14)로 머지됐다. 1건 시간·VRAM 은 **[실험 결과]** [exp-01](../experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, 리깅 끔, 표본 4건 + 2차 부하 539건). 품질 점수와 리깅을 켠 측정은 **[계획]**. 설치는 [ANIMALLIFT_SETUP.md](ANIMALLIFT_SETUP.md). Spring 쪽 호출(`RealJobWorker`·`InferenceClient`)은 **[구현됨]** 2026-10-04 — 이 스텁의 패스스루와 501 로 연동을 확인했다. 패스스루 부하 설정 `BESIDE_PASSTHROUGH_*` 는 **[구현됨]** 2026-11-01(아래 '패스스루 부하 설정'). VM 부하 시험에서는 2026-11-19 3차 F1a 에 썼다 [실험 결과].
 
+- **요청 id**(2026-11-26, Spring 쪽 [구현됨]): Spring 이 `/infer`·`/infer/upload`·`/artifacts` 요청에 `X-Request-Id: <jobId>-<attempt>` 헤더를 붙인다. 서비스는 무시해도 된다. 로그에 남기는 것은 [계획]([docs/CONTRACT.md](../../docs/CONTRACT.md) §6).
+
 ## GPU 서버 실행
 
 ```bash

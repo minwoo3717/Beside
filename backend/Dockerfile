@@ -40,4 +40,15 @@ EXPOSE 8080
 # jdk.httpclient.keepalive.timeout=60: the JDK HttpClient keeps an idle connection for 1200 s by default, longer than
 # the Runpod inference service's 75 s (deploy/runpod/start_pod.sh). The client must give a connection up first, or a
 # POST /infer/upload can go out on one the Pod already closed (or lost when the Pod stopped without a FIN).
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=40", "-Djdk.httpclient.keepalive.timeout=60", "-jar", "/app/app.jar"]
+# Out of heap (java.lang.OutOfMemoryError): the JVM exits with code 3 (-XX:+ExitOnOutOfMemoryError) instead of running on
+# with threads that died half way; Docker's restart policy brings it back and the VM watchdog reports it (🧠, deploy/
+# watchdog). Before that it writes the heap (up to the ~1.2 GB above) to /app/storage/backend-oom.hprof in the volume.
+# A file, not a folder: the JVM never overwrites an existing dump, so at most one is on the disk. Copy it out, analyse
+# it and delete it (deploy/README.md '메모리'), or the next OOM leaves none. A kernel OOM kill (the container's mem_limit,
+# e.g. ONNX Runtime's native memory) is a SIGKILL and leaves no dump.
+# Trade-off (chosen 2026-11-26): UploadCheck and CutoutStage catch OutOfMemoryError so that one photo's decode never
+# takes the server down; with this flag a HEAP OOM in one photo restarts the whole backend instead (jobs then running
+# end INTERNAL_ERROR, the app retries). A JVM that survived an OOM in some thread is the worse risk. Those catches now
+# only cover OutOfMemoryErrors the flag does not, e.g. direct buffer memory thrown by Java code.
+# The dump holds what was in memory: INFERENCE_TOKEN, the webhook URL, photo bytes. Treat it like deploy/.env.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=40", "-XX:+ExitOnOutOfMemoryError", "-XX:+HeapDumpOnOutOfMemoryError", "-XX:HeapDumpPath=/app/storage/backend-oom.hprof", "-Djdk.httpclient.keepalive.timeout=60", "-jar", "/app/app.jar"]

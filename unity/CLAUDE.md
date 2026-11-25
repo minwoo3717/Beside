@@ -40,6 +40,7 @@
 - 스크립트 파일은 **삭제 후 재생성하지 않는다** — Unity가 GUID를 새로 매겨 씬·프리팹 참조가 끊긴다. 내용 교체는 덮어쓰기, 이동은 Unity Project 창 안에서 한다.
 - Unity 생성 폴더(`Library/`, `Temp/`, `Logs/`, `obj/`, `Build*/`, `UserSettings/`, `MemoryCaptures/`, `*.csproj`, `*.sln`)는 커밋하지 않는다. `Packages/manifest.json`, `ProjectSettings/`는 커밋한다.
 - 측정값은 `Application.persistentDataPath/metrics/metrics.csv`에 [docs/METRICS.md](../docs/METRICS.md)의 열 이름 그대로 기록한다(`MetricsRecorder`, 열 추가 금지). 구간별 로그는 `[BesideMetric]` 접두어의 JSON 한 줄(`request_id`, `job_id`, `stage`, `duration_ms`, `error_code`)로 남기고, 모든 서버 요청에 `X-Request-Id`를 붙인다.
+- 제품 이벤트(화면 보기·버튼 누름, METRICS §6)는 `Metrics/ProductEvents` 한 곳에서 보낸다(`POST /api/v1/events`, 로그 `[BesideEvent]`). UI 는 한 줄 호출(`ProductEvents.ScreenView`·`Track`)만 하고, 이름·속성은 METRICS §6.1 표의 것만 쓴다(서버가 모르는 이름·값은 버린다). 속성에 파일 이름·서버 주소·토큰·사용자가 쓴 글을 넣지 않는다. 씬에 없으면 스스로 생기고, 끄려면 Inspector `Send Events` 또는 `BESIDE_NO_PRODUCT_EVENTS`.
 
 ## 실행
 

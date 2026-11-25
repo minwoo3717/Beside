@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Copy the backend's backups off the VM into the backup bucket (R1). Runs on the VM host as root from
-# beside-backup.timer (every hour at minute 20; the backend writes its H2 backup at minute 5), never in a container.
+# beside-backup.timer (every 5 minutes at minute 3, 8, ...; the backend writes its H2 backup every 5 minutes with
+# STORAGE_BACKUP_CRON in deploy/.env, hourly at minute 5 without it), never in a container.
 #   db/     each new H2 backup zip (volume beside-storage: backup/beside-<time>.zip) -> gs://$BUCKET/db/<name>  every run
-#   files/  new files under uploads/ and results/ of the same volume -> gs://$BUCKET/files/<path>   first run of each day (KST)
+#   files/  new files under uploads/ and results/ of the same volume -> gs://$BUCKET/files/<path>   first run of each day (KST),
+#           or every run with FORCE_FILES=1 (beside-backup.service sets it: only files not sent yet go)
 # The VM's service account (beside-backup@, made by deploy/gcp/backup_bucket.sh) has only roles/storage.objectCreator on
 # the bucket: it can create objects, not read, list, overwrite or delete them, so a broken or taken-over VM cannot erase
 # its own backups. Uploads therefore go straight to the Cloud Storage JSON API with ifGenerationMatch=0: the object is
@@ -14,7 +16,8 @@
 #   sudo /usr/local/sbin/beside-offsite-backup                  # what the timer runs
 #   sudo FORCE_FILES=1 /usr/local/sbin/beside-offsite-backup    # photos and GLBs too, now, not only at the day's first run
 # Exit status 1 when an upload failed (the next run tries it again) or the newest H2 zip is older than DB_STALE_MIN
-# (150 min: the backend's own hourly backup stopped); a good run writes its time to $STATE_DIR/last.ok,
+# (the backend's own backup stopped: 150 min by default for an hourly backend, 20 in beside-backup.service for the
+# 5-minute one); a good run writes its time to $STATE_DIR/last.ok,
 # which the VM watchdog reads to report a backup that stopped. The access token is never printed or put on a command
 # line. Tests: scripts/test_offsite_backup.sh (fake docker/curl/metadata server/bucket).
 set -euo pipefail
@@ -40,7 +43,7 @@ MIN_AGE_MIN="${MIN_AGE_MIN:-2}"                               # newer files may 
 METADATA="${METADATA_URL:-http://169.254.169.254}"
 GCS_UPLOAD="${GCS_UPLOAD_URL:-https://storage.googleapis.com/upload/storage/v1}"
 FORCE_FILES="${FORCE_FILES:-0}"
-DB_STALE_MIN="${DB_STALE_MIN:-150}"   # newest H2 zip older than this = the backend's hourly backup missed twice
+DB_STALE_MIN="${DB_STALE_MIN:-150}"   # newest H2 zip older than this = the backend's hourly backup missed twice (unit: 20)
 MAINTENANCE_FILES="${BESIDE_MAINTENANCE_FILES:-/etc/beside-maintenance /home/beside/fault/MAINTENANCE}"
 
 if [[ -n "${JOURNAL_STREAM:-}" ]]; then E='<3>'; else E='error: '; fi   # <3> = journald priority "err"
@@ -171,7 +174,7 @@ if [[ -d "$BACKUP_DIR" ]]; then
   while IFS= read -r name <&3; do
     [[ -z "$last" || "$name" > "$last" ]] || continue
     if [[ ! -f "$BACKUP_DIR/$name" ]]; then
-      err "pruned before it was sent, skipped: $name (was the VM off for two days?)"
+      err "pruned before it was sent, skipped: $name (was the VM off longer than STORAGE_BACKUP_KEEP backups?)"
     elif ! zip_ok "$BACKUP_DIR/$name"; then
       err "not a readable zip, skipped: $name"
       failed=1
@@ -190,7 +193,7 @@ else
 fi
 log "db: $sent new backup(s) sent, newest handled: ${last:-none}"
 
-# A backend whose hourly H2 backup stopped (a folder it cannot write, a full disk) left runs of "0 new" that counted as
+# A backend whose own H2 backup stopped (a folder it cannot write, a full disk) left runs of "0 new" that counted as
 # good, and its own failure is only an ERROR line in the backend log: nothing reached Discord while the bucket's newest
 # DB copy grew old (review finding, 2026-11-25). Now a newest zip older than DB_STALE_MIN fails the run, so last.ok
 # stops moving and the VM watchdog reports it. Not checked under a maintenance flag (load tests and drills; the
@@ -201,7 +204,7 @@ if [[ -d "$BACKUP_DIR" ]]; then
     if [[ -e "$flag" ]]; then maintenance="$flag"; break; fi
   done
   newest="$({ find "$BACKUP_DIR" -maxdepth 1 -type f -name 'beside-*.zip' -printf '%T@ %f\n' || true; } | sort -n | tail -n1)"
-  # A VM that was off for hours (or rebuilt from the daily snapshot) runs this before the backend's next xx:05 backup:
+  # A VM that was off for hours (or rebuilt from the daily snapshot) runs this before the backend's next backup:
   # its newest zip is old for a good reason, so the age is judged only once the VM has been up DB_STALE_MIN.
   uptime_s="${UPTIME_S:-$(cut -d. -f1 /proc/uptime 2>/dev/null || echo 999999)}"
   if [[ -n "$maintenance" ]]; then
@@ -209,19 +212,20 @@ if [[ -d "$BACKUP_DIR" ]]; then
   elif ((uptime_s < DB_STALE_MIN * 60)); then
     log "db: the VM has been up $((uptime_s / 60)) min (< $DB_STALE_MIN): the age of the newest backup is not checked yet"
   elif [[ -z "$newest" ]]; then
-    err "no H2 backup zip in $BACKUP_DIR: is the backend's hourly backup (storage.backup.*) running?"
+    err "no H2 backup zip in $BACKUP_DIR: is the backend's H2 backup (storage.backup.*) running?"
     failed=1
   else
     newest_s="${newest%% *}"
     newest_age_min=$(( ($(date +%s) - ${newest_s%%.*}) / 60 ))
     if ((newest_age_min > DB_STALE_MIN)); then
-      err "the newest H2 backup ${newest#* } is $newest_age_min min old (limit $DB_STALE_MIN): the backend's hourly backup has stopped (backend log: 'H2 backup failed')"
+      err "the newest H2 backup ${newest#* } is $newest_age_min min old (limit $DB_STALE_MIN): the backend's H2 backup has stopped (backend log: 'H2 backup failed')"
       failed=1
     fi
   fi
 fi
 
-# ---- files/: photos and GLBs, once a day. files.done lists every relative path already sent (objects never change:
+# ---- files/: photos and GLBs, once a day or every run (FORCE_FILES=1). files.done lists every relative path already
+# sent, and only the paths not in it go (objects never change:
 # uploads/<job>_<name> and results/<job>/base.glb are written once per job).
 today="$(TZ=Asia/Seoul date +%F)"
 if [[ "$FORCE_FILES" == 1 || "$(cat "$STATE_DIR/files.day" 2>/dev/null || true)" != "$today" ]]; then
@@ -253,12 +257,13 @@ if [[ "$FORCE_FILES" == 1 || "$(cat "$STATE_DIR/files.day" 2>/dev/null || true)"
   if ((files_failed == 0)); then
     printf '%s\n' "$today" > "$STATE_DIR/files.day"
   else
-    failed=1   # files.day stays: the next hourly run sends what is still missing
+    failed=1   # files.day stays: the next run sends what is still missing
   fi
   log "files: $files_sent new file(s) sent, $files_failed failed, $(wc -l < "$manifest") in the bucket"
 fi
 
-# The time of the last good run, for the VM watchdog (deploy/watchdog): it posts to Discord when this is 3 h old, so a
+# The time of the last good run, for the VM watchdog (deploy/watchdog): it posts to Discord when this is BACKUP_STALE_S
+# old (30 min in beside-watchdog.service for the 5-minute timer, 3 h by default), so a
 # backup that keeps failing (service account or scope gone, uploads refused) does not end the protection unnoticed.
 if ((failed == 0)); then
   date +%s > "$STATE_DIR/last.ok.tmp" && mv -f "$STATE_DIR/last.ok.tmp" "$STATE_DIR/last.ok"

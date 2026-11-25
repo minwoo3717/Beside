@@ -195,6 +195,13 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `beside.jobs.pending.stale` | `beside_jobs_pending_stale` | gauge | — | 대기열 상한이 세지 않는 오래된 PENDING 작업 수: `queuedAt` 이 `admission.stale-after-ms`(기본은 정상 작업이 PENDING 으로 기다릴 수 있는 가장 긴 시간, prod·N 19·c 1 이면 2시간 56분 — `inference.timeout-ms` 120 s 기준, D12)보다 오래된 행. 상한을 켰을 때만 1분마다 DB 에서 센다(요청이 없어도). 꺼져 있으면 늘 0. 0 보다 크면 돌릴 워커가 없는 작업이거나 설정보다 긴 대기이고, 상한은 그만큼 더 받는다(같은 검사에서 서버 로그에 WARN 한 줄). 세기가 실패하면 다음 성공까지 `NaN`. 2026-11-21 #21 결정, `api-v1.1`(PR #19) **[구현됨]** | `AdmissionGate` |
 | `beside.asset.downloads` | `beside_asset_downloads_total` | counter | `outcome`(아래) | `GET /api/v1/jobs/{id}/asset` 한 번마다 하나 | `AssetDownloadMetricsFilter` |
 | `beside.asset.download` | `beside_asset_download_seconds_*` | timer | `outcome` | 요청 도착 → 마지막 바이트를 쓴 때 | 같은 곳 |
+| `beside.api.errors` | `beside_api_errors_total` | counter | `status`(HTTP 상태 코드), `code`(응답의 `error.code`. Spring 이 직접 답한 오류 — 잘못된 method·Content-Type 등 — 는 `FRAMEWORK`) | [구현됨] 2026-11-26. 서버가 답한 오류 응답 수. v1·v0·웹 페이지 모두 센다(v0 는 응답에 code 가 없어도 같은 code 로). 알 수 없는 경로의 404(스캐너 포함)는 `code="NOT_FOUND"` 로 따로 보인다. `QUEUE_FULL`(503)도 세므로 5xx 비율에서는 §5.3 처럼 뺀다. 연결이 끊겨 답하지 못한 다운로드와 필터가 직접 답한 오류(다른 사이트 쓰기 400 등)는 세지 않는다. HTTP 오류 코드([api/ERROR_CODES.md](api/ERROR_CODES.md))는 기동할 때 그 상태로 0 부터 있고, `FRAMEWORK` 는 첫 오류 때 생긴다. 로그: 5xx 는 ERROR(method·경로·code·requestId·스택), 4xx 는 WARN 한 줄, `QUEUE_FULL` 과 알 수 없는 경로의 404 는 DEBUG | `GlobalExceptionHandler` |
+| `beside.inference.request` | `beside_inference_request_seconds_{bucket,sum,count,max}` | timer | `call`(`infer`\|`download`\|`cleanup`\|`health`), `outcome`(아래) | real 서버가 Python 추론 서비스에 보낸 HTTP 요청 한 번의 시간. 보낸 때 → 답을 다 받은 때 또는 포기한 때. `infer` = `POST /infer`·`/infer/upload`, `download` = 업로드 모드의 GLB `GET`, `cleanup` = `DELETE /artifacts/{jobId}`(다시 보낸 것도 하나씩), `health` = `GET /healthz`(15초마다). 서버 종료로 끊긴 요청은 세지 않는다. 왜: 생성 시간(`beside.job.processing`)만으로는 느린 곳이 GPU 인지 GLB 전송인지 연결인지 모른다. JDK HttpClient 라 자동 계측이 없어 직접 잰다. 16개 조합 모두 기동 때 0 으로 등록한다(mock 에도 있고 늘 0). 2026-11-26 **[구현됨]** | `InferenceClient`, `InferenceHealthMonitor`(둘 다 `InferenceMetrics` 로) |
+| `beside.inference.state` | `beside_inference_state` | gauge | `state`(`UP`\|`LOADING`\|`DOWN`\|`UNKNOWN`) | 마지막 `/healthz` 판정. 지금 상태만 1, 나머지는 0. 첫 확인 전에는 `UNKNOWN` 이 1. 왜: GPU 가 꺼지거나 모델이 안 올라온 것을 작업이 실패하기 전에 대시보드에서 바로 본다(지금까지는 관리 페이지와 Discord 알림뿐). real 프로파일에만 있다. 2026-11-26 **[구현됨]** | `InferenceHealthMonitor` |
+| `beside.inference.busy.seconds` | `beside_inference_busy_seconds` | gauge | — | 마지막 `/healthz` 의 `busyForMs / 1000`: GPU 에서 가장 오래 돌고 있는 실행의 나이(초). 쉬고 있으면 0. 모르면(DOWN, 이 필드가 없는 옛 서비스) `NaN`. 왜: STUCK 알림(`inference.stuck-alert-ms`, 기본 120초, 장애 훈련 FD13) 전에 실행이 길어지는 것을 본다. real 프로파일에만 있다. 2026-11-26 **[구현됨]** | `InferenceHealthMonitor` |
+| `beside.jobs.upload.rejected` | `beside_jobs_upload_rejected_total` | counter | `code`(아래 12개) | `POST /api/v1/jobs` 가 업로드 자체를 거절(400·413)한 수. `QUEUE_FULL` 은 여기가 아니라 `beside.jobs.refused` 다. Idempotency-Key 재요청, 다른 사이트에서 온 쓰기 거절(`CrossSiteWriteFilter`), v0 `/api/jobs` 는 세지 않는다. 왜: 사진을 올렸는데 작업이 만들어지지 않은 사용자가 얼마나 되는지, 어떤 이유가 많은지 본다(대표 사진 검사 기준값과 앱 안내 문구를 고칠 근거). 12개 모두 기동 때 0. 2026-11-26 **[구현됨]** Caddy 의 `request_body max_size 25MB` 를 넘는 본문은 Spring 에 오기 전에 413 으로 끝나 세지 않는다(필요하면 Loki 의 Caddy 접근 로그로 센다). | `JobServiceImpl`(검증·대표 사진 검사), `UploadRejectionCounter`(컨트롤러 전에 나는 413·`photos` 파트 없음·깨진 multipart) |
+| `beside.share.created` | `beside_share_created_total` | counter | — | 만든 공유 링크 수(`POST /api/v1/jobs/{id}/shares` 의 201). 왜: 제품 퍼널의 '공유' 단계. 2026-11-26 **[구현됨]** | `ShareService` |
+| `beside.share.views` | `beside_share_views_total` | counter | `outcome`(`ok`\|`not_found`\|`expired`\|`revoked`) | 공유 뷰어가 링크를 연 수(`GET /api/v1/shares/{token}` 한 번에 하나). 응답은 모두 404 `SHARE_NOT_FOUND` 로 같지만 여기서는 이유를 나눈다: `revoked` 취소된 링크(만료됐어도), `expired` 만료된 링크, `not_found` 없거나 형식이 틀린 토큰, 작업·파일이 없어진 링크. 토큰은 태그에 넣지 않는다. GLB 받기(`/asset`)·취소(`DELETE`)·서버 오류(500)는 세지 않는다. 왜: 공유한 링크가 실제로 열리는지, 유효 기간(기본 7일)이 짧지 않은지 본다. 네 값 모두 기동 때 0. 2026-11-26 **[구현됨]** 작업을 지우면 그 링크는 먼저 취소되므로(`JobDeletionService`) 지운 작업의 링크는 `revoked` 로 센다. | `ShareService.view` |
 
 `beside.asset.downloads` 의 `outcome`:
 
@@ -206,9 +213,24 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `not_completed` | 409 (`JOB_NOT_COMPLETED`, 완료 전에 받으려 함) |
 | `error` | 5xx, 처리 중 예외, 그 밖의 상태(400 잘못된 variant) |
 
-바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 와 `beside_jobs_refused_total` 의 `op` 두 값, `beside_jobs_pending_stale` 도 처음부터 있다. `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
+바이트는 서버가 Tomcat 에 넘긴 기준이다. 마지막 바이트까지 소켓 버퍼에 넘긴 뒤 클라이언트가 떠나면 `ok` 로 남는다. 다섯 값은 기동할 때 0 으로 등록되고, `beside_jobs_created_total`·`beside_jobs_retried_total`·`beside_jobs_queue` 와 `beside_jobs_refused_total` 의 `op` 두 값, `beside_jobs_pending_stale` 도 처음부터 있다. `beside_inference_request_seconds` 16개, `beside_jobs_upload_rejected_total` 12개, `beside_share_created_total`, `beside_share_views_total` 4개도 처음부터 있다(real 은 `beside_inference_state` 4개와 `beside_inference_busy_seconds` 도). `beside_jobs_finished_total` 과 작업 타이머는 해당 태그 조합의 첫 실행이 끝날 때 생긴다.
 
-버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30.
+`beside.inference.request` 의 `outcome` (HTTP 요청 기준이다. 작업 결과는 `beside_jobs_finished_total`, healthz 판정은 `beside_inference_state` 로 본다):
+
+| 값 | 뜻 |
+|---|---|
+| `ok` | 기대한 상태 코드로 답했다: `infer`·`download`·`health` 는 200, `cleanup` 은 2xx. 본문이 쓸 만한지는 보지 않는다(200 인데 `glbPath` 가 없으면 작업은 `CONVERSION_FAILED`, healthz 본문이 JSON 이 아니면 `DOWN`) |
+| `error` | 다른 상태 코드로 답했다(401·403·4xx·5xx), 또는 이 서버 쪽 오류(GLB 를 디스크에 못 씀, FD4) |
+| `timeout` | 시간 안에 답이 끝나지 않았다: `inference.timeout-ms`(infer·download), GLB 데이터가 `inference.download-idle-ms` 동안 없음, cleanup 10초, health 2초 |
+| `unavailable` | 답이 없었다: 연결 거절, 연결 5초(health 2초) 초과, 답 없이 끊긴 연결, 또는 요청 중 `/healthz` 의 `instanceId` 가 바뀌어 포기(FD16b) |
+
+`infer` 의 `error`·`timeout`·`unavailable` 은 작업 코드 `INFERENCE_FAILED`·`INFERENCE_TIMEOUT`·`INFERENCE_UNAVAILABLE` 과 거의 맞지만 같지는 않다. 401·403·501~504 응답은 작업 코드로는 `INFERENCE_UNAVAILABLE` 이고 여기서는 `error` 다(서비스가 답은 했다).
+
+`beside.jobs.upload.rejected` 의 `code`(docs/api/ERROR_CODES.md 와 같은 이름): `INVALID_REQUEST`(빈 파일, 깨진 multipart, 128자 넘는 Idempotency-Key), `NO_PHOTOS`(`photos` 파트 없음 포함), `TOO_MANY_PHOTOS`, `UNSUPPORTED_IMAGE_TYPE`, `PAYLOAD_TOO_LARGE`, 대표 사진 검사 7개 `UNREADABLE_IMAGE`·`IMAGE_TOO_SMALL`·`NO_ANIMAL_DETECTED`·`TOO_MANY_ANIMALS`·`ANIMAL_TOO_SMALL`·`IMAGE_TOO_DARK`·`IMAGE_TOO_BLURRY`(검사가 켜진 real·prod 에서만 0 이 아니다). 업로드 시도는 `beside_jobs_created_total + beside_jobs_upload_rejected_total + beside_jobs_refused_total{op="create"}` 로 본다(`created` 에는 v0 도 들어 있다).
+
+추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽 기록은 [계획]). `health` 에는 붙지 않는다.
+
+버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30. 추론 요청 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600(health 는 수십 ms, A40 한 실행은 8.7초, `inference.timeout-ms` 는 real 120초).
 
 주의: 재시작으로 끊긴 실행(`code="INTERNAL_ERROR"`, §1 주의)도 `FAILED` 로 세어지고 시간에는 서버가 꺼져 있던 시간이 들어간다. 패스스루 실행은 `passthrough="true"` 로 거른다. Mock 실행은 `worker="mock"` 이다. 단, `passthrough="true"` 가 붙는 것은 **성공한** 패스스루 실행뿐이다. 추론 서비스의 실패 응답에는 패스스루 여부가 없어서 백엔드는 스텁(패스스루)의 실패와 모델의 실패를 구별하지 못하고, FAILED 실행은 늘 `passthrough="false"` 로 남는다(§1 `passthrough` 가 null → 태그 `false`). 그래서 `passthrough="false"` 로 거른 성공률은 스텁의 성공만 빼고 스텁의 실패는 남긴다. 이 성공률은 추론 서비스가 실제 모델을 돌리는 동안에만 맞다(§5.3 아래).
 
@@ -244,3 +266,63 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 표 안의 `\|` 는 표 구분자를 피하려고 쓴 것이고, PromQL 에는 `|` 로 쓴다.
 
 확인 범위 **[구현됨]**: §5.1 의 이름·태그·버킷, 관리 포트 분리(공개 포트 `/actuator*` 404), 실제 Tomcat 연결을 RST 로 끊은 다운로드의 `client_abort` 는 backend 테스트(`ObservabilityEndpointTest`, `JobMetricsTest`, `OperationalMetricsFlowTest`, `AssetDownloadMetricsFilterTest`, `RealJobWorkerTest` 의 패스스루)로 확인했다. §5.2 중 스크레이프에 있는지 테스트가 보는 것은 `http_server_requests_seconds_bucket`(SLO 버킷·`env`), `jvm_memory_used_bytes`, `jvm_gc_memory_allocated_bytes_total`, `process_cpu_usage`, `tomcat_threads_busy_threads`, `hikaricp_connections`, `executor_active_threads`, `disk_free_bytes` 이고 나머지는 Spring Boot 3.2 기본 이름이다. **[계획]**: 위 PromQL 을 실제 Prometheus·Grafana 에 넣어 보는 것과 VM 에서 잰 값(PLAN 4b 부하 시험).
+
+2026-11-26 에 더한 이름(추론 요청·GPU 상태·업로드 거절·공유)은 `InferenceClientTest`(헤더·call·outcome), `InferenceHealthMonitorTest`(게이지·health), `ProductMetricsTest`, `ProductFunnelMetricsTest`(API 로 거절 코드·공유 결과), `JobV1PhotoCheckTest`(대표 사진 검사 7개 코드), `ObservabilityEndpointTest`(스크레이프에 0 으로 있음, 실제 Tomcat 의 413) 로 확인했다 **[구현됨]**. Grafana `beside-ops` 에 'GPU·추론' 줄(상태·바쁜 시간·요청 p95·실패)과 '제품 퍼널(서버)' 줄(퍼널·거절 코드·거절률·공유)을 더했다. JSON 만 고쳤고 실제 Grafana 에 띄워 보지 않았다 **[계획]**(운영 VM 배포 전).
+
+## 6. 제품 이벤트 (앱·공유 뷰어 → 서버, Backend·Unity, [구현됨] 2026-11-26, 배포 [계획])
+
+2026-11-26 에 추가한 절이다(안건 #24, [api/REVIEW_CHECKLIST.md](api/REVIEW_CHECKLIST.md)). §1~§5 가 서버·GPU 가 **어떻게 돌았는지**(개발자 로그·운영 지표)라면, 이 절은 사용자가 **무엇을 보고 눌렀는지**(클릭·노출 로그, 제품 지표)다. 멘토 피드백(2026-11-25)대로 앱이 서버로 보내고 관리 페이지에서 본다. 앱의 `metrics.csv`(§3)는 그대로이고 이 절과 섞지 않는다.
+
+- **보내는 곳**: Unity 앱(`unity/Assets/Beside/Metrics/ProductEvents.cs`, platform `android` — 에디터 Play 도 `android`)과 공유 뷰어(`/s/{token}`, `backend/.../static/share.js`, platform `web`)가 `POST /api/v1/events`(openapi `recordEvents`)로 1~50개씩 묶어 보낸다.
+- **이름 변경·삭제**는 계약 회의 결정(이 문서 머리의 규칙). 이벤트·속성 **추가**는 PR 노트로 하고 서버 목록(`ProductEventCatalog`)·openapi `ProductEvent` enum·이 표를 함께 바꾼다(서버가 모르는 이름은 버리므로 앱만 바꾸면 저장되지 않는다).
+
+### 6.1 이벤트와 속성
+
+공통 필드: `name`, `at`(클라이언트 시각, ISO 8601), `seq`(세션 안 0 부터 1씩), `jobId`(관계된 작업이 있을 때, UUID), `screen`(이벤트가 일어난 화면: `home` `confirm` `progress` `preview` `ar` `error` `settings` — Unity `DesignedUIController.Page` 이름의 소문자 — 와 웹 `share`). 묶음 공통: `installId`, `sessionId`, `appVersion`, `platform`. 속성(`props`)은 아래 값만 저장하고 그 밖의 키·값은 서버가 버린다.
+
+| 이름 | 언제 (어디서) | props | 왜 (무엇을 알려 주나) |
+|---|---|---|---|
+| `screen_view` | 화면이 바뀔 때(같은 화면을 잇달아 부르면 한 번). 앱 `DesignedUIController.Show`, 웹은 공유 뷰어를 열 때 | 없음 — 보여 준 화면은 `screen`(이 이름에서는 꼭 있어야 함) | 노출: 어느 화면까지 오는지, 퍼널의 시작(`home`)과 AR 진입(`ar`). 웹 `share` 는 공유 링크가 실제로 열린 수 |
+| `photos_selected` | 갤러리에서 고르기를 닫을 때·화면 촬영 뒤 | `source`(`gallery`\|`camera`), `count`(0~10, 10 = 10장 이상, 0 = 고르지 않고 닫음) | 사진 고르기에서 떠나는 비율(0장), 몇 장을 고르는지(1장만 쓰는지) |
+| `generate_tap` | "이 사진으로 만들기"(`new`), 홈의 이어보기 카드(`resume`), 실패 화면 "다시 시도"(`retry`) | `mode`(`new`\|`resume`\|`retry`), `photoCount`(0~10) | 확인 화면에서 생성까지 가는 전환, 실패 뒤 다시 시도하는 비율 |
+| `job_cancel_tap` | 만드는 중 화면의 "취소" | `stage`(`uploading`\|`queued`\|`processing`\|`downloading`\|`loading`), `elapsedSec`(0~86400, 작업 경과 초) | 기다리다 포기하는 단계와 시간 — 대기열(`queued`)·생성 시간 개선의 근거 |
+| `job_failed_shown` | 실패 화면을 띄울 때(JobManager `JobFailed`) | `code`([api/ERROR_CODES.md](api/ERROR_CODES.md) 의 코드 또는 앱 코드 `NETWORK_ERROR` `BAD_RESPONSE` `DOWNLOAD_FAILED` `FILE_CORRUPT` `LOAD_FAILED` `WAIT_TIMEOUT`), `retryable`(bool) | 사용자가 실제로 본 실패 이유의 분포(서버 실패율 §5 와 달리 앱 쪽 실패·사진 검사 거절도 들어감) |
+| `model_ready` | 모델을 받아 미리보기를 띄울 때(JobManager `ModelReady`) | `cached`(bool, 앱 캐시에서 읽음), `loadMs`(0~3600000), `waitMs`(0~3600000, 상태 폴링 시간) | 생성이 끝까지 간 세션 수, 앱 쪽 로딩 시간(§3 `loadMs`·`waitMs` 와 같은 값, 서버로 바로 옴) |
+| `fur_toggle` | 미리보기의 털 표현 버튼 | `on`(bool, 누른 뒤 상태) | 털 표현을 끄는 비율 — 셸 털의 비용(FPS) 대비 쓰임 |
+| `ar_issue_shown` | AR 안내가 바뀔 때(`ARGuidance.GuidanceChanged`, None 제외) | `issue`(`CameraDenied`\|`Unsupported`\|`NeedsInstall`\|`SessionError`\|`NoPlane`) | AR 에서 막히는 이유(권한 거부·미지원 기기·바닥 인식 실패) |
+| `model_placed` | 작업의 첫 AR 배치(JobManager `ModelPlaced`, 작업당 한 번) | `method`(`tap`\|`center`, "화면 가운데에 바로 놓기"), `secSinceArEnter`(0~86400, AR 화면에 들어온 뒤 초) | 퍼널의 끝. 바닥 탭과 가운데 버튼 중 무엇으로 놓는지, 놓기까지 걸린 시간 |
+| `animation_play` | 동작 칩·키보드 1~5(`PetAnimationPlayer.ClipStarted`), 웹은 공유 뷰어의 동작 칩 | `clip`(`Walk`\|`Sit`\|`TailWag`\|`HeadTilt`\|`Idle`) | 리깅·애니메이션 기능을 실제로 쓰는지, 어떤 동작이 인기인지 |
+| `photo_saved` | AR 화면의 "사진 찍기"가 저장을 마쳤을 때 | 없음 | 결과를 남길 만큼 만족했는지(공유의 대리 지표) |
+| `start_over` | "다른 사진으로 다시 만들기"·"새로 만들기"·"다른 사진 고르기" | `from`(`preview`\|`ar`\|`error`) | 결과가 마음에 들지 않아 다시 만드는 비율과 그 위치 |
+
+### 6.2 세션 퍼널 (`GET /api/v1/admin/funnel`, 관리 페이지 '세션 퍼널')
+
+`receivedAt` 이 `[from, to)` 인 이벤트를 `sessionId` 로 묶어 새로 만들기 흐름 여섯 단계를 센다: `home`(screen_view `screen=home`) → `photos_selected`(`count` 가 0 이 아닌 것) → `generate_tap` → `model_ready` → `ar`(screen_view `screen=ar`) → `model_placed`. 세션마다 단계 시각은 앞 단계 시각 이후(같은 세션 안에서 `at`, 같으면 `seq` 순)에 처음 나온 그 이벤트의 `at` 이고, 앞 단계에 이르지 못한 세션은 뒤 단계에 세지 않는다(이어보기처럼 단계를 건너뛴 세션은 빠진다). 값: `sessions`(그 단계에 이른 세션 수), `conversionPct`(첫 단계 대비 %), `fromPrevPct`(바로 앞 단계 대비 %), `medianSecondsFromPrev`(앞 단계에서 걸린 초의 중앙값, nearest-rank — 관리 stats 의 백분위와 같은 방식). 단계 사이 시간은 같은 기기의 시계끼리 뺀 값이라 기기 시계가 틀려도 영향이 적다.
+
+### 6.3 개인정보 규칙
+
+- 보내지 않는다: IP 주소(서버도 이 표에 저장하지 않는다), 사진·파일 이름, 서버 주소(`baseUrl`), 공유 링크 토큰·주소, 기기 ID·광고 ID, 사람이 쓴 글(펫 이름·메모·서버 주소 입력 등).
+- `props` 는 위 표의 enum·정수·불리언만 저장한다. 표에 없는 키, 범위 밖 값, 문자열이 enum 이 아닌 값은 서버가 버린다(이벤트는 남기고 `beside_app_events_dropped_total{reason="bad_prop"}` 로 센다). 이벤트·묶음의 다른 필드는 읽지 않는다.
+- `installId` 는 앱이 처음 켤 때 만든 난수 UUID(PlayerPrefs `beside.installId`, 웹은 `localStorage` 의 `beside.installId`)다. 앱을 지우면 새로 만든다. `sessionId` 는 앱 실행(웹은 페이지 열기)마다 새 UUID다. `appVersion` 은 `[0-9A-Za-z._+-]` 1~32자만 받는다.
+- 서버 로그에는 묶음마다 INFO 한 줄(받은 수·버린 수·platform·appVersion)만 남기고 `installId`·`sessionId` 는 쓰지 않는다.
+
+### 6.4 전송·저장·보존
+
+- **묶음**: 1~50개, 본문 32 KB 이하(넘으면 413), 형식이 틀린 묶음은 400 이고 아무것도 저장하지 않는다. 묶음 안의 잘못된 이벤트는 그것만 버리고 202 의 `dropped` 로 센다. 같은 `sessionId`·`seq` 는 한 번만 저장한다(앱이 응답을 못 받고 다시 보낸 묶음).
+- **요청 수 상한**: 서버 전체 토큰 버킷(초당 50 묶음, 순간 100 묶음)을 넘은 묶음은 저장하지 않고 202 `accepted 0` 을 돌려준다(새 상태 코드를 만들지 않으려고). 그 이벤트는 `reason="rate_limited"` 로 센다.
+- **앱**: 이벤트를 메모리 큐와 `persistentDataPath/metrics/events.jsonl`(오프라인 보관, 최대 500줄, 넘으면 오래된 것부터 버림)에 함께 넣고, 30초마다·20개가 쌓이면·앱이 백그라운드로 갈 때(`OnApplicationPause(true)`) 보낸다. 서버 주소·헤더는 작업 요청과 같다(`BesideApiClient`, `X-Request-Id`). 2xx 면 지우고, 4xx 면 그 묶음을 버리고, 연결 오류·5xx 면 남겨 5·10·20초 뒤 세 번까지 다시 보낸 뒤 30초 주기로 돌아간다. UI 를 막지 않는다. 끄는 법: 씬에 `ProductEvents` 컴포넌트를 두면 Inspector 의 `Send Events` 를 끌 수 있고, 없으면 자동으로 생긴다(`RuntimeInitializeOnLoadMethod`), 빌드에서 아예 빼려면 Scripting Define Symbol `BESIDE_NO_PRODUCT_EVENTS`. logcat 검색어 `BesideEvent`.
+- **웹(공유 뷰어)**: 같은 출처로 `fetch(keepalive)` 한 번에 하나씩 보낸다. 실패해도 다시 보내지 않는다. 토큰·주소를 넣지 않는다(`share-viewer.test.cjs` 가 확인).
+- **서버 저장**: H2 `product_events`(insert 만, `ProductEventRow`): `id, received_at, install_id, session_id, app_version, platform, name, event_at`(= `at`, 이름이 SQL 예약어와 겹치지 않게)`, seq, job_id, screen, props_json, env`. `env` 는 `management.metrics.tags.env`(§5 와 같은 `local`\|`prod`\|`loadtest`). 작업 삭제(`JobDeletionService`)는 이 표를 건드리지 않는다(측정).
+- **보존**: 30일. #23 자동 삭제를 구현할 때까지는 손으로 지운다 — 서버를 멈추고 H2 Shell 로 `DELETE FROM product_events WHERE received_at < DATEADD('DAY', -30, CURRENT_TIMESTAMP);` (운영 VM 절차는 #23 구현 때 정한다) **[계획]**.
+- **내보내기**: `GET /api/v1/admin/events?format=csv&from=&to=`(`product_events.csv`, 열 `receivedAt, env, platform, appVersion, installId, sessionId, seq, at, name, screen, jobId, props` — props 는 JSON 글), 관리 페이지 `/admin` 의 '세션 퍼널' 표와 CSV 버튼.
+
+### 6.5 서버 지표 (§5 와 같은 규칙: 관리 포트, `env` 태그)
+
+| Micrometer 이름 | Prometheus 이름 | 종류 | 태그 | 정의 |
+|---|---|---|---|---|
+| `beside.app.events` | `beside_app_events_total` | counter | `name`(§6.1 의 12개), `platform`(`android`\|`web`) | 저장한 이벤트 수. 기동할 때 24개 조합을 0 으로 등록한다 |
+| `beside.app.events.dropped` | `beside_app_events_dropped_total` | counter | `reason`(`unknown_name`\|`invalid`\|`duplicate`\|`rate_limited`\|`bad_prop`) | 버린 이벤트 수(`bad_prop` 만 이벤트가 아니라 버린 속성·필드 수). 기동할 때 0 으로 등록. 400·413 으로 거절한 묶음은 여기 세지 않는다(§5.2 `http_server_requests` 의 `uri="/api/v1/events"`) |
+
+예: 하루 화면별 노출은 카운터에 화면 태그가 없으므로 `GET /api/v1/admin/events` 로, 이름별 흐름은 `sum by (name) (increase(beside_app_events_total{env="prod"}[1d]))`, 생성 탭 대비 첫 배치(이벤트 수 비율, 세션 퍼널의 근사) `sum(increase(beside_app_events_total{env="prod",name="model_placed"}[1d])) / sum(increase(beside_app_events_total{env="prod",name="generate_tap"}[1d]))`. 정확한 세션 퍼널은 §6.2 API 다.
+
+확인 범위 **[구현됨]**(브랜치 `w7/product-events`): 수집·검사·중복·지표·내보내기·퍼널은 backend 테스트(`ProductEventsApiTest`, `ProductEventsRateLimitTest`, `ProductEventsAdminApiTest`, `ProductEventMetersTest`, 계약 `JobV1ContractTest`), 공유 뷰어 신호는 `share-viewer.test.cjs`, 관리 페이지 문구는 `admin-measurement.test.cjs`, Caddy 경로는 `deploy/test_caddy_routes.sh`(CI), Unity 는 Roslyn 컴파일만. **[계획]**: main 병합·VM 배포, 에디터·기기에서 보낸 실제 이벤트와 수치, Grafana '제품 퍼널' 행, 30일 자동 삭제(#23).

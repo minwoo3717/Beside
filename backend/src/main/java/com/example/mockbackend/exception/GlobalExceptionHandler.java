@@ -2,10 +2,14 @@ package com.example.mockbackend.exception;
 
 import com.example.mockbackend.api.v1.dto.ErrorDetail;
 import com.example.mockbackend.api.v1.dto.ErrorResponse;
+import com.example.mockbackend.config.RequestIdFilter;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.core.NestedExceptionUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -25,6 +29,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -35,27 +40,64 @@ import java.util.regex.Pattern;
  * </ul>
  * The split is by request path, not by controller, because 413 (multipart limits) is raised before a
  * handler is mapped and a controller-scoped advice would not see it.
+ * <p>
+ * Every error it answers is logged and counted (docs/METRICS.md §5.1 {@code beside.api.errors}, 2026-11-25 mentoring
+ * 'log all errors'):
+ * <ul>
+ *   <li>5xx: ERROR with method, path (share tokens cut, {@link #pathForLog}), error code, status, request id and the
+ *       stack. QUEUE_FULL (503) is the exception: an intended refusal that AdmissionGate logs once with the queue
+ *       numbers, so here it stays DEBUG.</li>
+ *   <li>4xx: one WARN line {@code METHOD PATH CODE (HTTP status): detail}, no stack. A route that does not exist (404
+ *       from Spring: scanners, typos) is DEBUG, so probes of random paths do not fill the log.</li>
+ *   <li>A client that left while the response was written: DEBUG, not counted (there is no response).</li>
+ * </ul>
+ * Spring MVC's own errors (wrong method or media type, ...) count with code {@code FRAMEWORK}; the v1 body keeps its
+ * NOT_FOUND / INVALID_REQUEST / INTERNAL_ERROR code. The request id is the MDC entry of {@link RequestIdFilter}.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     static final String V1_PREFIX = "/api/v1/";
+    /** The {@code code} tag of errors Spring MVC answers itself (ErrorResponse exceptions without a handler here). */
+    public static final String FRAMEWORK = "FRAMEWORK";
     /** /s/{token}, /api/v1/shares/{token}[/asset]: group 1 the prefix, group 2 the token's first 6 characters. */
     private static final Pattern SHARE_TOKEN_IN_PATH =
             Pattern.compile("^(/+(?:s|api/v1/shares)/+)([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+", Pattern.CASE_INSENSITIVE);
     private static final String UPLOAD_TOO_LARGE = "Upload too large: maximum 5 MB per photo and 20 MB per request";
     private static final Set<String> DISCONNECT_TYPE_NAMES =
             Set.of("ClientAbortException", "EOFException", "EofException", "AsyncRequestNotUsableException");
+    /** Client error line: method, path, code, status, detail. Also the DEBUG lines (QUEUE_FULL, unknown route). */
+    private static final String CLIENT_LINE = "{} {} {} (HTTP {}): {}";
+    /** Server error line: method, path, code, status, request id; the exception follows as the stack. */
+    private static final String SERVER_LINE = "Internal error: {} {} {} (HTTP {}, requestId={})";
 
     private final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final MeterRegistry registry;
+    private final Map<String, Counter> errors = new ConcurrentHashMap<>();
+
+    public GlobalExceptionHandler(MeterRegistry registry) {
+        this.registry = registry;
+        // Every HTTP error code exists from startup at 0 with its status, so a rate is defined before the first one.
+        // FRAMEWORK series appear with their first error (the status is Spring's).
+        for (ErrorCode code : ErrorCode.values()) {
+            if (code.httpStatus() != null) {
+                counter(code.httpStatus().value(), code.name());
+            }
+        }
+    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<?> handleApi(ApiException ex, HttpServletRequest request) {
+        int status = ex.getStatus().value();
+        String code = ex.getCode().name();
         if (ex.getRetryAfterSeconds() != null) {
             // QUEUE_FULL: an intended refusal under load, logged once with the queue numbers by AdmissionGate.
-            log.debug("{} {} {}: {}", request.getMethod(), pathForLog(request.getRequestURI()), ex.getCode(), forLog(ex.getMessage()));
+            log.debug(CLIENT_LINE, method(request), path(request), code, status, forLog(ex.getMessage()));
+        } else if (status >= 500) {
+            logServerError(request, code, status, ex);
         } else {
-            log.warn("{} {} {}: {}", request.getMethod(), pathForLog(request.getRequestURI()), ex.getCode(), forLog(ex.getMessage()));
+            log.warn(CLIENT_LINE, method(request), path(request), code, status, forLog(ex.getMessage()));
         }
+        count(status, code);
         if (isV1(request)) {
             ResponseEntity<ErrorResponse> body = v1(ex.getStatus(), ex.getCode(), ex.getMessage(), ex.getJobId());
             if (ex.getRetryAfterSeconds() == null) {
@@ -69,6 +111,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<?> handleMissingResource(NoResourceFoundException ex, HttpServletRequest request) {
+        // No such route: mostly scanners and typos, so DEBUG keeps them out of the log (the counter still sees them).
+        // Under /api/v1/ it is WARN: scanners rarely probe the versioned API, so it is almost always a real client
+        // calling a route this server lacks (an app built for a newer contract, a wrong base URL).
+        if (isV1(request)) {
+            log.warn(CLIENT_LINE, method(request), path(request), ErrorCode.NOT_FOUND, 404, "no such route");
+        } else {
+            log.debug(CLIENT_LINE, method(request), path(request), ErrorCode.NOT_FOUND, 404, "no such route");
+        }
+        count(404, ErrorCode.NOT_FOUND.name());
         if (isV1(request)) {
             return v1(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Resource not found: " + request.getRequestURI(), null);
         }
@@ -77,6 +128,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<?> handleUploadTooLarge(MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        clientError(request, ErrorCode.PAYLOAD_TOO_LARGE, forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(HttpStatus.PAYLOAD_TOO_LARGE, ErrorCode.PAYLOAD_TOO_LARGE, UPLOAD_TOO_LARGE, null);
         }
@@ -85,7 +137,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<?> handleInvalidUpload(MultipartException ex, HttpServletRequest request) {
-        log.warn("Invalid multipart upload: {}", forLog(ex.getMessage()));
+        clientError(request, ErrorCode.INVALID_REQUEST, "Invalid multipart upload: " + forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, "Invalid photo upload: " + ex.getMessage(), null);
         }
@@ -94,18 +146,20 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MissingServletRequestPartException.class)
     public ResponseEntity<?> handleMissingPart(MissingServletRequestPartException ex, HttpServletRequest request) {
+        String message = "Required multipart part '" + ex.getRequestPartName() + "' is missing";
+        clientError(request, ErrorCode.NO_PHOTOS, forLog(message));
         if (isV1(request)) {
-            return v1(HttpStatus.BAD_REQUEST, ErrorCode.NO_PHOTOS,
-                    "Required multipart part '" + ex.getRequestPartName() + "' is missing", null);
+            return v1(HttpStatus.BAD_REQUEST, ErrorCode.NO_PHOTOS, message, null);
         }
         return flat(HttpStatus.BAD_REQUEST, "Invalid request (HTTP 400)");
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<?> handleTypeMismatch(MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
+        String message = "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue();
+        clientError(request, ErrorCode.INVALID_REQUEST, forLog(message));
         if (isV1(request)) {
-            return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST,
-                    "Invalid value for parameter '" + ex.getName() + "': " + ex.getValue(), null);
+            return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, message, null);
         }
         return flat(HttpStatus.BAD_REQUEST, "Invalid request (HTTP 400)");
     }
@@ -120,13 +174,13 @@ public class GlobalExceptionHandler {
         if (!isV1(request)) {
             return handleAny(ex, request, response);
         }
-        log.warn("Unreadable request body: {}", forLog(ex.getMessage()));
+        clientError(request, ErrorCode.INVALID_REQUEST, "Unreadable request body: " + forLog(ex.getMessage()));
         return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, "The request body is missing or is not valid JSON", null);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<?> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-        log.warn("Bad request: {}", forLog(ex.getMessage()));
+        clientError(request, ErrorCode.INVALID_REQUEST, "Bad request: " + forLog(ex.getMessage()));
         if (isV1(request)) {
             return v1(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_REQUEST, ex.getMessage(), null);
         }
@@ -140,16 +194,25 @@ public class GlobalExceptionHandler {
         // AssetDownloadMetricsFilter counts these downloads as client_abort. Null = write nothing more. Only when
         // something was committed: on an uncommitted response null would leave an empty 200, so it gets the 500 below.
         if (isClientGone(ex) && response != null && response.isCommitted()) {
-            log.debug("{} {}: the client went away ({})", request == null ? null : request.getMethod(),
-                    request == null ? null : pathForLog(request.getRequestURI()), ex.getClass().getSimpleName());
+            log.debug("{} {}: the client went away ({})", method(request), path(request), ex.getClass().getSimpleName());
             return null;
         }
         // Preserve framework HTTP errors (e.g. wrong method / media type), not 500.
         if (ex instanceof org.springframework.web.ErrorResponse error) {
             HttpStatusCode status = error.getStatusCode();
-            String message = "Invalid request (HTTP " + status.value() + ")";
+            int value = status.value();
+            String detail = ex.getClass().getSimpleName() + ": " + forLog(ex.getMessage());
+            if (value >= 500) {
+                logServerError(request, FRAMEWORK, value, ex);
+            } else if (value == 404 && !isV1(request)) {
+                log.debug(CLIENT_LINE, method(request), path(request), FRAMEWORK, value, detail);
+            } else {
+                log.warn(CLIENT_LINE, method(request), path(request), FRAMEWORK, value, detail);
+            }
+            count(value, FRAMEWORK);
+            String message = "Invalid request (HTTP " + value + ")";
             if (isV1(request)) {
-                ErrorCode code = status.value() == 404 ? ErrorCode.NOT_FOUND
+                ErrorCode code = value == 404 ? ErrorCode.NOT_FOUND
                         : status.is4xxClientError() ? ErrorCode.INVALID_REQUEST
                         : ErrorCode.INTERNAL_ERROR;
                 return ResponseEntity.status(status).headers(error.getHeaders())
@@ -158,7 +221,8 @@ public class GlobalExceptionHandler {
             }
             return ResponseEntity.status(status).headers(error.getHeaders()).body(Map.of("error", message));
         }
-        log.error("Internal error", ex);
+        logServerError(request, ErrorCode.INTERNAL_ERROR.name(), 500, ex);
+        count(500, ErrorCode.INTERNAL_ERROR.name());
         if (isV1(request)) {
             return v1(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR, "Internal server error", null);
         }
@@ -220,6 +284,39 @@ public class GlobalExceptionHandler {
         }
         String text = message.toLowerCase(Locale.ROOT);
         return text.contains("broken pipe") || text.contains("connection reset by peer");
+    }
+
+    /** One WARN line for a client error answered with {@code code}'s own status; counted. */
+    private void clientError(HttpServletRequest request, ErrorCode code, String detail) {
+        int status = code.httpStatus().value();
+        log.warn(CLIENT_LINE, method(request), path(request), code, status, detail);
+        count(status, code.name());
+    }
+
+    private void logServerError(HttpServletRequest request, String code, int status, Throwable ex) {
+        String requestId = MDC.get(RequestIdFilter.MDC_KEY);
+        log.error(SERVER_LINE, method(request), path(request), code, status, requestId == null ? "-" : requestId, ex);
+    }
+
+    /** beside.api.errors{status, code}: bounded, the HTTP error codes of ErrorCode plus FRAMEWORK. */
+    private void count(int status, String code) {
+        counter(status, code).increment();
+    }
+
+    private Counter counter(int status, String code) {
+        return errors.computeIfAbsent(status + " " + code, key -> Counter.builder("beside.api.errors")
+                .description("Error responses written by GlobalExceptionHandler, by HTTP status and error code")
+                .tag("status", String.valueOf(status))
+                .tag("code", code)
+                .register(registry));
+    }
+
+    private static String method(HttpServletRequest request) {
+        return request == null ? null : forLog(request.getMethod());
+    }
+
+    private static String path(HttpServletRequest request) {
+        return request == null ? null : pathForLog(request.getRequestURI());
     }
 
     private static boolean isV1(HttpServletRequest request) {

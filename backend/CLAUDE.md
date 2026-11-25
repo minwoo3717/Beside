@@ -22,6 +22,7 @@
 - 서버가 시작될 때 PENDING/PROCESSING 으로 남은 작업은 FAILED(`INTERNAL_ERROR`)가 된다(`InterruptedJobRecovery`). 워커 스레드는 재시작을 넘지 못하기 때문이다.
 - 작업 삭제는 `JobDeletionService` 한 곳이고, API v1.2 에서는 펫과 함께 삭제(`DELETE /api/v1/pets/{id}?withJobs=true`)만 부른다. 작업 하나를 지우는 공개 엔드포인트·썸네일·입력 사진 엔드포인트는 검토 브랜치에 있었지만 v1.2 에 받지 않았다(REVIEW_CHECKLIST #11, `JobDeleteTest` 가 응답하지 않는 것을 확인). 끝난 작업(COMPLETED/FAILED)만 지우고, 사진·`storage.result.dir/{jobId}`·`storage.tmp.dir/{jobId}`·배경 제거 사진(`storage.preprocessed.dir/{jobId}-*.png`, real 의 `CutoutStage`)·공유 링크(취소)·Idempotency-Key 를 정리하지만 **`job_runs`·`events.jsonl`·`job_ratings`(품질 평가)·`client_metrics`(앱 측정)는 측정이라 남긴다**(평가 CSV 의 modelVersion 은 남은 `job_runs` 에서 온다, 지운 작업의 `GET …/ratings` 는 404). 작업에 딸린 테이블을 새로 만들면 측정인지 아닌지 정해 여기서 함께 정리한다.
 - `Job.petId`(보관함)는 `@Column(updatable = false)` 다. 워커가 몇 분 전에 읽은 Job 사본을 저장해도 사용자가 그동안 옮긴 펫을 되돌리지 않도록, 바꿀 때는 `JobRepository.updatePetId/unassignPet`(JPQL update)만 쓴다. 바꾸는 곳은 `PetService` 뿐이고(공개 `POST /api/v1/jobs` 는 펫을 받지 않는다 — 보관함 쓰기는 모두 Caddy 인증 뒤), 펫 삭제와 작업 넣기는 `PetService` 의 잠금 안에서 한다.
+- 제품 이벤트(`POST /api/v1/events`, REVIEW_CHECKLIST #24, [docs/METRICS.md](../docs/METRICS.md) §6)는 공개 경로다. 받는 이름·화면·속성은 `service/ProductEventCatalog` 한 곳이 정하고(openapi `ProductEvent` enum·METRICS §6.1 표와 같게), 그 밖의 값은 400 이 아니라 버리고 센다(`ProductEventMetrics`). 본문은 `EventV1Controller` 가 32 KB 까지만 직접 읽는다(Jackson 바인딩 금지 — 잘못된 이벤트 하나가 묶음 전체를 400 으로 만든다). 요청 수 상한(`events.rate.*`)을 넘으면 202 `accepted 0`(새 상태 코드 없음). `product_events` 는 측정이라 `JobDeletionService` 가 지우지 않고, 보존 30일은 #23 자동 삭제 전까지 손으로.
 - `/api/v1` 쓰기(POST·PUT·PATCH·DELETE)는 `config/CrossSiteWriteFilter` 를 지난다: 브라우저가 다른 사이트의 페이지에서 보낸 요청(`Sec-Fetch-Site`·`Origin`)은 400 `INVALID_REQUEST`. 관리 CSV 는 모두 `service/Csv` 로 쓴다(수식으로 읽힐 글자 칸 앞에 `'`).
 - 테스트는 `src/test/resources/config/application.properties` 덕분에 컨텍스트마다 인메모리 H2 를 쓴다. `spring.datasource.url` 을 프로파일 파일(application-mock.properties)에 두지 않는다: 프로파일 파일이 이 오버라이드를 이긴다.
 
@@ -59,7 +60,7 @@ node --test src/test/js/admin-format.test.cjs                    # 관리 페이
 node --test src/test/js/admin-measurement.test.cjs               # 관리 페이지 보고서 패널(평가 요약·metrics.csv 결과 문구·CSV 주소)
 node --test src/test/js/job-format.test.cjs src/test/js/qr.test.cjs   # 작업 상세 페이지 규칙(평가자 이름·점수 본문)과 QR 인코더(다시 읽어 확인)
 node --test src/test/js/library-core.test.cjs                    # 보관함 페이지 순수 함수(경로·라벨·대기 문구·사진 검사)
-node --test src/test/js/share-viewer.test.cjs                    # 공유 뷰어(/s/{token})의 토큰·동작 칩·만료 문구
+node --test src/test/js/share-viewer.test.cjs                    # 공유 뷰어(/s/{token})의 토큰·동작 칩·만료 문구·제품 이벤트(토큰 없음)
 $env:BESIDE_MVP_URL = 'http://localhost:8080'                    # 실행 중 서버와 함께 돌릴 때
 node --test src/test/js/mock-mvp.test.cjs
 Remove-Item Env:BESIDE_MVP_URL

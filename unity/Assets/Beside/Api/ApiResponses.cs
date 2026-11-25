@@ -41,6 +41,40 @@ namespace Beside.Api
         public string jobId;
     }
 
+    /// <summary>POST /api/v1/events body (openapi ProductEventBatch, docs/METRICS.md §6). One session's events, 1~50.
+    /// installId is a random GUID kept in PlayerPrefs, never a device id. Written with Newtonsoft only, so not
+    /// [Serializable]: Unity's serializer would skip the props dictionary (analyzer UAC1015).</summary>
+    public class ProductEventBatch
+    {
+        public string installId;
+        public string sessionId;
+        public string appVersion;
+        /// <summary>"android" (the app, editor included) | "web" (share viewer)</summary>
+        public string platform;
+        public List<ProductEvent> events;
+    }
+
+    /// <summary>One product event (openapi ProductEvent). Null fields are left out of the JSON.
+    /// props: only the enums, whole numbers and booleans of METRICS §6.1; the server drops anything else.</summary>
+    public class ProductEvent
+    {
+        public string name;
+        /// <summary>ISO 8601 UTC ("o" format).</summary>
+        public string at;
+        public int seq;
+        public string jobId;
+        public string screen;
+        public Dictionary<string, object> props;
+    }
+
+    /// <summary>202 of POST /api/v1/events.</summary>
+    [Serializable]
+    public class ProductEventsAccepted
+    {
+        public int accepted;
+        public int dropped;
+    }
+
     /// <summary>GET /api/v1/healthz — used to verify the configured base URL before uploading.</summary>
     [Serializable]
     public class HealthResponse
