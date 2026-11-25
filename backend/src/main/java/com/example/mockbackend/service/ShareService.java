@@ -49,11 +49,13 @@ public class ShareService {
     private final ShareLinkRepository shareLinks;
     private final JobService jobService;
     private final int defaultTtlDays;
+    /** beside.share.created and beside.share.views (docs/METRICS.md §5.1). */
+    private final ProductMetrics productMetrics;
     private final SecureRandom random = new SecureRandom();
     private final Logger log = LoggerFactory.getLogger(ShareService.class);
 
     public ShareService(ShareLinkRepository shareLinks, JobService jobService,
-                        @Value("${share.ttl-days:7}") int defaultTtlDays) {
+                        @Value("${share.ttl-days:7}") int defaultTtlDays, ProductMetrics productMetrics) {
         if (defaultTtlDays < MIN_TTL_DAYS || defaultTtlDays > MAX_TTL_DAYS) {
             throw new IllegalStateException("share.ttl-days must be between " + MIN_TTL_DAYS + " and " + MAX_TTL_DAYS
                     + ", got " + defaultTtlDays);
@@ -61,6 +63,7 @@ public class ShareService {
         this.shareLinks = shareLinks;
         this.jobService = jobService;
         this.defaultTtlDays = defaultTtlDays;
+        this.productMetrics = productMetrics;
     }
 
     /**
@@ -85,8 +88,49 @@ public class ShareService {
         }
         ShareLink link = ShareLink.issue(newToken(), jobId, now, now.plus(Duration.ofDays(days)));
         shareLinks.save(link);
+        productMetrics.shareCreated();
         log.info("Share created: jobId={} token={} expiresAt={}", jobId, abbreviate(link.getToken()), link.getExpiresAt());
         return link;
+    }
+
+    /**
+     * GET /api/v1/shares/{token}, the first call of the viewer page: {@link #open}, counted in beside.share.views by
+     * outcome. The answer is the same 404 for every outcome but ok; only the count tells revoked and expired apart.
+     * A server error (500) is not counted. The token is never a tag.
+     * @throws ApiException 404 SHARE_NOT_FOUND
+     */
+    public SharedAsset view(String token) {
+        SharedAsset shared;
+        try {
+            shared = open(token);
+        } catch (ApiException notFound) {
+            productMetrics.shareViewed(whyNotFound(token));
+            throw notFound;
+        }
+        productMetrics.shareViewed(ProductMetrics.ShareView.OK);
+        return shared;
+    }
+
+    /** Why {@link #open} found nothing to serve: revoked (first), expired, or not found (no such link, job or file). */
+    private ProductMetrics.ShareView whyNotFound(String token) {
+        if (token == null || !TOKEN_FORMAT.matcher(token).matches()) {
+            return ProductMetrics.ShareView.NOT_FOUND;
+        }
+        try {
+            ShareLink link = shareLinks.findById(token).orElse(null);
+            if (link == null) {
+                return ProductMetrics.ShareView.NOT_FOUND;
+            }
+            if (link.getRevokedAt() != null) {
+                return ProductMetrics.ShareView.REVOKED;
+            }
+            if (!Instant.now().isBefore(link.getExpiresAt())) {
+                return ProductMetrics.ShareView.EXPIRED;
+            }
+        } catch (RuntimeException e) {
+            log.debug("Share token={} not classified for the metrics: {}", abbreviate(token), e.toString());
+        }
+        return ProductMetrics.ShareView.NOT_FOUND;
     }
 
     /** The active link and the GLB it shares. @throws ApiException 404 SHARE_NOT_FOUND */

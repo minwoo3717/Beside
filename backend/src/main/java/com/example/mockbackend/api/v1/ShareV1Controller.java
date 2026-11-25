@@ -100,7 +100,7 @@ public class ShareV1Controller {
                     content = @Content(mediaType = JSON, schema = @Schema(implementation = ErrorResponse.class)))})
     @GetMapping(value = "/shares/{token}", produces = JSON)
     public ShareInfo getShare(@PathVariable("token") String token) {
-        ShareService.SharedAsset shared = shareService.open(token);
+        ShareService.SharedAsset shared = shareService.view(token); // open(), counted in beside.share.views
         ShareLink link = shared.link();
         return new ShareInfo(link.getCreatedAt(), link.getExpiresAt(),
                 new ShareAsset(ApiV1Paths.shareAsset(token), shared.bytes(), GLB));

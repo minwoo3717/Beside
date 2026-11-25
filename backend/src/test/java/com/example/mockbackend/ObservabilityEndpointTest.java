@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -119,6 +120,64 @@ class ObservabilityEndpointTest {
                 .contains("beside_jobs_refused_total{env=\"local\",op=\"create\",} 0.0")
                 .contains("beside_jobs_refused_total{env=\"local\",op=\"retry\",} 0.0")
                 .contains("beside_jobs_pending_stale{env=\"local\",} 0.0");
+    }
+
+    @Test
+    void prometheusScrapeHasTheInferenceAndFunnelMetersAtZero() throws Exception {
+        String scrape = get(managementPort, "/actuator/prometheus").body();
+        // docs/METRICS.md §5.1, 2026-11-26: registered at startup in every profile (mock calls no inference service).
+        for (String call : List.of("infer", "download", "cleanup", "health")) {
+            for (String outcome : List.of("ok", "error", "timeout", "unavailable")) {
+                assertThat(scrape).contains("beside_inference_request_seconds_count{call=\"" + call
+                        + "\",env=\"local\",outcome=\"" + outcome + "\",} 0.0");
+            }
+        }
+        assertThat(scrape)
+                .contains("beside_inference_request_seconds_bucket{call=\"infer\",env=\"local\",outcome=\"ok\",le=\"0.05\",} 0.0")
+                .contains("beside_inference_request_seconds_bucket{call=\"infer\",env=\"local\",outcome=\"ok\",le=\"120.0\",} 0.0")
+                .contains("beside_inference_request_seconds_bucket{call=\"infer\",env=\"local\",outcome=\"ok\",le=\"600.0\",} 0.0");
+        for (String code : List.of("INVALID_REQUEST", "NO_PHOTOS", "TOO_MANY_PHOTOS", "UNSUPPORTED_IMAGE_TYPE",
+                "UNREADABLE_IMAGE", "IMAGE_TOO_SMALL", "NO_ANIMAL_DETECTED", "TOO_MANY_ANIMALS", "ANIMAL_TOO_SMALL",
+                "IMAGE_TOO_DARK", "IMAGE_TOO_BLURRY")) {
+            assertThat(scrape).contains("beside_jobs_upload_rejected_total{code=\"" + code + "\",env=\"local\",} 0.0");
+        }
+        // The 413 test of this class may have run first: only that the series exists.
+        assertThat(scrape).contains("beside_jobs_upload_rejected_total{code=\"PAYLOAD_TOO_LARGE\",env=\"local\",}");
+        assertThat(scrape).contains("beside_share_created_total{env=\"local\",} 0.0");
+        for (String outcome : List.of("ok", "not_found", "expired", "revoked")) {
+            assertThat(scrape).contains("beside_share_views_total{env=\"local\",outcome=\"" + outcome + "\",} 0.0");
+        }
+        // The health monitor and its gauges exist in profile real only.
+        assertThat(scrape).doesNotContain("beside_inference_state").doesNotContain("beside_inference_busy_seconds");
+    }
+
+    /**
+     * A photo over spring.servlet.multipart.max-file-size is refused while Tomcat parses the request, before any
+     * controller: UploadRejectionCounter counts it, GlobalExceptionHandler still answers 413 PAYLOAD_TOO_LARGE.
+     */
+    @Test
+    void anUploadOverTheSizeLimitIsCountedAsPayloadTooLarge() throws Exception {
+        double before = meters.get("beside.jobs.upload.rejected").tag("code", "PAYLOAD_TOO_LARGE").counter().count();
+        String boundary = "BesideTest" + UUID.randomUUID().toString().replace("-", "");
+        byte[] head = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"big.jpg\"\r\n"
+                + "Content-Type: image/jpeg\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+        byte[] photo = new byte[6 * 1024 * 1024];   // over the 5 MB per photo
+        byte[] tail = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.US_ASCII);
+        HttpRequest upload = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/v1/jobs"))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArrays(List.of(head, photo, tail)))
+                .build();
+        try {
+            HttpResponse<String> response = http.send(upload, HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(413);
+            assertThat(response.body()).contains("PAYLOAD_TOO_LARGE");
+        } catch (IOException closedBeforeTheWholeBody) {
+            // Tomcat may close the connection instead of reading the rest; the count below is the point here.
+        }
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(
+                meters.get("beside.jobs.upload.rejected").tag("code", "PAYLOAD_TOO_LARGE").counter().count() - before)
+                .isEqualTo(1.0));
     }
 
     @Test
