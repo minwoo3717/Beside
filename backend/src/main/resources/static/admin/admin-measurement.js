@@ -75,8 +75,72 @@
     return `올리지 못했어요 (HTTP ${status}).`;
   }
 
+  // ------------------------------------------------------------------ session funnel (product events, docs/METRICS.md §6.2)
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  /** The range choices of the funnel panel; the value is days back from now. */
+  const FUNNEL_RANGES = Object.freeze([
+    Object.freeze({ days: 1, label: "최근 24시간" }),
+    Object.freeze({ days: 7, label: "최근 7일" }),
+    Object.freeze({ days: 30, label: "최근 30일 (보존 기간)" })
+  ]);
+  /** Korean names of the server's six steps (AdminFunnelStep.step); unknown steps keep their own name. */
+  const FUNNEL_LABELS = Object.freeze({
+    home: "홈 화면", photos_selected: "사진 고름", generate_tap: "만들기 누름",
+    model_ready: "모델 받음", ar: "AR 화면", model_placed: "AR 에 놓음"
+  });
+
+  function rangeStart(days, nowMs) {
+    const span = Number.isFinite(days) && days > 0 ? days : 7;
+    return new Date(nowMs - span * DAY_MS).toISOString();
+  }
+
+  /** GET /api/v1/admin/funnel from `days` before nowMs (receivedAt, open end). */
+  function funnelUrl(days, nowMs) {
+    return `/api/v1/admin/funnel?from=${encodeURIComponent(rangeStart(days, nowMs))}`;
+  }
+
+  /** CSV of the same range (GET /api/v1/admin/events?format=csv). */
+  function eventsCsvUrl(days, nowMs) {
+    return `/api/v1/admin/events?format=csv&from=${encodeURIComponent(rangeStart(days, nowMs))}`;
+  }
+
+  /** 60 → "60.0%", null → "—". */
+  function formatPct(value) {
+    return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : DASH;
+  }
+
+  /** Median seconds between steps: 8 → "8초", 12.5 → "12.5초", 95 → "1분 35초", null → "—". */
+  function formatSeconds(value) {
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return DASH;
+    if (value < 60) return `${Number.isInteger(value) ? value : value.toFixed(1)}초`;
+    const whole = Math.round(value);
+    return `${Math.floor(whole / 60)}분 ${whole % 60}초`;
+  }
+
+  /** AdminFunnel → table rows of text and the line above the table. */
+  function funnelView(funnel) {
+    const steps = funnel && Array.isArray(funnel.steps) ? funnel.steps : [];
+    const sessions = funnel && Number.isFinite(funnel.sessions) ? funnel.sessions : 0;
+    const rows = steps.map((step) => ({
+      label: FUNNEL_LABELS[step.step] || String(step.step),
+      event: String(step.event || ""),
+      sessions: Number.isFinite(step.sessions) ? String(step.sessions) : DASH,
+      conversion: formatPct(step.conversionPct),
+      fromPrev: formatPct(step.fromPrevPct),
+      median: formatSeconds(step.medianSecondsFromPrev)
+    }));
+    const first = steps.length > 0 && Number.isFinite(steps[0].sessions) ? steps[0].sessions : 0;
+    return {
+      rows,
+      summary: `이 기간 세션 ${sessions}개 · 홈을 본 세션 ${first}개`,
+      empty: sessions === 0
+    };
+  }
+
   return Object.freeze({
-    DASH, CLIENT_METRICS_URL, CLIENT_METRICS_CSV_URL, SCORE_COLUMNS,
-    jobPageUrl, ratingSummaryUrl, ratingsCsvUrl, e2eCsvUrl, formatScore, importSummary, uploadErrorText
+    DASH, CLIENT_METRICS_URL, CLIENT_METRICS_CSV_URL, SCORE_COLUMNS, FUNNEL_RANGES, FUNNEL_LABELS,
+    jobPageUrl, ratingSummaryUrl, ratingsCsvUrl, e2eCsvUrl, formatScore, importSummary, uploadErrorText,
+    funnelUrl, eventsCsvUrl, formatPct, formatSeconds, funnelView
   });
 });

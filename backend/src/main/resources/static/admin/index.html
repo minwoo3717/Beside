@@ -168,6 +168,34 @@
       <p id="client-result" class="upload-result" role="status" aria-live="polite"></p>
       <ul id="client-errors" class="upload-errors" aria-label="저장하지 않은 줄"></ul>
     </section>
+
+    <section class="panel" aria-labelledby="funnel-title">
+      <div class="panel-heading">
+        <h2 id="funnel-title">세션 퍼널 (제품 이벤트)</h2>
+        <div class="toolbar">
+          <label class="check">기간 <select id="funnel-range" aria-label="퍼널 기간"></select></label>
+          <a id="events-csv-link" class="primary-button" href="/api/v1/admin/events?format=csv" download="product_events.csv"><span>이벤트 CSV 받기</span><span aria-hidden="true">↓</span></a>
+        </div>
+      </div>
+      <p class="hint">앱과 공유 뷰어가 보낸 화면 보기·버튼 누름(<code>POST /api/v1/events</code>)을 세션별로 묶어, 새로 만들기 흐름의 단계마다 이른 세션 수를 셉니다. 세션마다 앞 단계 뒤에 처음 나온 이벤트만 세고, 시간은 앞 단계에서 걸린 시간의 중앙값입니다. 기간은 서버가 받은 시각 기준, 30초마다 갱신. 이름과 속성은 docs/METRICS.md §6.</p>
+      <p id="funnel-summary" class="sub">—</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">단계</th>
+              <th scope="col">세는 이벤트</th>
+              <th scope="col" class="num">세션</th>
+              <th scope="col" class="num">처음 대비</th>
+              <th scope="col" class="num">앞 단계 대비</th>
+              <th scope="col" class="num">걸린 시간(중앙값)</th>
+            </tr>
+          </thead>
+          <tbody id="funnel-body"></tbody>
+        </table>
+      </div>
+      <p id="funnel-empty" class="empty" hidden>이 기간에 받은 제품 이벤트가 없어요.</p>
+    </section>
   </main>
 
   <footer>
