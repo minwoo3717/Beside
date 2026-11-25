@@ -235,11 +235,17 @@ def k6_outcome(summary: dict | None) -> dict:
 CITE = "인용할 때 vm·k6Version·server.sha·client.uplinkMbps·photos 를 함께 적는다"
 
 
-def run_status(outcome: dict, local: bool) -> tuple:
+DRILL = ("인용하지 않는다 — 훈련 실행(ABORT_ON_ERRORS=0, k6 meta.drill): 무너진 부하를 일부러 유지한 장애 대응 훈련이라 "
+         "용량 결과가 아니다. 결과는 훈련 기록(감지·진단·완화 시각)에 쓴다")
+
+
+def run_status(outcome: dict, local: bool, drill: bool = False) -> tuple:
     """(status text, resultCandidate) for run.json: only a run on the VM that ended normally, or was stopped by an error
     rule, is a [실험 결과] candidate. A rule stop names the rule, not a cause: it is a capacity result only once a
     server restart or network drop at that moment is ruled out, which collect.py cannot see, so the text says so. A
     run whose guard could not read Prometheus stays a candidate, with the gap named in the text."""
+    if drill:
+        return DRILL, False
     ended, by = outcome["ended"], outcome["abortedBy"]
     failures = outcome.get("guardFailures") or 0
     caveat = (f"주의: 가드가 Prometheus 응답 {failures}개를 읽지 못했다(마지막: {outcome.get('guardLastError')}) — 그동안 "
@@ -272,7 +278,7 @@ def build_run_json(args, summary: dict | None, window: dict, tool: dict, photos:
     base_url = args.base_url or meta.get("baseUrl")
     local = is_local(base_url)
     outcome = k6_outcome(summary)
-    status, candidate = run_status(outcome, local)
+    status, candidate = run_status(outcome, local, drill=bool(meta.get("drill")))
     return {
         "schema": "beside-load-run/1",
         "status": status,
