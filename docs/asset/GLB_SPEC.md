@@ -6,8 +6,8 @@
 
 상태:
 
-- **[구현됨]** 변환기 `convert_asset.py`(털 맵 넣기 포함)와 리깅 `rig_transfer.py`(털 맵 옮기기 포함)가 `generation/tools/` 에 있고 추론 서비스(`generation/inference_service/app.py`)가 작업마다 부른다. 털 맵을 GLB 안에 넣는 코드는 PR #25(브랜치 `fix/hair-maps-in-glb`, 2026-11-21)로 들어왔고 `feat/contract-v1.0` 에 합쳤다 — main 병합(2026-11-21)·Pod 반영 전(§4.1 '알려진 점'). 각 절에 코드가 강제하는 항목과 그것을 보는 시험을 적었다. 변환기·리깅 도구의 시험도 `generation/inference_service/test_app.py` 에 있다(`generation/tools/` 에는 시험 파일이 따로 없다). 시험은 모델·GPU 없이 작은 합성 메시로 돌고, numpy·trimesh·pillow 가 없으면 건너뛴다.
-- **[실험 결과]** [exp-01](../../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, **리깅 끔**, 2026-11-17·18): 정점 4,310·삼각형 7,774, GLB 1,310,876~1,327,400 bytes(약 1.3 MB), `convertMs` 846~1,133(표본 4건)·2차 부하 539건 평균 900. 이때는 털 맵이 GLB 밖 파일이었다 — 털 맵을 넣은 GLB 의 크기와 리깅본의 크기는 아직 재지 않았다 **[계획]**.
+- **[구현됨]** 변환기 `convert_asset.py`(털 맵 넣기 포함)와 리깅 `rig_transfer.py`(털 맵 옮기기 포함)가 `generation/tools/` 에 있고 추론 서비스(`generation/inference_service/app.py`)가 작업마다 부른다. 털 맵을 GLB 안에 넣는 코드는 PR #25(브랜치 `fix/hair-maps-in-glb`, 2026-11-21)로 들어왔고 `feat/contract-v1.0` 에 합쳤다 — main 병합(2026-11-21)·Pod 반영(2026-11-25 확인: 2026-11-21 5차 부하 시험의 Pod 가 낸 GLB 에 털 맵, [perf/load/2026-11-21_vm-5th.md](../perf/load/2026-11-21_vm-5th.md) 1절 '털 맵 확인'. §4.1 '알려진 점'). 각 절에 코드가 강제하는 항목과 그것을 보는 시험을 적었다. 변환기·리깅 도구의 시험도 `generation/inference_service/test_app.py` 에 있다(`generation/tools/` 에는 시험 파일이 따로 없다). 시험은 모델·GPU 없이 작은 합성 메시로 돌고, numpy·trimesh·pillow 가 없으면 건너뛴다.
+- **[실험 결과]** [exp-01](../../generation/experiments/2026-11-17_exp-01_baseline-runpod.md)(Runpod A40, **리깅 끔**, 2026-11-17·18): 정점 4,310·삼각형 7,774, GLB 1,310,876~1,327,400 bytes(약 1.3 MB), `convertMs` 846~1,133(표본 4건)·2차 부하 539건 평균 900. 이때는 털 맵이 GLB 밖 파일이었다. 털 맵을 넣은 GLB(리깅 끔)는 5차 부하 시험(2026-11-21, Runpod A40, 같은 사진 반복)에서 1,923,996 bytes 였다(모든 실행이 같은 크기, [perf/load/2026-11-21_vm-5th.md](../perf/load/2026-11-21_vm-5th.md) 1절) **[실험 결과]**. 서버가 만든 리깅본(`modelVersion` 끝 `+rig`)은 2026-11-25 발표 GPU 리허설(Runpod A40, 사진 `dog.jpg` 1장, 9건, 1회)에서 2,100,924 bytes 였다(모든 실행이 같은 크기, [리허설 기록](../ops/data/2026-11-25_demo-gpu-rehearsal/README.md)) **[실험 결과]**.
 - **[계획]** glTF Validator 실행, Unity(glTFast) 로드·`loadMs`·기기 FPS 기록, 서버에서 만든 GLB 의 털·클립을 기기에서 확인, 품질 채점.
 - Mock 의 `backend/storage/results/sample-dog.glb` 는 리포에서 0바이트라 이 계약을 만족하지 않는다(직접 교체).
 
@@ -55,7 +55,7 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 - 클립 이름은 템플릿이 정하고 `rig_transfer.py` 는 그대로 옮긴다. 앱(`PetAnimationPlayer`)은 위 다섯 이름으로 찾는다 — 템플릿을 바꾸면 이름을 맞춘다. 클립이 없는 정적 GLB 면 앱은 동작 버튼을 숨긴다.
 - 리깅에 실패하거나(위상이 다름 등) 리깅본이 §1 크기 상한을 넘으면 정적 GLB 를 낸다. 작업은 실패하지 않는다. `modelVersion` 의 `+rig` 는 그 작업에서 리깅이 성공했을 때만 붙는다(#18).
 - 리깅이 성공한 실행은 리깅 시간이 `convertMs` 에 들어간다(#16, §5).
-- 상태: **[구현됨]** 시험은 모두 `test_app.py` 에 있다 — 합성 피라미드 템플릿으로 `rig_transfer.py` 를 직접 돌리는 `RigTransferVertexOrderTest`·`RigTransferFurMapsTest`, 가짜 리깅 모듈로 추론 서비스의 처리(리깅본으로 바꾸기·크기 상한)를 보는 `RiggedResultTest`·`OversizeRiggedResultTest`. 실제 템플릿으로 리깅을 켠 측정(크기·시간)은 **[계획]**(exp-01 은 리깅 끔).
+- 상태: **[구현됨]** 시험은 모두 `test_app.py` 에 있다 — 합성 피라미드 템플릿으로 `rig_transfer.py` 를 직접 돌리는 `RigTransferVertexOrderTest`·`RigTransferFurMapsTest`, 가짜 리깅 모듈로 추론 서비스의 처리(리깅본으로 바꾸기·크기 상한)를 보는 `RiggedResultTest`·`OversizeRiggedResultTest`. 실제 템플릿으로 리깅을 켠 측정은 2026-11-25 발표 GPU 리허설 9건(1회·사진 1장)이 처음이다: GLB 2,100,924 B, `processingMs`·`convertMs` 는 [리허설 기록](../ops/data/2026-11-25_demo-gpu-rehearsal/README.md) **[실험 결과]**. 사진을 바꾼 측정과 `inferMs`·`convertMs` 정리는 **[계획]**(exp-01 은 리깅 끔).
 
 ## 4. 텍스처
 
@@ -65,7 +65,7 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 
 ### 4.1 셸 털 맵 (`extras.beside`)
 
-[구현됨: PR #25(`fix/hair-maps-in-glb`, 2026-11-21), `feat/contract-v1.0` 에 합침 — main 병합(2026-11-21)·Pod 반영 전] 앱의 셸 털(`ShellFurRenderer`)이 쓰는 맵 두 장을 `base.glb` 안에 넣는다. 전에는 변환기가 GLB 옆에 PNG 로만 써서 어떤 경로로도 앱에 닿지 않았고, 서버에서 만든 모델에는 털이 그려지지 않았다(안건 #14). 필드 **추가**다: 쓰이지 않는 이미지와 `extras` 는 glTF 2.0 에서 허용되고, 털 맵을 넣은 GLB 를 trimesh 로 다시 읽는 시험이 있다(`FurMapsInGlbTest`). glTFast 로드는 확인 전이다 **[계획]**.
+[구현됨: PR #25(`fix/hair-maps-in-glb`, 2026-11-21), `feat/contract-v1.0` 에 합침 — main 병합(2026-11-21)·Pod 반영(2026-11-25 확인: 2026-11-21 5차 부하 시험의 Pod GLB 에 `extras.beside`, [vm-5th](../perf/load/2026-11-21_vm-5th.md) 1절)] 앱의 셸 털(`ShellFurRenderer`)이 쓰는 맵 두 장을 `base.glb` 안에 넣는다. 전에는 변환기가 GLB 옆에 PNG 로만 써서 어떤 경로로도 앱에 닿지 않았고, 서버에서 만든 모델에는 털이 그려지지 않았다(안건 #14). 필드 **추가**다: 쓰이지 않는 이미지와 `extras` 는 glTF 2.0 에서 허용되고, 털 맵을 넣은 GLB 를 trimesh 로 다시 읽는 시험이 있다(`FurMapsInGlbTest`). glTFast 로드는 확인 전이다 **[계획]**.
 
 앱(`unity/Assets/Beside/Loader/RuntimeModelLoader.cs` 의 `TryReadEmbeddedHair`)이 읽는 모양이 기준이고, 변환기(`convert_asset.py` 의 `embed_hair`)가 그 모양으로 쓴다. 정적 변환기 출력의 예:
 
@@ -111,8 +111,8 @@ hair variant 는 없다(#4, 2026-11-21): 예전의 `variant=hair` 파일, 노드
 
 - **[구현됨]** 쓰기 `convert_asset.py` 의 `hair_maps`·`embed_hair`, 옮기기 `rig_transfer.py` 의 `_copy_fur_maps`. 시험(`generation/inference_service/test_app.py`): `FurMapsInGlbTest`(앱 방식으로 읽힘·사본과 같은 바이트·texture 1개·`hair.npz` 없으면 항목 없음·읽지 못하는 `hair.npz`·해상도 상한), `RealConversionCancelTest.test_the_conversion_writes_into_the_existing_job_folder`(업로드 → `/artifacts` 로 내려받은 `base.glb` 에 털 맵), `RigTransferFurMapsTest`(이 GLB 의 털 맵은 옮기고 템플릿 것은 버림). 셋 다 앱의 `TryReadEmbeddedHair` 를 같은 순서로 옮긴 파이썬 함수 `_app_reads_fur` 로 읽어 확인한다.
 - 앱의 읽기 코드는 PR #25 전부터 있었다(#25 는 그 주석만 고쳤다). Unity 쪽 자동 시험은 없다.
-- **[계획]** 서버에서 만든 GLB 로 기기에서 털이 그려지는지, GLB 의 `furLength`(아래 '알려진 점'의 로컬 확인 값 약 0.070)와 지금까지 기기에서 써 온 `Dog_Fur_Mat` 의 `_FurLength` 0.025 를 같은 모델로 나란히 비교, 털 맵을 넣은 GLB 의 크기와 `loadMs`·FPS.
-- 알려진 점: Pod 가 새 변환기를 쓰기 시작하면 이미 깔린 앱도 새 작업마다(작업 흐름) 셸 20겹 털을 GLB 의 `furLength` 로 그린다. [RUNBOOK](../ops/RUNBOOK.md) 'GPU Pod 다시 세우기' 2단계는 Pod 를 켤 때마다 `checkout -B main origin/main` 을 한다. 그래서 main 병합 뒤에는 장애 복구로 Pod 를 한 번 다시 켜기만 해도 털이 켜진다. 추론 서비스에 털 맵 넣기를 끄는 스위치 `BESIDE_EMBED_HAIR=0` 이 생겼다 **[구현됨]**(브랜치 Unity 포트, 2026-11-21 — 위 `hair.npz` 항목). Pod 를 켤 때 그 값을 넣는 것은 [계획]이다. 기기 확인 전에 털이 켜지는 것을 피하려면 Pod 를 켤 때 그 값을 주거나, 그 단계에서 Pod 리포를 병합 전 main 커밋(2026-11-21 기준 `24bce92` — 그 뒤 Pod 에서 도는 코드의 동작 차이는 PR #25 의 변환기·리깅뿐이고 나머지는 주석·문서다)에 고정한다(명령은 RUNBOOK 같은 단계).
+- **[계획]** 서버에서 만든 GLB 로 기기에서 털이 그려지는지, GLB 의 `furLength`(아래 '알려진 점'의 로컬 확인 값 약 0.070. 5차 부하 시험의 서버 GLB 는 0.02041 — 사진 `dog.jpg` 1장, [vm-5th](../perf/load/2026-11-21_vm-5th.md) 1절)와 지금까지 기기에서 써 온 `Dog_Fur_Mat` 의 `_FurLength` 0.025 를 같은 모델로 나란히 비교, 털 맵을 넣은 GLB 의 `loadMs`·FPS(크기는 맨 위 '상태'의 5차 부하 시험 값).
+- 알려진 점: Pod 가 새 변환기를 쓰기 시작하면 이미 깔린 앱도 새 작업마다(작업 흐름) 셸 20겹 털을 GLB 의 `furLength` 로 그린다. [RUNBOOK](../ops/RUNBOOK.md) 'GPU Pod 다시 세우기' 2단계는 Pod 를 켤 때마다 `checkout -B main origin/main` 을 한다. 그래서 main 병합 뒤에는 장애 복구로 Pod 를 한 번 다시 켜기만 해도 털이 켜진다. 추론 서비스에 털 맵 넣기를 끄는 스위치 `BESIDE_EMBED_HAIR=0` 이 생겼다 **[구현됨]**(브랜치 Unity 포트, 2026-11-21 — 위 `hair.npz` 항목). Pod 를 켤 때 그 값을 넣는 것은 [계획]이다. 기기 확인 전에 털이 켜지는 것을 피하려면 Pod 를 켤 때 그 값을 주거나, 그 단계에서 Pod 리포를 병합 전 main 커밋(2026-11-21 기준 `24bce92` — 그 뒤 Pod 에서 도는 코드의 동작 차이는 PR #25 의 변환기·리깅뿐이고 나머지는 주석·문서다)에 고정한다(명령은 RUNBOOK 같은 단계). 2026-11-25 확인: Pod 는 2026-11-21 5차 부하 시험부터 털 맵을 넣은 GLB 를 냈다(맨 위 '상태'). `BESIDE_EMBED_HAIR=0` 으로 Pod 를 켠 기록은 리포에 없다. 앱에서 그 털이 어떻게 그려지는지는 기기에서 확인하지 않았다 **[계획]**.
 - 알려진 점(로컬 확인 1건, 실험 기록 아님): 리포의 AnimalLift 출력 `unity/Assets/Models/n02085782_186 (1)_{mesh.obj,uv.png,hair.npz}` 를 이 변환기(`convert()`, `forward_axis="+x"`)로 2026-11-21 에 로컬 변환하니 `hair.npz` 격자 512×512, 털 맵 PNG 135,776 B(길이) + 444,118 B(결), GLB 2,120,640 B(§1 상한 안), `furLength` 0.069799 였다. `Dog_Fur_Mat` 의 0.025 의 약 2.8배라 기기에서 털 모양이 눈에 띄게 달라질 수 있다. 그 길이가 화면에서 맞는지, 20겹의 FPS·메모리는 재지 않았다 **[계획]** — Unity·3D 담당이 기기에서 확인한다.
 
 ## 5. 변환기 출력 (`generation/tools/convert_asset.py`)
