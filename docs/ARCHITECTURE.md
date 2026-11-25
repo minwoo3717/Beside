@@ -152,6 +152,28 @@ backend/storage/
 - 동시성: Mock 은 작업마다 스레드(`@Async`, 기본 실행기). real 은 `inference.max-concurrency`(기본 1 = GPU 1장)건만 `/infer` 를 부르고 나머지는 PENDING 으로 기다린다 **[구현됨]**.
 - DB: 서버 하나가 H2 파일 하나를 연다(AUTO_SERVER 없음). 같은 파일로 두 번째 서버를 띄우면 시작 단계에서 실패한다. 다른 인스턴스는 `--storage.db.path` 로 다른 파일을 쓴다.
 
+## 관측 (지표 · 로그 · 추적)
+
+2026-11-25 멘토링('로깅·모니터링·추적: 감지가 빠르고 원인을 빨리 찾는다')을 세 갈래로 나눴다. 모두 VM 의 compose `monitoring` 프로필에 있고 사람은 Grafana(`/grafana`, Basic 인증 + Grafana 로그인) 한 곳에서 본다. 상세는 [deploy/README.md](../deploy/README.md) '모니터링'·'로그 · 알림'.
+
+```mermaid
+flowchart LR
+  B[Spring backend] -- "/actuator/prometheus (8081, 15 s)" --> P[(Prometheus)]
+  B -- "JSON 로그 (json-file)" --> A[Alloy] --> L[(Loki)]
+  B -- "OTLP HTTP span (4318)" --> T[(Tempo)]
+  B -- "X-Request-Id + traceparent" --> I[Python 추론 서비스<br/>Runpod Pod: inference.log]
+  P & L & T --> G[Grafana]
+```
+
+| 갈래 | 무엇 | 하나를 따라가는 열쇠 | 상태 |
+|---|---|---|---|
+| 지표 | `beside.*`·Spring 내장 지표 → Prometheus, 대시보드 'Beside 운영', 알림 11개([METRICS.md](METRICS.md) §5) | `env`·`worker` 태그 | [구현됨] VM 적용(Prometheus·Grafana 2026-11-25), 알림은 배포 전 |
+| 로그 | backend 는 prod 에서 한 줄 JSON(`requestId`·`jobId`·`attempt`·`traceId`·`spanId`), Caddy 접근 로그 → Alloy → Loki, 'Beside 로그' | `requestId`(앱의 X-Request-Id), `jobId`, `traceId` | [구현됨, 배포 전] |
+| 추적 | 작업 실행 하나 = 트레이스 하나(`beside.job.run` → 크롭·슬롯 대기·healthz 대기·추론 HTTP 3개·GLB 저장), 업로드 요청 트레이스에 링크, OTLP → Tempo | `traceId`(로그 줄에서 Tempo 로, span 에서 로그로) | [구현됨, 배포 전] 2026-11-26 W8 |
+| 추론 서비스 로그 | Pod 의 `inference.log`: UTC 시각·수준, 실패 응답마다 WARNING, 줄 끝 `rid=<jobId>-<attempt> trace=<id>`, 요청별 시간 줄(기본 켬) | `rid`, `trace` | [구현됨, 배포 전] 2026-11-26 B4. Loki 로는 오지 않는다(Pod 에서 grep) |
+
+추적은 span 만 남긴다: 시간 값은 이미 지표(`beside.job.*`, `beside.inference.request`)에 있어 같은 수치를 새 이름으로 더하지 않는다. backend 는 `management.otlp.tracing.endpoint` 가 있을 때만 span 을 내보낸다(Spring Boot 3.2 동작). 그래서 테스트·로컬 실행은 연결을 열지 않고 trace id 만 로그에 남는다. Python 서비스는 span 을 만들지 않고 받은 `traceparent` 를 로그에만 적는다([CONTRACT.md](CONTRACT.md) §6).
+
 ## 계약 경계와 문서
 
 | 경계 | 문서 | 보호 수단 |
