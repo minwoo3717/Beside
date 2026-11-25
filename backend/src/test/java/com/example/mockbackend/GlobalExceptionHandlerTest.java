@@ -214,7 +214,7 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void unknownRoutesStayAtDebugSoScannersDoNotFillTheLog() {
+    void unknownRoutesStayAtDebugSoScannersDoNotFillTheLogButUnknownV1RoutesWarn() {
         ResponseEntity<?> page = handler.handleMissingResource(new NoResourceFoundException(HttpMethod.GET, "wp-login.php"),
                 new MockHttpServletRequest("GET", "/wp-login.php"));
         assertThat(page.getStatusCode().value()).isEqualTo(404);
@@ -223,8 +223,11 @@ class GlobalExceptionHandlerTest {
         handler.handleAny(new NoHandlerFoundException("GET", "/api/v1/none", new HttpHeaders()),
                 new MockHttpServletRequest("GET", "/api/v1/none"), new MockHttpServletResponse());
 
-        assertThat(logged.list).hasSize(3).allSatisfy(event -> assertThat(event.getLevel()).isEqualTo(Level.DEBUG));
+        // Scanners hit the root paths: DEBUG. A route missing under /api/v1/ is a real client (an app built for a newer
+        // contract, a wrong base URL), so it is WARN in both the resource and the framework path.
+        assertThat(logged.list).extracting(ILoggingEvent::getLevel).containsExactly(Level.DEBUG, Level.WARN, Level.WARN);
         assertThat(logged.list.get(0).getFormattedMessage()).isEqualTo("GET /wp-login.php NOT_FOUND (HTTP 404): no such route");
+        assertThat(logged.list.get(1).getFormattedMessage()).isEqualTo("GET /api/v1/nope NOT_FOUND (HTTP 404): no such route");
     }
 
     @Test

@@ -111,8 +111,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<?> handleMissingResource(NoResourceFoundException ex, HttpServletRequest request) {
-        // No such route: mostly scanners and typos. DEBUG keeps them out of the log; the counter still sees them.
-        log.debug(CLIENT_LINE, method(request), path(request), ErrorCode.NOT_FOUND, 404, "no such route");
+        // No such route: mostly scanners and typos, so DEBUG keeps them out of the log (the counter still sees them).
+        // Under /api/v1/ it is WARN: scanners rarely probe the versioned API, so it is almost always a real client
+        // calling a route this server lacks (an app built for a newer contract, a wrong base URL).
+        if (isV1(request)) {
+            log.warn(CLIENT_LINE, method(request), path(request), ErrorCode.NOT_FOUND, 404, "no such route");
+        } else {
+            log.debug(CLIENT_LINE, method(request), path(request), ErrorCode.NOT_FOUND, 404, "no such route");
+        }
         count(404, ErrorCode.NOT_FOUND.name());
         if (isV1(request)) {
             return v1(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Resource not found: " + request.getRequestURI(), null);
@@ -198,7 +204,7 @@ public class GlobalExceptionHandler {
             String detail = ex.getClass().getSimpleName() + ": " + forLog(ex.getMessage());
             if (value >= 500) {
                 logServerError(request, FRAMEWORK, value, ex);
-            } else if (value == 404) {
+            } else if (value == 404 && !isV1(request)) {
                 log.debug(CLIENT_LINE, method(request), path(request), FRAMEWORK, value, detail);
             } else {
                 log.warn(CLIENT_LINE, method(request), path(request), FRAMEWORK, value, detail);
