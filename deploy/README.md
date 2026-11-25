@@ -295,6 +295,8 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tai
 
 컨테이너 로그는 서비스마다 10MB × 5개에서 돈다(compose 의 `x-logging`, json-file `max-size`·`max-file`). 그보다 오래된 로그가 필요하면 그때그때 파일로 꺼내 둔다(`... logs --no-color backend > backend-$(date +%F).log`).
 
+로그 파일(`/var/lib/docker/containers/<id>/<id>-json.log`)의 줄마다 서비스 이름이 `"attrs":{"com.docker.compose.service":"backend"}` 처럼 붙는다(json-file 의 `labels` 옵션) **[구현됨, 배포 전]**. 로그 수집기가 `docker.sock` 없이 파일만 읽어도 서비스를 가를 수 있게 하려는 것이다. 수집기 자체는 [계획]. 이 옵션이 들어간 compose 로 처음 `up -d` 하면 모든 컨테이너가 다시 만들어진다(backend 진행 중 작업은 `INTERNAL_ERROR`, caddy 몇 초 끊김). 붙은 줄은 그 뒤에 쓴 로그부터다.
+
 측정 로그는 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backend:/app/storage/events.jsonl ./events.jsonl` 로 꺼낸다(prod 는 H2 콘솔이 꺼져 있다. `job_runs` CSV 내보내기 API 는 S5 — 계약 추가라 검토 브랜치에 있다. 그 전에는 H2 백업 zip 을 개발 PC 로 가져와 h2-console 로 연다).
 
 ### 업데이트

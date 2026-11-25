@@ -246,6 +246,9 @@ jobs:
           assert mem_bytes(base["services"]["backend"]["mem_limit"]) == 3 * 1024**3, base["services"]["backend"]["mem_limit"]
           for name, svc in mon["services"].items():
               assert svc.get("logging", {}).get("options", {}).get("max-size"), f"{name}: no log rotation"
+              # each json-file line carries the compose service name (attrs), for a log agent without docker.sock
+              labels = svc["logging"]["options"].get("labels", "").split(",")
+              assert "com.docker.compose.service" in labels, f"{name}: log lines without the service label ({labels})"
           # the overlay swaps backend only: own volume, webhook and H2 backup off, env=loadtest, no production GPU URL/token
           be = lt["services"]["backend"]
           env = be["environment"]
