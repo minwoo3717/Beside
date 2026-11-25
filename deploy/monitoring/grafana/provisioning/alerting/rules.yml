@@ -201,13 +201,13 @@ groups:
         labels:
           severity: critical
       - uid: beside-edge-latency
-        title: "앞단(Caddy) 응답 p95 > 1 s"
+        title: "앞단(Caddy) 작업 조회 p95 > 1 s"
         condition: C
         data:
           - refId: A
             relativeTimeRange: {from: 300, to: 0}
             datasourceUid: beside-loki
-            model: {"refId": "A", "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | status=~\".+\" | unwrap duration | __error__=\"\" [2m]) by (service)", "queryType": "instant"}
+            model: {"refId": "A", "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | request_method=\"GET\" | request_uri=~\"/api/v1/jobs/[0-9a-f-]+\" | unwrap duration | __error__=\"\" [2m]) by (service)", "queryType": "instant"}
           - refId: C
             datasourceUid: __expr__
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [1]}}]}
@@ -216,7 +216,7 @@ groups:
         for: 2m
         isPaused: false
         annotations:
-          summary: "앞단(Caddy) 응답 p95 가 1 s 를 넘은 지 2분. Spring 지표에는 backend 앞 네트워크·Caddy 대기열 지연이 안 보인다(2026-11-26 스테이징 훈련 S2: 앞단 17.8 s 동안 Spring 0.025 s). Grafana 'Beside 로그' 의 Caddy 응답 시간과 'Beside 운영' 의 CPU 를 본다."
+          summary: "앞단(Caddy)에서 잰 작업 조회(GET /api/v1/jobs/{id}) p95 가 1 s 를 넘은 지 2분. Spring 지표에는 backend 앞 네트워크·Caddy 대기열 지연이 안 보인다(2026-11-26 스테이징 훈련 S2: 앞단 17.8 s 동안 Spring 0.025 s). 작업 조회만 본다: Grafana 웹소켓(연결 내내 한 줄)·GLB 다운로드·업로드는 원래 길어 트래픽이 적을 때 p95 를 끌어올린다(2026-11-26 배포 전 검토). Grafana 'Beside 로그' 의 Caddy 응답 시간과 'Beside 운영' 의 CPU 를 본다."
         labels:
           severity: warning
       - uid: beside-backend-errors
@@ -226,7 +226,7 @@ groups:
           - refId: A
             relativeTimeRange: {from: 300, to: 0}
             datasourceUid: beside-loki
-            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"}[5m]))", "queryType": "instant"}
+            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"} | json | logger_name!~\"io[.]opentelemetry[.].*\" [5m]))", "queryType": "instant"}
           - refId: C
             datasourceUid: __expr__
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
@@ -235,6 +235,25 @@ groups:
         for: 0s
         isPaused: false
         annotations:
-          summary: "backend 가 지난 5분에 ERROR 로그를 남겼다. Grafana 'Beside 로그' 의 'backend ERROR · WARN' 에서 requestId·jobId 로 따라간다."
+          summary: "backend 가 지난 5분에 ERROR 로그를 남겼다. Grafana 'Beside 로그' 의 'backend ERROR · WARN' 에서 requestId·jobId 로 따라간다. 트레이스 내보내기 실패(io.opentelemetry)는 따로 '트레이스 내보내기 실패' 알림이 본다."
+        labels:
+          severity: warning
+      - uid: beside-trace-export
+        title: "트레이스 내보내기 실패 (tempo)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-loki
+            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"} | json | logger_name=~\"io[.]opentelemetry[.].*\" [10m]))", "queryType": "instant"}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "backend 가 지난 10분에 트레이스를 tempo 로 보내지 못했다(OpenTelemetry 내보내기 ERROR, 1분에 최대 5줄). 작업에는 영향 없다. tempo 컨테이너가 떠 있는지(메모리 상한 384m) 본다. 'backend ERROR 로그' 와 나눈 이유: 한 알림에 묶이면 tempo 가 꺼진 동안 그 알림이 계속 울린 상태라 진짜 오류가 새 메시지 없이 묻힌다(반복 4시간, 2026-11-26 배포 전 검토)."
         labels:
           severity: warning
