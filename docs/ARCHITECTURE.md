@@ -2,6 +2,12 @@
 
 결정됨(재논의하지 않는다): **Unity Android 앱(ARCore, glTFast) ↔ Spring Boot 공개 API(Job 상태·저장·에셋 서빙) ↔ Python 추론 서비스(FastAPI, GPU, AnimalLift + GLB 변환, 내부 전용 `POST /infer`)**. Spring 은 profile 로 `mock | real` 워커를 교체하고 real 워커가 Python 을 호출한다. Unity 는 Spring API 계약 v1 만 본다.
 
+왜 세 부분으로 나눴나:
+- 처음 결정한 이유를 적은 기록은 없다. 아래는 2026-11-26 에 설계와 운영 기록에서 읽어 낸 것이다. 팀 확인은 [계획]이다.
+- 모델(AnimalLift)은 PyTorch 라 추론은 Python 서비스에 둔다.
+- GPU 는 비싸서 쓸 때만 켠다. 그래서 작업 상태·결과·공개 API 는 GPU 가 꺼져도 살아 있어야 한다(prod 오프라인 대기, '데이터 흐름').
+- 세 트랙이 동시에 개발하므로 경계를 계약 문서(`docs/api/openapi.yaml`, GLB_SPEC)와 계약 시험으로 고정한다. Unity 가 Python 을 직접 부르지 않는 것도 같은 이유다(경계를 하나로).
+
 상태: Spring(v0·v1·Mock/real 워커·H2 저장소·실행별 측정 `job_runs`)과 계약 문서는 **[구현됨]**(real 워커의 `/infer` 호출은 FastAPI 스텁 패스스루로 확인), Unity 앱과 AnimalLift 추론·변환·자동 리깅 연결은 #1(2026-10-14)로 머지됐다 — 앱 DoD 증빙은 아직 없고, 실제 모델 실측은 2026-11-17 Runpod 에서 처음 했다([exp-01](../generation/experiments/2026-11-17_exp-01_baseline-runpod.md), [PLAN.md](PLAN.md)). 실제 E2E 배치는 팀원 GPU PC 한 대에 Spring 과 추론 서비스를 함께 두기로 했다(2026-10-05). 2026-10-30 결정으로 Spring 은 **클라우드 VM**(Docker Compose + Caddy)에 올리고 GPU 쪽과는 Tailscale 로 잇는다: 배포 파일·prod 프로파일·`/infer` 업로드 모드·GPU 오프라인 대기는 **[구현됨]**([deploy/](../deploy/README.md), 같은 PC 패스스루로 확인), 실제 VM 배포는 2026-11-13 GCP 로 **[구현됨]**. GPU 는 **Runpod Pod** 로 하고 Pod 안에 Tailscale 을 띄우기로 했고(2026-11-13), 2026-11-17 VM ↔ Pod 연결과 AnimalLift 모델 모드로 공개 주소 전체 흐름이 **[구현됨]**(사진 3건. 그날 VM ↔ Pod 는 DERP 중계였고, 2026-11-18·19 부하 시험 때는 직접 연결이었다. 아래 '배포 가정').
 
 ## 구성 요소
