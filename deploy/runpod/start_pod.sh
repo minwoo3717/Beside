@@ -35,7 +35,8 @@
 # Overrides: WORKSPACE (/workspace), PORT (8002), TS_HOSTNAME (beside-gpu), RUN_DIR (/var/run/beside: socket, pids),
 #   TOKEN_FILE (/workspace/beside-token), ANIMALLIFT_DIR, CONDA_HOME, CONDA_ENV, WORK_DIR, RIG_TEMPLATE, SAMPLE_GLB,
 #   HF_HOME, TORCH_HOME (model caches, default under /workspace/.cache), ALLOW_NO_GPU=1, TS_VERSION + TS_SHA256,
-#   UVICORN_TIMEOUT_KEEP_ALIVE (75 s), THREADS (8: OMP/MKL/OPENBLAS_NUM_THREADS; "default" leaves them unset) - both
+#   UVICORN_TIMEOUT_KEEP_ALIVE (75 s), THREADS (8: OMP/MKL/OPENBLAS_NUM_THREADS; "default" leaves them unset),
+#   BESIDE_REQUEST_TIMING (1: one "timing ..." line per request in inference.log, since 2026-11-26; 0 = off) - these
 #   apply when the service starts, NORESTART_FILE (/workspace/beside-norestart), RESTART_DELAY_S (5),
 #   RESTART_MAX_DELAY_S (60), RESTART_STABLE_S (300: a run this long resets the delay) - read by the supervisor
 set -euo pipefail
@@ -78,6 +79,8 @@ port_busy() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }   # something ac
 [[ "$KEEP_ALIVE_S" =~ ^[1-9][0-9]{0,3}$ ]] || die "UVICORN_TIMEOUT_KEEP_ALIVE must be seconds, 1-9999 (got: $KEEP_ALIVE_S)"
 [[ "$THREADS" =~ ^[1-9][0-9]{0,2}$ || "$THREADS" == default ]] ||
   die "THREADS must be a number of threads, 1-999, or default (got: $THREADS)"
+[[ "${BESIDE_REQUEST_TIMING:-1}" =~ ^[01]$ ]] ||
+  die "BESIDE_REQUEST_TIMING must be 1 (timing lines, the default) or 0 (got: $BESIDE_REQUEST_TIMING)"
 if [[ -z "${BESIDE_INFERENCE_TOKEN:-}" && -r "$TOKEN_FILE" ]]; then
   BESIDE_INFERENCE_TOKEN="$(cat "$TOKEN_FILE")"
   perms="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || echo unknown)"
@@ -196,6 +199,10 @@ TS_IP="$(ts ip -4)"
 # 4. The inference service, loopback only (tailscaled forwards tailnet connections to it).
 export HF_HOME="${HF_HOME:-$WS/.cache/huggingface}" TORCH_HOME="${TORCH_HOME:-$WS/.cache/torch}"  # SD VAE, DINOv2
 export UVICORN_TIMEOUT_KEEP_ALIVE="$KEEP_ALIVE_S"   # uvicorn reads its UVICORN_* settings (both modes run python -m uvicorn)
+# Per-request timing lines on by default (2026-11-26, mentoring 'logging, monitoring, tracing'): with the service's
+# rid/trace lines they say when this side answered a job's request (generation/inference_service/README.md '로그').
+# Read once when the service starts; BESIDE_REQUEST_TIMING=0 bash start_pod.sh turns them off.
+export BESIDE_REQUEST_TIMING="${BESIDE_REQUEST_TIMING:-1}"
 if [[ "$THREADS" == default ]]; then
   unset OMP_NUM_THREADS MKL_NUM_THREADS OPENBLAS_NUM_THREADS
 else

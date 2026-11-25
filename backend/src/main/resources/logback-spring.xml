@@ -2,10 +2,11 @@
 <!--
   Console logging. docs/ops/RUNBOOK.md '먼저 볼 곳' says how to find a request or a job in it.
   - Every profile but prod: Spring Boot's own text console. application.properties logging.pattern.level adds
-    [rid=<requestId> job=<jobId>] (RequestIdFilter, the job workers).
+    [rid=<requestId> job=<jobId> trace=<traceId>] (RequestIdFilter, the job workers, tracing).
   - prod: one JSON object per line (LogstashEncoder), so Docker's log and a log server can read fields without parsing
-    text: @timestamp in UTC, level, logger_name, thread_name, message, the MDC keys requestId / jobId / attempt (only
-    these), and the stack trace in the one field stack_trace (JSON escapes its newlines: no extra lines).
+    text: @timestamp in UTC, level, logger_name, thread_name, message, the MDC keys requestId / jobId / attempt /
+    traceId / spanId (only these; the trace ids since 2026-11-26: Grafana's Loki data source links traceId to Tempo),
+    and the stack trace in the one field stack_trace (JSON escapes its newlines: no extra lines).
     The stack is cut to 8 KB with framework frames (Tomcat, servlet, Spring proxies) folded, root cause first, class names in full (grep):
     Docker's json-file driver splits a message over 16 KB into partial entries, which a log server then stores as
     pieces. The full stack of a request thread can pass 16 KB.
@@ -28,6 +29,8 @@
                 <includeMdcKeyName>requestId</includeMdcKeyName>
                 <includeMdcKeyName>jobId</includeMdcKeyName>
                 <includeMdcKeyName>attempt</includeMdcKeyName>
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>spanId</includeMdcKeyName>
                 <throwableConverter class="net.logstash.logback.stacktrace.ShortenedThrowableConverter">
                     <maxLength>8192</maxLength>
                     <rootCauseFirst>true</rootCauseFirst>

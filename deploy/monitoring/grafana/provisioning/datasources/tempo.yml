@@ -1,0 +1,26 @@
+# Grafana 데이터소스: compose 내부망의 Tempo(2026-11-26 W8 분산 추적). backend 가 보낸 트레이스를 본다.
+# 작업 실행 하나 = 트레이스 하나(루트 span beside.job.run). Explore → Tempo → Search 에서 Span Name 'beside.job.run',
+# 또는 TraceQL {name="beside.job.run" && span.jobId="<jobId>"}. Loki 로그 줄의 traceId 를 눌러도 온다(loki.yml).
+# 이 파일의 '$$' 는 Grafana 가 환경 변수로 바꾸지 않게 한 것이다(화면에서는 '$' 하나로 보인다).
+apiVersion: 1
+
+datasources:
+  - name: Tempo
+    uid: beside-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    isDefault: false
+    editable: false
+    jsonData:
+      # span 에서 그 트레이스의 로그로: backend 의 JSON 줄에는 "traceId" 필드가 있다(logback-spring.xml).
+      tracesToLogsV2:
+        datasourceUid: beside-loki
+        spanStartTimeShift: '-1m'
+        spanEndTimeShift: '1m'
+        customQuery: true
+        query: '{service="backend"} |= "$${__trace.traceId}"'
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false

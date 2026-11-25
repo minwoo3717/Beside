@@ -83,6 +83,9 @@ import java.util.stream.Stream;
  * Every request is timed in {@code beside.inference.request} (call = infer | download | cleanup, docs/METRICS.md
  * §5.1), and the per-job ones carry {@value #REQUEST_ID_HEADER}: {jobId}-{attempt}, or {jobId} alone when the caller
  * did not give the attempt, so the service's log can be matched with this server's. The request body is unchanged.
+ * Each of those requests is also a client span of the job run's trace ({@link JobTracing}: "POST /infer[/upload]",
+ * "GET /artifacts/{jobId}/base.glb", "DELETE /artifacts/{jobId}") and carries its W3C {@code traceparent} next to
+ * X-Request-Id (2026-11-26; the JDK HttpClient has no automatic instrumentation).
  */
 @Component
 @Profile("real")
@@ -142,6 +145,8 @@ public class InferenceClient {
     private final ObjectMapper objectMapper;
     private final HttpClient http;
     private final InferenceMetrics metrics;
+    /** A client span per request (child of the job run's span) and its W3C traceparent header. */
+    private final JobTracing tracing;
     private final Logger log = LoggerFactory.getLogger(InferenceClient.class);
 
     /**
@@ -166,6 +171,12 @@ public class InferenceClient {
         this(baseUrl, timeoutMs, transfer, token, tmpDir, downloadIdleMs, objectMapper, InferenceMetrics.detached());
     }
 
+    /** Timed into {@code metrics}, without tracing. */
+    public InferenceClient(String baseUrl, long timeoutMs, String transfer, String token, String tmpDir,
+                           long downloadIdleMs, ObjectMapper objectMapper, InferenceMetrics metrics) {
+        this(baseUrl, timeoutMs, transfer, token, tmpDir, downloadIdleMs, objectMapper, metrics, JobTracing.NOOP);
+    }
+
     @Autowired
     public InferenceClient(@Value("${inference.base-url:http://localhost:8001}") String baseUrl,
                            @Value("${inference.timeout-ms:120000}") long timeoutMs,
@@ -173,8 +184,9 @@ public class InferenceClient {
                            @Value("${inference.token:}") String token,
                            @Value("${storage.tmp.dir:storage/tmp}") String tmpDir,
                            @Value("${inference.download-idle-ms:" + DEFAULT_DOWNLOAD_IDLE_MS + "}") long downloadIdleMs,
-                           ObjectMapper objectMapper, InferenceMetrics metrics) {
+                           ObjectMapper objectMapper, InferenceMetrics metrics, JobTracing tracing) {
         this.metrics = metrics;
+        this.tracing = tracing;
         this.downloadIdle = Duration.ofMillis(Math.max(0, downloadIdleMs));
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.inferUri = URI.create(this.baseUrl + "/infer");
@@ -286,12 +298,15 @@ public class InferenceClient {
         String requestId = requestId(jobId, attempt);
         for (int send = 1; send <= CLEANUP_ATTEMPTS; send++) {
             long started = System.nanoTime();
+            // one client span per DELETE sent (a resend is a second one), built inside it for its traceparent
+            JobTracing.Scoped span = tracing.call("DELETE /artifacts/{jobId}", "cleanup", baseUrl + "/artifacts/" + jobId);
             try {
                 HttpRequest request = withToken(HttpRequest.newBuilder(URI.create(baseUrl + "/artifacts/" + jobId)), requestId)
                         .timeout(CLEANUP_TIMEOUT)
                         .DELETE()
                         .build();
                 HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
+                span.tag("http.status_code", response.statusCode());
                 boolean deleted = response.statusCode() / 100 == 2;
                 metrics.record(InferenceMetrics.Call.CLEANUP,
                         deleted ? InferenceMetrics.Outcome.OK : InferenceMetrics.Outcome.ERROR, started);
@@ -300,10 +315,12 @@ public class InferenceClient {
                 }
                 return;
             } catch (HttpTimeoutException e) {   // includes HttpConnectTimeoutException
+                span.failed(e);
                 metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.outcomeOf(e), started);
                 log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 return;
             } catch (IOException e) {
+                span.failed(e);
                 metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.outcomeOf(e), started);
                 if (send < CLEANUP_ATTEMPTS) {
                     log.info("jobId={} {} failed: {}: sending it once more", jobId, call, e.toString());
@@ -311,13 +328,17 @@ public class InferenceClient {
                     log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 }
             } catch (RuntimeException e) {
+                span.failed(e);
                 metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.Outcome.ERROR, started);
                 log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 return;
             } catch (InterruptedException e) {
+                span.failed(e);
                 Thread.currentThread().interrupt();
                 log.warn("jobId={} {} interrupted: the service keeps the job's files", jobId, call);
                 return;
+            } finally {
+                span.close();
             }
         }
     }
@@ -327,12 +348,17 @@ public class InferenceClient {
     private Result inferPath(String jobId, String requestId, List<Path> images, Watch watch)
             throws InferenceFailure, InterruptedException {
         String call = "POST " + inferUri;
-        HttpRequest request = withToken(HttpRequest.newBuilder(inferUri), requestId)
-                .timeout(timeout)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(pathRequestBody(jobId, images)))
-                .build();
-        JsonNode root = answerOf(send(request, call, watch), call);
+        JsonNode root = traced("POST /infer", "infer", inferUri.toString(), span -> {
+            // built inside the client span, so its traceparent goes out with X-Request-Id
+            HttpRequest request = withToken(HttpRequest.newBuilder(inferUri), requestId)
+                    .timeout(timeout)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(pathRequestBody(jobId, images)))
+                    .build();
+            HttpResponse<String> response = send(request, call, watch);
+            span.tag("http.status_code", response.statusCode());
+            return answerOf(response, call);
+        });
         String glbPath = root.path("glbPath").asText(null);
         if (glbPath == null || glbPath.isBlank()) {
             throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without glbPath",
@@ -361,19 +387,27 @@ public class InferenceClient {
             throws InferenceFailure, InterruptedException {
         String call = "POST " + uploadUri;
         String boundary = "BesideBoundary" + UUID.randomUUID().toString().replace("-", "");
-        HttpRequest request = withToken(HttpRequest.newBuilder(uploadUri), requestId)
-                .timeout(timeout)
-                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                .POST(multipartBody(boundary, jobId, images, filenames))
-                .build();
-        JsonNode root = answerOf(send(request, call, watch), call);
+        // The service answers when its GLB is ready, so this span is photo upload + generation; the GLB transfer is
+        // the download span below. Built inside the span for its traceparent.
+        JsonNode root = traced("POST /infer/upload", "infer", uploadUri.toString(), span -> {
+            HttpRequest request = withToken(HttpRequest.newBuilder(uploadUri), requestId)
+                    .timeout(timeout)
+                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                    .POST(multipartBody(boundary, jobId, images, filenames))
+                    .build();
+            HttpResponse<String> response = send(request, call, watch);
+            span.tag("http.status_code", response.statusCode());
+            return answerOf(response, call);
+        });
         String glbUrl = root.path("glbUrl").asText(null);
         URI artifact = artifactUri(glbUrl);
         if (artifact == null) {
             throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without a usable glbUrl",
                     call + " -> HTTP 200 glbUrl=" + glbUrl + ": " + quote(root.toString()));
         }
-        return resultOf(root, download(jobId, requestId, artifact, watch));
+        Path glb = traced("GET /artifacts/{jobId}/base.glb", "download", artifact.toString(),
+                span -> download(jobId, requestId, artifact, watch, span));
+        return resultOf(root, glb);
     }
 
     /** glbUrl is relative to the service ("/artifacts/..."): the GLB is only ever fetched from inference.base-url. */
@@ -447,7 +481,7 @@ public class InferenceClient {
      * GET glbUrl into {storage.tmp.dir}/{jobId}/base.glb. Only a 200 body is written. A GLB that does not arrive is
      * CONVERSION_FAILED; one this server cannot write (its own disk) is INTERNAL_ERROR.
      */
-    private Path download(String jobId, String requestId, URI artifact, Watch watch)
+    private Path download(String jobId, String requestId, URI artifact, Watch watch, JobTracing.Scoped span)
             throws InferenceFailure, InterruptedException {
         String call = "GET " + artifact;
         Path target = tmpDir.resolve(jobId).resolve("base.glb");
@@ -509,6 +543,7 @@ public class InferenceClient {
             }
         }
         HttpResponse<Path> response = waited.response();
+        span.tag("http.status_code", response.statusCode());
         if (response.statusCode() != 200) {
             throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
                     "Inference service answered HTTP " + response.statusCode() + " to the GLB download",
@@ -519,7 +554,10 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- shared
 
-    /** The token header when one is set, and {@value #REQUEST_ID_HEADER} when {@code requestId} is not null. */
+    /**
+     * The token header when one is set, {@value #REQUEST_ID_HEADER} when {@code requestId} is not null, and the W3C
+     * {@code traceparent} of the client span in scope (docs/CONTRACT.md §6: optional, the service may ignore it).
+     */
     private HttpRequest.Builder withToken(HttpRequest.Builder builder, String requestId) {
         if (token != null) {
             builder.header(TOKEN_HEADER, token);
@@ -527,7 +565,32 @@ public class InferenceClient {
         if (requestId != null) {
             builder.header(REQUEST_ID_HEADER, requestId);
         }
-        return builder;
+        return tracing.inject(builder);
+    }
+
+    /**
+     * One exchange inside its client span ({@link JobTracing#call}): the span ends with it and records a failure (the
+     * job failure code as beside.error_code) or an interrupt.
+     */
+    private <T> T traced(String name, String call, String url, Exchange<T> exchange)
+            throws InferenceFailure, InterruptedException {
+        JobTracing.Scoped span = tracing.call(name, call, url);
+        try {
+            return exchange.run(span);
+        } catch (InferenceFailure failure) {
+            span.tag("beside.error_code", failure.code().name()).failed(failure);
+            throw failure;
+        } catch (InterruptedException | RuntimeException e) {
+            span.failed(e);
+            throw e;
+        } finally {
+            span.close();
+        }
+    }
+
+    @FunctionalInterface
+    private interface Exchange<T> {
+        T run(JobTracing.Scoped span) throws InferenceFailure, InterruptedException;
     }
 
     /** {jobId}-{attempt}, {jobId} when the attempt is unknown (0 or less), null when the job id is not plain text. */
