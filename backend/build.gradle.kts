@@ -23,6 +23,9 @@ dependencies {
     // 운영 지표 (docs/METRICS.md §5): Actuator 는 관리 포트(management.server.port, 기본 8081)에만, Prometheus 형식으로.
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+    // prod 로그를 한 줄에 JSON 하나로(logback-spring.xml). 7.4 는 Logback 1.3·1.4(Spring Boot 3.2 는 1.4.11)용이다.
+    // 8.x 는 Logback 1.5 가 필요해 Boot 3.2 와 맞지 않는다.
+    runtimeOnly("net.logstash.logback:logstash-logback-encoder:7.4")
     // 대표 사진 검사·전처리(preprocess): ImageIO 가 WEBP 사진도 읽도록 하는 플러그인 (ImageIO 서비스로 자동 등록).
     implementation("com.twelvemonkeys.imageio:imageio-webp:3.15.3")
     // 대표 사진 검사·전처리: YOLOX(개·고양이 감지)와 U2Net(배경 제거)을 CPU 로 실행. jar 에 모든 플랫폼 네이티브가 들어 있다.

@@ -10,6 +10,7 @@ import com.example.mockbackend.service.preprocess.CutoutStage;
 import com.example.mockbackend.service.preprocess.PreparedPhoto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
@@ -65,6 +66,9 @@ import java.util.List;
 @Service
 @Profile("real")
 public class RealJobWorker implements JobWorker {
+    /** MDC keys of a run (logback-spring.xml, logging.pattern.level); MockJobWorker uses the same names. */
+    static final String MDC_JOB_ID = "jobId";
+    static final String MDC_ATTEMPT = "attempt";
     private static final byte[] GLB_MAGIC = {'g', 'l', 'T', 'F'};
     /** What the run starts from when inference.offline-wait-ms is 0: no reading, so no instance to watch. */
     private static final InferenceHealthMonitor.Status NOT_CHECKED = new InferenceHealthMonitor.Status(
@@ -125,6 +129,10 @@ public class RealJobWorker implements JobWorker {
         // The place in the slot line is taken now and kept through the cutout, so the line stays in dispatch
         // (accepted-or-retried) order: a retry whose cutout is reused must not get ahead of new jobs still in theirs.
         Object place = inferenceSlots.join();
+        // Every line of this run (and of JobFinisher and its listeners on this thread) carries the job: MDC does not
+        // follow @Async from the request, and the pool thread must not keep it for the next job.
+        MDC.put(MDC_JOB_ID, jobId);
+        MDC.put(MDC_ATTEMPT, String.valueOf(attempt));
         try {
             photo = prepare(jobId, attempt);
             // Asked first and again every inference.slot-recheck-ms while waiting: a job canceled (or canceled and
@@ -156,6 +164,8 @@ public class RealJobWorker implements JobWorker {
             // A cutout that threw never reached acquire(): its place must not block the line. After acquire() the
             // place is gone already and this does nothing.
             inferenceSlots.leave(place);
+            MDC.remove(MDC_JOB_ID);
+            MDC.remove(MDC_ATTEMPT);
         }
     }
 

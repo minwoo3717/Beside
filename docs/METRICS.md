@@ -195,6 +195,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `beside.jobs.pending.stale` | `beside_jobs_pending_stale` | gauge | — | 대기열 상한이 세지 않는 오래된 PENDING 작업 수: `queuedAt` 이 `admission.stale-after-ms`(기본은 정상 작업이 PENDING 으로 기다릴 수 있는 가장 긴 시간, prod·N 19·c 1 이면 2시간 56분 — `inference.timeout-ms` 120 s 기준, D12)보다 오래된 행. 상한을 켰을 때만 1분마다 DB 에서 센다(요청이 없어도). 꺼져 있으면 늘 0. 0 보다 크면 돌릴 워커가 없는 작업이거나 설정보다 긴 대기이고, 상한은 그만큼 더 받는다(같은 검사에서 서버 로그에 WARN 한 줄). 세기가 실패하면 다음 성공까지 `NaN`. 2026-11-21 #21 결정, `api-v1.1`(PR #19) **[구현됨]** | `AdmissionGate` |
 | `beside.asset.downloads` | `beside_asset_downloads_total` | counter | `outcome`(아래) | `GET /api/v1/jobs/{id}/asset` 한 번마다 하나 | `AssetDownloadMetricsFilter` |
 | `beside.asset.download` | `beside_asset_download_seconds_*` | timer | `outcome` | 요청 도착 → 마지막 바이트를 쓴 때 | 같은 곳 |
+| `beside.api.errors` | `beside_api_errors_total` | counter | `status`(HTTP 상태 코드), `code`(응답의 `error.code`. Spring 이 직접 답한 오류 — 잘못된 method·Content-Type 등 — 는 `FRAMEWORK`) | [구현됨] 2026-11-26. 서버가 답한 오류 응답 수. v1·v0·웹 페이지 모두 센다(v0 는 응답에 code 가 없어도 같은 code 로). 알 수 없는 경로의 404(스캐너 포함)는 `code="NOT_FOUND"` 로 따로 보인다. `QUEUE_FULL`(503)도 세므로 5xx 비율에서는 §5.3 처럼 뺀다. 연결이 끊겨 답하지 못한 다운로드와 필터가 직접 답한 오류(다른 사이트 쓰기 400 등)는 세지 않는다. HTTP 오류 코드([api/ERROR_CODES.md](api/ERROR_CODES.md))는 기동할 때 그 상태로 0 부터 있고, `FRAMEWORK` 는 첫 오류 때 생긴다. 로그: 5xx 는 ERROR(method·경로·code·requestId·스택), 4xx 는 WARN 한 줄, `QUEUE_FULL` 과 알 수 없는 경로의 404 는 DEBUG | `GlobalExceptionHandler` |
 
 `beside.asset.downloads` 의 `outcome`:
 

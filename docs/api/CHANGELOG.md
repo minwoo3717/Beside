@@ -76,3 +76,11 @@ v1.0 몫은 위 'v1.0 — 2026-11-21 확정'(태그 `api-v1.0`), v1.1 몫은 위
 - **`api-v1.1`**: 작업 대기열 상한 — 생성·retry 에 503 `QUEUE_FULL` + `Retry-After`(N=19, 165 s), PR #19(#21). 반영: 위 'v1.1 — 2026-11-21' 절(운영에서 켜기는 [계획]).
 - **`api-v1.2`**: v1.1 검토 브랜치(`review/api-v1.1`)에서 고른 것 — 대기 정보·작업 취소·공유 링크·반려동물 보관함·관리 화면·품질 평가와 오류 코드 `CANCELED`·`JOB_NOT_PENDING`·`SHARE_NOT_FOUND`·`PET_NOT_FOUND`·`JOB_IN_PROGRESS`(#11·#12). 작업 삭제·`thumbnail`·`photos` 엔드포인트는 미룸. 반영: 위 'v1.2' 절(브랜치 `feat/api-v1.2` **[구현됨]**, PR #27 로 main 병합·태그 `api-v1.2` `f6dfa66`, 2026-11-22). 그 브랜치의 'v1.1 (제안)' 절은 그 v1.2 절로 바꿨다.
 - 보존 정책(#23, 응답 형태 변경 없음): 사진 7일·GLB 30일, 지운 작업은 404 `ASSET_NOT_FOUND`. 구현은 공개 베타 전.
+
+### 2026-11-26 — 응답 헤더 `X-Request-Id` (응답 형태 변경 없음)
+
+- 추가(응답 헤더): 모든 응답에 `X-Request-Id`. 요청의 `X-Request-Id` 가 1~64자의 `A-Z a-z 0-9 . _ : -` 이면 그 값, 없거나 규칙 밖이면 서버가 만든 UUID 다. 본문·상태 코드·다른 헤더는 그대로다.
+- 앱: 이미 요청마다 이 헤더를 보낸다(Unity `BesideApiClient`). 응답 헤더는 읽지 않아도 된다. 바꿀 것이 없다.
+- 목적: 서버 로그에서 요청 하나를 찾는다(멘토링 '모든 오류를 로그로'·'추적'). 텍스트 로그는 `rid=`, prod JSON 로그는 필드 `requestId`.
+- 문서: [CONTRACT.md](../CONTRACT.md) §2 '요청 id'. openapi.yaml 에는 다음 태그 때 적는다 [계획]. 계약 테스트는 헤더를 비교하지 않는다.
+- 구현 상태: `RequestIdFilter`·`RequestIdFilterTest` **[구현됨]**(브랜치 `w1/logging`). 운영 VM 배포는 [계획].

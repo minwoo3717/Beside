@@ -6,6 +6,7 @@ import com.example.mockbackend.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
@@ -51,6 +52,9 @@ public class MockJobWorker implements JobWorker {
     @Override
     public void dispatch(String jobId, int attempt) {
         Instant start = Instant.now();
+        // Every line of this run carries the job (MDC does not follow @Async; the pool thread must not keep it).
+        MDC.put(RealJobWorker.MDC_JOB_ID, jobId);
+        MDC.put(RealJobWorker.MDC_ATTEMPT, String.valueOf(attempt));
         try {
             Thread.sleep(pendingMs);
             Job job = jobTransitions.start(jobId, attempt, 0.5).orElse(null);
@@ -81,6 +85,9 @@ public class MockJobWorker implements JobWorker {
         } catch (RuntimeException unexpected) {
             // Escaping the @Async method would leave the job PENDING or PROCESSING until the next restart.
             failUnended(jobId, attempt, unexpected);
+        } finally {
+            MDC.remove(RealJobWorker.MDC_JOB_ID);
+            MDC.remove(RealJobWorker.MDC_ATTEMPT);
         }
     }
 
