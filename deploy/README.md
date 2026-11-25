@@ -235,6 +235,23 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h                                   # Swap: 2.0Gi
 ```
 
+**메모리 부족(OOM)이 나면** — 이미지와 감시 **[구현됨, 배포 전]**(2026-11-26):
+
+- 두 가지가 있다.
+  - **Java 힙 부족**(`java.lang.OutOfMemoryError`, 힙은 `mem_limit` 의 40 %): JVM 이 종료 코드 3 으로 스스로 끝난다(`-XX:+ExitOnOutOfMemoryError`, [backend/Dockerfile](../backend/Dockerfile)). 전에는 스레드 일부만 죽은 채 계속 떠 있을 수 있었다.
+  - **컨테이너 한도 초과**(커널의 OOM kill, 힙 밖 ONNX Runtime 메모리 포함): 커널이 SIGKILL 로 끝낸다. Docker 는 `State.OOMKilled` 와 `oom` 이벤트를 남긴다.
+- 둘 다 `restart: unless-stopped` 로 Docker 가 다시 띄운다. 그때 진행 중이던 작업은 `INTERNAL_ERROR` 로 끝난다(앱에서 다시 시도).
+- VM 감시(아래 '운영 대응 설치' 7번)가 Docker 의 `RestartCount` 가 는 것을 보고 디스코드로 알린다. 메모리 때문이면 🧠, 다른 이유면 ♻️ 다.
+- **힙 덤프**: Java 힙 부족이면 JVM 이 끝나기 전에 힙을 볼륨의 `/app/storage/backend-oom.hprof` 에 쓴다(최대 힙 크기, 약 1.2 GB). JVM 은 있는 파일을 덮어쓰지 않으므로 덤프는 많아야 하나다. **꺼내서 분석한 뒤 꼭 지운다.** 남아 있으면 다음 힙 부족 때 덤프가 생기지 않고 디스크만 차지한다:
+
+```bash
+C="docker compose -f deploy/docker-compose.yml --env-file deploy/.env"
+$C cp backend:/app/storage/backend-oom.hprof ./backend-oom-$(date +%F).hprof   # 개발 PC 로는 scp. Eclipse MAT 등으로 연다
+$C exec backend rm /app/storage/backend-oom.hprof
+```
+
+- 커널 OOM kill 은 덤프를 남기지 않는다. `docker stats --no-stream` 으로 지금 메모리를 보고, 되풀이되면 위 한도 표를 다시 정한다.
+
 ### 띄우기 · 확인
 
 `deploy/.env` 에 `GRAFANA_ADMIN_PASSWORD`(`openssl rand -base64 24`)를 먼저 넣는다. 견본(`.env.example`)에서는 일부러 비워 두었다. 비어 있으면 grafana 컨테이너는 이유를 로그에 남기고 뜨지 않는다.
