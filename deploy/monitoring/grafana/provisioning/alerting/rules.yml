@@ -181,6 +181,25 @@ groups:
           summary: "지난 1시간 끝난 작업의 20 % 넘게 실패했다(3건 이상). 코드별로는 'Beside 운영' 의 '끝난 작업' 패널."
         labels:
           severity: warning
+      - uid: beside-gpu-down-with-jobs
+        title: "GPU 꺼짐 + 기다리는 작업"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "max(beside_inference_state{env=\"prod\",state=\"DOWN\"}) * on() (max(beside_jobs_queue{env=\"prod\",state=\"pending\"}) > bool 0)", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "🔴 추론 서비스(GPU)가 DOWN 인데 기다리는 작업이 있는 지 5분. 작업은 최대 30분 기다린 뒤 INFERENCE_UNAVAILABLE 로 끝난다. RUNBOOK 'GPU Pod 다시 세우기'."
+        labels:
+          severity: critical
       - uid: beside-backend-errors
         title: "backend ERROR 로그"
         condition: C

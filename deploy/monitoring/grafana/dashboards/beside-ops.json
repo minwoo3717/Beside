@@ -3389,6 +3389,210 @@
           "range": false
         }
       ]
+    },
+    {
+      "id": 43,
+      "type": "row",
+      "title": "앱 이벤트 (클릭·노출, POST /api/v1/events)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 129
+      },
+      "panels": []
+    },
+    {
+      "id": 44,
+      "type": "bargauge",
+      "title": "앱 이벤트 — 이름별 (선택 기간)",
+      "description": "beside_app_events_total{name}: 앱(android)과 공유 뷰어(web)가 보낸 클릭·노출 이벤트 수(docs/METRICS.md §6). 이벤트 수라 사람 수가 아니다. 세션(사람) 단위 퍼널은 /admin 의 '세션 퍼널'.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 130
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (name) (increase(beside_app_events_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "{{name}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "stat",
+      "title": "생성 탭 → 첫 AR 배치 (이벤트 수 비율, 선택 기간)",
+      "description": "model_placed ÷ generate_tap. 이벤트 수 비율이라 세션 퍼널의 근사다(같은 사람이 여러 번 누르면 섞인다).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 130
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "-",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"model_placed\"}[$__range])) / sum(increase(beside_app_events_total{env=\"$env\",name=\"generate_tap\"}[$__range]))",
+          "legendFormat": "비율",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "type": "stat",
+      "title": "보낸 곳별 (선택 기간)",
+      "description": "platform 별 이벤트 수: android = 앱, web = 공유 뷰어(/s/{token}).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 130
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (platform) (increase(beside_app_events_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "{{platform}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "type": "timeseries",
+      "title": "버린 이벤트 — 이유별 ($window 창)",
+      "description": "beside_app_events_dropped_total{reason}: unknown_name(서버 목록에 없는 이름), invalid, duplicate(같은 sessionId·seq 재전송), rate_limited(서버 전체 상한, 202 accepted 0), bad_prop(버린 속성 수). 앱만 바꾸고 서버 목록을 안 바꾸면 unknown_name 이 는다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 134
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (reason) (increase(beside_app_events_dropped_total{env=\"$env\"}[$window])) > 0",
+          "legendFormat": "{{reason}}"
+        }
+      ]
     }
   ],
   "templating": {
