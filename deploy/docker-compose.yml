@@ -64,8 +64,10 @@ services:
       STORAGE_BACKUP_KEEP: "${STORAGE_BACKUP_KEEP:-48}"
       # 분산 추적(W8, 2026-11-26): 작업 실행 하나의 트레이스(beside.job.run, 추론 서비스 호출 포함)와 HTTP 요청을 아래
       # tempo(monitoring 프로필)로 보낸다. management.otlp.tracing.endpoint ↔ MANAGEMENT_OTLP_TRACING_ENDPOINT: Spring Boot 3.2 는
-      # 이 값이 있을 때만 내보낸다(application.properties). tempo 를 띄우지 않으면 내보내기가 실패하고 backend 로그에 경고가
-      # 가끔 남는다(작업에는 영향 없음). 그때는 deploy/.env 에 TRACING_SAMPLING_PROBABILITY=0 (span 은 안 보내고 traceId 는 로그에 남음).
+      # 이 값이 있을 때만 내보낸다(application.properties). tempo 가 없으면 내보내기가 실패해 backend 가 ERROR 를 1분에 최대
+      # 5줄 남기고(OpenTelemetry 의 SEVERE, 작업에는 영향 없음) Grafana '트레이스 내보내기 실패' 알림이 울린다. 그래서 배포는
+      # tempo 먼저(README '로그 · 알림'). tempo 없이 오래 띄울 때는 deploy/.env 에 TRACING_SAMPLING_PROBABILITY=0 (span 은 안
+      # 보내고 traceId 는 로그에 남음).
       MANAGEMENT_OTLP_TRACING_ENDPOINT: http://tempo:4318/v1/traces
       MANAGEMENT_TRACING_SAMPLING_PROBABILITY: ${TRACING_SAMPLING_PROBABILITY:-1.0}
     volumes:
@@ -136,7 +138,7 @@ services:
 
   # ---- 모니터링 (선택): docker compose ... --profile monitoring up -d ----
   # 메모리 예산(한도 합): backend 3g + caddy 2g + prometheus 384m + grafana 256m + loki 384m + alloy 384m + tempo 384m
-  # ≈ 6.6GB + OS(2026-11-26, 전에는 5.6GB). 지금 GCP VM(8GB)에는 들어간다. 4GB VM 이면 한도 합이 RAM 을 넘으므로
+  # ≈ 6.75 GiB + OS(2026-11-26, 전에는 5.6GB). 지금 GCP VM(8GB)에는 들어간다. 4GB VM 이면 한도 합이 RAM 을 넘으므로
   # swap 2GB 가 꼭 필요하다(README '메모리'). backend 3g 는 전처리 모델(ONNX Runtime) 때문이다.
 
   prometheus:

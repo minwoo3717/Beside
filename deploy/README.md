@@ -201,7 +201,7 @@ TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름
 
 ## 모니터링 (Prometheus + Grafana, 선택)
 
-2026-11-26 더함 **[구현됨, 배포 전]**: 로그 수집(Loki + Alloy), Grafana 지표 알림 12개(2026-11-26 스테이징 훈련 뒤 앞단 지연 1개 추가), 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
+2026-11-26 더함 **[구현됨, 배포 전]**: 로그 수집(Loki + Alloy), Grafana 지표 알림 13개(2026-11-26 스테이징 훈련 뒤 앞단 지연 1개, 배포 전 검토 뒤 트레이스 내보내기 1개 추가), 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
 
 설정 파일 **[구현됨]** · VM 에서 띄우기 **[적용]**: 2026-11-25 05:52 UTC, 아래 '띄우기 · 확인' 의 `$M up -d` 대신 `$M up -d --no-deps prometheus grafana` 로 backend·caddy 를 건드리지 않고 띄웠다(먼저 `--dry-run` 으로 확인, 두 컨테이너 ID·재시작 0 그대로, `.env` 백업 `deploy/.env.bak-20261125-grafana`, 관리자 비밀번호는 VM 에서 만들어 출력하지 않음). 그때 메모리는 grafana 55 MiB·prometheus 100 MiB 였다. 이제 VM 의 compose 명령에는 늘 `--profile monitoring` 을 붙인다(아래). 첫 값은 [2026-11-25 리허설](../docs/ops/data/2026-11-25_demo-gpu-rehearsal/README.md) 의 Prometheus 질의. 멘토 지표 5종(생성 성공률, 생성 시간 평균·p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)과 서버 자원을 한 화면에서 본다. 지표 이름은 [docs/METRICS.md](../docs/METRICS.md) §5(`beside.*` → Prometheus `beside_*`).
 
@@ -285,7 +285,7 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
 
 브라우저: `https://<도메인>/grafana/` → Basic 인증(팀 계정) → Grafana 로그인(`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`).
 
-- **monitoring 을 쓰기 시작하면 compose 명령에 늘 `--profile monitoring` 을 붙인다**(`$M`). 붙이지 않은 `up -d` 는 prometheus·grafana 를 멈추지도 고치지도 않는다. [scripts/deploy_vm.sh](../scripts/deploy_vm.sh) 도 프로필을 붙이지 않으므로, `monitoring/prometheus.yml` 이 바뀐 배포 뒤에는 `$M restart prometheus` 를 따로 한다(파일 하나 마운트라 재시작해야 읽는다). 대시보드·데이터소스 폴더는 폴더 마운트라 git pull 만으로 반영된다.
+- **monitoring 을 쓰기 시작하면 compose 명령에 늘 `--profile monitoring` 을 붙인다**(`$M`). 붙이지 않은 `up -d` 는 prometheus·grafana 를 멈추지도 고치지도 않는다. [scripts/deploy_vm.sh](../scripts/deploy_vm.sh) 도 프로필을 붙이지 않으므로, `monitoring/prometheus.yml` 이 바뀐 배포 뒤에는 `$M restart prometheus` 를 따로 한다(파일 하나 마운트라 재시작해야 읽는다). 대시보드는 Grafana 가 폴더를 다시 읽어 git pull 만으로 반영된다. **데이터소스·알림 공급 파일은 Grafana 가 시작할 때만 읽으므로** 바뀐 배포 뒤에는 `$M restart grafana` 를 한다(서비스 정의가 그대로면 `up -d` 는 grafana 를 다시 만들지 않는다, 2026-11-26 배포 전 검토).
 - Grafana 관리자 비밀번호는 **처음 뜰 때(빈 `grafana_data`)만** `.env` 에서 읽는다. 나중에 바꾸려면 `$M exec grafana grafana cli admin reset-admin-password '<새 비밀번호>'`.
 - 끄기: `$M stop prometheus grafana`(데이터는 볼륨 `beside_prometheus_data`·`beside_grafana_data` 에 남는다). 지표는 백업 대상이 아니다.
 - Prometheus 화면이 필요하면 Grafana 의 **Explore** 에서 같은 PromQL 을 쓴다. 원시 응답은 위처럼 `$M exec prometheus wget -qO- 'http://localhost:9090/api/v1/...'`.
@@ -295,8 +295,8 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
 - **왜**: 로그는 서비스마다 50 MB 에서 지워지고(부하 중에는 몇 분) VM 과 함께 사라졌다. 지표 알림은 0개라 대시보드는 사람이 볼 때만 쓸모가 있었다. 2026-11-25 멘토링('로그를 서버로 보내 대시보드로', '모니터링을 해야 감지가 빠르다').
 - **로그**: `alloy` 가 Docker 의 json-file 로그(`/var/lib/docker/containers`, 읽기만)를 읽어 `loki` 로 보낸다. `docker.sock` 은 붙이지 않는다. 서비스 이름은 json-file `labels` 가 넣는 `attrs` 에서 읽는다(아래 '로그'). 라벨은 `service`·`stream`·`level`(backend·caddy)뿐이고, `jobId`·`uri` 는 질의 때 `| json` 으로 본다. 보관 7일(볼륨 `beside_loki_data`).
 - **대시보드**: Grafana **Beside** 폴더 → **Beside 로그**(서비스별 로그 줄/분, backend 수준별, Caddy 상태별·응답 시간 p95, ERROR·WARN, 실패 코드별, Caddy 5xx uri, 느린 요청, ID 로 찾기). 원본 [monitoring/grafana/dashboards/beside-logs.json](monitoring/grafana/dashboards/beside-logs.json). 로그 줄의 `jobId`·`requestId` 를 누르면 작업 페이지·같은 요청의 로그로 간다.
-- **알림**: [monitoring/grafana/provisioning/alerting/rules.yml](monitoring/grafana/provisioning/alerting/rules.yml) 12개, `env="prod"` 만(2026-11-26 스테이징 훈련 뒤 조회 알림 라벨·기준 고침, 앞단 지연 알림 추가 — [docs/ops/2026-11-26_staging-drills.md](../docs/ops/2026-11-26_staging-drills.md)). Discord 는 2026-11-26 결정으로 기존 팀 채널(`GRAFANA_ALERT_WEBHOOK_URL` 을 비우면 `NOTIFY_WEBHOOK_URL`). 기준은 [docs/ops/SLO.md](../docs/ops/SLO.md). 메시지는 '📈 …', 풀리면 '✅ 해제: …'.
-- **띄우기**(backend·caddy 는 그대로): `$M up -d --no-deps loki alloy` 다음 `$M up -d --no-deps grafana`(알림 폴더 마운트·환경 변수가 바뀌어 다시 만들어진다). 확인: Grafana Explore 에서 Loki `{service="backend"}`, 알림 → 규칙 목록 11개.
+- **알림**: [monitoring/grafana/provisioning/alerting/rules.yml](monitoring/grafana/provisioning/alerting/rules.yml) 13개, `env="prod"` 만(2026-11-26 스테이징 훈련 뒤 조회 알림 라벨·기준 고침, 앞단 작업 조회 지연 알림 추가 — [docs/ops/2026-11-26_staging-drills.md](../docs/ops/2026-11-26_staging-drills.md). 배포 전 검토 뒤 트레이스 내보내기 실패를 'backend ERROR 로그' 에서 떼어 따로 알림). Discord 는 2026-11-26 결정으로 기존 팀 채널(`GRAFANA_ALERT_WEBHOOK_URL` 을 비우면 `NOTIFY_WEBHOOK_URL`). 기준은 [docs/ops/SLO.md](../docs/ops/SLO.md). 메시지는 '📈 …', 풀리면 '✅ 해제: …'.
+- **띄우기**(backend·caddy 는 그대로): `$M up -d --no-deps loki alloy` 다음 `$M up -d --no-deps grafana`(알림 폴더 마운트·환경 변수가 바뀌어 다시 만들어진다). 확인: Grafana Explore 에서 Loki `{service="backend"}`, 알림 → 규칙 목록 13개. 규칙 파일만 바뀐 배포는 `$M restart grafana`.
 - **로그 형식**: prod backend 는 한 줄에 JSON 하나(`logback-spring.xml`, 2026-11-26). `docker compose logs backend | jq -r .message` 로 읽고, `requestId`·`jobId`·`traceId` 필드로 찾는다. 부하 시험 문서의 옛 텍스트 줄 예시(`deploy/loadtest/README.md`)는 이제 JSON 의 `message` 다.
 - **추적(분산 트레이싱, W8)** **[구현됨, 배포 전]**: 작업 한 건이 어디에 시간을 썼는지 한 화면에서 본다(멘토링 '로깅·모니터링·추적').
   - 구성: backend 가 Micrometer Tracing(OpenTelemetry)으로 span 을 만들어 OTLP HTTP 로 `tempo:4318` 에 보낸다(compose 의 `MANAGEMENT_OTLP_TRACING_ENDPOINT`, 표본 `TRACING_SAMPLING_PROBABILITY` 기본 1.0). `tempo`(grafana/tempo:2.6.1, single binary, 볼륨 `beside_tempo_data`, 보관 72시간, 공개 포트 없음)가 저장하고 Grafana 데이터소스 **Tempo**(uid `beside-tempo`)가 읽는다. 설정 [monitoring/tempo/tempo.yml](monitoring/tempo/tempo.yml).
@@ -304,7 +304,8 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
   - 보는 법: Grafana **Explore → Tempo → Search** 에서 Span Name `beside.job.run`(또는 TraceQL `{name="beside.job.run" && span.jobId="<jobId>"}`) → 트레이스를 열면 단계별 막대가 나온다. Loki 로그 줄(Explore 의 Loki 또는 'Beside 로그' 대시보드)의 `traceId` 를 누르면 그 트레이스로, 트레이스의 span 에서 'Logs for this span' 을 누르면 그 작업의 backend 로그로 간다. PROCESSING 줄(`stage=PROCESSING … traceId=<id>`)에도 적힌다.
   - GPU 쪽: 같은 요청에 W3C `traceparent` 가 붙고([docs/CONTRACT.md](../docs/CONTRACT.md) §6), Pod 의 `inference.log` 줄 끝에 `rid=<jobId>-<attempt> trace=<trace id>` 가 남는다([generation/inference_service/README.md](../generation/inference_service/README.md) '로그'). Pod 로그는 Loki 로 오지 않으므로 Pod 에서 `grep <trace id> /workspace/beside-logs/inference.log`.
   - 보내지 않는 것: `/actuator/**`·`/api/v1/healthz` 요청과 `@Scheduled` 실행의 span(하루 수만 개, 지표는 그대로).
-  - 띄우기: `$M up -d --no-deps tempo` 다음 `$M up -d --no-deps grafana`(데이터소스 폴더에 tempo.yml 이 생겨 다시 읽는다)와 backend 재배포(새 이미지 + 환경 변수 두 줄). tempo 없이 backend 만 띄우면 내보내기가 실패해 backend 로그에 경고가 가끔 남는다(작업에는 영향 없음). 그때는 `deploy/.env` 에 `TRACING_SAMPLING_PROBABILITY=0`. 부하 시험도 같은 값을 물려받는다(낮추려면 같은 줄).
+  - 띄우기(순서가 중요): VM 에서 `git pull --ff-only` → `$M up -d --no-deps tempo`(먼저, 떴는지 `$M ps tempo`) → `scripts/deploy_vm.sh`(backend 새 이미지 + 환경 변수 두 줄) → `$M restart grafana`(Tempo 데이터소스·알림은 시작할 때만 읽는다). tempo 없이 backend 가 뜨면 내보내기가 실패해 backend 가 **ERROR** 를 1분에 최대 5줄 남기고(OpenTelemetry 의 SEVERE, 작업에는 영향 없음) '트레이스 내보내기 실패' 알림이 울린다. tempo 없이 오래 띄울 때는 `deploy/.env` 에 `TRACING_SAMPLING_PROBABILITY=0`. 부하 시험도 같은 값을 물려받는다(낮추려면 같은 줄).
+  - 가리는 것: 서버 span 의 `http.url` 은 로그와 같은 규칙으로 공유 토큰의 앞 6자만 남긴다(`TracingConfig`, 2026-11-26 배포 전 검토).
   - 확인 **[구현됨]**: `TracingPropagationTest`(span 나무·링크·traceparent·로그의 traceId·retry·MDC), `TracingExportConfigTest`(엔드포인트가 있을 때만 내보내기), CI 가 tempo 설정 검사(`-config.verify`)·기동·OTLP span 한 개 받기·Grafana 데이터소스 `beside-tempo` 를 본다(PR CI 에서 돈다, 개발 PC 에 Docker 없음). VM 에서 실제 트레이스를 본 것은 **[계획]**(배포 전).
 
 ## 운영
