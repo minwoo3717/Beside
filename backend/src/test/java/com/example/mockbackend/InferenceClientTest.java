@@ -4,11 +4,13 @@ import com.example.mockbackend.domain.RunDetails;
 import com.example.mockbackend.exception.ErrorCode;
 import com.example.mockbackend.service.InferenceClient;
 import com.example.mockbackend.service.InferenceFailure;
+import com.example.mockbackend.service.InferenceMetrics;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +65,10 @@ class InferenceClientTest {
     private final List<List<MultipartPart>> uploads = new CopyOnWriteArrayList<>();
     /** "METHOD path token" of every request; token "(none)" when the header is absent. */
     private final List<String> calls = new CopyOnWriteArrayList<>();
+    /** "METHOD X-Request-Id" of every request; "(none)" when the header is absent. */
+    private final List<String> requestIds = new CopyOnWriteArrayList<>();
+    /** beside.inference.request of the clients made by {@link #metered}. */
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private volatile int artifactStatus = 200;
     private volatile byte[] artifactBytes = "glTF-bytes-from-the-gpu-pc".getBytes(StandardCharsets.UTF_8);
     private volatile boolean artifactDrop;
@@ -80,6 +86,7 @@ class InferenceClientTest {
         server.createContext("/infer/upload", exchange -> {
             try {
                 calls.add("POST " + exchange.getRequestURI().getPath() + " " + tokenOf(exchange));
+                requestIds.add("POST " + requestIdOf(exchange));
                 contentTypes.add(exchange.getRequestHeaders().getFirst("Content-Type"));
                 uploads.add(MultipartPart.parse(exchange.getRequestHeaders().getFirst("Content-Type"),
                         exchange.getRequestBody().readAllBytes()));
@@ -98,6 +105,7 @@ class InferenceClientTest {
             try {
                 String method = exchange.getRequestMethod();
                 calls.add(method + " " + exchange.getRequestURI().getPath() + " " + tokenOf(exchange));
+                requestIds.add(method + " " + requestIdOf(exchange));
                 if (method.equals("DELETE")) {
                     exchange.sendResponseHeaders(deleteStatus, -1);
                 } else if (artifactDrop) {
@@ -132,6 +140,7 @@ class InferenceClientTest {
         server.createContext("/infer", exchange -> {
             try {
                 calls.add("POST " + exchange.getRequestURI().getPath() + " " + tokenOf(exchange));
+                requestIds.add("POST " + requestIdOf(exchange));
                 requests.add(JSON.readTree(exchange.getRequestBody()));
                 contentTypes.add(exchange.getRequestHeaders().getFirst("Content-Type"));
                 Thread.sleep(delayMs);
@@ -763,6 +772,113 @@ class InferenceClientTest {
                 .hasMessageContaining("inference.transfer");
     }
 
+    // ---------------------------------------------------------------- X-Request-Id and beside.inference.request
+
+    /** Every per-job request names the run ({jobId}-{attempt}) for the service's log; the body stays as it was. */
+    @Test
+    void perJobRequestsCarryTheRequestIdAndTheBodyIsUnchanged() throws Exception {
+        ObjectNode ok = JSON.createObjectNode();
+        ok.put("glbPath", dir.resolve("base.glb").toString());
+        answer(200, ok.toString());
+        client(5_000).infer("job-r1", 2, List.of(dir.resolve("dog.jpg")), List.of("dog.jpg"), null);
+        client(5_000).infer("job-r2", List.of(dir.resolve("dog.jpg")));   // no attempt given: the job id alone
+        client(5_000).infer("job r3", 1, List.of(dir.resolve("dog.jpg")), List.of("dog.jpg"), null); // not plain: none
+
+        assertThat(requestIds).containsExactly("POST job-r1-2", "POST job-r2", "POST (none)");
+        assertThat(requests).allSatisfy(sent -> assertThat(fieldNames(sent))
+                .as("the header is the only change: the body has the same fields")
+                .containsExactly("jobId", "imagePaths", "options"));
+        assertThat(requests.get(0).path("jobId").asText()).isEqualTo("job-r1");
+
+        requestIds.clear();
+        answerUploadOk("job-r4");
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient upload = uploadClient("s3cret");
+        upload.infer("job-r4", 1, List.of(photo), List.of("dog.jpg"), InferenceClient.Watch.NONE);
+        upload.cleanup("job-r4", 1);
+        upload.cleanup("job-r4");
+
+        assertThat(requestIds).containsExactly("POST job-r4-1", "GET job-r4-1", "DELETE job-r4-1", "DELETE job-r4");
+        assertThat(fieldNames(JSON.readTree(uploads.get(0).get(0).bytes()))).containsExactly("jobId", "options");
+    }
+
+    @Test
+    void everyPostIsTimedAsInferByHowItEnded() throws Exception {
+        InferenceClient client = metered(baseUrl(), "path", 600, 0);
+        assertThat(registry.get("beside.inference.request").timers()).as("4 calls x 4 outcomes, registered at 0")
+                .hasSize(16).allMatch(timer -> timer.count() == 0);
+        ObjectNode ok = JSON.createObjectNode();
+        ok.put("glbPath", dir.resolve("base.glb").toString());
+        List<Path> photo = List.of(dir.resolve("dog.jpg"));
+
+        answer(200, ok.toString());
+        client.infer("job-m1", photo);
+        answer(200, "{}");   // the job fails CONVERSION_FAILED, but the service did answer 200
+        catchThrowableOfType(() -> client.infer("job-m1", photo), InferenceFailure.class);
+        answer(503, "");
+        catchThrowableOfType(() -> client.infer("job-m1", photo), InferenceFailure.class);
+        answer(200, ok.toString());
+        delayMs = 3_000;     // longer than the 600 ms timeout
+        catchThrowableOfType(() -> client.infer("job-m1", photo), InferenceFailure.class);
+        delayMs = 0;
+        drop = true;         // closed without an answer
+        catchThrowableOfType(() -> client.infer("job-m1", photo), InferenceFailure.class);
+        drop = false;
+        delayMs = 3_000;     // the watch gives up first (FD16b)
+        catchThrowableOfType(() -> client.infer("job-m1", 1, photo, List.of("dog.jpg"), () -> "instance a -> b"),
+                InferenceFailure.class);
+
+        assertThat(timedSoFar()).containsExactly("infer/error=1", "infer/ok=2", "infer/timeout=1", "infer/unavailable=2");
+        assertThat(registry.get("beside.inference.request").tags("call", "infer", "outcome", "timeout").timer()
+                .totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).as("the wait until giving up").isBetween(500.0, 2_500.0);
+
+        int closedPort;
+        try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = probe.getLocalPort();
+        }
+        InferenceClient down = metered("http://127.0.0.1:" + closedPort, "path", 5_000, 0);
+        catchThrowableOfType(() -> down.infer("job-m2", photo), InferenceFailure.class);
+        assertThat(timed("infer", "unavailable")).as("connection refused").isEqualTo(3);
+    }
+
+    @Test
+    void uploadModeTimesTheDownloadAndEveryDeleteApart() throws Exception {
+        InferenceClient client = metered(baseUrl(), "upload", 5_000, 600);
+        answerUploadOk("job-m3");
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        List<Path> photos = List.of(photo);
+
+        client.infer("job-m3", photos);                       // infer ok, download ok
+        artifactStatus = 404;
+        catchThrowableOfType(() -> client.infer("job-m3", photos), InferenceFailure.class);   // download error
+        artifactStatus = 200;
+        artifactStall = true;                                 // no data for the 600 ms idle limit
+        catchThrowableOfType(() -> client.infer("job-m3", photos), InferenceFailure.class);   // download timeout
+        artifactStall = false;
+        Files.createDirectories(dir.resolve("tmp").resolve("job-m4").resolve("base.glb"));   // FD4: cannot write here
+        answerUploadOk("job-m4");
+        catchThrowableOfType(() -> client.infer("job-m4", photos), InferenceFailure.class);   // download error
+        client.cleanup("job-m3");                             // 204
+        deleteStatus = 500;
+        client.cleanup("job-m3");
+
+        assertThat(timedSoFar()).containsExactly("cleanup/error=1", "cleanup/ok=1",
+                "download/error=2", "download/ok=1", "download/timeout=1", "infer/ok=4");
+
+        int closedPort;
+        try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = probe.getLocalPort();
+        }
+        metered("http://127.0.0.1:" + closedPort, "upload", 5_000, 600).cleanup("job-m5");
+        assertThat(timed("cleanup", "unavailable")).as("refused, sent once more, refused again").isEqualTo(2);
+    }
+
+    private static List<String> fieldNames(JsonNode node) {
+        List<String> names = new java.util.ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+
     private InferenceClient client(long timeoutMs) {
         // Trailing slash on purpose: the client must not call //infer.
         return new InferenceClient("http://127.0.0.1:" + server.getAddress().getPort() + "/", timeoutMs, JSON);
@@ -789,6 +905,30 @@ class InferenceClientTest {
     private static String tokenOf(HttpExchange exchange) {
         String token = exchange.getRequestHeaders().getFirst("X-Inference-Token");
         return token == null ? "(none)" : token;
+    }
+
+    private static String requestIdOf(HttpExchange exchange) {
+        String id = exchange.getRequestHeaders().getFirst("X-Request-Id");
+        return id == null ? "(none)" : id;
+    }
+
+    /** A client timed into {@link #registry}; {@code idleMs} is inference.download-idle-ms. */
+    private InferenceClient metered(String base, String transfer, long timeoutMs, long idleMs) {
+        return new InferenceClient(base, timeoutMs, transfer, "", dir.resolve("tmp").toString(), idleMs, JSON,
+                new InferenceMetrics(registry));
+    }
+
+    private long timed(String call, String outcome) {
+        return registry.get("beside.inference.request").tags("call", call, "outcome", outcome).timer().count();
+    }
+
+    /** Every beside.inference.request series with a count above 0, as "call/outcome=count". */
+    private List<String> timedSoFar() {
+        return registry.get("beside.inference.request").timers().stream()
+                .filter(timer -> timer.count() > 0)
+                .map(timer -> timer.getId().getTag("call") + "/" + timer.getId().getTag("outcome") + "=" + timer.count())
+                .sorted()
+                .toList();
     }
 
     private static void respond(HttpExchange exchange, int status, byte[] bytes) throws IOException {

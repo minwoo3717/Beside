@@ -40,6 +40,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.IntPredicate;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
@@ -78,6 +80,9 @@ import java.util.stream.Stream;
  *       CONVERSION_FAILED. A normal download takes well under a second; the POST has no such limit, since the model
  *       legitimately sends nothing while it runs.</li>
  * </ul>
+ * Every request is timed in {@code beside.inference.request} (call = infer | download | cleanup, docs/METRICS.md
+ * §5.1), and the per-job ones carry {@value #REQUEST_ID_HEADER}: {jobId}-{attempt}, or {jobId} alone when the caller
+ * did not give the attempt, so the service's log can be matched with this server's. The request body is unchanged.
  */
 @Component
 @Profile("real")
@@ -99,6 +104,10 @@ public class InferenceClient {
     /** inference.download-idle-ms default. */
     public static final long DEFAULT_DOWNLOAD_IDLE_MS = 60_000;
     public static final String TOKEN_HEADER = "X-Inference-Token";
+    /** Sent with every per-job request (not /healthz): {jobId}-{attempt}, or {jobId} when the attempt is unknown. */
+    public static final String REQUEST_ID_HEADER = "X-Request-Id";
+    /** A request id is sent only when it is this plain (job ids are UUIDs): nothing a header could choke on. */
+    private static final Pattern REQUEST_ID_FORMAT = Pattern.compile("[A-Za-z0-9._-]{1,128}");
     /** Codes the inference service may send in detail.code. */
     private static final Set<ErrorCode> SERVICE_CODES = EnumSet.of(ErrorCode.INFERENCE_FAILED,
             ErrorCode.INFERENCE_TIMEOUT, ErrorCode.INFERENCE_UNAVAILABLE, ErrorCode.CONVERSION_FAILED);
@@ -132,6 +141,7 @@ public class InferenceClient {
     private final Duration downloadIdle;
     private final ObjectMapper objectMapper;
     private final HttpClient http;
+    private final InferenceMetrics metrics;
     private final Logger log = LoggerFactory.getLogger(InferenceClient.class);
 
     /**
@@ -150,6 +160,12 @@ public class InferenceClient {
         this(baseUrl, timeoutMs, transfer, token, tmpDir, DEFAULT_DOWNLOAD_IDLE_MS, objectMapper);
     }
 
+    /** Timed into a registry of its own ({@link InferenceMetrics#detached()}). */
+    public InferenceClient(String baseUrl, long timeoutMs, String transfer, String token, String tmpDir,
+                           long downloadIdleMs, ObjectMapper objectMapper) {
+        this(baseUrl, timeoutMs, transfer, token, tmpDir, downloadIdleMs, objectMapper, InferenceMetrics.detached());
+    }
+
     @Autowired
     public InferenceClient(@Value("${inference.base-url:http://localhost:8001}") String baseUrl,
                            @Value("${inference.timeout-ms:120000}") long timeoutMs,
@@ -157,7 +173,8 @@ public class InferenceClient {
                            @Value("${inference.token:}") String token,
                            @Value("${storage.tmp.dir:storage/tmp}") String tmpDir,
                            @Value("${inference.download-idle-ms:" + DEFAULT_DOWNLOAD_IDLE_MS + "}") long downloadIdleMs,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper, InferenceMetrics metrics) {
+        this.metrics = metrics;
         this.downloadIdle = Duration.ofMillis(Math.max(0, downloadIdleMs));
         this.baseUrl = baseUrl.replaceAll("/+$", "");
         this.inferUri = URI.create(this.baseUrl + "/infer");
@@ -222,15 +239,30 @@ public class InferenceClient {
         return infer(jobId, images, filenames, Watch.NONE);
     }
 
+    /** Without the attempt: {@value #REQUEST_ID_HEADER} is the job id alone. */
+    public Result infer(String jobId, List<Path> images, List<String> filenames, Watch watch)
+            throws InferenceFailure, InterruptedException {
+        return infer(jobId, 0, images, filenames, watch);
+    }
+
     /**
      * Blocks until the service answers (and, in upload mode, the GLB is downloaded), inference.timeout-ms passes or
      * {@code watch} says the request is lost. Interruptible (server shutdown). {@code filenames} are the uploads'
-     * original names, sent in upload mode.
+     * original names, sent in upload mode. {@code attempt} (1, 2, ... ; 0 = unknown) only goes into
+     * {@value #REQUEST_ID_HEADER}.
      */
-    public Result infer(String jobId, List<Path> images, List<String> filenames, Watch watch)
+    public Result infer(String jobId, int attempt, List<Path> images, List<String> filenames, Watch watch)
             throws InferenceFailure, InterruptedException {
         Watch checked = watch == null ? Watch.NONE : watch;
-        return transfer == Transfer.UPLOAD ? inferUpload(jobId, images, filenames, checked) : inferPath(jobId, images, checked);
+        String requestId = requestId(jobId, attempt);
+        return transfer == Transfer.UPLOAD
+                ? inferUpload(jobId, requestId, images, filenames, checked)
+                : inferPath(jobId, requestId, images, checked);
+    }
+
+    /** Without the attempt: {@value #REQUEST_ID_HEADER} is the job id alone. */
+    public void cleanup(String jobId) {
+        cleanup(jobId, 0);
     }
 
     /**
@@ -238,9 +270,9 @@ public class InferenceClient {
      * to delete the job's folder (DELETE /artifacts/{jobId}). Never throws: a failed cleanup is logged and does not
      * change the job's result (JobFinisher rule). Path mode has nothing to clean. An I/O error on the DELETE (no
      * answer) is retried once ({@link #CLEANUP_ATTEMPTS}); a timeout is not, and neither is an HTTP error status (the
-     * service did answer).
+     * service did answer). Each DELETE sent is one {@code cleanup} request in beside.inference.request.
      */
-    public void cleanup(String jobId) {
+    public void cleanup(String jobId, int attempt) {
         if (transfer != Transfer.UPLOAD) {
             return;
         }
@@ -251,27 +283,35 @@ public class InferenceClient {
             log.warn("jobId={} could not delete the temporary GLB folder {}: {}", jobId, jobTmp, e.toString());
         }
         String call = "DELETE " + baseUrl + "/artifacts/" + jobId;
-        for (int attempt = 1; attempt <= CLEANUP_ATTEMPTS; attempt++) {
+        String requestId = requestId(jobId, attempt);
+        for (int send = 1; send <= CLEANUP_ATTEMPTS; send++) {
+            long started = System.nanoTime();
             try {
-                HttpRequest request = withToken(HttpRequest.newBuilder(URI.create(baseUrl + "/artifacts/" + jobId)))
+                HttpRequest request = withToken(HttpRequest.newBuilder(URI.create(baseUrl + "/artifacts/" + jobId)), requestId)
                         .timeout(CLEANUP_TIMEOUT)
                         .DELETE()
                         .build();
                 HttpResponse<Void> response = http.send(request, HttpResponse.BodyHandlers.discarding());
-                if (response.statusCode() / 100 != 2) {
+                boolean deleted = response.statusCode() / 100 == 2;
+                metrics.record(InferenceMetrics.Call.CLEANUP,
+                        deleted ? InferenceMetrics.Outcome.OK : InferenceMetrics.Outcome.ERROR, started);
+                if (!deleted) {
                     log.warn("jobId={} {} -> HTTP {}: the service keeps the job's files", jobId, call, response.statusCode());
                 }
                 return;
             } catch (HttpTimeoutException e) {   // includes HttpConnectTimeoutException
+                metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.outcomeOf(e), started);
                 log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 return;
             } catch (IOException e) {
-                if (attempt < CLEANUP_ATTEMPTS) {
+                metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.outcomeOf(e), started);
+                if (send < CLEANUP_ATTEMPTS) {
                     log.info("jobId={} {} failed: {}: sending it once more", jobId, call, e.toString());
                 } else {
                     log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 }
             } catch (RuntimeException e) {
+                metrics.record(InferenceMetrics.Call.CLEANUP, InferenceMetrics.Outcome.ERROR, started);
                 log.warn("jobId={} {} failed: {}: the service keeps the job's files", jobId, call, e.toString());
                 return;
             } catch (InterruptedException e) {
@@ -284,9 +324,10 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- path mode
 
-    private Result inferPath(String jobId, List<Path> images, Watch watch) throws InferenceFailure, InterruptedException {
+    private Result inferPath(String jobId, String requestId, List<Path> images, Watch watch)
+            throws InferenceFailure, InterruptedException {
         String call = "POST " + inferUri;
-        HttpRequest request = withToken(HttpRequest.newBuilder(inferUri))
+        HttpRequest request = withToken(HttpRequest.newBuilder(inferUri), requestId)
                 .timeout(timeout)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(pathRequestBody(jobId, images)))
@@ -316,11 +357,11 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- upload mode
 
-    private Result inferUpload(String jobId, List<Path> images, List<String> filenames, Watch watch)
+    private Result inferUpload(String jobId, String requestId, List<Path> images, List<String> filenames, Watch watch)
             throws InferenceFailure, InterruptedException {
         String call = "POST " + uploadUri;
         String boundary = "BesideBoundary" + UUID.randomUUID().toString().replace("-", "");
-        HttpRequest request = withToken(HttpRequest.newBuilder(uploadUri))
+        HttpRequest request = withToken(HttpRequest.newBuilder(uploadUri), requestId)
                 .timeout(timeout)
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(multipartBody(boundary, jobId, images, filenames))
@@ -332,7 +373,7 @@ public class InferenceClient {
             throw InferenceFailure.modelRan(ErrorCode.CONVERSION_FAILED, "Inference service answered HTTP 200 without a usable glbUrl",
                     call + " -> HTTP 200 glbUrl=" + glbUrl + ": " + quote(root.toString()));
         }
-        return resultOf(root, download(jobId, artifact, watch));
+        return resultOf(root, download(jobId, requestId, artifact, watch));
     }
 
     /** glbUrl is relative to the service ("/artifacts/..."): the GLB is only ever fetched from inference.base-url. */
@@ -406,7 +447,8 @@ public class InferenceClient {
      * GET glbUrl into {storage.tmp.dir}/{jobId}/base.glb. Only a 200 body is written. A GLB that does not arrive is
      * CONVERSION_FAILED; one this server cannot write (its own disk) is INTERNAL_ERROR.
      */
-    private Path download(String jobId, URI artifact, Watch watch) throws InferenceFailure, InterruptedException {
+    private Path download(String jobId, String requestId, URI artifact, Watch watch)
+            throws InferenceFailure, InterruptedException {
         String call = "GET " + artifact;
         Path target = tmpDir.resolve(jobId).resolve("base.glb");
         try {
@@ -416,7 +458,8 @@ public class InferenceClient {
                     "Could not prepare the GLB download on this server (" + e.getClass().getSimpleName() + ")",
                     call + " -> " + target + ": " + e);
         }
-        HttpRequest request = withToken(HttpRequest.newBuilder(artifact)).timeout(timeout).GET().build();
+        HttpRequest request = withToken(HttpRequest.newBuilder(artifact), requestId).timeout(timeout).GET().build();
+        long started = System.nanoTime();
         // The request timeout of the JDK 17 client stops once the headers arrive, so a GPU PC that vanishes mid-body
         // (no FIN over the tailnet) would block here for good while holding the only inference slot. await() covers
         // the whole exchange, body included, and cuts it off after downloadIdle without data (FD16b).
@@ -438,6 +481,9 @@ public class InferenceClient {
             file.abort();
             deleteQuietly(target);
         }
+        // This server's own disk failing the write (FD4) is an error here, not a service that went away.
+        metrics.record(InferenceMetrics.Call.DOWNLOAD, waited.end() == End.FAILED && file.writeError() != null
+                ? InferenceMetrics.Outcome.ERROR : outcomeOf(waited, status -> status == 200), started);
         switch (waited.end()) {
             case DEADLINE -> throw new InferenceFailure(ErrorCode.CONVERSION_FAILED,
                     "The GLB download did not finish within inference.timeout-ms=" + timeout.toMillis(), call + ": body timed out");
@@ -473,16 +519,39 @@ public class InferenceClient {
 
     // ---------------------------------------------------------------- shared
 
-    private HttpRequest.Builder withToken(HttpRequest.Builder builder) {
+    /** The token header when one is set, and {@value #REQUEST_ID_HEADER} when {@code requestId} is not null. */
+    private HttpRequest.Builder withToken(HttpRequest.Builder builder, String requestId) {
         if (token != null) {
             builder.header(TOKEN_HEADER, token);
+        }
+        if (requestId != null) {
+            builder.header(REQUEST_ID_HEADER, requestId);
         }
         return builder;
     }
 
-    /** The POST: its answer, or the job failure code of what went wrong. */
+    /** {jobId}-{attempt}, {jobId} when the attempt is unknown (0 or less), null when the job id is not plain text. */
+    static String requestId(String jobId, int attempt) {
+        String id = attempt > 0 ? jobId + "-" + attempt : jobId;
+        return id != null && REQUEST_ID_FORMAT.matcher(id).matches() ? id : null;
+    }
+
+    /** beside.inference.request outcome of a wait that ended without an interrupt; {@code ok} picks the good statuses. */
+    private static InferenceMetrics.Outcome outcomeOf(Waited<?> waited, IntPredicate ok) {
+        return switch (waited.end()) {
+            case ANSWERED -> ok.test(waited.response().statusCode())
+                    ? InferenceMetrics.Outcome.OK : InferenceMetrics.Outcome.ERROR;
+            case DEADLINE, IDLE -> InferenceMetrics.Outcome.TIMEOUT;
+            case LOST -> InferenceMetrics.Outcome.UNAVAILABLE;
+            case FAILED -> InferenceMetrics.outcomeOf(waited.error());
+        };
+    }
+
+    /** The POST: its answer, or the job failure code of what went wrong. Timed as call=infer. */
     private HttpResponse<String> send(HttpRequest request, String call, Watch watch) throws InferenceFailure, InterruptedException {
+        long started = System.nanoTime();
         Waited<String> waited = await(http.sendAsync(request, HttpResponse.BodyHandlers.ofString()), watch, null, Duration.ZERO);
+        metrics.record(InferenceMetrics.Call.INFER, outcomeOf(waited, status -> status == 200), started);
         switch (waited.end()) {
             case ANSWERED -> {
                 return waited.response();
