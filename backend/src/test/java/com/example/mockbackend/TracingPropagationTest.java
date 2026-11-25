@@ -284,6 +284,24 @@ class TracingPropagationTest {
     }
 
     @Test
+    void aShareLinksTokenKeepsOnlyItsFirstSixCharactersOnTheServerSpan() throws Exception {
+        // 2026-11-26 pre-deploy review: Spring tags server spans with the raw URI (http.url) and Tempo keeps them 72 h;
+        // the share routes are public and the token is the only key to a pet's model (openapi.yaml: 앞 6자만)
+        String token = "AbCdEfGhIjKlMnOpQrStUv";
+        mvc.perform(get("/api/v1/shares/" + token).header("X-Request-Id", "rid-trace-share-1"));
+        mvc.perform(get("/s/" + token).header("X-Request-Id", "rid-trace-share-2"));
+        List<SpanData> servers = SPANS.getFinishedSpanItems().stream()
+                .filter(span -> span.getKind() == SpanKind.SERVER)
+                .filter(span -> String.valueOf(attr(span, TracingConfig.REQUEST_ID_TAG)).startsWith("rid-trace-share-"))
+                .toList();
+        assertThat(servers).hasSize(2);
+        assertThat(servers).extracting(span -> attr(span, TracingConfig.URL_TAG))
+                .containsExactlyInAnyOrder("/api/v1/shares/AbCdEf...", "/s/AbCdEf...");
+        assertThat(servers).allSatisfy(span -> assertThat(span.getAttributes().asMap().values())
+                .noneMatch(value -> String.valueOf(value).contains(token)));
+    }
+
+    @Test
     void withoutAnEndpointNothingIsExported() {
         // Spring Boot 3.2 makes the OTLP exporter only for management.otlp.tracing.endpoint (TracingExportConfigTest);
         // this context has tracing on and no endpoint, as a local run: no exporter bean, so no connection attempts.
