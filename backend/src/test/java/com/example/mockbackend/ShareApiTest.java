@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
@@ -130,6 +131,18 @@ class ShareApiTest {
                 .andExpect(content().bytes(SAMPLE_GLB))
                 .andReturn();
         assertThat(asset.getResponse().getHeader("Content-Disposition")).startsWith("inline").doesNotContain(jobId);
+        // Range requests, as for the job asset (JobV1ApiTest): one range declares its own length; several
+        // (multipart/byteranges) must not declare the whole file's length (review finding, 2026-11-25).
+        String assetUrl = infoBody.path("asset").path("url").asText();
+        mvc.perform(get(assetUrl).header("Range", "bytes=0-3"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().longValue("Content-Length", 4))
+                .andExpect(content().bytes(Arrays.copyOfRange(SAMPLE_GLB, 0, 4)));
+        MvcResult multiRange = mvc.perform(get(assetUrl).header("Range", "bytes=0-3,8-11"))
+                .andExpect(status().isPartialContent())
+                .andExpect(header().doesNotExist("Content-Length"))
+                .andReturn();
+        assertThat(multiRange.getResponse().getContentType()).startsWith("multipart/byteranges");
     }
 
     @Test

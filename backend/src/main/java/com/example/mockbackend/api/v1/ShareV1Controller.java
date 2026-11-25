@@ -122,9 +122,11 @@ public class ShareV1Controller {
     @GetMapping("/shares/{token}/asset")
     public ResponseEntity<Resource> downloadShareAsset(@PathVariable("token") String token) {
         ShareService.SharedAsset shared = shareService.open(token);
+        // No contentLength, as in JobV1Controller.downloadAsset: Spring sets it from the resource for 200 and from the
+        // range for a single-range 206; a fixed whole-file length would also go out on a multi-range 206, whose body
+        // is shorter (review finding, 2026-11-25).
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(GLB))
-                .contentLength(shared.bytes())
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=" + shareService.cacheSeconds(shared.link()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + SHARED_FILENAME + "\"")
                 .body(new FileSystemResource(shared.file()));
