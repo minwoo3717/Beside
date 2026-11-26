@@ -6,6 +6,7 @@ import com.example.mockbackend.preprocess.Cutout;
 import com.example.mockbackend.preprocess.DecodedPhoto;
 import com.example.mockbackend.preprocess.ImageDecoding;
 import com.example.mockbackend.preprocess.UnreadableImageException;
+import com.example.mockbackend.service.ShutdownSignal;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,16 +38,22 @@ public class CutoutStage {
     private final PreprocessProperties props;
     private final Path dir;
     private final Semaphore slots;
+    private final ShutdownSignal shutdown;
 
     public CutoutStage(PreprocessModels models, PreprocessProperties props,
-                       @Value("${storage.preprocessed.dir:storage/preprocessed}") String dir) {
+                       @Value("${storage.preprocessed.dir:storage/preprocessed}") String dir, ShutdownSignal shutdown) {
         this.models = models;
         this.props = props;
         this.dir = Path.of(dir);
         this.slots = new Semaphore(Math.max(1, props.getCutout().getMaxConcurrency()), true);
+        this.shutdown = shutdown;
     }
 
-    /** Never throws except when the worker is interrupted (shutdown). */
+    /**
+     * Never throws except when the worker is interrupted, or the server stops ({@link ShutdownSignal.Stopping}): a
+     * job that gets the permit only then gives it back without a cutout, so jobs queued for the permit (up to
+     * preprocess.cutout.wait-ms) do not each run one in turn while the server waits for them to stop.
+     */
     public PreparedPhoto prepare(Job job) throws InterruptedException {
         if (!models.cutoutEnabled() || job.getUploads().isEmpty()) {
             return PreparedPhoto.off();
@@ -72,6 +79,10 @@ public class CutoutStage {
             log.warn("jobId={} no cutout: no slot within {} ms, the original photo goes (FALLBACK:BUSY)", job.getId(),
                     props.getCutout().getWaitMs());
             return new PreparedPhoto(null, null, null, "FALLBACK:BUSY", version);
+        }
+        if (shutdown.stopping()) {
+            slots.release();
+            shutdown.check();
         }
         long work = System.nanoTime();
         try {
