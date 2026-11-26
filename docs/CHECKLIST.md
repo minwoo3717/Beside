@@ -44,7 +44,7 @@
 |---|---|---|---|
 | S1 | [BE] | 문서 정리(종합 A-5). 이 파일·PLAN·루트 README 는 2026-11-25 이 브랜치에서 고쳤다. 리뷰 브랜치가 고치는 파일의 겹치는 줄은 그 병합 뒤에. → 2026-11-26: 리뷰 브랜치는 PR #33(`0e9440e`)으로 병합됐다(문서 충돌은 `50efc57` 에서 풂) | 종합 A-5, 6절 |
 | S2 | [BE] | 멘토 요구 답: TRAFFIC_MODEL 3·5절을 잰 S_busy 로, 큐 처리량·확장 기준 한 장(GPU 증설 0회, 기준은 [제안값]), 멘토 F1~F5 ↔ FD 대응표. **이 브랜치에서 함**: [report/2026-11-25_mentoring-response.md](report/2026-11-25_mentoring-response.md) | [TRAFFIC_MODEL](perf/load/TRAFFIC_MODEL.md), [vm-5th](perf/load/2026-11-21_vm-5th.md), 종합 A-6 |
-| S3 | [BE·사람] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). ~~2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤~~ → 2026-11-26 사용자 결정: 발표 전에 실행한다. 1-1 5분 백업 **[적용]**(배포 창 1). 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC), Tailscale 로그인 승인 대기 [사람]. 1-4 `scripts/failover_vm.sh --planned` [구현됨]. 1-5 전환 훈련(D-1·D-3) [계획] | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
+| S3 | [BE·사람] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). ~~2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤~~ → 2026-11-26 사용자 결정: 발표 전에 실행한다. 1-1 5분 백업 **[적용]**(배포 창 1). 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC), Tailscale 로그인 승인 대기 [사람]. 1-4 `scripts/failover_vm.sh --planned` [구현됨]. 2026-11-26 `scripts/sync_standby.sh` 로 대기 VM 을 운영 `a44b3ed`·이미지에 맞추고 DRY_RUN 점검 통과(Tailscale 로그인만 남음, [준비 기록](ops/data/2026-11-26_failover-prep/README.md)). 1-5 전환 훈련(D-1·D-3) [계획]: 창 날짜·공지 [사람] | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
 | S4 | [전원·사람] | 보고서 초안과 팀 리뷰. 초안은 **이 브랜치에서 함**([report/최종보고서.md](report/최종보고서.md)), 팀 리뷰는 사람 | [PLAN 5단계](PLAN.md) DoD |
 | S5 | [GEN·BE·사람] | exp-03 전처리 3안 사람 채점. M10 과 같은 세션에서 | [exp-03](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) '실행 전' |
 | S6 | [GEN] | gltf-validator 로 정적·털 맵·리깅 GLB 3개 검사 | 3절 3단계 'GLB_SPEC 통과 GLB 3개' |

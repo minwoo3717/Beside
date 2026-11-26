@@ -35,7 +35,7 @@
 |---|---|
 | 프로젝트 | `beside-514511`(무료 체험 결제 계정에 연결) |
 | VM | `beside-vm` — `asia-northeast3-a`(서울), e2-standard-2(2 vCPU · 8GB), Ubuntu 24.04 LTS, 균형 디스크 50GB, 삭제 방지 켬 |
-| 대기 VM | `beside-standby` — `asia-northeast3-b`, e2-standard-2, 삭제 방지 켬. 2026-11-25 17:22~17:40 UTC 에 운영 디스크 스냅샷 `beside-vm-standby-20261125-172254`(main `d5f4a32`, 배포 창 1 직후)로 만들었다([gcp/clone_vm.sh](gcp/clone_vm.sh) → [standby/clone_init.sh](standby/clone_init.sh)). Tailscale 로그인 승인 대기. 코드는 운영(`a44b3ed`)보다 옛것이다. 전환 훈련은 [계획] ([REDUNDANCY](../docs/ops/REDUNDANCY.md) 6절) |
+| 대기 VM | `beside-standby` — `asia-northeast3-b`, e2-standard-2, 삭제 방지 켬. 2026-11-25 17:22~17:40 UTC 에 운영 디스크 스냅샷 `beside-vm-standby-20261125-172254`(main `d5f4a32`, 배포 창 1 직후)로 만들었다([gcp/clone_vm.sh](gcp/clone_vm.sh) → [standby/clone_init.sh](standby/clone_init.sh)). 서비스 계정 `beside-backup@`(아래 '서비스 계정·백업 버킷' 행과 같은 범위)과 임시 외부 IP 가 붙어 있다(2026-11-26 `gcloud` 확인). 2026-11-26 13:17~13:20 UTC [scripts/sync_standby.sh](../scripts/sync_standby.sh) 로 코드·이미지를 운영과 같은 `a44b3ed` 에 맞췄다(시작은 안 함, [준비 기록](../docs/ops/data/2026-11-26_failover-prep/README.md)). Tailscale 은 로그인 승인 대기다. 전환 훈련은 [계획]이다(절차 [RUNBOOK](../docs/ops/RUNBOOK.md) '대기 서버로 넘기기·되돌리기') |
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
