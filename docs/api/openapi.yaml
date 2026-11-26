@@ -32,6 +32,11 @@ info:
 
     다음 태그 전 추가(v1.3 후보, 2026-11-26 안건 #24): 제품 이벤트 수집 POST /api/v1/events(tag events, 공개)와
     관리 내보내기 GET /api/v1/admin/events·GET /api/v1/admin/funnel(tag admin). 모두 추가이고 기존 필드·enum·상태 코드는 그대로다.
+
+    다음 태그 전 추가(2026-11-26, 응답 형태 변경 없음): 요청 id 헤더 X-Request-Id. 요청에 넣는 것은 선택이다(1~64자
+    A-Z a-z 0-9 . _ : -, 앱은 요청마다 보낸다). backend 는 모든 응답에 그 값을 돌려준다(없거나 규칙 밖이면 새 UUID).
+    서버 로그를 이 값으로 찾는다. OpenAPI 3.0 은 모든 응답에 붙는 헤더를 한 번에 적을 수 없어 components/headers/XRequestId
+    로 정의하고 작업 접수(202)와 공통 오류 응답(components/responses)에 붙였다. 계약 테스트는 헤더를 비교하지 않는다.
 servers:
   - url: http://localhost:8080
     description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
@@ -139,6 +144,8 @@ paths:
               schema:
                 type: string
                 example: /api/v1/jobs/3fa85f64-5717-4562-b3fc-2c963f66afa6
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
           content:
             application/json:
               schema:
@@ -1180,6 +1187,16 @@ paths:
           $ref: '#/components/responses/InternalError'
 
 components:
+  headers:
+    XRequestId:
+      description: >-
+        이 요청의 id. 요청의 X-Request-Id 가 1~64자의 A-Z a-z 0-9 . _ : - 이면 그 값, 없거나 규칙 밖이면 서버가 만든 UUID 다.
+        backend(Spring)가 쓰는 모든 응답에 붙는다(오류·v0·웹 페이지 포함. Caddy 가 직접 답하는 응답에는 없다). 서버 로그는
+        이 값으로 찾는다(텍스트 로그 rid=, prod JSON 로그 필드 requestId). 2026-11-26 추가, 응답 형태 변경 없음.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._:-]{1,64}$'
+        example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
   parameters:
     JobId:
       name: jobId
@@ -1288,6 +1305,9 @@ components:
   responses:
     BadRequest:
       description: 잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
@@ -1297,30 +1317,45 @@ components:
         잘못된 요청 (INVALID_REQUEST, NO_PHOTOS, TOO_MANY_PHOTOS, UNSUPPORTED_IMAGE_TYPE) 또는 대표 사진 검사 거절
         (UNREADABLE_IMAGE, IMAGE_TOO_SMALL, NO_ANIMAL_DETECTED, TOO_MANY_ANIMALS, ANIMAL_TOO_SMALL, IMAGE_TOO_DARK,
         IMAGE_TOO_BLURRY)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     NotFound:
       description: 없음 (JOB_NOT_FOUND, ASSET_NOT_FOUND, NOT_FOUND, PET_NOT_FOUND)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
       description: 상태 충돌 (JOB_NOT_COMPLETED, JOB_NOT_FAILED, JOB_NOT_PENDING, JOB_IN_PROGRESS)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     PayloadTooLarge:
       description: 용량 초과 (PAYLOAD_TOO_LARGE) — 장당 5 MB 또는 요청 전체 20 MB 초과
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     InternalError:
       description: 서버 오류 (INTERNAL_ERROR)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
@@ -1339,12 +1374,18 @@ components:
           schema:
             type: integer
             minimum: 1
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     ShareNotFound:
       description: 공유 링크 없음 (SHARE_NOT_FOUND) — 없는 토큰·만료·취소·지워진 작업을 구분하지 않는다. error.jobId 는 비운다.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
@@ -1353,12 +1394,18 @@ components:
       description: >-
         잘못된 이벤트 묶음 (INVALID_REQUEST) — JSON 이 아님, installId·sessionId 가 UUID 가 아님, appVersion·platform 형식,
         events 가 1~50개가 아님(51개 이상 포함), 다른 사이트의 페이지에서 보낸 요청. 아무것도 저장하지 않는다.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     EventsTooLarge:
       description: 본문이 32 KB(32,768 바이트)를 넘음 (PAYLOAD_TOO_LARGE). 아무것도 저장하지 않는다. 묶음을 나눠 다시 보낸다.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/XRequestId'
       content:
         application/json:
           schema:
