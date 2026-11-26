@@ -1,7 +1,7 @@
 # 2026-11-27 backend 가 정지 때 SIGKILL(137)로 죽던 원인과 고침
 
 - **왜**: 2026-11-26 계획 전환 훈련(D-3)에서 대기 VM 의 backend 가 `docker compose stop backend` 뒤 10 s 안에 끝나지 않아 SIGKILL(종료 코드 137, `OOMKilled` false)로 죽었다. 정지 단계는 두 번 다 약 11 s 였고, 멈추는 동안 backend 로그는 한 줄도 없었다. H2 파일 DB 가 정상으로 닫히지 않으니 배포·재시작·전환 때마다 같은 일이 날 수 있었다.
-  - 원 기록: `docs/ops/2026-11-26_failover-drills.md` '찾은 것 4', `docs/ops/data/2026-11-26_failover-drills/observations.txt` '=== Backend stop'(이 글을 쓸 때는 브랜치 `ops/standby-tailnet-2026-11-26` 의 커밋 `b005f1a` 에만 있다).
+  - 원 기록: `docs/ops/2026-11-26_failover-drills.md` '찾은 것 4', `docs/ops/data/2026-11-26_failover-drills/observations.txt` '=== Backend stop'.
 - **표기**: [실험 결과] 아래에 조건과 값이 있다. [구현됨] 코드와 시험이 이 리포에 있다. [가설] 확인하지 않았다. [계획] 아직 하지 않았다.
 
 ## 요약
@@ -80,5 +80,4 @@
 ## 남은 것 [계획]
 
 - 실제 SIGTERM·종료 코드 143 은 리눅스에서만 잴 수 있다. 개발 PC 에는 리눅스 JDK·Docker 가 없어 재지 않았다. 배포 뒤 VM 에서 PENDING 작업을 하나 둔 채 `docker compose stop backend` 를 하고 `docker inspect` 의 종료 코드(143 기대)와 정지 시간, 로그의 "Server stopping" 줄을 본다.
-- 운영 VM 배포는 하지 않았다(배포 동결 12/01 전, 사용자가 정한다). 배포 전까지 운영 backend 의 정지는 여전히 작업이 있으면 SIGKILL 이다.
-- 전환 훈련 문서(`2026-11-26_failover-drills.md`)의 '찾은 것 4' 를 이 글로 잇는 것은 그 브랜치를 main 에 넣을 때 한다.
+- 운영 VM 배포는 하지 않았다(배포 동결 12/01 전, 사용자가 정한다). 배포 전까지 운영 backend 의 정지는 여전히 작업이 있으면 SIGKILL 이다.

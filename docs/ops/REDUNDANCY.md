@@ -100,7 +100,7 @@
     - 전환 2단계는 볼륨의 `backup/`(backend 의 5분 H2 zip)을 복사하지 않는다. 그래서 넘긴 직후 대상의 VM 밖 백업 1~2번이 신선도 검사(20분)에 걸려 실패하고, 감시가 '백업 멈춤' 을 알린다. backend 의 첫 5분 백업이 생기면 풀린다. → 2026-11-27: 2단계가 가장 새 zip 1개도 복사한다 [구현됨] (가짜 명령 시험, 실제 전환으로는 확인 전).
     - 넘길 때 PENDING·PROCESSING 이던 작업은 대상에서 `INTERNAL_ERROR` 가 된다. → 2026-11-27: 0단계가 원본 대기열이 0 이 아니면 멈춘다(`BESIDE_ALLOW_QUEUE=1` 로 넘김) [구현됨].
     - Grafana 알림 상태와 Prometheus·Loki·Tempo 기록은 VM 마다 따로다. 넘기면 대상의 옛 상태가 이어지고, 운영 VM 그래프에는 넘겨 있던 시간이 빈다.
-    - `compose stop backend` 에서 backend 가 Docker 기본 10 s 안에 끝나지 않고 SIGKILL(종료 코드 137)로 죽었다(D-3 에서 확인). 원인은 아직 모른다 [가설]. 배포·재시작에도 해당할 수 있다.
+    - `compose stop backend` 에서 backend 가 Docker 기본 10 s 안에 끝나지 않고 SIGKILL(종료 코드 137)로 죽었다(D-3 에서 확인). → 2026-11-27: 원인(Spring 이 실행 중 @Async 작업을 30 s 기다림)을 찾아 고쳤다 [구현됨] ([backend 정지 기록](2026-11-27_backend-stop.md)). VM 확인은 배포 뒤 [계획].
   - `standby_pull.sh`(Phase 2 W6)는 없다 [계획]. 대기 VM 의 데이터는 스냅샷 시점 그대로이고, 계획 전환 때 `failover_vm.sh` 가 원본에서 복사한다.
   - 서비스 계정: `clone_vm.sh` 는 계정 없이 만든다(`--no-service-account --no-scopes`). 지금 대기 VM 에는 `beside-backup@`(storage-rw·logging-write·monitoring-write)이 붙어 있다(2026-11-26 `gcloud compute instances describe` 확인. 마지막 시작 2026-11-25 17:28:23 UTC 로 보아 만든 직후 멈춰서 붙인 것으로 보인다). 그래서 넘긴 뒤 VM 밖 백업 계정은 있다. 이 붙이기는 스크립트에 없는 손 단계다. 다시 만들 때는 RUNBOOK 'VM 다시 세우기' 1번의 값으로 붙인다(이미 있는 VM 은 멈춤 → `set-service-account` → 시작).
 - **근거**: 2026-11-25 읽기 전용 조사. 원문은 [data/2026-11-25_redundancy-design/](data/2026-11-25_redundancy-design/).
