@@ -4,15 +4,15 @@
 
 - 표기: **[구현됨]** 코드·테스트가 리포에 있고 실행된다 / **[실험 결과]** 측정값과 조건이 기록돼 있다 / **[계획]** 아직 안 함 / **직접 할 일**(0절에서는 **[사람]**) 사람이 해야 함(하드웨어·계정·회의·콘솔).
 - 담당: **BE** Backend · **UN** Unity · **GEN** 3D Generation · **전원**.
-- 근거는 `파일:줄`로 적었다. 탐색 시점(10-30~31)의 줄 번호라 이후 수정으로 조금 밀릴 수 있다. 0절은 2026-11-25 main `d6e25d1` 기준이다.
+- 근거는 `파일:줄`로 적었다. 탐색 시점(10-30~31)의 줄 번호라 이후 수정으로 조금 밀릴 수 있다. 0절은 2026-11-25 main `d6e25d1` 기준으로 썼고, 2026-11-26 main `62ea18f`·운영 VM `a44b3ed` 에 맞춰 낡은 줄을 고쳤다.
 
 ## 0. 2026-11-25 남은 일 (발표 12/04 기준)
 
 2026-11-25 읽기 전용 조사의 종합 [90-synthesis.md](ops/data/2026-11-25_redundancy-design/90-synthesis.md) A-1~A-4 를 줄였다. 번호(M·S·C)는 종합과 같고, 자세한 근거와 예상 시간은 종합에 있다. **[사람]** 은 콘솔·기기·팀원 손이 필요한 일이다. 발표는 2026-12-04(금), 종강은 12-21 이다.
 
 **2026-11-25 사용자 결정**
-- 서버 이중화는 계획만 세운다. 실행은 사용자가 나중에 명령한다([ops/REDUNDANCY.md](ops/REDUNDANCY.md) §6). 그래서 아래 S3·C7 과 일정의 이중화 줄은 명령이 있을 때만 한다.
-- 백업 주기 단축(DB 5분, 사진·GLB 매 실행)은 리뷰 브랜치 `fix/review-2026-11-25` 를 VM 에 배포하는 창(M3)에서 함께 한다.
+- ~~서버 이중화는 계획만 세운다. 실행은 사용자가 나중에 명령한다. 그래서 아래 S3·C7 과 일정의 이중화 줄은 명령이 있을 때만 한다.~~ → 2026-11-26 사용자 결정: 발표 전 Phase 1 까지 실행한다. Phase 2·3 은 발표 뒤다([ops/REDUNDANCY.md](ops/REDUNDANCY.md) §6).
+- 백업 주기 단축(DB 5분, 사진·GLB 매 실행)은 리뷰 브랜치 `fix/review-2026-11-25` 를 VM 에 배포하는 창(M3)에서 함께 한다. → 2026-11-26 확인: 배포 창 1(2026-11-25 17:16~17:21 UTC, main `d5f4a32`)에서 함께 했다 **[적용]**.
 - 발표 당일 GPU 는 일찍(T-2h 이상) 켠다. 실패에 대비해 녹화 영상을 준비한다(M8·M12).
 
 **이 브랜치(`docs/final-report-2026-11-25`)에서 함**: 운영 VM 에 Grafana 띄우기(M11), GPU 리허설(M12 절차 1회), 최종보고서 [report/최종보고서.md](report/최종보고서.md)(S4 초안), 멘토 대응 [report/2026-11-25_mentoring-response.md](report/2026-11-25_mentoring-response.md)(S2), 이 파일·PLAN·루트 README 정리(S1 일부).
@@ -23,7 +23,7 @@
 |---|---|---|---|
 | M1 | [전원·사람] | 보고서 제출일과 발표 형식을 확인한다. 배포 동결일·리허설일을 1절과 [PLAN 5단계](PLAN.md)에 적는다 | 1절(제출일이 리포에 없음) |
 | M2 | [전원·사람] | 리깅·애니메이션을 발표에서 어떻게 다룰지 정한다. 보고서 한계 문장(사진은 첫 1장만, 리깅은 템플릿이 있을 때만)을 넣는다 | 3절 5단계 '충돌', PR #30(`625c2a5`) |
-| M3 | [BE] | 리뷰 브랜치 PR 병합 → VM 배포 1번(백업 주기 단축 함께) → 배포 동결 선언. 2026-11-25 확인 때 main 보다 14커밋 앞(마지막 `e9358f6`, 14:17 KST), 병합 전 | `git log main..fix/review-2026-11-25`. 재시작하면 진행 중 작업이 `INTERNAL_ERROR` |
+| M3 | [BE] | 리뷰 브랜치 PR 병합 → VM 배포 1번(백업 주기 단축 함께) → 배포 동결 선언. ~~2026-11-25 확인 때 main 보다 14커밋 앞(마지막 `e9358f6`, 14:17 KST), 병합 전~~ → 2026-11-26 확인: PR #33 으로 main 병합(`0e9440e`), 배포 창 1(2026-11-25 17:16~17:21 UTC, `d5f4a32`)에서 VM 배포·5분 백업 **[적용]**. 남은 것: 배포 동결 선언(12/01, 일정 [제안]) | `git log`(`0e9440e`), [deploy/README](../deploy/README.md) '코드' 행. 재시작하면 진행 중 작업이 `INTERNAL_ERROR` |
 | M4 | [BE·GEN·사람] | 시연 Pod 코드 고정: Pod 시작 명령의 `checkout -B main origin/main` 을 태그(예 `demo-1204`)로 바꾼다. Runpod 시작 명령 수정은 사람 | [RUNBOOK 'GPU Pod 다시 세우기'](ops/RUNBOOK.md). 리뷰 브랜치를 병합하면 Pod 코드도 바뀜 |
 | M5 | [UN·사람] | Android 빌드 환경(Unity Hub Android Build Support·SDK·adb)을 갖추거나 Unity 담당 PC 를 쓴다 | 이 PC 에 AndroidPlayer·adb 없음(종합 [조사]) |
 | M6 | [UN] | main 을 Unity 6 에디터에서 컴파일·Play 하고 APK 를 만든다. 시연 설정: baseUrl `https://beside-team.duckdns.org`, FurBenchmark·FpsOverlay 끔 | `JobManager.cs:25` 가 `http://192.168.0.10:8080` |
@@ -31,7 +31,7 @@
 | M8 | [UN·사람: 기기] | 실기기에서 VM + Pod 전체 흐름 영상과 logcat. 4단계 DoD 이자 데모 영상, 시연 실패 때 대체 자료 | 3절 4단계 '실기기 실제 모델 AR'. 리포에 영상 0개 |
 | M9 | [UN→BE·사람: 기기] | 앱 `metrics.csv` 10회 → `/admin` 으로 올리기. M7·M8 과 같은 Pod 세션에서 | [METRICS.md](METRICS.md) 머리말 '0건' |
 | M10 | [GEN·전원·사람] | exp-02 품질 평가: 사진 3마리 이상, 6항목, 평가자 2명 이상. 팀 사진이 필요하다 | 3절 3단계 |
-| M11 | [BE·사람] | 운영 VM 에 Grafana 를 띄워 지표 5개 화면을 캡처한다(JVM 힙 패널 고침 포함). 2026-11-25: 운영 VM 에 띄움 **[적용]**(05:52 UTC, backend·caddy 그대로), 리허설 작업 9건으로 Prometheus 에 5개 값이 참 **[실험 결과]**, 'GC 뒤 힙 비율' 패널 고침은 이 브랜치 [구현됨](VM 에는 병합 뒤 `git pull` 로). 남은 것: Grafana 로그인·캡처 [사람] | 5절 '찾은 개선', [리허설 기록](ops/data/2026-11-25_demo-gpu-rehearsal/README.md) |
+| M11 | [BE·사람] | 운영 VM 에 Grafana 를 띄워 지표 5개 화면을 캡처한다(JVM 힙 패널 고침 포함). 2026-11-25: 운영 VM 에 띄움 **[적용]**(05:52 UTC, backend·caddy 그대로), 리허설 작업 9건으로 Prometheus 에 5개 값이 참 **[실험 결과]**, 'GC 뒤 힙 비율' 패널 고침은 이 브랜치 [구현됨](VM 에는 병합 뒤 `git pull` 로 → 2026-11-26: PR #32 로 병합, 배포 창 1(`d5f4a32`)부터 VM 리포에 있음). 남은 것: Grafana 로그인·캡처 [사람] | 5절 '찾은 개선', [리허설 기록](ops/data/2026-11-25_demo-gpu-rehearsal/README.md) |
 | M12 | [BE·GEN] | 시연 당일 GPU 절차를 정하고 한 번 실제로 해 본다. **이 브랜치에서 함(GPU 리허설)**. 순서(2026-11-25 사용자 결정 '일찍 켜기 + 녹화', 스텁 폴백은 쓰지 않음): 동결일에 코드 고정 → T-2h 새 Pod → healthz·짧은 작업 1건 → 실패면 같은 설정으로 새 Pod → 그래도 안 되면 녹화 영상. 2026-11-25 리허설 1회: 생성 → UP 89.6 s, 첫 작업 e2e 22.1 s, 9건 모두 COMPLETED, Pod 는 지움 **[실험 결과]** | [RUNBOOK '발표 당일 GPU 절차'](ops/RUNBOOK.md), [리허설 기록](ops/data/2026-11-25_demo-gpu-rehearsal/README.md) |
 | M13 | [BE·사람] | R3 외부 가동 감시: 콘솔에서 메일 알림 채널을 만들고 `deploy/gcp/uptime_check.sh create <channel>`. 이중화 계획의 Phase 0-1 과 같은 일이다 | [RUNBOOK](ops/RUNBOOK.md) 'R3 [계획: 채널]'. 2026-11-25 GCP 가동 감시 0개 |
 | M14 | [BE·전원] | 발표 수치 한 장과 측정표 3종. 표마다 조건(사진 1장 반복, 1회 실행)을 적는다 | 3절 5단계, [perf/load](perf/load/), [장애 훈련](ops/2026-11-20_failure-drills.md) |
@@ -42,9 +42,9 @@
 
 | # | 담당 | 할 일 | 근거 |
 |---|---|---|---|
-| S1 | [BE] | 문서 정리(종합 A-5). 이 파일·PLAN·루트 README 는 2026-11-25 이 브랜치에서 고쳤다. 리뷰 브랜치가 고치는 파일의 겹치는 줄은 그 병합 뒤에 | 종합 A-5, 6절 |
+| S1 | [BE] | 문서 정리(종합 A-5). 이 파일·PLAN·루트 README 는 2026-11-25 이 브랜치에서 고쳤다. 리뷰 브랜치가 고치는 파일의 겹치는 줄은 그 병합 뒤에. → 2026-11-26: 리뷰 브랜치는 PR #33(`0e9440e`)으로 병합됐다(문서 충돌은 `50efc57` 에서 풂) | 종합 A-5, 6절 |
 | S2 | [BE] | 멘토 요구 답: TRAFFIC_MODEL 3·5절을 잰 S_busy 로, 큐 처리량·확장 기준 한 장(GPU 증설 0회, 기준은 [제안값]), 멘토 F1~F5 ↔ FD 대응표. **이 브랜치에서 함**: [report/2026-11-25_mentoring-response.md](report/2026-11-25_mentoring-response.md) | [TRAFFIC_MODEL](perf/load/TRAFFIC_MODEL.md), [vm-5th](perf/load/2026-11-21_vm-5th.md), 종합 A-6 |
-| S3 | [BE·사람: 명령] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). 2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤 | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
+| S3 | [BE·사람] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). ~~2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤~~ → 2026-11-26 사용자 결정: 발표 전에 실행한다. 1-1 5분 백업 **[적용]**(배포 창 1). 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC), Tailscale 로그인 승인 대기 [사람]. 1-4 `scripts/failover_vm.sh --planned` [구현됨]. 1-5 전환 훈련(D-1·D-3) [계획] | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
 | S4 | [전원·사람] | 보고서 초안과 팀 리뷰. 초안은 **이 브랜치에서 함**([report/최종보고서.md](report/최종보고서.md)), 팀 리뷰는 사람 | [PLAN 5단계](PLAN.md) DoD |
 | S5 | [GEN·BE·사람] | exp-03 전처리 3안 사람 채점. M10 과 같은 세션에서 | [exp-03](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) '실행 전' |
 | S6 | [GEN] | gltf-validator 로 정적·털 맵·리깅 GLB 3개 검사 | 3절 3단계 'GLB_SPEC 통과 GLB 3개' |
@@ -63,24 +63,24 @@
 - C4 [사람] GCP 크레딧 사용량과 예산 알림 확인([deploy/README](../deploy/README.md) '비용과 끝내기').
 - C5 [BE] FD4 디스크 가득 참, R4 디스크·백업 알림, 실제 모델이 멈춘 경우 재현(훈련 볼륨에서).
 - C6 [BE] F3·F4 실행. GPU 가 필요 없고 스크립트는 [구현됨]이다([TRAFFIC_MODEL 9절](perf/load/TRAFFIC_MODEL.md)).
-- C7 [BE·GEN] GPU 예비 Pod B(같은 볼륨) — 2026-11-25 결정(당일 GPU 는 일찍 켜기 + 녹화 영상)으로 하지 않는다. 이중화 실행 명령이 있으면 다시 본다.
+- C7 [BE·GEN] GPU 예비 Pod B(같은 볼륨) — 2026-11-25 결정(당일 GPU 는 일찍 켜기 + 녹화 영상)으로 하지 않는다. ~~이중화 실행 명령이 있으면 다시 본다.~~ → 2026-11-26 결정으로 발표 전에 하는 이중화는 Phase 1(대기 VM)까지라 이것(REDUNDANCY Phase G 의 G-c)은 그대로 하지 않는다.
 - C8 [UN] 진행 화면에 `queue`·`estimate` 표시(`JobResponse.cs` 에 그 필드가 없음).
 - C9 [UN·사람: 기기] 기기 2종 FPS, minSdk 34 가 의도인지, 오류 문구, `metrics.csv` 중복 줄, 털 성능을 main 코드로 다시 재기, `QUEUE_FULL` 문구.
 
 ### 발표 뒤 (종강 12/21 전)
 
 - [BE·UN·사람] 큐 상한을 운영에서 켠다. `QUEUE_FULL` 을 아는 Unity 새 빌드를 팀·시연 기기에 깐 뒤에 한다. 발표에서는 "5차 부하 시험에서 검증했고 운영은 꺼 둠"으로 쓴다([vm-5th 11절](perf/load/2026-11-21_vm-5th.md), [CHANGELOG v1.1](api/CHANGELOG.md)).
-- [BE] 서버 이중화 Phase 0~3. 사용자 명령이 있을 때만([REDUNDANCY §6](ops/REDUNDANCY.md)).
+- [BE] 서버 이중화 Phase 2·3([REDUNDANCY §6](ops/REDUNDANCY.md)). Phase 1 까지는 2026-11-26 사용자 결정으로 발표 전에 한다(S3).
 - [BE] FD16b 의 남은 두 길(120 s 시간 초과, GLB 내려받기 60 s 무응답)과 FD9 진짜 블랙홀([vm-5th 11절](perf/load/2026-11-21_vm-5th.md)).
-- [BE] 부하 시험 남은 것: A1 재측정, 한국 리전 부하 발생기, A3 large, A5·A6, 스텁 G1·G2, 넘치는 c=2(5절).
+- [BE] 부하 시험 남은 것: A1 재측정, 한국 리전 부하 발생기(2026-11-26 스테이징 훈련은 서울 zone `beside-loadgen` 으로 돌렸지만 운영 VM 이 아닌 복제본·훈련 모드라 용량 결과가 아니다, [기록](ops/2026-11-26_staging-drills.md)), A3 large, A5·A6, 스텁 G1·G2, 넘치는 c=2(5절).
 - [BE] 보존 정책 자동 삭제(#23), 요청 제한(#22·F5).
-- [GEN] exp-04. [UN] 확장 기능(털 결용 TANGENT, 화질 옵션, 바닥 위 걷기, EditMode 시험, 크래시 수집), `insecureHttpOption` 정리.
+- [GEN] ~~exp-04.~~ → 2026-11-26: exp-04 는 exp-02·03 과 한 세션으로 발표 전에 한다(11/27 Pod·11/28 채점 [계획], [exp-04](../generation/experiments/2026-11-26_exp-04_ab-input-texture.md)). [UN] 확장 기능(털 결용 TANGENT, 화질 옵션, 바닥 위 걷기, EditMode 시험, 크래시 수집), `insecureHttpOption` 정리.
 - [사람] 서식6, 월구독 해지·카드 삭제·크레딧 잔액 0 증빙(리포 밖 예산 문서).
 - [사람] 종강 정리: 백업을 개발 PC 로 옮긴 뒤 VM·고정 IP·스냅샷·버킷·Runpod Pod 8개·볼륨을 지운다. 삭제는 되돌릴 수 없다([deploy/README](../deploy/README.md) '비용과 끝내기'). 리포 정리는 7절.
 
 ### 9일 일정 [제안]
 
-종합 A-7 을 2026-11-25 결정에 맞춰 고쳤다. 이중화 줄은 사용자 명령이 있을 때만 한다.
+종합 A-7 을 2026-11-25 결정에 맞춰 고쳤다. ~~이중화 줄은 사용자 명령이 있을 때만 한다.~~ → 2026-11-26 사용자 결정으로 이중화 줄도 발표 전에 한다.
 
 | 날짜 | 할 일 |
 |---|---|
@@ -88,7 +88,7 @@
 | 11/26(목) | M3 병합 + VM 배포 창(백업 주기 단축 포함), M4 Pod 코드 고정, M6 에디터 Play·APK |
 | 11/27(금) | Pod 세션 1(약 4 h): M7·M8·M9, Grafana 데이터 채우기와 캡처, exp-02 생성 |
 | 11/28(토) | M10 채점(2명) [사람], S5 |
-| 11/29(일) | M14 수치 한 장. (명령이 있으면) 이중화 계획 전환 훈련 |
+| 11/29(일) | M14 수치 한 장. 이중화 계획 전환 훈련(REDUNDANCY 조각 1-5: 훈련 D-1 넘기기·D-3 되돌리기) |
 | 11/30(월) | 슬라이드 초안, S1 나머지 |
 | 12/01(화) | **배포 동결.** 리허설 1(GPU 포함, M12·M16), 녹화 영상 확정 |
 | 12/02(수) | 리허설 피드백 반영. 운영을 건드리는 훈련은 하지 않는다 |
@@ -139,7 +139,7 @@ Runpod 사용 예상: Pod 세션·리허설·발표 당일을 합쳐 약 15 h ×
 | 2 | 30초 `avgFps` ≥ 30 [실험 결과] | [ ] | 측정 0건 | UN · 기기 |
 | 2 | 스케일·회전·재배치 | [ ] | 증빙 없음. 핀치 범위가 PLAN(0.2~1.5)과 프리팹(`m_MinScale` 0.3)에서 다름 | UN |
 | 2 | `metrics.csv` 10열, 기기 2종 이상 | [ ] | 데이터 0건. minSdk 34 라 Android 14 이상만 설치됨(`ProjectSettings.asset:184`) | UN · 기기 |
-| 3 | exp-01 ~ 04 기록 | [ ] | ~~기록 0건~~ → 2026-11-25 확인: `generation/experiments/` 에 기록 5개. exp-01(2026-11-17, A40 베이스라인) **[실험 결과]**, Unity 트랙 조사 3개(모델 비교·방해 요소·같은 개 일관성, RTX 4060 Ti) **[실험 결과]**, exp-03 은 틀만 **[계획]**(실행 전). exp-02·exp-04 는 없음 | GEN · Runpod |
+| 3 | exp-01 ~ 04 기록 | [ ] | ~~기록 0건~~ → 2026-11-25 확인: `generation/experiments/` 에 기록 5개. exp-01(2026-11-17, A40 베이스라인) **[실험 결과]**, Unity 트랙 조사 3개(모델 비교·방해 요소·같은 개 일관성, RTX 4060 Ti) **[실험 결과]**, exp-03 은 틀만 **[계획]**(실행 전). ~~exp-02·exp-04 는 없음~~ → 2026-11-26: exp-02·03·04 를 한 세션으로 묶은 [exp-04 계획](../generation/experiments/2026-11-26_exp-04_ab-input-texture.md) 문서와 도구 `generation/tools/eval_*.py`(시험 `test_eval3d.py`) 가 있다. 도구는 **[구현됨]**, 계획 문서의 실행은 아래처럼 [계획]. 실제 실행은 0건 **[계획]**(11/27 Pod·11/28 채점) | GEN · Runpod |
 | 3 | 베이스라인 수치·환경 | [ ] | ~~측정 0건~~ → 2026-11-25 확인(exp-01): A40 에서 inferMs 3.9~5.7 s, gpuPeakMB 5,120, 환경 표 **[실험 결과]**(CC0 사진 3장, 표본 4건 + 2차 부하 시험 539건). 우리 사진 3마리 이상(exp-02)은 [계획] | GEN |
 | 3 | 품질 6항목(평가자 2명 이상) baseline vs 개선 | [ ] | 0건(exp-01 품질 칸도 비어 있음). 정면·측면·위 렌더 필요. ~~평가 입력 화면은 `review/api-v1.1` 에만 있음~~ → 2026-11-25 확인: 품질 평가 화면은 `api-v1.2`(PR #27, 2026-11-22)로 main 에 들어왔다. 0절 M10 [사람] | GEN+전원 |
 | 3 | GLB_SPEC 통과 GLB 3개, gltf-validator 오류 0 | [ ] | ~~변환기 테스트 없음~~ — 변환기·리깅 도구의 털 맵 시험(`FurMapsInGlbTest`·`RigTransferFurMapsTest`, PR #25)과 리깅 정점 순서·크기 상한 시험이 `generation/inference_service/test_app.py` 에 있다 **[구현됨]**(합성 메시, 좌표·노드 배치를 직접 보는 시험은 없음). ~~실제 출력(리깅)이 GLB_SPEC("스킨 없음")과 다름~~ → 안건 #14 2026-11-21 결정대로 GLB_SPEC 을 실제 출력에 맞췄다(스킨·클립 선택 항목, 털 맵은 base GLB 안 `extras.beside` §4.1, `feat/contract-v1.0`). 남은 것 [계획]: 실제 출력 GLB 3개의 gltf-validator 기록, glTFast 로드 | GEN |
