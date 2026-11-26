@@ -24,6 +24,13 @@ services:
       context: ../backend
     image: beside-backend:local
     restart: unless-stopped
+    # 정지(compose stop·up -d 의 재생성·docker restart) 때 SIGTERM 뒤 SIGKILL 까지 기다리는 시간. Docker 기본은 10 s.
+    # 2026-11-26 전환 훈련에서 backend 가 10 s 안에 안 끝나 SIGKILL(137)로 죽었다(H2 를 닫지 못함): Spring 의 @Async
+    # 실행기가 GPU 를 기다리는 작업을 30 s 까지 기다렸다. 이제 작업은 종료 신호에 바로 끝나(ShutdownSignal) 정지는 약 1 s,
+    # 앱 안의 대기 상한은 5 s(spring.lifecycle.timeout-per-shutdown-phase)다. 30 s 는 그 뒤 빈 닫기(전처리 모델·H2·
+    # 트레이스 내보내기)가 느려도 H2 가 정상으로 닫히게 두는 여유다. 정상 정지는 이 값만큼 기다리지 않는다.
+    # 기록: docs/ops/2026-11-27_backend-stop.md
+    stop_grace_period: 30s
     environment:
       # prod 가 마지막이어야 real 의 설정(H2 콘솔 등)을 덮어쓴다.
       SPRING_PROFILES_ACTIVE: real,prod

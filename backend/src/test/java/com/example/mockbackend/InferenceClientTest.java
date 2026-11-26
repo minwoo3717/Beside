@@ -541,6 +541,41 @@ class InferenceClientTest {
         assertThat(dir.resolve("tmp").resolve("job-w2").resolve("base.glb")).doesNotExist();
     }
 
+    /**
+     * Server stop (failover drill 2026-11-26, finding 4): a watch that throws InterruptedException (RealJobWorker's,
+     * once ShutdownSignal is raised) gives up the POST or the download within the watch interval and rethrows it,
+     * instead of keeping the run (and with it the server's stop) waiting for inference.timeout-ms. No GLB is left.
+     */
+    @ParameterizedTest(name = "stop during the {0}")
+    @ValueSource(strings = {"post", "download"})
+    void aWatchThatThrowsInterruptedGivesTheRequestUpAtOnce(String during) throws IOException {
+        answerUploadOk("job-w4");
+        if (during.equals("post")) {
+            delayMs = 20_000;   // the service never gets to answer
+        } else {
+            artifactStall = true;
+        }
+        Path photo = Files.write(dir.resolve("dog.jpg"), new byte[]{1, 2, 3});
+        InferenceClient client = new InferenceClient(baseUrl(), 60_000, "upload", "", dir.resolve("tmp").toString(), 0, JSON);
+        long started = System.nanoTime();
+        InterruptedException stop = new InterruptedException("server shutting down");
+        InferenceClient.Watch watch = () -> {
+            boolean reached = during.equals("post") || calls.stream().anyMatch(call -> call.startsWith("GET"));
+            if (reached && System.nanoTime() - started > 300_000_000L) {
+                throw stop;
+            }
+            return null;
+        };
+
+        InterruptedException thrown = catchThrowableOfType(
+                () -> client.infer("job-w4", List.of(photo), List.of("dog.jpg"), watch), InterruptedException.class);
+
+        assertThat(thrown).isSameAs(stop);
+        assertThat((System.nanoTime() - started) / 1_000_000).as("the watch, not the 60 s timeout").isLessThan(5_000);
+        assertThat(Thread.currentThread().isInterrupted()).as("no interrupt flag: nothing interrupted the thread").isFalse();
+        assertThat(dir.resolve("tmp").resolve("job-w4").resolve("base.glb")).doesNotExist();
+    }
+
     /** A watch that says nothing, or fails, never ends a run the service still answers. */
     @Test
     void aQuietOrBrokenWatchChangesNothing() throws Exception {

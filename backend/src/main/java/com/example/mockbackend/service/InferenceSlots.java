@@ -95,6 +95,16 @@ final class InferenceSlots {
         }
     }
 
+    /**
+     * Makes every waiter ask {@code stillWanted} now instead of at its next recheck (the server is stopping,
+     * {@link ShutdownSignal}: the real worker's question then answers false).
+     */
+    void wakeAll() {
+        synchronized (line) {
+            line.notifyAll();
+        }
+    }
+
     /** Jobs waiting in line now (for tests and logs). */
     int waiting() {
         synchronized (line) {

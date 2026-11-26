@@ -151,13 +151,15 @@ public class InferenceClient {
 
     /**
      * Tells a request in flight that it cannot be answered any more. Asked about every {@link #WATCH_INTERVAL} while
-     * the request waits; a non-null answer cancels it and says why (for the log).
+     * the request waits; a non-null answer cancels it and says why (for the log). Throwing InterruptedException
+     * cancels it too and ends the wait as an interrupt would (the server is stopping: RealJobWorker's watch checks
+     * {@link ShutdownSignal}, which never interrupts the thread itself).
      */
     @FunctionalInterface
     public interface Watch {
         Watch NONE = () -> null;
 
-        String lostBecause();
+        String lostBecause() throws InterruptedException;
     }
 
     public InferenceClient(String baseUrl, long timeoutMs, String transfer, String token, String tmpDir,
@@ -682,7 +684,13 @@ public class InferenceClient {
                 pending.cancel(true);
                 throw e;
             }
-            String lost = lostBecause(watch);
+            String lost;
+            try {
+                lost = lostBecause(watch);
+            } catch (InterruptedException e) {
+                pending.cancel(true);
+                throw e;
+            }
             if (lost != null) {
                 pending.cancel(true);
                 return new Waited<>(End.LOST, null, null, lost);
@@ -694,8 +702,11 @@ public class InferenceClient {
         }
     }
 
-    /** A Watch that throws is treated as saying nothing: it must not end a run the service may still answer. */
-    private String lostBecause(Watch watch) {
+    /**
+     * A Watch that throws a RuntimeException is treated as saying nothing: it must not end a run the service may still
+     * answer. Its InterruptedException (server stopping) goes on to the caller.
+     */
+    private String lostBecause(Watch watch) throws InterruptedException {
         try {
             return watch.lostBecause();
         } catch (RuntimeException e) {
