@@ -94,4 +94,4 @@ v1.0 몫은 위 'v1.0 — 2026-11-21 확정'(태그 `api-v1.0`), v1.1 몫은 위
 - 규칙: 서버 전체 요청 수 상한(토큰 버킷 초당 50 묶음)을 넘은 묶음은 202 로 `accepted 0` 을 돌려주고 저장하지 않는다(새 상태 코드를 만들지 않으려고, 429 `RATE_LIMITED` 는 #22 예약 그대로). 같은 `sessionId`·`seq` 는 한 번만 저장한다. 개인정보(IP·파일 이름·서버 주소·공유 토큰·자유 글)는 받지 않는다. 보존 30일(#23 자동 삭제 전까지 손으로).
 - 측정 이름(추가, [METRICS.md](../METRICS.md) §6): 이벤트 이름·속성 표, Prometheus `beside_app_events_total{name,platform}`, `beside_app_events_dropped_total{reason}`.
 - 배포(Caddy, 계약 밖): `POST /api/v1/events` 만 공개, 같은 경로의 다른 method 와 관리 API 는 Basic 인증 뒤(`deploy/test_caddy_routes.sh`).
-- 구현 상태: 서버(`EventV1Controller`·`ProductEventService`)·관리 페이지 '세션 퍼널'·공유 뷰어 신호·Unity `ProductEvents` **[구현됨]**(브랜치 `w7/product-events`, backend 시험·node 시험 통과, Unity 는 Roslyn 컴파일만). 병합·VM 배포·기기 확인은 [계획].
+- 구현 상태: 서버(`EventV1Controller`·`ProductEventService`)·관리 페이지 '세션 퍼널'·공유 뷰어 신호·Unity `ProductEvents` **[구현됨]**(브랜치 `w7/product-events`, backend 시험·node 시험 통과, Unity 는 Roslyn 컴파일만). main 병합(PR #34 `d5f4a32`)과 운영 VM 배포(배포 창 1, 2026-11-25 17:16~17:21 UTC)는 끝났다 **[구현됨: 적용]**. 기기 확인과 운영에서 쌓인 이벤트·퍼널 수치 확인은 [계획].

@@ -198,7 +198,7 @@ services:
       # 데이터소스(Prometheus)와 대시보드 'Beside 운영'을 파일로 넣는다. 폴더 마운트라 git pull 이 바로 보인다.
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      # 지표 알림 규칙 10개 → Discord(2026-11-26). 웹훅은 아래 GRAFANA_ALERT_WEBHOOK_URL.
+      # 알림 규칙 13개(지표 10·로그 3) → Discord(2026-11-26). 웹훅은 위 GRAFANA_ALERT_WEBHOOK_URL.
       - ./monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
       # 사용자·세션·직접 만든 대시보드(SQLite).
