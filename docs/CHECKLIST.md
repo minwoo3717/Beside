@@ -44,7 +44,7 @@
 |---|---|---|---|
 | S1 | [BE] | 문서 정리(종합 A-5). 이 파일·PLAN·루트 README 는 2026-11-25 이 브랜치에서 고쳤다. 리뷰 브랜치가 고치는 파일의 겹치는 줄은 그 병합 뒤에. → 2026-11-26: 리뷰 브랜치는 PR #33(`0e9440e`)으로 병합됐다(문서 충돌은 `50efc57` 에서 풂) | 종합 A-5, 6절 |
 | S2 | [BE] | 멘토 요구 답: TRAFFIC_MODEL 3·5절을 잰 S_busy 로, 큐 처리량·확장 기준 한 장(GPU 증설 0회, 기준은 [제안값]), 멘토 F1~F5 ↔ FD 대응표. **이 브랜치에서 함**: [report/2026-11-25_mentoring-response.md](report/2026-11-25_mentoring-response.md) | [TRAFFIC_MODEL](perf/load/TRAFFIC_MODEL.md), [vm-5th](perf/load/2026-11-21_vm-5th.md), 종합 A-6 |
-| S3 | [BE·사람] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). ~~2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤~~ → 2026-11-26 사용자 결정: 발표 전에 실행한다. 1-1 5분 백업 **[적용]**(배포 창 1). 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC), Tailscale 로그인 2026-11-26 15:27 UTC 무렵(사람 승인). 1-4 `scripts/failover_vm.sh --planned` [구현됨]. 2026-11-26 `scripts/sync_standby.sh` 로 대기 VM 을 운영 `a44b3ed`·이미지에 맞췄고, 로그인 뒤 15:29 UTC DRY_RUN 은 tailnet 까지 모든 검사를 통과했다([준비 기록](ops/data/2026-11-26_failover-prep/README.md)). 1-5 전환 훈련(D-1·D-3) [계획]: 창 날짜·공지 [사람] | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
+| S3 | [BE·사람] | 서버 이중화 Phase 0~1(대기 VM, 계획 전환·되돌리기 실측). ~~2026-11-25 결정: 계획만, 실행은 사용자 명령 뒤~~ → 2026-11-26 사용자 결정: 발표 전에 실행한다. 1-1 5분 백업 **[적용]**(배포 창 1). 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC), Tailscale 로그인 2026-11-26 15:27 UTC 무렵(사람 승인). 1-4 `scripts/failover_vm.sh --planned` [구현됨]. 2026-11-26 `scripts/sync_standby.sh` 로 대기 VM 을 운영 `a44b3ed`·이미지에 맞췄고, 로그인 뒤 15:29 UTC DRY_RUN 은 tailnet 까지 모든 검사를 통과했다([준비 기록](ops/data/2026-11-26_failover-prep/README.md)). 1-5 전환 훈련 D-1·D-3 은 2026-11-26 15:48~16:01 UTC 에 했다 **[실험 결과]**: 바깥에서 잰 끊김 약 65 s·63 s(목표 ≤ 3분 [제안값] 맞음), 공개 경로 63/63, 표지 작업 4건 모두 남음([기록](ops/2026-11-26_failover-drills.md)). GPU 재고가 없어 GPU 부분(넘긴 뒤 작업 COMPLETED, 대기 VM → Pod 8002)은 [계획] | [REDUNDANCY §6](ops/REDUNDANCY.md), 종합 B |
 | S4 | [전원·사람] | 보고서 초안과 팀 리뷰. 초안은 **이 브랜치에서 함**([report/최종보고서.md](report/최종보고서.md)), 팀 리뷰는 사람 | [PLAN 5단계](PLAN.md) DoD |
 | S5 | [GEN·BE·사람] | exp-03 전처리 3안 사람 채점. M10 과 같은 세션에서 | [exp-03](../generation/experiments/2026-11-05_exp-03_input-preprocess.md) '실행 전' |
 | S6 | [GEN] | gltf-validator 로 정적·털 맵·리깅 GLB 3개 검사 | 3절 3단계 'GLB_SPEC 통과 GLB 3개' |
@@ -88,7 +88,7 @@
 | 11/26(목) | M3 병합 + VM 배포 창(백업 주기 단축 포함), M4 Pod 코드 고정, M6 에디터 Play·APK |
 | 11/27(금) | Pod 세션 1(약 4 h): M7·M8·M9, Grafana 데이터 채우기와 캡처, exp-02 생성 |
 | 11/28(토) | M10 채점(2명) [사람], S5 |
-| 11/29(일) | M14 수치 한 장. 이중화 계획 전환 훈련(REDUNDANCY 조각 1-5: 훈련 D-1 넘기기·D-3 되돌리기) |
+| 11/29(일) | M14 수치 한 장. ~~이중화 계획 전환 훈련(REDUNDANCY 조각 1-5: 훈련 D-1 넘기기·D-3 되돌리기)~~ → 2026-11-26 에 했다(GPU 부분만 남음) |
 | 11/30(월) | 슬라이드 초안, S1 나머지 |
 | 12/01(화) | **배포 동결.** 리허설 1(GPU 포함, M12·M16), 녹화 영상 확정 |
 | 12/02(수) | 리허설 피드백 반영. 운영을 건드리는 훈련은 하지 않는다 |

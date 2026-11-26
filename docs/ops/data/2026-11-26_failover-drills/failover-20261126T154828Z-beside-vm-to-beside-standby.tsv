@@ -1,0 +1,17 @@
+2026-11-26T15:48:56.663Z	1795708136701	check	from=beside-vm(asia-northeast3-a,10.178.0.2) to=beside-standby(asia-northeast3-b,10.178.0.4) ip=34.64.91.254 to_ext=external-nat
+2026-11-26T15:49:00.738Z	1795708140775	check	ok: same commit a44b3ed
+2026-11-26T15:49:02.976Z	1795708143012	check	ok: images on beside-standby built for a44b3ed at 2026-11-26T13:35:38Z
+2026-11-26T15:49:03.719Z	1795708143762	check	tailnet on beside-standby: 100.84.254.122  beside-standby  <team>@  linux  -
+2026-11-26T15:49:03.801Z	1795708143840	1-stop	maintenance on, backend stop on beside-vm
+2026-11-26T15:49:14.944Z	1795708154980	1-stop	backend stopped
+2026-11-26T15:49:15.008Z	1795708155044	2-copy	start
+2026-11-26T15:49:18.817Z	1795708158853	2-copy	done
+2026-11-26T15:49:18.880Z	1795708158917	3-start	compose up on beside-standby
+2026-11-26T15:50:03.549Z	1795708203585	3-start	healthz ok on beside-standby
+2026-11-26T15:50:03.615Z	1795708203653	4-ip	detach from beside-vm
+2026-11-26T15:50:15.270Z	1795708215307	4-ip	attach to beside-standby
+2026-11-26T15:50:20.729Z	1795708220767	4-ip	attached
+2026-11-26T15:50:22.122Z	1795708222157	5-public	first public 200
+2026-11-26T15:50:43.749Z	1795708243787	5-public	routes: == 63 passed, 0 failed
+2026-11-26T15:50:43.816Z	1795708243852	6-roles	start
+2026-11-26T15:50:52.858Z	1795708252896	6-roles	done: beside-standby is active with 34.64.91.254, beside-vm is a stopped standby

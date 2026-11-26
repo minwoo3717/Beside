@@ -1,0 +1,59 @@
+# D-3 started 2026-11-26T15:58:19Z
+2026-11-26T15:58:51.297Z	1795708731336	check	from=beside-standby(asia-northeast3-b,10.178.0.4) to=beside-vm(asia-northeast3-a,10.178.0.2) ip=34.64.91.254 to_ext=none
+2026-11-26T15:58:54.648Z	1795708734688	check	ok: same commit a44b3ed
+2026-11-26T15:58:56.534Z	1795708736572	check	ok: images on beside-vm built for a44b3ed at 2026-11-26T15:50:53Z
+2026-11-26T15:58:57.265Z	1795708737304	check	tailnet on beside-vm: 100.98.76.5  beside-vm  <team>@  linux  offline
+2026-11-26T15:58:57.337Z	1795708737381	1-stop	maintenance on, backend stop on beside-standby
+ Container beside-backend-1 Stopping
+ Container beside-backend-1 Stopped
+2026-11-26T15:59:08.497Z	1795708748535	1-stop	backend stopped
+2026-11-26T15:59:08.564Z	1795708748601	2-copy	start
+2026-11-26T15:59:12.288Z	1795708752325	2-copy	done
+2026-11-26T15:59:12.354Z	1795708752390	3-start	compose up on beside-vm
+ Container beside-backend-1 Starting
+ Container beside-tempo-1 Starting
+ Container beside-loki-1 Starting
+ Container beside-prometheus-1 Starting
+ Container beside-tempo-1 Started
+ Container beside-loki-1 Started
+ Container beside-alloy-1 Starting
+ Container beside-prometheus-1 Started
+ Container beside-grafana-1 Starting
+ Container beside-backend-1 Started
+ Container beside-caddy-1 Starting
+ Container beside-caddy-1 Started
+ Container beside-alloy-1 Started
+ Container beside-grafana-1 Started
+2026-11-26T15:59:59.043Z	1795708799081	3-start	healthz ok on beside-vm
+2026-11-26T15:59:59.111Z	1795708799148	4-ip	detach from beside-standby
+Updated [https://www.googleapis.com/compute/v1/projects/beside-514511/zones/asia-northeast3-b/instances/beside-standby].
+2026-11-26T16:00:04.449Z	1795708804487	4-ip	attach to beside-vm
+Updated [https://www.googleapis.com/compute/v1/projects/beside-514511/zones/asia-northeast3-a/instances/beside-vm].
+2026-11-26T16:00:09.799Z	1795708809836	4-ip	attached
+2026-11-26T16:00:11.173Z	1795708811211	5-public	first public 200
+2026-11-26T16:00:32.617Z	1795708832658	5-public	routes: == 63 passed, 0 failed
+2026-11-26T16:00:32.691Z	1795708832732	6-roles	start
+Created symlink /etc/systemd/system/timers.target.wants/beside-watchdog.timer → /etc/systemd/system/beside-watchdog.timer.
+Created symlink /etc/systemd/system/timers.target.wants/beside-backup.timer → /etc/systemd/system/beside-backup.timer.
+Updated [https://www.googleapis.com/compute/v1/projects/beside-514511/zones/asia-northeast3-a/disks/beside-vm].
+ Container beside-grafana-1 Stopping
+ Container beside-alloy-1 Stopping
+ Container beside-tempo-1 Stopping
+ Container beside-caddy-1 Stopping
+ Container beside-alloy-1 Stopped
+ Container beside-loki-1 Stopping
+ Container beside-caddy-1 Stopped
+ Container beside-backend-1 Stopping
+ Container beside-backend-1 Stopped
+ Container beside-grafana-1 Stopped
+ Container beside-prometheus-1 Stopping
+ Container beside-prometheus-1 Stopped
+ Container beside-tempo-1 Stopped
+ Container beside-loki-1 Stopped
+Removed "/etc/systemd/system/timers.target.wants/beside-watchdog.timer".
+Removed "/etc/systemd/system/timers.target.wants/beside-backup.timer".
+2026-11-26T16:00:41.448Z	1795708841484	6-roles	done: beside-vm is active with 34.64.91.254, beside-standby is a stopped standby
+timeline: docs/ops/data/2026-11-26_failover-drills/failover-20261126T155821Z-beside-standby-to-beside-vm.tsv
+SSH: the alias beside-gcp now reaches beside-vm; use  ssh -o HostKeyAlias=beside-vm beside-gcp  (its host key differs from beside-standby).
+# exit 0
+# ended 2026-11-26T16:00:41Z

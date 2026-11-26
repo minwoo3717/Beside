@@ -42,7 +42,7 @@ REDUNDANCY 6절 1-5(전환 훈련 D-1·D-3) 전의 준비 기록이다. 운영 V
 
 Tailscale 에서 아직 못 본 것:
 - 대기 VM 에서 GPU Pod(`100.83.86.62:8002`, 운영 `.env` 의 `INFERENCE_BASE_URL`)로 닿는지는 Pod 가 꺼져 있어 보지 못했다. 훈련 날 GPU Pod 를 켜면 넘기기 전에 RUNBOOK 준비 3 의 `tailscale ping <Pod 의 100.x>` 와 8002 번 TCP 로 본다(ping 이 되어도 ACL 이 8002 번을 막을 수 있어서 둘 다 본다, RUNBOOK 당일 1번) [계획].
-- 전환 4단계는 대기 VM 의 임시 IP 를 떼고 고정 IP 를 붙인다. 그 사이 대기 VM 은 밖으로 나가지 못해 tailnet 연결이 잠깐 끊겼다가 다시 붙을 것으로 예상한다. 얼마나 걸리는지는 훈련에서 잰다 [계획].
+- 전환 4단계는 대기 VM 의 임시 IP 를 떼고 고정 IP 를 붙인다. 그 사이 대기 VM 은 밖으로 나가지 못해 tailnet 연결이 잠깐 끊겼다가 다시 붙을 것으로 예상한다. 얼마나 걸리는지는 훈련에서 잰다 [계획]. → 2026-11-26 훈련에서는 재지 않았다 [계획].
 
 ## 검토로 고친 것
 
@@ -64,5 +64,5 @@ Tailscale 에서 아직 못 본 것:
 ## 남은 것 [계획]
 
 - ~~사람: 대기 VM Tailscale 로그인 승인~~ → 2026-11-26 15:27 UTC 무렵 승인했다(위 표). 승인 주소는 첫 동기화가 도는 동안 `sudo tailscale up --hostname=beside-standby --accept-dns=false --timeout=20s` 로 만들었다.
-- 사람: 훈련 창 날짜와 공지, Grafana 캡처.
-- 훈련 당일: Runpod CPU Pod(drill_client), GPU Pod 를 켤지 결정(켜면 넘기기 전에 대기 VM → Pod ping·8002 번 TCP), D-1·D-3, 결과 문서.
+- ~~사람: 훈련 창 날짜와 공지, Grafana 캡처.~~ → 사용자 지시("지금 전환 훈련해")로 같은 날 바로 했다. 공지·Grafana 캡처는 하지 않았다.
+- ~~훈련 당일: Runpod CPU Pod(drill_client), GPU Pod 를 켤지 결정, D-1·D-3, 결과 문서.~~ → 2026-11-26 15:43~16:06 UTC 에 했다([결과](../../2026-11-26_failover-drills.md)). GPU 재고가 없어 GPU 없이 했다. 대기 VM → Pod ping·8002 번 TCP 는 아직 못 봤다 [계획].
