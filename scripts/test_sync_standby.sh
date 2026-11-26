@@ -71,7 +71,7 @@ SY="$HERE/sync_standby.sh"
 reset() {
   : > "$WORK/calls"; : > "$WORK/hosts"; : > "$WORK/marker-writes"; echo "$OLD_SHA" > "$WORK/sb-head"
   echo 10.178.0.2 > "$WORK/vm/beside-vm.ip"; echo 34.64.91.254 > "$WORK/vm/beside-vm.ext"
-  echo 10.178.0.4 > "$WORK/vm/beside-standby.ip"; echo 34.50.16.238 > "$WORK/vm/beside-standby.ext"
+  echo 10.178.0.4 > "$WORK/vm/beside-standby.ip"; echo 34.22.1.1 > "$WORK/vm/beside-standby.ext"
   echo "projects/p/zones/asia-northeast3-a/instances/beside-vm" > "$WORK/vm/ip-user"
 }
 changed() { grep -E "merge --ff-only|fetch_models|compose .* build|> ~/.beside-built" "$WORK/calls" || true; }
