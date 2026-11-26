@@ -8,10 +8,12 @@
 #   0 checks (no change): both VMs RUNNING, the static IP is on FROM, TO is a prepared copy (backend not running, same
 #     repo commit, every compose image present, a ~/.beside-built marker for that commit: scripts/sync_standby.sh, or
 #     step 6 of the failover that left it), TO logged in to the tailnet (else the GPU Pod is out of reach;
-#     BESIDE_ALLOW_NO_TAILNET=1 goes on anyway), FROM answers healthz
+#     BESIDE_ALLOW_NO_TAILNET=1 goes on anyway), FROM answers healthz, FROM has no job waiting or running (they would
+#     end as INTERNAL_ERROR; BESIDE_ALLOW_QUEUE=1 goes on; an unreadable count only warns)
 #   1 FROM: maintenance flag on, backend stopped                                   <- users start seeing errors
-#   2 copy FROM -> TO over SSH through this PC: the H2 DB, uploads/, results/, preprocessed/, events.jsonl
-#     (numeric owners kept, about 80 MB on 2026-11-26) and deploy/.env (secrets, never printed). RPO 0: backend stopped
+#   2 copy FROM -> TO over SSH through this PC: the H2 DB, uploads/, results/, preprocessed/, events.jsonl and the
+#     newest H2 zip of backup/ (numeric owners kept, about 80 MB on 2026-11-26) and deploy/.env (secrets, never
+#     printed). RPO 0: backend stopped
 #   3 TO: compose up (with the monitoring profile), wait for its own healthz
 #   4 move the static IP: detach from FROM, drop TO's temporary IP if any, attach to TO
 #   5 wait for the public healthz on the domain; then scripts/check_public_routes.sh
@@ -117,6 +119,23 @@ if [[ ! "$TS_TO" =~ ^100\. ]]; then
     die "$TO is not logged in to the tailnet, so it could not reach the GPU Pod (BESIDE_ALLOW_NO_TAILNET=1 to go on)"
   fi
 fi
+# Jobs waiting or running on FROM end as INTERNAL_ERROR when its backend stops (the target's InterruptedJobRecovery;
+# 2026-11-26 drill finding 3), so a planned switch waits for an empty queue. The count is the backend's own gauge
+# beside_jobs_queue{state=pending|processing}, read through the prometheus container (management port 8081). An
+# unreadable count (monitoring profile down) only warns.
+QUEUE="$(on "$FROM" "docker exec beside-prometheus-1 wget -qO- http://backend:8081/actuator/prometheus 2>/dev/null | awk '/^beside_jobs_queue\\{/ {s+=\$2; n++} END {if (n) printf \"%d\", s}'" || true)"
+if [[ ! "$QUEUE" =~ ^[0-9]+$ ]]; then
+  mark check "queue on $FROM: unknown (backend metrics not readable); jobs waiting there would end as INTERNAL_ERROR"
+elif [[ "$QUEUE" == 0 ]]; then
+  mark check "ok: queue on $FROM empty"
+elif [[ "${BESIDE_ALLOW_QUEUE:-0}" == 1 ]]; then
+  mark check "BESIDE_ALLOW_QUEUE=1: going on with $QUEUE job(s) on $FROM; they end as INTERNAL_ERROR (retry in the app)"
+elif [[ "$DRY" == 1 ]]; then
+  echo "DRY_RUN: a real run would STOP here: $QUEUE job(s) waiting or running on $FROM (wait, or BESIDE_ALLOW_QUEUE=1)"
+  DRY_BLOCKED=1
+else
+  die "$QUEUE job(s) waiting or running on $FROM would end as INTERNAL_ERROR: wait until the queue is empty (BESIDE_ALLOW_QUEUE=1 to go on)"
+fi
 if [[ "$DRY" == 1 && "${DRY_BLOCKED:-0}" == 1 ]]; then
   echo "DRY_RUN: the other checks passed. Once that is fixed, the changing steps would be:"
 elif [[ "$DRY" == 1 ]]; then
@@ -146,12 +165,16 @@ mark 1-stop "backend stopped"
 
 # ---- 2 copy data and .env
 mark 2-copy "start"
+# The newest H2 zip of backup/ (the backend's 5-minute copy) goes along, not the whole folder: without it the target's
+# first off-VM backup runs judge its snapshot-time zips as stale and the watchdog reports the backup as stopped
+# (2026-11-26 drill finding 1). Zip names sort by time (beside-YYYYMMDD-HHMMSS-NNN.zip).
+COPY_OUT="sudo sh -c 'cd $VOL && tar --numeric-owner -cf - ${DATA[*]} \$(ls -1 backup/beside-*.zip 2>/dev/null | sort | tail -n 1)'"
 if [[ "$DRY" == 1 ]]; then
-  echo "+ on $FROM sudo tar -C $VOL --numeric-owner -cf - ${DATA[*]} | on $TO sudo tar -C $VOL --numeric-owner -xf -"
+  echo "+ on $FROM $COPY_OUT | on $TO sudo tar -C $VOL --numeric-owner -xf -"
   echo "+ on $FROM cat ~/Beside/deploy/.env | on $TO (keep .env.standby, write .env 600)"
 else
   on "$TO" "sudo sh -c 'cd $VOL && rm -rf ${DATA[*]}'" || rollback
-  on "$FROM" "sudo tar -C $VOL --numeric-owner -cf - ${DATA[*]}" | on "$TO" "sudo tar -C $VOL --numeric-owner -xf -" \
+  on "$FROM" "$COPY_OUT" | on "$TO" "sudo tar -C $VOL --numeric-owner -xf -" \
     || rollback
   on "$FROM" 'cat ~/Beside/deploy/.env' | on "$TO" \
     'cp -p ~/Beside/deploy/.env ~/Beside/deploy/.env.standby 2>/dev/null; umask 077; cat > ~/Beside/deploy/.env.new && mv -f ~/Beside/deploy/.env.new ~/Beside/deploy/.env' \

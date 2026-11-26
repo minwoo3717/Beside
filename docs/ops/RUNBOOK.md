@@ -109,7 +109,7 @@
    - 복사본에서 `tailscale logout` 은 하지 않는다.
    - 승인이 안 되면 훈련을 미룬다. `failover_vm.sh` 가 멈추고(`BESIDE_ALLOW_NO_TAILNET=1` 로만 넘어간다), 넘기면 GPU Pod 에 닿지 않아 작업이 PENDING 으로 기다리다 30분 뒤 `INFERENCE_UNAVAILABLE` 로 끝난다.
 4. `bash scripts/sync_standby.sh`: 대기 VM 을 운영 커밋으로 빨리 감고, 모델·이미지를 빌드·받는다. 아무것도 시작하지 않는다. 끝나면 `~/.beside-built` 에 커밋을 남긴다(도중에는 `pending`). 운영을 다시 배포하면 이것도 다시 돌린다.
-5. `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`: 점검만 한다. 같은 커밋, 대상 이미지가 다 있음, 빌드 표시, tailnet 을 본다. `would STOP` 줄이 있으면 진행하지 않는다.
+5. `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`: 점검만 한다. 같은 커밋, 대상 이미지가 다 있음, 빌드 표시, tailnet, 원본 대기열(2026-11-27 부터)을 본다. `would STOP` 줄이 있으면 진행하지 않는다.
 6. 공지:
    - 1시간 창이고, 끊김은 수 분이다(목표 ≤ 3분 [제안값]).
    - 그때 진행 중인 작업은 `INTERNAL_ERROR` 로 끝나니 앱에서 다시 시도한다.
@@ -135,8 +135,9 @@
    - `python3 drill_client.py check --base https://beside-team.duckdns.org --ids out/d1/marked-d1a.txt`(B 는 `marked-d1b.txt`)로 A·B 가 404 가 아닌지 본다.
    - 진행 중이던 작업은 `POST /api/v1/jobs/{id}/retry` 로 다시 보낸다(drill_client 에는 다시 보내기가 없다). Pod 를 켰다면 전환 뒤 1건이 COMPLETED 인지 본다.
      - 넘길 때 PENDING 이던 작업도 대상 backend 가 켜질 때 `INTERNAL_ERROR`("Interrupted by a server restart while PENDING")가 된다(2026-11-26 표지 작업 4건 모두).
+     - 2026-11-27 부터 `failover_vm.sh` 0단계가 원본 대기열(PENDING·PROCESSING)이 0 이 아니면 멈춘다. 비워질 때까지 기다리거나, 잃어도 되면 `BESIDE_ALLOW_QUEUE=1` 로 넘긴다 [구현됨]. 표지 작업을 GPU 없이 만들면 대기열에 남으므로, 그때는 `BESIDE_ALLOW_QUEUE=1` 이 필요하다.
    - Tailscale 관리 화면을 본다.
-   - 넘긴 직후 대상의 VM 밖 백업 1~2번은 실패하고, 감시가 '🗄️ VM 밖 백업(R1)이 멈췄어요' 를 보낸다. 전환이 볼륨의 `backup/` 을 복사하지 않아 대상의 가장 새 zip 이 오래됐기 때문이다. backend 의 첫 5분 백업 뒤 업로드가 성공하면 '✅ 다시 성공' 이 온다(2026-11-26: 15:51 알림 → 15:58 성공).
+   - 2026-11-26 훈련에서는 넘긴 직후 대상의 VM 밖 백업 1~2번이 실패했고, 감시가 '🗄️ VM 밖 백업(R1)이 멈췄어요' 를 보냈다(15:51 알림 → 15:58 성공). 전환이 볼륨의 `backup/` 을 복사하지 않아 대상의 가장 새 zip 이 오래됐기 때문이다. 2026-11-27 부터 2단계가 가장 새 zip 1개도 복사한다 [구현됨, 실제 전환으로는 아직 확인 전]. 그래도 알림이 오면 backend 의 첫 5분 백업 뒤 '✅ 다시 성공' 이 오는지 본다.
    - 대상 Grafana 는 자기 디스크에 저장된 옛 알림 상태로 켜진다. 몇 분 동안 해결된 알림을 다시 보낼 수 있다.
 7. SSH: 고정 IP 가 대기 VM 에 있는 동안 `ssh beside-gcp` 는 호스트 키가 달라 실패한다. 그동안은 `ssh -o HostKeyAlias=beside-standby beside-gcp` 를 쓴다.
    - 옛 운영 VM 은 외부 IP 가 없어 Tailscale 이 오프라인이다.

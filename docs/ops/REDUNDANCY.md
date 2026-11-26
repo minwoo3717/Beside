@@ -97,8 +97,8 @@
 - **알려진 빈틈** (2026-11-26):
   - 대기 VM 의 코드와 이미지는 스냅샷 시점 `d5f4a32`(배포 창 1 직후)였고, 운영 VM 은 `a44b3ed`(배포 창 2)다. `failover_vm.sh` 는 0단계에서 두 VM 의 리포 커밋이 다르면 멈춘다. 리포만 당기면 커밋 검사는 통과하지만, 3단계 `compose up` 은 빌드하지 않아 스냅샷의 옛 backend 이미지가 뜨고, 없는 tempo 이미지는 끊긴 동안 받는다. → 새 `scripts/sync_standby.sh` 가 운영 커밋으로 빨리 감고 모델·이미지를 빌드·받은 뒤(시작은 안 함) `~/.beside-built` 를 남긴다. `failover_vm.sh` 0단계는 대상에 compose 이미지가 다 있는지, 빌드 표시가 같은 커밋인지도 본다(표시가 없거나 `pending` 이면 거절. 6단계가 옛 운영 VM 에 표시를 남겨 되돌리기도 통과) [구현됨](가짜 명령 시험). `scripts/deploy_vm.sh` 의 `BESIDE_DEPLOY_STANDBY=1` 은 만들지 않는다(최신 main 을 당기는 스크립트라 운영 커밋에 맞출 수 없다).
   - 2026-11-26 훈련에서 찾은 것([훈련 기록](2026-11-26_failover-drills.md) '찾은 것'):
-    - 전환 2단계는 볼륨의 `backup/`(backend 의 5분 H2 zip)을 복사하지 않는다. 그래서 넘긴 직후 대상의 VM 밖 백업 1~2번이 신선도 검사(20분)에 걸려 실패하고, 감시가 '백업 멈춤' 을 알린다. backend 의 첫 5분 백업이 생기면 풀린다. 고칠 길은 가장 새 zip 도 복사하기다 [계획].
-    - 넘길 때 PENDING·PROCESSING 이던 작업은 대상에서 `INTERNAL_ERROR` 가 된다. 0단계에서 대기열이 0 이 아니면 경고하기 [계획].
+    - 전환 2단계는 볼륨의 `backup/`(backend 의 5분 H2 zip)을 복사하지 않는다. 그래서 넘긴 직후 대상의 VM 밖 백업 1~2번이 신선도 검사(20분)에 걸려 실패하고, 감시가 '백업 멈춤' 을 알린다. backend 의 첫 5분 백업이 생기면 풀린다. → 2026-11-27: 2단계가 가장 새 zip 1개도 복사한다 [구현됨] (가짜 명령 시험, 실제 전환으로는 확인 전).
+    - 넘길 때 PENDING·PROCESSING 이던 작업은 대상에서 `INTERNAL_ERROR` 가 된다. → 2026-11-27: 0단계가 원본 대기열이 0 이 아니면 멈춘다(`BESIDE_ALLOW_QUEUE=1` 로 넘김) [구현됨].
     - Grafana 알림 상태와 Prometheus·Loki·Tempo 기록은 VM 마다 따로다. 넘기면 대상의 옛 상태가 이어지고, 운영 VM 그래프에는 넘겨 있던 시간이 빈다.
     - `compose stop backend` 에서 backend 가 Docker 기본 10 s 안에 끝나지 않고 SIGKILL(종료 코드 137)로 죽었다(D-3 에서 확인). 원인은 아직 모른다 [가설]. 배포·재시작에도 해당할 수 있다.
   - `standby_pull.sh`(Phase 2 W6)는 없다 [계획]. 대기 VM 의 데이터는 스냅샷 시점 그대로이고, 계획 전환 때 `failover_vm.sh` 가 원본에서 복사한다.
