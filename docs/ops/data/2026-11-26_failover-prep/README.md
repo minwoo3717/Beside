@@ -1,4 +1,4 @@
-# 계획 전환 준비 (2026-11-26) — 대기 VM 맞추기·DRY_RUN
+# 계획 전환 준비 (2026-11-26) — 대기 VM 맞추기·Tailscale·DRY_RUN
 
 REDUNDANCY 6절 1-5(전환 훈련 D-1·D-3) 전의 준비 기록이다. 운영 VM 은 읽기만 했고 바꾼 것은 대기 VM 뿐이다. 절차는 [RUNBOOK](../../RUNBOOK.md) '대기 서버로 넘기기·되돌리기'.
 
@@ -33,8 +33,16 @@ REDUNDANCY 6절 1-5(전환 훈련 D-1·D-3) 전의 준비 기록이다. 운영 V
 | — | 독립 검토 2갈래(bash 안전성, 문서 대 스크립트) | 운영을 바꾸거나 D-1 을 막는 문제는 없었다. 고친 것은 아래 |
 | 13:35:25~13:35:38 | 고친 `sync_standby.sh` 로 다시([sync-2.log](sync-2.log)) | 이미 `a44b3ed`, 빌드 캐시로 13 s, 빌드 표시 다시 씀 |
 | 13:37 | 고친 `failover_vm.sh` DRY_RUN([failover-dry-run.log](failover-dry-run.log)) | 커밋·이미지·빌드 표시 통과, **tailnet 로그아웃이라 실제 실행이면 멈춤** |
+| 15:25 | 대기 VM Tailscale 상태 읽기 | 아직 `NeedsLogin`. 설정값은 호스트 이름 `beside-standby`, DNS 받지 않음 |
+| 15:27 무렵 | 사람: 첫 동기화(13:17~13:20) 때 만든 승인 주소를 팀 tailnet 계정으로 승인 | `beside-standby` = `100.84.254.122`. 운영 `beside-vm`(`100.98.76.5`)·Pod `beside-gpu`(`100.83.86.62`, 꺼짐)와 따로인 노드, 같은 tailnet 사용자, 태그 없음, 노드 키 만료 2027-05-25 15:27:38 UTC. 운영 노드는 그대로(같은 IP, 키 만료 2027-05-16) |
+| 15:28 | 두 VM 사이 `tailscale ping`(disco·TSMP)과 tailnet 위 TCP 22 | 양쪽 모두 내부 IP 로 직접 연결(`direct 10.178.0.4:41641`), disco 2~4 ms·TSMP 2~47 ms, 양방향 TCP 22 열림(두 VM 사이 22 번은 ACL 이 막지 않음. Pod 의 8002 번은 아래) |
+| 15:28:47~15:29:28 | `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`([failover-dry-run-2.log](failover-dry-run-2.log)) | **점검 모두 통과**(`DRY_RUN: checks passed`): 같은 커밋 `a44b3ed`, 이미지·빌드 표시(13:35:38 UTC), tailnet `100.84.254.122` |
 
-로그에서 대기 VM 의 임시 외부 IP 는 가렸다. 고정 IP·내부 IP 는 그대로 두었다.
+로그에서 대기 VM 의 임시 외부 IP 와 tailnet 계정 이름(`<team>`)은 가렸다. 고정 IP·내부 IP·tailnet IP 는 그대로 두었다.
+
+Tailscale 에서 아직 못 본 것:
+- 대기 VM 에서 GPU Pod(`100.83.86.62:8002`, 운영 `.env` 의 `INFERENCE_BASE_URL`)로 닿는지는 Pod 가 꺼져 있어 보지 못했다. 훈련 날 GPU Pod 를 켜면 넘기기 전에 RUNBOOK 준비 3 의 `tailscale ping <Pod 의 100.x>` 와 8002 번 TCP 로 본다(ping 이 되어도 ACL 이 8002 번을 막을 수 있어서 둘 다 본다, RUNBOOK 당일 1번) [계획].
+- 전환 4단계는 대기 VM 의 임시 IP 를 떼고 고정 IP 를 붙인다. 그 사이 대기 VM 은 밖으로 나가지 못해 tailnet 연결이 잠깐 끊겼다가 다시 붙을 것으로 예상한다. 얼마나 걸리는지는 훈련에서 잰다 [계획].
 
 ## 검토로 고친 것
 
@@ -55,5 +63,6 @@ REDUNDANCY 6절 1-5(전환 훈련 D-1·D-3) 전의 준비 기록이다. 운영 V
 
 ## 남은 것 [계획]
 
-- 사람: 대기 VM Tailscale 로그인 승인(첫 동기화가 도는 동안 `sudo tailscale up --hostname=beside-standby --accept-dns=false --timeout=20s` 로 승인 주소를 만들었다), 훈련 창 날짜와 공지, Grafana 캡처.
-- 훈련 당일: Runpod CPU Pod(drill_client), GPU Pod 를 켤지 결정, D-1·D-3, 결과 문서.
+- ~~사람: 대기 VM Tailscale 로그인 승인~~ → 2026-11-26 15:27 UTC 무렵 승인했다(위 표). 승인 주소는 첫 동기화가 도는 동안 `sudo tailscale up --hostname=beside-standby --accept-dns=false --timeout=20s` 로 만들었다.
+- 사람: 훈련 창 날짜와 공지, Grafana 캡처.
+- 훈련 당일: Runpod CPU Pod(drill_client), GPU Pod 를 켤지 결정(켜면 넘기기 전에 대기 VM → Pod ping·8002 번 TCP), D-1·D-3, 결과 문서.

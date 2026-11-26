@@ -1,0 +1,31 @@
+# started 2026-11-26T15:28:47Z
+2026-11-26T15:29:20.702Z	1795706960743	check	from=beside-vm(asia-northeast3-a,10.178.0.2) to=beside-standby(asia-northeast3-b,10.178.0.4) ip=34.64.91.254 to_ext=external-nat
+2026-11-26T15:29:24.194Z	1795706964233	check	ok: same commit a44b3ed
+2026-11-26T15:29:26.445Z	1795706966485	check	ok: images on beside-standby built for a44b3ed at 2026-11-26T13:35:38Z
+2026-11-26T15:29:27.162Z	1795706967201	check	tailnet on beside-standby: 100.84.254.122  beside-standby  <team>@  linux  -
+DRY_RUN: checks passed. The changing steps would be:
+2026-11-26T15:29:27.231Z	1795706967272	1-stop	maintenance on, backend stop on beside-vm
++ on beside-vm sudo\ touch\ /etc/beside-maintenance\ \&\&\ docker\ compose\ -f\ ~/Beside/deploy/docker-compose.yml\ --env-file\ ~/Beside/deploy/.env\ --profile\ monitoring\ stop\ backend
+2026-11-26T15:29:27.310Z	1795706967347	1-stop	backend stopped
+2026-11-26T15:29:27.388Z	1795706967427	2-copy	start
++ on beside-vm sudo tar -C /var/lib/docker/volumes/beside-storage/_data --numeric-owner -cf - db uploads results preprocessed events.jsonl | on beside-standby sudo tar -C /var/lib/docker/volumes/beside-storage/_data --numeric-owner -xf -
++ on beside-vm cat ~/Beside/deploy/.env | on beside-standby (keep .env.standby, write .env 600)
+2026-11-26T15:29:27.459Z	1795706967499	2-copy	done
+2026-11-26T15:29:27.531Z	1795706967572	3-start	compose up on beside-standby
++ on beside-standby docker\ compose\ -f\ ~/Beside/deploy/docker-compose.yml\ --env-file\ ~/Beside/deploy/.env\ --profile\ monitoring\ up\ -d
+2026-11-26T15:29:27.603Z	1795706967642	3-start	healthz ok on beside-standby
+2026-11-26T15:29:27.673Z	1795706967714	4-ip	detach from beside-vm
++ gcloud --project=beside-514511 --quiet compute instances delete-access-config beside-vm --zone=asia-northeast3-a --access-config-name=external-nat
++ gcloud --project=beside-514511 --quiet compute instances delete-access-config beside-standby --zone=asia-northeast3-b --access-config-name=external-nat
+2026-11-26T15:29:27.754Z	1795706967795	4-ip	attach to beside-standby
++ gcloud --project=beside-514511 --quiet compute instances add-access-config beside-standby --zone=asia-northeast3-b --access-config-name=external-nat --address=34.64.91.254
+2026-11-26T15:29:27.827Z	1795706967866	4-ip	attached
+2026-11-26T15:29:27.897Z	1795706967941	5-public	first public 200
+2026-11-26T15:29:27.972Z	1795706968013	6-roles	start
++ on beside-standby printf\ \'active\\n\'\ \|\ sudo\ tee\ /etc/beside-role\ \>/dev/null\ \&\&\ sudo\ rm\ -f\ /etc/beside-maintenance\ \&\&\ rm\ -f\ ~/.beside-built\ \&\&\ sudo\ systemctl\ enable\ --now\ beside-watchdog.timer\ beside-backup.timer
++ gcloud --project=beside-514511 --quiet compute disks add-resource-policies beside-standby-boot --zone=asia-northeast3-b --resource-policies=beside-daily-snapshot
++ on beside-vm docker\ compose\ -f\ ~/Beside/deploy/docker-compose.yml\ --env-file\ ~/Beside/deploy/.env\ --profile\ monitoring\ stop\;\ sudo\ systemctl\ disable\ --now\ beside-watchdog.timer\ beside-backup.timer\;\ printf\ \'standby\\n\'\ \|\ sudo\ tee\ /etc/beside-role\ \>/dev/null\;\ printf\ \'%s\ %s\\n\'\ a44b3ed7f107e7e3b5f8ae848ec18e2f93150e5d\ \$\(date\ -u\ +%FT%TZ\)\ \>\ ~/.beside-built
+2026-11-26T15:29:28.049Z	1795706968091	6-roles	done: beside-standby is active with 34.64.91.254, beside-vm is a stopped standby
+SSH: the alias beside-gcp now reaches beside-standby; use  ssh -o HostKeyAlias=beside-standby beside-gcp  (its host key differs from beside-vm).
+# exit 0
+# ended 2026-11-26T15:29:28Z

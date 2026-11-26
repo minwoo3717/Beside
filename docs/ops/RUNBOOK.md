@@ -104,7 +104,7 @@
 2. 대기 VM 에 임시 외부 IP 가 있어야 한다(git·이미지·Tailscale 이 밖으로 나간다). 없으면 `bash deploy/gcp/clone_vm.sh ip standby`. 전환 4단계가 이 IP 를 뗀다.
 3. Tailscale 로그인: 대기 VM 에서 `sudo systemctl enable --now tailscaled`(`clone_init.sh` 가 꺼 둔다) → `sudo tailscale up --hostname=beside-standby --accept-dns=false`(운영 VM 과 같은 옵션, [deploy/README.md](../../deploy/README.md) 'Tailscale').
    - 나온 주소를 팀 tailnet 계정으로 사람이 열어 승인한다. 관리 화면에 `beside-vm`·`beside-standby` 두 노드가 따로 보이고 "Duplicate node key" 가 없어야 한다. ACL 이 `beside-standby` 를 막지 않는지도 본다.
-   - Pod 가 켜져 있으면 대기 VM 에서 `tailscale ping <Pod 의 100.x>` 로 닿는지 본다.
+   - Pod 가 켜져 있으면 대기 VM 에서 `tailscale ping <Pod 의 100.x>` 로 닿는지 보고, 추론 포트도 본다: `timeout 3 bash -c '</dev/tcp/<Pod 의 100.x>/8002' && echo open`. ping 이 되어도 ACL 이 8002 번을 막을 수 있다(ACL 로 운영 VM → Pod 8002 만 허용했다면 `beside-standby` 도 넣는다, [deploy/README.md](../../deploy/README.md) 'Tailscale'). 막히면 넘긴 뒤 작업이 PENDING 으로 기다린다.
    - 복사본에서 `tailscale logout` 은 하지 않는다.
    - 승인이 안 되면 훈련을 미룬다. `failover_vm.sh` 가 멈추고(`BESIDE_ALLOW_NO_TAILNET=1` 로만 넘어간다), 넘기면 GPU Pod 에 닿지 않아 작업이 PENDING 으로 기다리다 30분 뒤 `INFERENCE_UNAVAILABLE` 로 끝난다.
 4. `bash scripts/sync_standby.sh`: 대기 VM 을 운영 커밋으로 빨리 감고, 모델·이미지를 빌드·받는다. 아무것도 시작하지 않는다. 끝나면 `~/.beside-built` 에 커밋을 남긴다(도중에는 `pending`). 운영을 다시 배포하면 이것도 다시 돌린다.
@@ -120,6 +120,7 @@
    - 그 Pod 에서 다음을 켜 둔다:
      `python3 drill_client.py run --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1 --interval 20 --duration 3600`
      기본값 그대로면 10분 뒤 멈춘다. GPU Pod 를 켜지 않았으면 `--no-jobs` 로 healthz 만 잰다.
+   - GPU Pod 를 켰으면 넘기기 전에 대기 VM 에서 준비 3 의 ping·8002 번 TCP 를 한 번 더 본다.
    - 개발 PC 에서 `export BESIDE_TIMELINE_DIR=docs/ops/data/<날짜>_failover-drills` 를 해 둔다. 타임라인 TSV 가 그 폴더에 생긴다.
 2. Grafana 화면을 캡처한다(넘긴 뒤에는 대기 VM 의 Prometheus·Loki·Tempo 가 스냅샷 시점 기록부터 이어진다).
 3. 표지 작업 A 를 만든다: `python3 drill_client.py mark --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1a --count 1`(id 는 `out/d1/marked-d1a.txt`).

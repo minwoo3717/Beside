@@ -5,7 +5,7 @@
   - GPU 는 **Pod 안 자동 재시작 + 새 Pod 복구 절차**로 한다.
   - 두 대를 동시에 돌리는 active-active 나 hot standby 는 지금 하지 않는다.
   - 2026-11-25: [6절](#6-다음-단계-계획-2026-11-25-계획)에 다음 단계 계획(warm standby 단계안)을 세움.
-  - 2026-11-26: 사용자 결정으로 발표 전 Phase 1 까지 실행한다(멘토링 '이중화는 최대한 실제로'). 1-1 5분 백업 **[적용]**(2026-11-25 17:16~17:21 UTC 배포 창 1), 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC, Tailscale 로그인 승인 대기), 1-4 스크립트 [구현됨], 1-5 전환 훈련 [계획].
+  - 2026-11-26: 사용자 결정으로 발표 전 Phase 1 까지 실행한다(멘토링 '이중화는 최대한 실제로'). 1-1 5분 백업 **[적용]**(2026-11-25 17:16~17:21 UTC 배포 창 1), 1-2·1-3 대기 VM `beside-standby` 만듦(2026-11-25 17:22~17:40 UTC, Tailscale 로그인 2026-11-26 15:27 UTC 무렵), 1-4 스크립트 [구현됨], 1-5 전환 훈련 [계획].
 - **근거**: [장애 훈련 결과](2026-11-20_failure-drills.md), [런북](RUNBOOK.md).
 - **표기**:
   - [적용] 운영에 켜 둠
@@ -86,7 +86,7 @@
 
 ## 6. 다음 단계 계획 (2026-11-25) [계획]
 
-- **상태**: 2026-11-25 에는 계획만 세웠다(그날 사용자 결정). 2026-11-26 사용자 결정으로 발표 전 Phase 1 까지 실행한다. 진행: 1-1 [적용], 1-2·1-3 대기 VM 만듦(`deploy/gcp/clone_vm.sh create standby now` → `deploy/standby/clone_init.sh standby`, 스냅샷 `beside-vm-standby-20261125-172254`, Tailscale 로그인 승인 대기), 1-4 `scripts/failover_vm.sh --planned` [구현됨](가짜 gcloud·ssh 시험), 1-5 D-1·D-3 [계획]. Phase 2·3 은 발표 뒤. 2026-11-26 13:17~13:37 UTC: `scripts/sync_standby.sh` 로 대기 VM 을 `a44b3ed`·이미지에 맞추고, `failover_vm.sh` DRY_RUN 점검이 커밋·이미지·빌드 표시를 통과했다. Tailscale 로그인 전이라 실제 실행은 멈춘다([준비 기록](data/2026-11-26_failover-prep/README.md)).
+- **상태**: 2026-11-25 에는 계획만 세웠다(그날 사용자 결정). 2026-11-26 사용자 결정으로 발표 전 Phase 1 까지 실행한다. 진행: 1-1 [적용], 1-2·1-3 대기 VM 만듦(`deploy/gcp/clone_vm.sh create standby now` → `deploy/standby/clone_init.sh standby`, 스냅샷 `beside-vm-standby-20261125-172254`, Tailscale 로그인 2026-11-26 15:27 UTC 무렵), 1-4 `scripts/failover_vm.sh --planned` [구현됨](가짜 gcloud·ssh 시험), 1-5 D-1·D-3 [계획]. Phase 2·3 은 발표 뒤. 2026-11-26 13:17~13:37 UTC: `scripts/sync_standby.sh` 로 대기 VM 을 `a44b3ed`·이미지에 맞추고, `failover_vm.sh` DRY_RUN 점검이 커밋·이미지·빌드 표시를 통과했다. 그때는 Tailscale 로그인 전이라 실제 실행이면 멈췄다. 15:27 UTC 무렵 로그인을 승인했고, 15:29 UTC DRY_RUN 은 tailnet 까지 모든 검사를 통과했다. 대기 VM 에서 GPU Pod 로 닿는지는 Pod 가 꺼져 있어 아직 보지 못했다([준비 기록](data/2026-11-26_failover-prep/README.md)).
 - **알려진 빈틈** (2026-11-26):
   - 대기 VM 의 코드와 이미지는 스냅샷 시점 `d5f4a32`(배포 창 1 직후)였고, 운영 VM 은 `a44b3ed`(배포 창 2)다. `failover_vm.sh` 는 0단계에서 두 VM 의 리포 커밋이 다르면 멈춘다. 리포만 당기면 커밋 검사는 통과하지만, 3단계 `compose up` 은 빌드하지 않아 스냅샷의 옛 backend 이미지가 뜨고, 없는 tempo 이미지는 끊긴 동안 받는다. → 새 `scripts/sync_standby.sh` 가 운영 커밋으로 빨리 감고 모델·이미지를 빌드·받은 뒤(시작은 안 함) `~/.beside-built` 를 남긴다. `failover_vm.sh` 0단계는 대상에 compose 이미지가 다 있는지, 빌드 표시가 같은 커밋인지도 본다(표시가 없거나 `pending` 이면 거절. 6단계가 옛 운영 VM 에 표시를 남겨 되돌리기도 통과) [구현됨](가짜 명령 시험). `scripts/deploy_vm.sh` 의 `BESIDE_DEPLOY_STANDBY=1` 은 만들지 않는다(최신 main 을 당기는 스크립트라 운영 커밋에 맞출 수 없다).
   - `standby_pull.sh`(Phase 2 W6)는 없다 [계획]. 대기 VM 의 데이터는 스냅샷 시점 그대로이고, 계획 전환 때 `failover_vm.sh` 가 원본에서 복사한다.
