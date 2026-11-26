@@ -18,7 +18,7 @@
 | 포맷 | glTF 2.0 binary (`.glb`), 단일 파일, buffer 1개(= BIN 청크) | 외부 `.bin`/이미지 참조 금지. 텍스처·털 맵은 bufferView 에 임베드. 앱의 털 맵 읽기는 BIN 청크만 보고, 변환기는 buffer 가 하나가 아니면 털 맵을 넣지 못해 `CONVERSION_FAILED` 로 끝낸다 |
 | Content-Type | `model/gltf-binary` | API 응답 헤더 및 `AssetInfo.contentType` |
 | 파일 크기 | ≤ 10 MB (제안값) | 털 맵·스킨·클립을 모두 넣은 **최종 파일** 기준. 변환기는 털 맵을 넣은 뒤의 크기를 검사하고(`convert_asset.py`, 이 상한을 넘는 정적 GLB 의 시험은 없다), 추론 서비스는 리깅본을 다시 검사한다(`OversizeRiggedResultTest`) **[구현됨]**. 리깅본이 넘으면 정적 GLB 를 낸다. `AssetInfo.bytes` 로 노출 |
-| 검증 | [glTF Validator](https://github.khronos.org/glTF-Validator/) 오류 0 | **[계획]**(exp-02). 경고는 허용하되 실험 기록에 남긴다. 털 맵 이미지는 어느 texture 도 가리키지 않아(§4.1) '쓰이지 않는 객체' 알림이 나올 수 있다(확인 안 함) |
+| 검증 | [glTF Validator](https://github.khronos.org/glTF-Validator/) 오류 0 | ~~**[계획]**(exp-02)~~ → 2026-11-27 운영 GLB 3종(정적·털 맵·리깅) 오류 0·경고 0 **[실험 결과]**([검사 기록](../../generation/experiments/2026-11-27_glb-validator.md)). 경고는 허용하되 실험 기록에 남긴다. 털 맵 이미지는 어느 texture 도 가리키지 않아(§4.1) INFO `UNUSED_OBJECT` 가 나온다(2026-11-27 확인, 설계대로) |
 | 확장(extension) | 없음 | Draco/KTX2 압축은 glTFast 지원 확인 후 [계획]. 쓰려면 Unity 패키지 추가 필요 |
 
 ## 2. 좌표계 · 단위 · 원점 · 방향
