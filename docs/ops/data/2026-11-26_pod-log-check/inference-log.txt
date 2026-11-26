@@ -1,0 +1,47 @@
+# Runpod Pod ul0b0fi6fgb7i6, /workspace/beside-logs/inference.log, segment after the 2026-11-26T08:06:24Z start.
+# 28 lines containing 'GET /healthz' removed (uvicorn access line + timing line per 15 s poll).
+# The torch.load FutureWarning line is cut where it ends with '...'. Nothing else changed. No token in this text.
+=== 2026-11-26T08:06:24Z start_pod.sh ===
+AnimalLift: /workspace/AnimalLift | work: /workspace/beside-work | listen: 127.0.0.1:8002
+token: set (X-Inference-Token required on /infer, /infer/upload, /artifacts)
+rigging: /workspace/beside-rig/template-rigged.glb
+wait for: 'model loaded ... on cuda'   (stop: Ctrl+C)
+INFO:     Started server process [216]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8002 (Press CTRL+C to quit)
+/workspace/Beside/generation/inference_service/animallift_runner.py:76: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. ...
+  ckpt = torch.load(str(ckpt_path), map_location="cpu")
+/workspace/miniconda3/envs/animallift/lib/python3.10/site-packages/huggingface_hub/utils/_validators.py:205: UserWarning: The `local_dir_use_symlinks` argument is deprecated and ignored in `hf_hub_download`. Downloading to a local directory does not use symlinks anymore.
+  warnings.warn(
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-11-26T08:07:15.988Z INFO beside.inference model loaded in 44.3s on cuda (animallift-baseline@5d364cf:latest via animallift_runner:AnimalLiftRunner)
+[Checkpoint] Restored model architecture and VAE settings.
+[VAE] stabilityai/sd-vae-ft-mse: frozen float32, texture=1024, latent=[4,128,128], scaling=0.18215
+2026-11-26T08:07:43.748Z INFO beside.inference request POST /infer/upload client=127.0.0.1:59780 traceparent=00-14c049d0d0e0df86abf4c3cd78e274d0-d4f6399b735f53e3-01 rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+2026-11-26T08:07:56.053Z INFO beside.inference job 35b357d7-82b1-468d-9377-d2963e732fe0: rigged (36 joints, clips Idle,Walk,TailWag,HeadTilt,Sit) rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+2026-11-26T08:07:56.058Z INFO beside.inference job 35b357d7-82b1-468d-9377-d2963e732fe0: infer 7030 ms, convert 1065 ms, 7774 tris, 2100924 bytes rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+2026-11-26T08:07:56.062Z INFO beside.inference job 35b357d7-82b1-468d-9377-d2963e732fe0: upload mode, 1 photo(s) in, /workspace/beside-work/35b357d7-82b1-468d-9377-d2963e732fe0/base.glb out rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+INFO:     127.0.0.1:59780 - "POST /infer/upload HTTP/1.1" 200 OK
+timing POST /infer/upload 200 client=127.0.0.1:59780 in=609137 body_ms=1334.2 start_ms=12316.9 end_ms=12324.3 gone_ms=- out=375 err=- at=2026-11-26T08:07:43.748Z
+2026-11-26T08:07:56.346Z INFO beside.inference request GET /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0/base.glb client=127.0.0.1:59780 traceparent=00-14c049d0d0e0df86abf4c3cd78e274d0-bc65942594c56375-01 rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+INFO:     127.0.0.1:59780 - "GET /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0/base.glb HTTP/1.1" 200 OK
+timing GET /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0/base.glb 200 client=127.0.0.1:59780 in=0 body_ms=- start_ms=20.9 end_ms=44.6 gone_ms=- out=2100924 err=- at=2026-11-26T08:07:56.346Z
+2026-11-26T08:07:58.569Z INFO beside.inference request DELETE /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0 client=127.0.0.1:59780 traceparent=00-14c049d0d0e0df86abf4c3cd78e274d0-20b4b03a85a897ee-01 rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+2026-11-26T08:07:58.592Z INFO beside.inference job 35b357d7-82b1-468d-9377-d2963e732fe0: work folder deleted rid=35b357d7-82b1-468d-9377-d2963e732fe0-1 trace=14c049d0d0e0df86abf4c3cd78e274d0
+INFO:     127.0.0.1:59780 - "DELETE /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0 HTTP/1.1" 204 No Content
+timing DELETE /artifacts/35b357d7-82b1-468d-9377-d2963e732fe0 204 client=127.0.0.1:59780 in=0 body_ms=- start_ms=24.9 end_ms=26.2 gone_ms=- out=0 err=- at=2026-11-26T08:07:58.568Z
+2026-11-26T08:08:51.776Z WARNING beside.inference POST /infer: 401 INFERENCE_UNAVAILABLE missing X-Inference-Token rid=logcheck-401
+INFO:     127.0.0.1:51392 - "POST /infer?probe=1 HTTP/1.1" 401 Unauthorized
+timing POST /infer 401 client=127.0.0.1:51392 in=0 body_ms=- start_ms=1.4 end_ms=2.1 gone_ms=- out=90 err=- at=2026-11-26T08:08:51.776Z
+2026-11-26T08:08:52.316Z WARNING beside.inference GET /artifacts/nope/base.glb: 401 INFERENCE_UNAVAILABLE missing X-Inference-Token
+INFO:     127.0.0.1:51394 - "GET /artifacts/nope/base.glb HTTP/1.1" 401 Unauthorized
+timing GET /artifacts/nope/base.glb 401 client=127.0.0.1:51394 in=0 body_ms=- start_ms=1.0 end_ms=1.7 gone_ms=- out=90 err=- at=2026-11-26T08:08:52.316Z
+2026-11-26T08:09:00.465Z INFO beside.inference request GET /artifacts/00000000-0000-0000-0000-000000000000/base.glb client=127.0.0.1:41746 traceparent=00-0123456789abcdef0123456789abcdef-0123456789abcdef-01 rid=logcheck-404 trace=0123456789abcdef0123456789abcdef
+2026-11-26T08:09:00.473Z WARNING beside.inference job 00000000-0000-0000-0000-000000000000: 404 base.glb not in the work folder (no run of this job finished here, or it was deleted) rid=logcheck-404 trace=0123456789abcdef0123456789abcdef
+INFO:     127.0.0.1:41746 - "GET /artifacts/00000000-0000-0000-0000-000000000000/base.glb HTTP/1.1" 404 Not Found
+timing GET /artifacts/00000000-0000-0000-0000-000000000000/base.glb 404 client=127.0.0.1:41746 in=0 body_ms=- start_ms=9.6 end_ms=10.9 gone_ms=- out=29 err=- at=2026-11-26T08:09:00.465Z
+2026-11-26T08:09:01.077Z INFO beside.inference request POST /infer client=127.0.0.1:41752 traceparent=- rid=logcheck-422
+2026-11-26T08:09:01.085Z WARNING beside.inference POST /infer: 422 invalid request [{"loc": ["body", "imagePaths"], "msg": "Field required"}] rid=logcheck-422
+INFO:     127.0.0.1:41752 - "POST /infer HTTP/1.1" 422 Unprocessable Entity
+timing POST /infer 422 client=127.0.0.1:41752 in=13 body_ms=5.7 start_ms=8.9 end_ms=9.8 gone_ms=- out=104 err=- at=2026-11-26T08:09:01.077Z

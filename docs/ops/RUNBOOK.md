@@ -23,9 +23,9 @@
 | backend 상태 | VM `docker compose -f deploy/docker-compose.yml --env-file deploy/.env ps`. DB 까지 보려면 `exec -T backend curl -s localhost:8081/actuator/health` |
 | GPU 상태 변화 | backend 로그 `inference service A -> B`, 디스코드 GPU 알림 |
 | 대기열 | `exec -T backend curl -s localhost:8081/actuator/prometheus \| grep ^beside_jobs_queue` |
-| 요청 하나 | 앱 `[BesideMetric]` 줄의 `request_id`(= 요청·응답 헤더 `X-Request-Id`)로 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs backend \| grep <id>`. prod 는 한 줄에 JSON 하나(`"requestId":"<id>"`, 스택은 `stack_trace` 필드), 다른 프로필은 텍스트 `rid=<id>` [구현됨, VM 배포 전] |
-| 작업 하나 | 같은 명령에 `grep <jobId>`. 워커 줄은 `"jobId"`(prod) 또는 `job=<jobId>`(텍스트)이고, 접수 줄 `Job created: <jobId>` 의 요청 id 로 만든 요청도 찾는다 [구현됨, VM 배포 전] |
-| 오류 응답 수 | `exec -T backend curl -s localhost:8081/actuator/prometheus \| grep ^beside_api_errors_total`(status·code 별). 5xx 는 로그에 `Internal error: ... requestId=<id>` 와 스택 [구현됨, VM 배포 전] |
+| 요청 하나 | 앱 `[BesideMetric]` 줄의 `request_id`(= 요청·응답 헤더 `X-Request-Id`)로 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs backend \| grep <id>`. prod 는 한 줄에 JSON 하나(`"requestId":"<id>"`, 스택은 `stack_trace` 필드), 다른 프로필은 텍스트 `rid=<id>` [구현됨: 적용] 배포 창 1(2026-11-25 17:21 UTC). 2026-11-26 08:07 UTC 업로드 1건: 응답 `X-Request-Id` 와 같은 값이 `Job created` JSON 줄의 `requestId` 에 있었다 |
+| 작업 하나 | 같은 명령에 `grep <jobId>`. 워커 줄은 `"jobId"`(prod) 또는 `job=<jobId>`(텍스트)이고, 접수 줄 `Job created: <jobId>` 의 요청 id 로 만든 요청도 찾는다 [구현됨: 적용] 배포 창 1. 2026-11-26 같은 작업의 크롭·PROCESSING·COMPLETED 줄에 `jobId` 가 있었다(워커 줄의 `requestId` 는 비어 있다) |
+| 오류 응답 수 | `exec -T backend curl -s localhost:8081/actuator/prometheus \| grep ^beside_api_errors_total`(status·code 별). 5xx 는 로그에 `Internal error: ... requestId=<id>` 와 스택 [구현됨: 적용] 배포 창 1. 운영에서 5xx 줄은 아직 보지 못했다 |
 | VM 감시(R4) | `journalctl -u beside-watchdog -n 20 --no-pager`(정상이면 비어 있다), 디스코드 🔁(재시작)·✅(재시작 뒤 정상) |
 | Pod | Runpod 콘솔, Pod `/workspace/beside-logs/{inference,start,supervisor}.log`, `curl -s 127.0.0.1:8002/healthz` |
 
