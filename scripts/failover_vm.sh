@@ -6,16 +6,21 @@
 #   DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby   # read-only checks + the commands
 # Order (each line goes to the UTC timeline file, so the drill report can give the outage per step):
 #   0 checks (no change): both VMs RUNNING, the static IP is on FROM, TO is a prepared copy (backend not running, same
-#     repo commit), FROM answers healthz
+#     repo commit, every compose image present, a ~/.beside-built marker for that commit: scripts/sync_standby.sh, or
+#     step 6 of the failover that left it), TO logged in to the tailnet (else the GPU Pod is out of reach;
+#     BESIDE_ALLOW_NO_TAILNET=1 goes on anyway), FROM answers healthz
 #   1 FROM: maintenance flag on, backend stopped                                   <- users start seeing errors
 #   2 copy FROM -> TO over SSH through this PC: the H2 DB, uploads/, results/, preprocessed/, events.jsonl
 #     (numeric owners kept, about 80 MB on 2026-11-26) and deploy/.env (secrets, never printed). RPO 0: backend stopped
 #   3 TO: compose up (with the monitoring profile), wait for its own healthz
 #   4 move the static IP: detach from FROM, drop TO's temporary IP if any, attach to TO
 #   5 wait for the public healthz on the domain; then scripts/check_public_routes.sh
-#   6 TO: role active, maintenance off, watchdog + off-VM backup timers on, daily snapshot schedule on its disk;
-#     FROM: compose stopped, timers off, role standby (it has no external IP now, so its Tailscale is offline)
-# If step 3 or 4 fails: the static IP goes back to FROM and FROM's backend starts again (rollback, logged).
+#   6 TO: role active, maintenance off, build marker removed (a later deploy there would leave it stale), watchdog +
+#     off-VM backup timers on, daily snapshot schedule on its disk;
+#     FROM: compose stopped, timers off, role standby, build marker = the commit its images ran (so the way back
+#     passes step 0). It has no external IP now, so its Tailscale is offline
+# If step 1, 2 (copy), 3 (start, healthz), 4 (IP move) or 5 (public healthz) fails: the static IP goes back to FROM and
+# FROM's backend starts again (rollback, logged). A failed route check in step 5 is only logged.
 # Not done here [계획]: unplanned failover (FROM dead), pulling backups on a timer (Phase 2).
 # Overrides: BESIDE_GCP_PROJECT, BESIDE_STATIC_IP (beside-ip), BESIDE_REGION (asia-northeast3),
 # BESIDE_DOMAIN (beside-team.duckdns.org), BESIDE_SSH_KEY (~/.ssh/beside-vm.key), BESIDE_TIMELINE_DIR (.).
@@ -85,13 +90,36 @@ HEALTH="curl -sk --max-time 5 --resolve $DOMAIN:443:127.0.0.1 https://$DOMAIN/ap
 
 mark check "from=$FROM($ZFROM,$IFROM) to=$TO($ZTO,$ITO) ip=$STATIC to_ext=${TO_EXT:-none}"
 [[ "$(on "$FROM" "$HEALTH" || true)" == *'"status":"ok"'* ]] || die "$FROM does not answer healthz"
-[[ -z "$(on "$TO" "docker ps -q --filter name=beside-backend-1" || true)" ]] || die "$TO already runs a backend"
-CF="$(on "$FROM" 'git -C ~/Beside rev-parse HEAD')"; CT="$(on "$TO" 'git -C ~/Beside rev-parse HEAD')"
-[[ "$CF" == "$CT" ]] || die "repo commits differ: $FROM $CF, $TO $CT (deploy the same commit to $TO first)"
+TO_RUNNING="$(on "$TO" "docker ps -q --filter name=beside-backend-1")" || die "docker ps on $TO failed"
+[[ -z "$TO_RUNNING" ]] || die "$TO already runs a backend"
+CF="$(on "$FROM" 'git -C ~/Beside rev-parse HEAD')" || die "ssh to $FROM failed"
+CT="$(on "$TO" 'git -C ~/Beside rev-parse HEAD')" || die "ssh to $TO failed"
+[[ "$CF" == "$CT" ]] || die "repo commits differ: $FROM $CF, $TO $CT (bash scripts/sync_standby.sh $FROM $TO)"
 mark check "ok: same commit ${CF:0:7}"
-TS_TO="$(on "$TO" 'tailscale status --self=true --peers=false 2>/dev/null | head -1' || true)"
-mark check "tailnet on $TO: ${TS_TO:-not running (GPU jobs will wait until it is up)}"
-if [[ "$DRY" == 1 ]]; then
+# compose up in step 3 does not build: a pulled repo with the snapshot's images would start old code, and a missing
+# image would be pulled during the outage. An empty or failed listing is an error, not "nothing missing".
+MISSING="$(on "$TO" "set -o pipefail; imgs=\$($COMPOSE config --images | sort -u) && [ -n \"\$imgs\" ] && for i in \$imgs; do docker image inspect \"\$i\" >/dev/null 2>&1 || echo \"\$i\"; done")" \
+  || die "could not list the images of $TO (compose config failed?)"
+[[ -z "$MISSING" ]] || die "images missing on $TO: $(tr '\n' ' ' <<<"$MISSING")(bash scripts/sync_standby.sh $FROM $TO)"
+BUILT="$(on "$TO" 'cat ~/.beside-built 2>/dev/null || true')" || die "ssh to $TO failed"
+[[ "${BUILT%% *}" == "$CF" ]] \
+  || die "$TO has no build marker for ${CF:0:7} ('${BUILT:-none}'): bash scripts/sync_standby.sh $FROM $TO"
+mark check "ok: images on $TO built for ${CF:0:7} at ${BUILT#* }"
+TS_TO="$(on "$TO" 'tailscale status --self=true --peers=false 2>&1 | head -1' || true)"
+mark check "tailnet on $TO: ${TS_TO:-?}"
+if [[ ! "$TS_TO" =~ ^100\. ]]; then
+  if [[ "${BESIDE_ALLOW_NO_TAILNET:-0}" == 1 ]]; then
+    mark check "BESIDE_ALLOW_NO_TAILNET=1: going on; GPU jobs wait (PENDING) until $TO joins the tailnet"
+  elif [[ "$DRY" == 1 ]]; then
+    echo "DRY_RUN: a real run would STOP here: $TO is not logged in to the tailnet (docs/ops/RUNBOOK.md '대기 서버로 넘기기')"
+    DRY_BLOCKED=1
+  else
+    die "$TO is not logged in to the tailnet, so it could not reach the GPU Pod (BESIDE_ALLOW_NO_TAILNET=1 to go on)"
+  fi
+fi
+if [[ "$DRY" == 1 && "${DRY_BLOCKED:-0}" == 1 ]]; then
+  echo "DRY_RUN: the other checks passed. Once that is fixed, the changing steps would be:"
+elif [[ "$DRY" == 1 ]]; then
   echo "DRY_RUN: checks passed. The changing steps would be:"
 fi
 
@@ -113,7 +141,7 @@ rollback() {
 
 # ---- 1 stop the source
 mark 1-stop "maintenance on, backend stop on $FROM"
-run on "$FROM" "sudo touch /etc/beside-maintenance && $COMPOSE stop backend"
+run on "$FROM" "sudo touch /etc/beside-maintenance && $COMPOSE stop backend" || rollback
 mark 1-stop "backend stopped"
 
 # ---- 2 copy data and .env
@@ -174,9 +202,9 @@ fi
 
 # ---- 6 roles
 mark 6-roles "start"
-run on "$TO" "printf 'active\n' | sudo tee /etc/beside-role >/dev/null && sudo rm -f /etc/beside-maintenance && sudo systemctl enable --now beside-watchdog.timer beside-backup.timer"
+run on "$TO" "printf 'active\n' | sudo tee /etc/beside-role >/dev/null && sudo rm -f /etc/beside-maintenance && rm -f ~/.beside-built && sudo systemctl enable --now beside-watchdog.timer beside-backup.timer"
 run "${G[@]}" compute disks add-resource-policies "$TO_DISK" --zone="$ZTO" --resource-policies=beside-daily-snapshot || true
-run on "$FROM" "$COMPOSE stop; sudo systemctl disable --now beside-watchdog.timer beside-backup.timer; printf 'standby\n' | sudo tee /etc/beside-role >/dev/null"
+run on "$FROM" "$COMPOSE stop; sudo systemctl disable --now beside-watchdog.timer beside-backup.timer; printf 'standby\n' | sudo tee /etc/beside-role >/dev/null; printf '%s %s\n' $CF \$(date -u +%FT%TZ) > ~/.beside-built"
 mark 6-roles "done: $TO is active with $STATIC, $FROM is a stopped standby"
 [[ "$DRY" == 1 ]] || echo "timeline: $TL"
 echo "SSH: the alias beside-gcp now reaches $TO; use  ssh -o HostKeyAlias=$TO beside-gcp  (its host key differs from $FROM)."
