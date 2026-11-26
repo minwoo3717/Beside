@@ -165,7 +165,7 @@ jobs:
           "${compose[@]}" --profile monitoring "${loadtest[@]}" config -q
           # prometheus and grafana start only with --profile monitoring
           test "$("${compose[@]}" config --services | sort | xargs)" = "backend caddy"
-          test "$("${compose[@]}" --profile monitoring config --services | sort | xargs)" = "alloy backend caddy grafana loki prometheus"
+          test "$("${compose[@]}" --profile monitoring config --services | sort | xargs)" = "alloy backend caddy grafana loki prometheus tempo"
           "${compose[@]}" config --format json > compose-base.json
           "${compose[@]}" --profile monitoring config --format json > compose-monitoring.json
           "${compose[@]}" "${loadtest[@]}" config --format json > compose-loadtest.json
@@ -256,8 +256,21 @@ jobs:
           vols = [v.get("source", "") + ":" + v.get("target", "") for v in alloy.get("volumes", [])]
           assert not any("docker.sock" in v for v in vols), f"alloy mounts docker.sock: {vols}"
           assert any(v.get("target") == "/var/lib/docker/containers" and v.get("read_only") for v in alloy["volumes"]), vols
-          for name in ("loki", "alloy"):
+          for name in ("loki", "alloy", "tempo"):
               assert mem_bytes(mon["services"][name]["mem_limit"]) <= 384 * 1024**2, (name, mon["services"][name]["mem_limit"])
+          # tracing (W8, 2026-11-26): tempo is internal only (no ports, checked above for every service), keeps its blocks
+          # in a named volume, its Go GC aims at about 80 % of the cap, and the backend exports to it with every trace sampled
+          tempo = mon["services"]["tempo"]
+          assert any(v.get("source") == "tempo_data" and v.get("target") == "/var/tempo" for v in tempo["volumes"]), tempo["volumes"]
+          assert 0.75 <= go_bytes(tempo["environment"]["GOMEMLIMIT"]) / mem_bytes(tempo["mem_limit"]) <= 0.85, tempo["environment"]
+          benv = mon["services"]["backend"]["environment"]
+          assert benv["MANAGEMENT_OTLP_TRACING_ENDPOINT"] == "http://tempo:4318/v1/traces", benv["MANAGEMENT_OTLP_TRACING_ENDPOINT"]
+          assert benv["MANAGEMENT_TRACING_SAMPLING_PROBABILITY"] == "1.0", benv["MANAGEMENT_TRACING_SAMPLING_PROBABILITY"]
+          assert "management.otlp.tracing.endpoint" not in props, "only compose sets the OTLP endpoint (tests and local runs export nothing)"
+          # memory: the sum of the caps of the whole monitoring profile stays well inside the 8 GB VM (deploy/README '메모리')
+          total = sum(mem_bytes(svc["mem_limit"]) for svc in mon["services"].values())
+          print(f"sum of mem_limit with --profile monitoring: {total / 1024**3:.2f} GiB")
+          assert total <= 7 * 1024**3, f"mem_limit sum {total / 1024**3:.2f} GiB"
           graf = mon["services"]["grafana"]
           assert any(v.get("target") == "/etc/grafana/provisioning/alerting" for v in graf["volumes"]), "grafana without alert rules"
           assert graf["environment"]["GRAFANA_ALERT_WEBHOOK_URL"], "grafana alert webhook empty"
@@ -307,13 +320,33 @@ jobs:
             -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             "$image" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
-      - name: log pipeline and Grafana provisioning load (Loki config, Alloy syntax, datasources, dashboards, alert rules)
+      - name: log pipeline, traces and Grafana provisioning load (Loki config, Alloy syntax, Tempo, datasources, dashboards, alert rules)
         run: |
           img() { grep -m1 -oE "$1:[^\"[:space:]]+" deploy/docker-compose.yml; }
           docker run --rm -v "$PWD/deploy/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro" "$(img grafana/loki)" \
             -config.file=/etc/loki/loki.yml -verify-config
           docker run --rm -v "$PWD/deploy/monitoring/alloy/config.alloy:/tmp/config.alloy:ro" "$(img grafana/alloy)" \
             fmt /tmp/config.alloy > /dev/null
+          # Tempo (W8, 2026-11-26): the config parses strictly with no warnings (-config.verify exits 1 on one), then the
+          # image runs as compose runs it (named volume at /var/tempo, owned by its user 10001), gets ready, takes one
+          # OTLP/HTTP span on 4318 and returns it by trace id on 3200
+          docker run --rm -v "$PWD/deploy/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro" "$(img grafana/tempo)" \
+            -config.file=/etc/tempo/tempo.yml -config.verify=true
+          docker volume create ci-tempo-data > /dev/null
+          docker run -d --name ci-tempo -p 127.0.0.1:3201:3200 -p 127.0.0.1:4319:4318 \
+            -v "$PWD/deploy/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro" -v ci-tempo-data:/var/tempo \
+            "$(img grafana/tempo)" -config.file=/etc/tempo/tempo.yml
+          for _ in $(seq 1 60); do curl -fs http://127.0.0.1:3201/ready > /dev/null && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3201/ready > /dev/null || { docker logs ci-tempo | tail -50; echo "tempo not ready"; exit 1; }
+          trace=5b8efff798038103d269b633813fc60c
+          now="$(date +%s%N)"
+          span='{"traceId":"'"$trace"'","spanId":"eee19b7ec3c1b174","name":"beside.job.run","kind":1,"startTimeUnixNano":"'"$now"'","endTimeUnixNano":"'"$((now + 1000000))"'"}'
+          curl -fsS -X POST http://127.0.0.1:4319/v1/traces -H 'Content-Type: application/json' \
+            -d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"beside-ci"}}]},"scopeSpans":[{"spans":['"$span"']}]}]}' > /dev/null
+          for _ in $(seq 1 30); do curl -fs "http://127.0.0.1:3201/api/traces/$trace" | grep -q beside.job.run && break; sleep 1; done
+          curl -fsS "http://127.0.0.1:3201/api/traces/$trace" | grep -q beside.job.run || { docker logs ci-tempo | tail -50; echo "span not found"; exit 1; }
+          docker rm -f ci-tempo > /dev/null
+          docker volume rm ci-tempo-data > /dev/null
           # Grafana starts with the same provisioning as the VM (no Prometheus/Loki behind it: only loading is checked)
           docker run -d --name ci-grafana -p 127.0.0.1:3300:3000 \
             -e GF_SECURITY_ADMIN_PASSWORD=ci-dummy -e GRAFANA_ALERT_WEBHOOK_URL=http://127.0.0.1:9/ci \
@@ -324,14 +357,17 @@ jobs:
             "$(img grafana/grafana-oss)"
           for _ in $(seq 1 60); do curl -fs http://127.0.0.1:3300/api/health > /dev/null && break; sleep 2; done
           A=(-fsS -u admin:ci-dummy)
-          curl "${A[@]}" http://127.0.0.1:3300/api/datasources | python3 -c 'import json,sys; u={d["uid"] for d in json.load(sys.stdin)}; assert {"beside-prometheus","beside-loki"} <= u, u'
+          curl "${A[@]}" http://127.0.0.1:3300/api/datasources | python3 -c 'import json,sys; u={d["uid"] for d in json.load(sys.stdin)}; assert {"beside-prometheus","beside-loki","beside-tempo"} <= u, u'
+          # Loki lines link their traceId to Tempo, and Tempo's spans lead back to the job's Loki lines
+          curl "${A[@]}" http://127.0.0.1:3300/api/datasources/uid/beside-loki | python3 -c 'import json,sys; d=json.load(sys.stdin)["jsonData"]["derivedFields"]; assert any(f["name"]=="traceId" and f.get("datasourceUid")=="beside-tempo" for f in d), d'
+          curl "${A[@]}" http://127.0.0.1:3300/api/datasources/uid/beside-tempo | python3 -c 'import json,sys; t=json.load(sys.stdin)["jsonData"]["tracesToLogsV2"]; assert t["datasourceUid"]=="beside-loki" and "${__trace.traceId}" in t["query"], t'
           curl "${A[@]}" "http://127.0.0.1:3300/api/search?type=dash-db" | python3 -c 'import json,sys; u={d["uid"] for d in json.load(sys.stdin)}; assert {"beside-ops","beside-logs"} <= u, u'
           n="$(curl "${A[@]}" http://127.0.0.1:3300/api/v1/provisioning/alert-rules | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
           want="$(grep -c '^      - uid: ' deploy/monitoring/grafana/provisioning/alerting/rules.yml)"
           test "$n" = "$want" || { docker logs ci-grafana | tail -50; echo "alert rules loaded: $n, in the file: $want"; exit 1; }
           docker logs ci-grafana 2>&1 | grep -iE 'level=error.*provision' && exit 1 || true
           docker rm -f ci-grafana > /dev/null
-          echo "loki, alloy and grafana provisioning ok ($n alert rules)"
+          echo "loki, alloy, tempo and grafana provisioning ok ($n alert rules)"
 
       - name: Caddy route rules (404 / 401 / public / 413)
         run: bash deploy/test_caddy_routes.sh

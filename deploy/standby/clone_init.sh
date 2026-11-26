@@ -21,6 +21,7 @@ set -euo pipefail
 ROLE="${1:-}"
 [[ "$ROLE" =~ ^(staging|standby)$ ]] || { echo "usage: clone_init.sh staging|standby" >&2; exit 2; }
 HOST="${BESIDE_HOSTNAME:-$(hostname)}"
+HOST="${HOST%%.*}"   # GCE gives the FQDN (beside-standby.asia-northeast3-b.c.<project>.internal)
 if [[ "$HOST" != "beside-$ROLE" ]]; then
   echo "refusing: this host is '$HOST', not beside-$ROLE (clone_init.sh only runs on a copy)" >&2
   exit 2

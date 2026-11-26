@@ -12,8 +12,14 @@ datasources:
     editable: false
     jsonData:
       maxLines: 1000
-      # 로그 줄의 jobId·requestId 를 누르면 작업 페이지나 같은 ID 의 다른 로그로 간다.
+      # 로그 줄의 jobId·requestId 를 누르면 작업 페이지나 같은 ID 의 다른 로그로 간다. traceId(2026-11-26 W8)는 Tempo 의
+      # 그 트레이스로 간다: prod JSON 필드 "traceId", PROCESSING 줄의 traceId=, 텍스트 로그의 trace=.
       derivedFields:
+        - name: traceId
+          matcherRegex: '(?:traceId[=":\s]+|trace=)([0-9a-f]{32})'
+          datasourceUid: beside-tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: 트레이스 보기
         - name: jobId
           matcherRegex: 'jobId[=":\s]+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'
           url: '/job/?id=$${__value.raw}'

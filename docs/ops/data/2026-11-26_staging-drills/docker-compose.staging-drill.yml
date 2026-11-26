@@ -1,0 +1,6 @@
+# staging drill overlay (2026-11-26): after docker-compose.loadtest.yml. Alerts as in prod, sent to drill-hook.
+services:
+  backend:
+    environment:
+      METRICS_ENV: prod
+      NOTIFY_WEBHOOKURL: http://drill-hook:8080/backend

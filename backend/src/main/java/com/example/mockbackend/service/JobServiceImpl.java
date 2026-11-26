@@ -65,6 +65,8 @@ public class JobServiceImpl implements JobService {
     private final JobTransitions jobTransitions;
     /** queuedAt of new and retried jobs: strictly increasing, so queue order (JobResponse.queue) = arrival order. */
     private final QueueClock queueClock;
+    /** The run's trace links to the trace of the request that dispatched it (upload, retry): remembered here. */
+    private final JobTracing jobTracing;
     private final Logger log = LoggerFactory.getLogger(JobServiceImpl.class);
 
     @Value("${storage.upload.dir:storage/uploads}")
@@ -228,8 +230,10 @@ public class JobServiceImpl implements JobService {
                     .orElseThrow(() -> notFailed(getJobOrThrow(id)));
         }
         try {
+            jobTracing.dispatching(id, job.getAttempt());
             jobWorker.dispatch(id, job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
+            jobTracing.forget(id, job.getAttempt());
             // Shutdown has begun (the executor refuses work while Tomcat still answers): no worker would run the new
             // attempt, so the job goes back to the FAILED attempt this request found (under the lock, and only while
             // it is still PENDING in the attempt this retry made).
@@ -426,9 +430,11 @@ public class JobServiceImpl implements JobService {
      */
     private void dispatch(Job job) {
         try {
+            jobTracing.dispatching(job.getId(), job.getAttempt());
             // Invoke another Spring bean so @Async runs through its proxy.
             jobWorker.dispatch(job.getId(), job.getAttempt());
         } catch (TaskRejectedException shuttingDown) {
+            jobTracing.forget(job.getId(), job.getAttempt());
             discard(job);
             throw shuttingDown;
         }

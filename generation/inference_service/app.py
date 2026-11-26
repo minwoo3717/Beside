@@ -42,10 +42,16 @@ Two transfer modes (README '전송 모드', docs/CONTRACT.md 6.1):
          stops at its next step and removes whatever it wrote after the DELETE (README 'DELETE /artifacts/{jobId}').
   BESIDE_WORK_SWEEP_MINUTES=<N> (default unset = off): at startup and every min(N, 10) minutes, remove
          {WORK_DIR}/<jobId> folders untouched for N minutes that no run is using (leftovers of a killed service).
+
+Logs (README '로그', 2026-11-26): stderr, "<UTC time> <LEVEL> <logger> <message>", INFO and up. Every job request
+(/infer, /infer/upload, /artifacts/*) gets an INFO "request ..." line, every failure answer a WARNING (or the ERROR
+with the traceback where one is logged), and every line logged while a request runs ends with "rid=<X-Request-Id>
+trace=<trace id of traceparent>" when Spring sent them (docs/CONTRACT.md §6). The token is never logged.
 """
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import errno
 import hmac
 import itertools
@@ -64,6 +70,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
@@ -124,6 +132,75 @@ INSTANCE_ID = uuid.uuid4().hex[:12]
 log = logging.getLogger("beside.inference")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools"))   # convert_asset.py
 
+
+# --------------------------------------------------------------------------- logging (README '로그')
+# Before 2026-11-26 no logger here had a handler: only WARNING and up reached stderr, through Python's last-resort
+# handler (message only, no time, no level), so routine lines were logged as warnings and failure answers not at all.
+# Now one stderr handler (the Pod's inference.log) for beside.* (INFO and up) and the converter's warnings:
+#   2026-11-26T01:02:03.456Z WARNING beside.inference job <id>: 503 INFERENCE_UNAVAILABLE ... rid=<id>-1 trace=<32 hex>
+# rid / trace: the X-Request-Id ("<jobId>-<attempt>") and the trace id of the W3C traceparent Spring sends with every job
+# request (docs/CONTRACT.md §6), on every line logged while that request runs. Spring logs the same rid and its job
+# run's trace (Tempo), so the two logs can be matched. Header values of another form are not logged (log injection).
+# beside.timing (BESIDE_REQUEST_TIMING) keeps its own message-only line: docs/perf parses that format.
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
+REQUEST_ID_FORMAT = re.compile(r"[A-Za-z0-9._-]{1,128}")
+# version-traceid-parentid-flags, lowercase hex; version ff and all-zero ids are invalid (W3C Trace Context)
+TRACEPARENT_FORMAT = re.compile(r"(?!ff)[0-9a-f]{2}-(?!0{32})([0-9a-f]{32})-(?!0{16})[0-9a-f]{16}-[0-9a-f]{2}")
+_REQUEST_ID: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("beside_request_id", default=None)
+_TRACE_ID: "contextvars.ContextVar[Optional[str]]" = contextvars.ContextVar("beside_trace_id", default=None)
+
+
+def _request_id_of(value: Optional[str]) -> Optional[str]:
+    """X-Request-Id when it is plain ([A-Za-z0-9._-]{1,128}, what Spring sends), else None."""
+    return value if value is not None and REQUEST_ID_FORMAT.fullmatch(value) else None
+
+
+def _traceparent_of(value: Optional[str]) -> Optional[str]:
+    """A valid W3C traceparent header as it was sent, else None."""
+    return value if value is not None and TRACEPARENT_FORMAT.fullmatch(value) else None
+
+
+def _trace_id_of(traceparent: Optional[str]) -> Optional[str]:
+    return traceparent.split("-")[1] if traceparent else None
+
+
+class _RequestContextFilter(logging.Filter):
+    """Puts the running request's rid / trace on each record (request_id, trace_id; None outside a request). A value
+    passed with extra= is kept (the token check logs before the request context is set)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "request_id"):
+            record.request_id = _REQUEST_ID.get()
+        if not hasattr(record, "trace_id"):
+            record.trace_id = _TRACE_ID.get()
+        return True
+
+
+class _LogFormatter(logging.Formatter):
+    """LOG_FORMAT with the time in UTC (ISO 8601, ms, Z) and " rid=... trace=..." after the message when known."""
+
+    def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
+        return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created)) + ".%03dZ" % record.msecs
+
+    def formatMessage(self, record: logging.LogRecord) -> str:
+        text = super().formatMessage(record)
+        for key, value in (("rid", getattr(record, "request_id", None)), ("trace", getattr(record, "trace_id", None))):
+            if value:
+                text += f" {key}={value}"
+        return text
+
+
+REQUEST_CONTEXT = _RequestContextFilter()
+LOG_HANDLER = logging.StreamHandler(sys.stderr)
+LOG_HANDLER.setFormatter(_LogFormatter(LOG_FORMAT))
+LOG_HANDLER.addFilter(REQUEST_CONTEXT)        # records of beside.* children and the converter
+log.addFilter(REQUEST_CONTEXT)                # records of this logger carry it before any handler (tests read them)
+logging.getLogger("beside").setLevel(logging.INFO)
+for _name in ("beside", "convert_asset"):     # convert_asset keeps its own level (root's WARNING)
+    _logger = logging.getLogger(_name)
+    _logger.addHandler(LOG_HANDLER)
+    _logger.propagate = False                 # one line each, also when a host configures the root logger
+
 app = FastAPI(
     title="Beside Inference Service (internal)",
     version="0.1.0",
@@ -133,6 +210,51 @@ app = FastAPI(
 
 def _needs_token(path: str) -> bool:
     return path == "/infer" or path.startswith("/infer/") or path == "/artifacts" or path.startswith("/artifacts/")
+
+
+def _printable(text: str, limit: int = 200) -> str:
+    """A request path or id as one log line: printable ASCII only (a decoded %0A would start a fake line), cut."""
+    return re.sub(r"[^\x20-\x7e]", "?", text)[:limit]
+
+
+def _header(scope, name: bytes) -> Optional[str]:
+    for key, value in scope.get("headers") or ():
+        if key == name:
+            return value.decode("latin-1")
+    return None
+
+
+class _RequestContext:
+    """Pure ASGI middleware, inside the token check: rid / trace of the request for every line logged while it runs
+    (contextvars follow FastAPI's thread pool), and one INFO line per job request (the paths the token guards):
+    "request <METHOD> <path> client=<ip>:<port> traceparent=<header or ->" (+ rid / trace). /healthz gets no line:
+    Spring polls it every 15 s. Neither the token nor the query string is logged."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        traceparent = _traceparent_of(_header(scope, b"traceparent"))
+        rid_token = _REQUEST_ID.set(_request_id_of(_header(scope, b"x-request-id")))
+        trace_token = _TRACE_ID.set(_trace_id_of(traceparent))
+        try:
+            path = scope.get("path", "")
+            if _needs_token(path):
+                client = scope.get("client") or ("-", "-")
+                log.info("request %s %s client=%s:%s traceparent=%s", scope.get("method", "-"), _printable(path),
+                         client[0], client[1], traceparent or "-")
+            await self.app(scope, receive, send)
+        finally:
+            _TRACE_ID.reset(trace_token)
+            _REQUEST_ID.reset(rid_token)
+
+
+# Added before the token check below, so it runs inside it (and inside _RequestTiming): user middleware added later
+# wraps what was added earlier.
+app.add_middleware(_RequestContext)
 
 
 def _token_matches(given: str) -> bool:
@@ -150,8 +272,15 @@ async def _check_token(request: Request, call_next):
     The path is the one the router matches (scope["path"]), not request.url.path: that one is rebuilt from the Host
     header, so a Host such as "a?" or "a/b" would hide /artifacts/... from this check on older Starlette versions.
     """
-    if INFERENCE_TOKEN and _needs_token(request.scope.get("path", "")):
+    path = request.scope.get("path", "")
+    if INFERENCE_TOKEN and _needs_token(path):
         if not _token_matches(request.headers.get("x-inference-token", "")):
+            # Neither token (sent or expected) is logged; rid / trace come from the headers, the context is not set yet.
+            traceparent = _traceparent_of(request.headers.get("traceparent"))
+            log.warning("%s %s: 401 INFERENCE_UNAVAILABLE %s X-Inference-Token", request.method, _printable(path),
+                        "wrong" if "x-inference-token" in request.headers else "missing",
+                        extra={"request_id": _request_id_of(request.headers.get("x-request-id")),
+                               "trace_id": _trace_id_of(traceparent)})
             return JSONResponse(
                 status_code=401,
                 content={"detail": {"code": "INFERENCE_UNAVAILABLE", "message": "missing or wrong X-Inference-Token"}},
@@ -226,8 +355,11 @@ class _RequestTiming:
             client = scope.get("client") or ("-", "-")
             status = rec["status"] or (500 if error != "-" else "-")
             at = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(wall)) + f".{int(wall % 1 * 1000):03d}Z"
+            # The path is percent-decoded (%0A is a real newline, %20 a space) and this line is on by default on the Pod
+            # (start_pod.sh): printable ASCII with no space, so it stays one line with the fields docs/perf parsers split
+            path = _printable(scope.get("path", "-")).replace(" ", "?")
             timing_log.info("timing %s %s %s client=%s:%s in=%d body_ms=%s start_ms=%s end_ms=%s gone_ms=%s out=%d "
-                            "err=%s at=%s", scope.get("method", "-"), scope.get("path", "-"), status, client[0],
+                            "err=%s at=%s", scope.get("method", "-"), path, status, client[0],
                             client[1], rec["in"], ms(rec["body"]), ms(rec["start"]), ms(rec["end"]), ms(rec["gone"]),
                             rec["out"], error, at)
 
@@ -272,7 +404,7 @@ def _load_model() -> None:
             cfg_scale=float(os.environ["BESIDE_CFG_SCALE"]) if os.environ.get("BESIDE_CFG_SCALE") else None,
             vae_local_path=os.environ.get("BESIDE_VAE_LOCAL_PATH") or None,
         )
-        log.warning("model loaded in %.1fs on %s (%s via %s)", time.perf_counter() - started, MODEL.device, MODEL.version, RUNNER_SPEC)
+        log.info("model loaded in %.1fs on %s (%s via %s)", time.perf_counter() - started, MODEL.device, MODEL.version, RUNNER_SPEC)
     except Exception as e:  # noqa: BLE001  keep serving /healthz so the problem is visible
         MODEL_ERROR = f"{type(e).__name__}: {e}"
         MODEL_LOAD_ERROR = _short_load_error(e)
@@ -402,10 +534,10 @@ def _safe_photo_name(index: int, filename: Optional[str]) -> str:
 def _job_dir(job_id: str) -> pathlib.Path:
     """{WORK_DIR}/{jobId} for an id that matches JOB_ID; 404 otherwise, so no path ever leaves WORK_DIR."""
     if not JOB_ID.match(job_id):
-        raise HTTPException(status_code=404, detail="no such artifact")
+        raise _not_found(job_id, "job id not of the form [A-Za-z0-9-]{1,64}")
     job_dir = WORK_DIR / job_id
     if job_dir.resolve().parent != WORK_DIR:
-        raise HTTPException(status_code=404, detail="no such artifact")
+        raise _not_found(job_id, "job folder outside the work dir")
     return job_dir
 
 
@@ -423,6 +555,28 @@ def _inference_failed(message: str) -> HTTPException:
     """500 {code: INFERENCE_FAILED, message}: the model failure answer. The passthrough failure knobs reuse it so a
     load test sees exactly what Spring sees when the model fails (Spring records detail.code: README error table)."""
     return HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "message": message})
+
+
+def _failure(job_id: str, status: int, code: str, message: str) -> HTTPException:
+    """The contract's {code, message} error answer (README error table), logged at WARNING as
+    "job <id>: <status> <code> <message>". For answers nothing else logs; a model failure logs its traceback instead."""
+    log.warning("job %s: %d %s %s", job_id, status, code, message)
+    return HTTPException(status_code=status, detail={"code": code, "message": message})
+
+
+def _not_found(job_id: str, what: str) -> HTTPException:
+    """404 of /artifacts (Spring's GLB download then fails CONVERSION_FAILED), logged at WARNING."""
+    log.warning("job %s: 404 %s", _printable(job_id, 64), what)
+    return HTTPException(status_code=404, detail="no such artifact")
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid_request(request: Request, exc: RequestValidationError):
+    """422 of a request FastAPI refused before an endpoint ran (path mode body: jobId pattern, imagePaths): logged at
+    WARNING with what was wrong, then FastAPI's own answer, unchanged."""
+    log.warning("%s %s: 422 invalid request %s", request.method, _printable(request.scope.get("path", "")),
+                _printable(json.dumps([{"loc": e.get("loc"), "msg": e.get("msg")} for e in exc.errors()], default=str), 300))
+    return await request_validation_exception_handler(request, exc)
 
 
 # --------------------------------------------------------------------------- job attempts: DELETE cancels a run
@@ -578,13 +732,13 @@ def _sweep_work_dir(max_age_s: float, now: Optional[float] = None) -> List[str]:
             except OSError:
                 log.exception("work sweep: could not remove %s", job_dir)
     if removed:
-        log.warning("work sweep: removed %d job folder(s) untouched for %.0f min: %s",
-                    len(removed), max_age_s / 60, ", ".join(removed))
+        log.info("work sweep: removed %d job folder(s) untouched for %.0f min: %s",
+                 len(removed), max_age_s / 60, ", ".join(removed))
     return removed
 
 
 def _sweep_loop(minutes: float) -> None:
-    log.warning("work sweep on: job folders untouched for %.0f min are removed", minutes)
+    log.info("work sweep on: job folders untouched for %.0f min are removed", minutes)
     while True:
         try:
             _sweep_work_dir(minutes * 60)
@@ -729,8 +883,10 @@ def _simulate_generation(job_id: str, image_paths: List[str], attempt: Optional[
         generation_ms = int((time.perf_counter() - started) * 1000)
     tags = [tag for tag in (failure, "slow token" if slow else None) if tag]
     outcome = ("failed" if failure else "ok") + (f" ({', '.join(tags)})" if tags else "")
-    log.warning("job %s: passthrough sim %d ms (planned %.0f), slot wait %d ms of %d slot(s), outcome %s",
-                job_id, generation_ms, sleep_ms, waited_ms, knobs.slots, outcome)
+    # A simulated failure is the model failure answer, which logs no other line: WARNING then, INFO otherwise.
+    log.log(logging.WARNING if failure else logging.INFO,
+            "job %s: passthrough sim %d ms (planned %.0f), slot wait %d ms of %d slot(s), outcome %s",
+            job_id, generation_ms, sleep_ms, waited_ms, knobs.slots, outcome)
     if failure:
         raise _inference_failed(f"passthrough simulated failure (BESIDE_PASSTHROUGH_{failure.replace(' ', '_').upper()})")
     return generation_ms
@@ -743,13 +899,13 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
     _stop_if_cancelled(attempt, "before the run")
     for image in image_paths:
         if not pathlib.Path(image).is_file():
-            raise HTTPException(status_code=400, detail={"code": "INFERENCE_FAILED", "message": f"image not found: {image}"})
+            raise _failure(job_id, 400, "INFERENCE_FAILED", f"image not found: {image}")
 
     if SAMPLE_GLB:
         started = time.perf_counter()
         sample = pathlib.Path(SAMPLE_GLB)
         if not sample.is_file():
-            raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": f"BESIDE_SAMPLE_GLB not found: {SAMPLE_GLB}"})
+            raise _failure(job_id, 500, "CONVERSION_FAILED", f"BESIDE_SAMPLE_GLB not found: {SAMPLE_GLB}")
         simulated_ms = _simulate_generation(job_id, image_paths, attempt)   # None unless a BESIDE_PASSTHROUGH_* knob is set
         return _Result(
             glb=sample.resolve(),
@@ -760,14 +916,11 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
         )
 
     if not ANIMALLIFT_DIR:
-        raise HTTPException(
-            status_code=501,
-            detail={"code": "INFERENCE_UNAVAILABLE",
-                    "message": "No model configured. Set BESIDE_ANIMALLIFT_DIR (model) or BESIDE_SAMPLE_GLB (passthrough)."},
-        )
+        raise _failure(job_id, 501, "INFERENCE_UNAVAILABLE",
+                       "No model configured. Set BESIDE_ANIMALLIFT_DIR (model) or BESIDE_SAMPLE_GLB (passthrough).")
     if MODEL is None:
         msg = f"AnimalLift failed to load: {MODEL_ERROR}" if MODEL_ERROR else "AnimalLift is still loading"
-        raise HTTPException(status_code=503, detail={"code": "INFERENCE_UNAVAILABLE", "message": msg})
+        raise _failure(job_id, 503, "INFERENCE_UNAVAILABLE", msg)
 
     from convert_asset import ConversionError, convert
 
@@ -775,7 +928,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
     raw_dir = job_dir / "raw"
     image = image_paths[0]   # AnimalLift is single-image; extra photos are ignored for now
     if len(image_paths) > 1:
-        log.warning("job %s: %d photos, using the first one", job_id, len(image_paths))
+        log.info("job %s: %d photos, using the first one", job_id, len(image_paths))
 
     with MODEL_LOCK:
         _stop_if_cancelled(attempt, "before the model")   # waited here after its client gave up: no GPU time for it
@@ -801,7 +954,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
                     make_dirs=False, **extras)
     except ConversionError as e:
         _stop_if_cancelled(attempt, "after a conversion error")
-        raise HTTPException(status_code=500, detail={"code": "CONVERSION_FAILED", "message": str(e)})
+        raise _failure(job_id, 500, "CONVERSION_FAILED", str(e))
     except Exception as e:  # noqa: BLE001
         _stop_if_cancelled(attempt, "after a conversion error")
         log.exception("job %s: conversion crashed", job_id)
@@ -826,7 +979,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
             m["bytes"] = info["bytes"]
             m["convertMs"] += int((time.perf_counter() - rig_started) * 1000)
             rigged = True
-            log.warning("job %s: rigged (%d joints, clips %s)", job_id, info["joints"], ",".join(info["clips"]))
+            log.info("job %s: rigged (%d joints, clips %s)", job_id, info["joints"], ",".join(info["clips"]))
         except (RigError, Exception) as e:  # noqa: BLE001  static model is still a valid result
             log.warning("job %s: rig transfer skipped: %s", job_id, e)
             if tmp.exists():
@@ -839,7 +992,7 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
                 log.warning("job %s: could not rewrite base.metrics.json after rigging: %s", job_id, e)
 
     _stop_if_cancelled(attempt, "before answering")   # the GLB it would point to is gone or is the retry's
-    log.warning("job %s: infer %d ms, convert %d ms, %d tris, %d bytes", job_id, pred.infer_ms, m["convertMs"], m["triangles"], m["bytes"])
+    log.info("job %s: infer %d ms, convert %d ms, %d tris, %d bytes", job_id, pred.infer_ms, m["convertMs"], m["triangles"], m["bytes"])
     return _Result(
         glb=glb.resolve(),
         metrics=InferMetrics(inferMs=pred.infer_ms, gpuPeakMB=pred.gpu_peak_mb, modelParams=MODEL.model_params,
@@ -894,8 +1047,12 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
     try:
         parsed = InferUploadRequest.model_validate_json(request)
     except ValidationError as e:
+        # no job id to name: the request part itself is what is wrong (its text is not logged, only where and why)
+        log.warning("POST /infer/upload: 422 invalid request part %s",
+                    _printable(json.dumps([{"loc": x.get("loc"), "msg": x.get("msg")} for x in e.errors()], default=str), 300))
         raise HTTPException(status_code=422, detail=json.loads(e.json(include_url=False)))
     if not 1 <= len(photos) <= MAX_PHOTOS:
+        log.warning("job %s: 422 1 to %d photos, got %d", parsed.jobId, MAX_PHOTOS, len(photos))
         raise HTTPException(status_code=422, detail=[{"loc": ["body", "photos"], "msg": f"1 to {MAX_PHOTOS} photos, got {len(photos)}"}])
 
     job_dir = _job_dir(parsed.jobId)
@@ -924,8 +1081,8 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
                 if job_dir.is_dir():   # the folder is there, so something else is missing: not the case below
                     raise
                 raise _deleted_during_run(parsed.jobId, "while copying the sample")   # DELETE right after the check
-    log.warning("job %s: upload mode, %d photo(s) in, %s out%s", parsed.jobId, len(saved), artifact,
-                " (passthrough sample)" if result.passthrough else "")
+    log.info("job %s: upload mode, %d photo(s) in, %s out%s", parsed.jobId, len(saved), artifact,
+             " (passthrough sample)" if result.passthrough else "")
     return InferUploadResponse(
         glbPath=str(artifact.resolve()),
         glbUrl=f"/artifacts/{parsed.jobId}/base.glb",
@@ -942,8 +1099,10 @@ def get_artifact(job_id: str, name: str) -> FileResponse:
     """A result file of an upload mode job. Only names in ARTIFACTS, only inside {WORK_DIR}/{jobId}."""
     job_dir = _job_dir(job_id)
     path = job_dir / name
-    if name not in ARTIFACTS or not path.is_file():
-        raise HTTPException(status_code=404, detail="no such artifact")
+    if name not in ARTIFACTS:
+        raise _not_found(job_id, f"no artifact named {_printable(name, 64)!r}")
+    if not path.is_file():
+        raise _not_found(job_id, f"{name} not in the work folder (no run of this job finished here, or it was deleted)")
     return FileResponse(path, media_type="model/gltf-binary", filename=name)
 
 
@@ -960,6 +1119,8 @@ def delete_artifacts(job_id: str) -> Response:
             _CANCELLED[job_id] = number
         removed = _remove_job_dir(job_dir)
     if removed or running:
-        log.warning("job %s: %s%s", job_id, "work folder deleted" if removed else "no work folder",
-                    ", cancelled the run still in progress" if running else "")
+        # routine after every upload-mode job; a run still in progress means Spring gave up on it (WARNING)
+        log.log(logging.WARNING if running else logging.INFO, "job %s: %s%s", job_id,
+                "work folder deleted" if removed else "no work folder",
+                ", cancelled the run still in progress" if running else "")
     return Response(status_code=204)

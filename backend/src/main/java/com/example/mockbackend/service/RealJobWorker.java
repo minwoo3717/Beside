@@ -11,6 +11,7 @@ import com.example.mockbackend.service.preprocess.PreparedPhoto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Async;
@@ -58,6 +59,9 @@ import java.util.List;
  *   <li>Upload mode, success or failure: InferenceClient.cleanup deletes the temporary GLB and sends
  *       DELETE /artifacts/{jobId}; a failed cleanup is only logged.</li>
  * </ol>
+ * Each run is one trace ({@link JobTracing}, 2026-11-26): root beside.job.run with the stages beside.job.cutout,
+ * beside.job.slot-wait, beside.job.service-wait (offline wait on), the inference client spans and beside.job.store,
+ * linked to the trace of the request that dispatched it; the PROCESSING line names its traceId.
  * Failures end the run FAILED with their job failure code (InferenceClient documents the mapping). An interrupted
  * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end;
  * that includes an error before PROCESSING (reading the job, the cutout, the inference-service check, the PROCESSING
@@ -87,15 +91,27 @@ public class RealJobWorker implements JobWorker {
     private final CutoutStage cutoutStage;
     private final long offlineWaitMs;
     private final long offlinePollMs;
+    private final JobTracing tracing;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
+    /** Without tracing (tests that build the worker themselves). */
+    public RealJobWorker(JobRepository jobRepository, JobTransitions jobTransitions, JobFinisher jobFinisher,
+                         InferenceClient inferenceClient, InferenceHealthMonitor healthMonitor, CutoutStage cutoutStage,
+                         String resultDir, int maxConcurrency, long offlineWaitMs, long offlinePollMs, long slotRecheckMs) {
+        this(jobRepository, jobTransitions, jobFinisher, inferenceClient, healthMonitor, cutoutStage, resultDir,
+                maxConcurrency, offlineWaitMs, offlinePollMs, slotRecheckMs, JobTracing.NOOP);
+    }
+
+    @Autowired
     public RealJobWorker(JobRepository jobRepository, JobTransitions jobTransitions, JobFinisher jobFinisher,
                          InferenceClient inferenceClient, InferenceHealthMonitor healthMonitor, CutoutStage cutoutStage,
                          @Value("${storage.result.dir:storage/results}") String resultDir,
                          @Value("${inference.max-concurrency:1}") int maxConcurrency,
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
                          @Value("${inference.offline-poll-ms:5000}") long offlinePollMs,
-                         @Value("${inference.slot-recheck-ms:1000}") long slotRecheckMs) {
+                         @Value("${inference.slot-recheck-ms:1000}") long slotRecheckMs,
+                         JobTracing tracing) {
+        this.tracing = tracing;
         this.jobRepository = jobRepository;
         this.jobTransitions = jobTransitions;
         this.jobFinisher = jobFinisher;
@@ -129,24 +145,37 @@ public class RealJobWorker implements JobWorker {
         // The place in the slot line is taken now and kept through the cutout, so the line stays in dispatch
         // (accepted-or-retried) order: a retry whose cutout is reused must not get ahead of new jobs still in theirs.
         Object place = inferenceSlots.join();
+        // The run is a trace of its own (JobTracing: root beside.job.run, a child span per stage, linked to the
+        // upload's trace), opened first so every line of the run carries its traceId too.
+        JobTracing.Run trace = tracing.startRun(jobId, attempt, type());
         // Every line of this run (and of JobFinisher and its listeners on this thread) carries the job: MDC does not
         // follow @Async from the request, and the pool thread must not keep it for the next job.
         MDC.put(MDC_JOB_ID, jobId);
         MDC.put(MDC_ATTEMPT, String.valueOf(attempt));
         try {
-            photo = prepare(jobId, attempt);
+            try (JobTracing.Scoped cutout = tracing.stage("beside.job.cutout")) {
+                photo = prepare(jobId, attempt);
+                cutout.tag("preprocess.result", photo.result());
+            }
             // Asked first and again every inference.slot-recheck-ms while waiting: a job canceled (or canceled and
             // retried into a newer attempt) gives its place and thread back instead of holding them until its turn.
-            if (!inferenceSlots.acquire(place, () -> jobTransitions.isPending(jobId, attempt))) {
+            boolean acquired;
+            try (JobTracing.Scoped waiting = tracing.stage("beside.job.slot-wait")) {
+                acquired = inferenceSlots.acquire(place, () -> jobTransitions.isPending(jobId, attempt));
+                waiting.tag("acquired", String.valueOf(acquired));
+            }
+            if (!acquired) {
+                trace.notStarted();
                 logNotStarted(jobId, attempt);
                 return;
             }
             try {
-                run(jobId, attempt, start, photo, offlineDeadline);
+                run(jobId, attempt, start, photo, offlineDeadline, trace);
             } finally {
                 inferenceSlots.release();
             }
         } catch (InterruptedException e) {
+            trace.failed(ErrorCode.INTERNAL_ERROR.name(), e);
             // Record the failure before restoring the interrupt flag: JDBC calls can fail while it is set.
             try {
                 markInterrupted(jobId, attempt);
@@ -159,6 +188,7 @@ public class RealJobWorker implements JobWorker {
             // Outside run()'s own handling: reading the job, the cutout, the inference-service check, the PROCESSING
             // save, or a failure write that threw. Escaping the @Async method would leave the job PENDING (or
             // PROCESSING) with no thread left to end it until the next restart. The slot is already released.
+            trace.failed(ErrorCode.INTERNAL_ERROR.name(), unexpected);
             failUnended(jobId, attempt, unexpected, photo);
         } finally {
             // A cutout that threw never reached acquire(): its place must not block the line. After acquire() the
@@ -166,6 +196,7 @@ public class RealJobWorker implements JobWorker {
             inferenceSlots.leave(place);
             MDC.remove(MDC_JOB_ID);
             MDC.remove(MDC_ATTEMPT);
+            trace.close();   // ends the root span and takes traceId/spanId off this pool thread
         }
     }
 
@@ -179,28 +210,42 @@ public class RealJobWorker implements JobWorker {
                 ? PreparedPhoto.off() : cutoutStage.prepare(job);
     }
 
-    private void run(String jobId, int attempt, Instant start, PreparedPhoto photo, long offlineDeadline)
-            throws InterruptedException {
+    private void run(String jobId, int attempt, Instant start, PreparedPhoto photo, long offlineDeadline,
+                     JobTracing.Run trace) throws InterruptedException {
         Awaited waited = awaitInferenceService(jobId, attempt, offlineDeadline);
         if (waited.end() == Wait.TIMED_OUT) {
-            failUnavailable(jobId, attempt, photo);
+            failUnavailable(jobId, attempt, photo, trace);
             return;
         }
         // The inference service reports no progress (openapi: null when unknown).
         Job job = waited.end() == Wait.READY ? jobTransitions.start(jobId, attempt, null).orElse(null) : null;
         if (job == null) {
+            trace.notStarted();
             logNotStarted(jobId, attempt);
             return;
         }
-        log.info("jobId={} stage=PROCESSING POST {}", jobId, inferenceClient.requestUri());
+        // traceId: this run's trace in Tempo (also the MDC field of every line of the run), for a search in Loki
+        log.info("jobId={} stage=PROCESSING POST {} traceId={}", jobId, inferenceClient.requestUri(), trace.traceId());
 
         try {
-            // attempt goes out as X-Request-Id <jobId>-<attempt>, so the service's log tells retries apart
+            // attempt goes out as X-Request-Id <jobId>-<attempt>, so the service's log tells retries apart; the
+            // client spans' traceparent goes with it (InferenceClient, JobTracing)
             InferenceClient.Result result = inferenceClient.infer(jobId, attempt, photo.paths(imagePaths(job)),
                     photo.names(filenames(job)), restartWatch(waited.ready()));
-            StoredGlb stored = storeBaseGlb(jobId, result.glbPath());
+            StoredGlb stored;
+            try (JobTracing.Scoped storing = tracing.stage("beside.job.store")) {
+                try {
+                    stored = storeBaseGlb(jobId, result.glbPath());
+                } catch (InferenceFailure failure) {
+                    storing.failed(failure);
+                    throw failure;
+                }
+                storing.tag("glb.bytes", stored.bytes());
+            }
             jobFinisher.complete(job, stored.path().toString(), start, type(),
                     photo.apply(result.details(stored.bytes())));
+            trace.completed();
+            trace.tag("passthrough", String.valueOf(result.passthrough())).tag("modelVersion", result.modelVersion());
             if (result.passthrough()) {
                 log.warn("jobId={} stage=COMPLETED with the passthrough sample GLB: not an inference result, "
                         + "leave it out of measurements (job_runs.passthrough = true)", jobId);
@@ -209,10 +254,12 @@ public class RealJobWorker implements JobWorker {
                         result.modelVersion(), result.metrics());
             }
         } catch (InferenceFailure failure) {
+            trace.failed(failure.code().name(), failure);
             jobFinisher.fail(job, failure.code(), failure.getMessage(), type(),
                     photo.apply(failure.modelRan() ? failedRunDetails(waited.ready()) : RunDetails.NONE));
             log.warn("jobId={} stage=FAILED code={} {} [{}]", jobId, failure.code(), failure.getMessage(), failure.logDetail());
         } catch (RuntimeException unexpected) {
+            trace.failed(ErrorCode.INTERNAL_ERROR.name(), unexpected);
             log.error("jobId={} real worker error", jobId, unexpected);
             // Spring's own error, not the model's: no modelVersion (RunDetails.NONE plus the preprocessing facts).
             jobFinisher.fail(job, ErrorCode.INTERNAL_ERROR, unexpectedMessage(unexpected), type(),
@@ -240,15 +287,17 @@ public class RealJobWorker implements JobWorker {
     }
 
     /** The offline wait is over: FAILED INFERENCE_UNAVAILABLE, unless the job was canceled at the last moment. */
-    private void failUnavailable(String jobId, int attempt, PreparedPhoto photo) {
+    private void failUnavailable(String jobId, int attempt, PreparedPhoto photo, JobTracing.Run trace) {
         InferenceHealthMonitor.Status status = healthMonitor.current();
         String message = "The inference service was not ready within " + offlineWaitMs / 1000 + " s (last check: "
                 + status.state() + ")";
         if (jobTransitions.failPending(jobId, attempt, ErrorCode.INFERENCE_UNAVAILABLE, message, type(),
                 photo.apply(RunDetails.NONE)).isPresent()) {
+            trace.failed(ErrorCode.INFERENCE_UNAVAILABLE.name(), null);
             log.warn("jobId={} stage=FAILED code=INFERENCE_UNAVAILABLE: inference service not UP within {} ms of dispatch ({})",
                     jobId, offlineWaitMs, status.detail());
         } else {
+            trace.notStarted();
             logNotStarted(jobId, attempt);
         }
     }
@@ -274,6 +323,15 @@ public class RealJobWorker implements JobWorker {
         if (offlineWaitMs == 0) {
             return new Awaited(Wait.READY, NOT_CHECKED);
         }
+        // A stage of the run's trace: a GPU that is off or still loading shows up as this span's length.
+        try (JobTracing.Scoped check = tracing.stage("beside.job.service-wait")) {
+            Awaited awaited = waitUntilUp(jobId, attempt, deadline);
+            check.tag("result", awaited.end().name());
+            return awaited;
+        }
+    }
+
+    private Awaited waitUntilUp(String jobId, int attempt, long deadline) throws InterruptedException {
         // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
         boolean logged = false;
         while (true) {
