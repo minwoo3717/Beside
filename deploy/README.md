@@ -39,7 +39,7 @@
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
 | 서비스 계정·백업 버킷 | `beside-backup@beside-514511.iam.gserviceaccount.com`(키 없음, 범위 `storage-rw,logging-write,monitoring-write`, 2026-11-20 04:26 UTC 까지 붙임) — 버킷 `gs://beside-514511-backups` 에 만들기만(`roles/storage.objectCreator`). 아래 '운영 대응 설치' 3번. 컨테이너는 2번(메타데이터 차단, 2026-11-20)으로 이 토큰을 받지 못한다 |
-| 코드 | VM 의 `~/Beside` 는 `main` `625c2a5`(PR #30 병합 뒤, 2026-11-22 07:05:35 UTC `git pull --ff-only`, backend 컨테이너 07:07:56 UTC 다시 만듦. 2026-11-25 확인: VM `git reflog`·`docker inspect`). main 의 그 뒤 커밋(PR #31)은 `unity/` 만 바꿨다. 그 전 배포는 2026-11-21 01:06 UTC `fe10683`(`api-v1.1`, 5차 부하 시험 전), 2026-11-20 15:50:40~15:53:14 UTC `7230dea`(PR #22, backend 만 다시 빌드·다시 만듦), 05:32:32~05:33:49 UTC `ce1a685`(PR #18·#20). caddy 컨테이너는 2026-11-20 05:33 UTC 에 만든 그대로다. 추론 서비스 변경(PR #11, PR #20 의 `loadError`·`busyForMs`·감독 루프)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
+| 코드 | VM 의 `~/Beside` 는 `main` `a44b3ed`(PR #35, 배포 창 2: 2026-11-26 00:04:32 UTC `git pull --ff-only`, tempo 00:04:38 처음 띄움, backend 00:07:33 다시 만듦, alloy·grafana 00:08:17. 되돌리기용 이미지 `beside-backend:rollback-d5f4a32`). 그 전은 2026-11-25 17:16~17:21 UTC `d5f4a32`(PR #34, 배포 창 1: backend·caddy·prometheus·grafana 다시 만듦, loki·alloy 처음 띄움), 2026-11-22 07:05:35 UTC `625c2a5`(PR #30 병합 뒤, backend 컨테이너 07:07:56 UTC 다시 만듦. 2026-11-25 확인: VM `git reflog`·`docker inspect`). main 의 그 뒤 커밋(PR #31)은 `unity/` 만 바꿨다. 그 전 배포는 2026-11-21 01:06 UTC `fe10683`(`api-v1.1`, 5차 부하 시험 전), 2026-11-20 15:50:40~15:53:14 UTC `7230dea`(PR #22, backend 만 다시 빌드·다시 만듦), 05:32:32~05:33:49 UTC `ce1a685`(PR #18·#20). caddy 컨테이너는 2026-11-20 05:33 UTC 에 만든 그대로다. 추론 서비스 변경(PR #11, PR #20 의 `loadError`·`busyForMs`·감독 루프)은 VM 이 아니라 Pod 에서 돈다. 감사 뒤 강화한 Caddyfile 은 PR #5 로 main 에 들어갔고 VM 의 로컬 수정은 되돌렸다(아래 '지금 상태'의 절차) |
 
 **만들기**(다시 만들 때도 같다): 콘솔 오른쪽 위 `>_`(Cloud Shell)에서 [gcp/create_vm.sh](gcp/create_vm.sh) 내용을 `~/create_vm.sh` 로 저장하고 `SSH_PUBKEY='<beside-vm.key.pub 한 줄>' bash ~/create_vm.sh` 를 실행한다(영역 자원이 모자라면 끝에 `asia-northeast3-b`). 이미 있는 리소스는 건너뛰므로 중간에 멈추면 같은 명령을 다시 실행한다. 마지막 줄의 `IP=` 를 DuckDNS 에 넣는다.
 
@@ -201,7 +201,7 @@ TIMEOUT_SECONDS=600 scripts/e2e_mock.sh $D ~/photos/dog1.jpg     # 전체 흐름
 
 ## 모니터링 (Prometheus + Grafana, 선택)
 
-2026-11-26 더함 **[구현됨, 배포 전]**: 로그 수집(Loki + Alloy), Grafana 지표 알림 13개(2026-11-26 스테이징 훈련 뒤 앞단 지연 1개, 배포 전 검토 뒤 트레이스 내보내기 1개 추가), 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
+2026-11-26 더함 **[구현됨: 적용]**(로그·알림 11개는 배포 창 1, 추적·알림 13개는 배포 창 2: 2026-11-26 00:04~00:08 UTC, main `a44b3ed`(PR #35)): 로그 수집(Loki + Alloy), Grafana 지표 알림 13개(2026-11-26 스테이징 훈련 뒤 앞단 지연 1개, 배포 전 검토 뒤 트레이스 내보내기 1개 추가), 분산 추적(Tempo). 아래 '로그 · 알림 (2026-11-26)'.
 
 설정 파일 **[구현됨]** · VM 에서 띄우기 **[적용]**: 2026-11-25 05:52 UTC, 아래 '띄우기 · 확인' 의 `$M up -d` 대신 `$M up -d --no-deps prometheus grafana` 로 backend·caddy 를 건드리지 않고 띄웠다(먼저 `--dry-run` 으로 확인, 두 컨테이너 ID·재시작 0 그대로, `.env` 백업 `deploy/.env.bak-20261125-grafana`, 관리자 비밀번호는 VM 에서 만들어 출력하지 않음). 그때 메모리는 grafana 55 MiB·prometheus 100 MiB 였다. 이제 VM 의 compose 명령에는 늘 `--profile monitoring` 을 붙인다(아래). 첫 값은 [2026-11-25 리허설](../docs/ops/data/2026-11-25_demo-gpu-rehearsal/README.md) 의 Prometheus 질의. 멘토 지표 5종(생성 성공률, 생성 시간 평균·p95, 대기열 길이, API 응답 시간, 에셋 다운로드 실패율)과 서버 자원을 한 화면에서 본다. 지표 이름은 [docs/METRICS.md](../docs/METRICS.md) §5(`beside.*` → Prometheus `beside_*`).
 
@@ -290,7 +290,12 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
 - 끄기: `$M stop prometheus grafana`(데이터는 볼륨 `beside_prometheus_data`·`beside_grafana_data` 에 남는다). 지표는 백업 대상이 아니다.
 - Prometheus 화면이 필요하면 Grafana 의 **Explore** 에서 같은 PromQL 을 쓴다. 원시 응답은 위처럼 `$M exec prometheus wget -qO- 'http://localhost:9090/api/v1/...'`.
 
-### 로그 · 알림 (2026-11-26) **[구현됨, 배포 전]**
+### 로그 · 알림 (2026-11-26) **[구현됨: 적용]**
+
+- **적용 기록**:
+  - 배포 창 1(2026-11-25 17:16~17:21 UTC, main `d5f4a32`): loki·alloy 처음 띄움, 알림 11개 공급. 확인은 공개 경로 61/61, 응답의 `X-Request-Id`, prod JSON 로그, Loki 서비스 5개.
+  - 배포 창 2: 2026-11-26 00:04~00:08 UTC, main `a44b3ed`(PR #35): 순서는 VM pull → `$M up -d --no-deps tempo`(ready) → `scripts/deploy_vm.sh` → `$M up -d`(alloy 384m 로 다시 만듦) → `$M restart grafana`. 배포 전 대기·처리 중 작업 0건, GPU 꺼짐.
+  - 창 2 확인(00:08~00:10 UTC): 공개 경로 61/61. Grafana DB 에 알림 13개와 데이터소스 `beside-loki`·`beside-prometheus`·`beside-tempo`. 표시(`X-Request-Id`)를 붙인 요청 두 개의 backend 로그 `traceId` 로 Tempo 에서 서버 span 을 찾았다(`beside.request_id`, 공유 경로 `http.url` 은 `/api/v1/shares/AbCdEf...`). 배포 뒤 OpenTelemetry 내보내기 오류·backend ERROR 0줄. 13개 질의를 운영 Prometheus·Loki 로 계산해 모두 기준 아래(앞단 작업 조회 p95 0.053 s). 메모리 tempo 27 MiB·alloy 72 MiB·backend 1.2 GiB, 호스트 사용 2.3 GB / 7.9 GB. 5분 백업: 새 backend 의 첫 zip 이 00:10:00 에 생겼다. H2 로 열어 작업 35건을 확인했고, 바로 전 zip(00:05)과 개수·가장 새 작업 시각이 같다. 크기 24 KB → 14 KB 는 재시작 때 H2 가 파일을 줄인 것이다(`mv.db` 139,264 → 86,016 바이트). 00:13:01 업로드가 이 zip 을 버킷에 보냈다(`db: 1 new backup(s) sent`).
 
 - **왜**: 로그는 서비스마다 50 MB 에서 지워지고(부하 중에는 몇 분) VM 과 함께 사라졌다. 지표 알림은 0개라 대시보드는 사람이 볼 때만 쓸모가 있었다. 2026-11-25 멘토링('로그를 서버로 보내 대시보드로', '모니터링을 해야 감지가 빠르다').
 - **로그**: `alloy` 가 Docker 의 json-file 로그(`/var/lib/docker/containers`, 읽기만)를 읽어 `loki` 로 보낸다. `docker.sock` 은 붙이지 않는다. 서비스 이름은 json-file `labels` 가 넣는 `attrs` 에서 읽는다(아래 '로그'). 라벨은 `service`·`stream`·`level`(backend·caddy)뿐이고, `jobId`·`uri` 는 질의 때 `| json` 으로 본다. 보관 7일(볼륨 `beside_loki_data`).
@@ -298,7 +303,7 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
 - **알림**: [monitoring/grafana/provisioning/alerting/rules.yml](monitoring/grafana/provisioning/alerting/rules.yml) 13개, `env="prod"` 만(2026-11-26 스테이징 훈련 뒤 조회 알림 라벨·기준 고침, 앞단 작업 조회 지연 알림 추가 — [docs/ops/2026-11-26_staging-drills.md](../docs/ops/2026-11-26_staging-drills.md). 배포 전 검토 뒤 트레이스 내보내기 실패를 'backend ERROR 로그' 에서 떼어 따로 알림). Discord 는 2026-11-26 결정으로 기존 팀 채널(`GRAFANA_ALERT_WEBHOOK_URL` 을 비우면 `NOTIFY_WEBHOOK_URL`). 기준은 [docs/ops/SLO.md](../docs/ops/SLO.md). 메시지는 '📈 …', 풀리면 '✅ 해제: …'.
 - **띄우기**(backend·caddy 는 그대로): `$M up -d --no-deps loki alloy` 다음 `$M up -d --no-deps grafana`(알림 폴더 마운트·환경 변수가 바뀌어 다시 만들어진다). 확인: Grafana Explore 에서 Loki `{service="backend"}`, 알림 → 규칙 목록 13개. 규칙 파일만 바뀐 배포는 `$M restart grafana`.
 - **로그 형식**: prod backend 는 한 줄에 JSON 하나(`logback-spring.xml`, 2026-11-26). `docker compose logs backend | jq -r .message` 로 읽고, `requestId`·`jobId`·`traceId` 필드로 찾는다. 부하 시험 문서의 옛 텍스트 줄 예시(`deploy/loadtest/README.md`)는 이제 JSON 의 `message` 다.
-- **추적(분산 트레이싱, W8)** **[구현됨, 배포 전]**: 작업 한 건이 어디에 시간을 썼는지 한 화면에서 본다(멘토링 '로깅·모니터링·추적').
+- **추적(분산 트레이싱, W8)** **[구현됨: 적용]**(배포 창 2): 작업 한 건이 어디에 시간을 썼는지 한 화면에서 본다(멘토링 '로깅·모니터링·추적').
   - 구성: backend 가 Micrometer Tracing(OpenTelemetry)으로 span 을 만들어 OTLP HTTP 로 `tempo:4318` 에 보낸다(compose 의 `MANAGEMENT_OTLP_TRACING_ENDPOINT`, 표본 `TRACING_SAMPLING_PROBABILITY` 기본 1.0). `tempo`(grafana/tempo:2.6.1, single binary, 볼륨 `beside_tempo_data`, 보관 72시간, 공개 포트 없음)가 저장하고 Grafana 데이터소스 **Tempo**(uid `beside-tempo`)가 읽는다. 설정 [monitoring/tempo/tempo.yml](monitoring/tempo/tempo.yml).
   - 작업 실행 하나 = 트레이스 하나: 루트 `beside.job.run`(태그 `jobId`·`attempt`·`worker`·`job.result`·`job.error_code`) 아래 `beside.job.cutout`(크롭·배경 제거) → `beside.job.slot-wait`(GPU 슬롯 대기) → `beside.job.service-wait`(GPU 가 UP 인지) → `POST /infer/upload`(사진 업로드 + 생성) → `GET /artifacts/{jobId}/base.glb`(GLB 전송) → `beside.job.store` → `DELETE /artifacts/{jobId}`. 업로드는 202 뒤 `@Async` 로 돌아 업로드 요청과는 다른 트레이스이고, 루트가 업로드(또는 retry) 요청의 트레이스로 **링크**되며 그 trace id 를 `beside.dispatched.trace_id` 로 남긴다. 업로드 요청의 서버 span 에는 앱의 `X-Request-Id` 가 `beside.request_id` 로 있다.
   - 보는 법: Grafana **Explore → Tempo → Search** 에서 Span Name `beside.job.run`(또는 TraceQL `{name="beside.job.run" && span.jobId="<jobId>"}`) → 트레이스를 열면 단계별 막대가 나온다. Loki 로그 줄(Explore 의 Loki 또는 'Beside 로그' 대시보드)의 `traceId` 를 누르면 그 트레이스로, 트레이스의 span 에서 'Logs for this span' 을 누르면 그 작업의 backend 로그로 간다. PROCESSING 줄(`stage=PROCESSING … traceId=<id>`)에도 적힌다.
@@ -306,7 +311,7 @@ curl -s -o /dev/null -w "%{http_code}\n" $D/actuator/prometheus              # 4
   - 보내지 않는 것: `/actuator/**`·`/api/v1/healthz` 요청과 `@Scheduled` 실행의 span(하루 수만 개, 지표는 그대로).
   - 띄우기(순서가 중요): VM 에서 `git pull --ff-only` → `$M up -d --no-deps tempo`(먼저, 떴는지 `$M ps tempo`) → `scripts/deploy_vm.sh`(backend 새 이미지 + 환경 변수 두 줄) → `$M restart grafana`(Tempo 데이터소스·알림은 시작할 때만 읽는다). tempo 없이 backend 가 뜨면 내보내기가 실패해 backend 가 **ERROR** 를 1분에 최대 5줄 남기고(OpenTelemetry 의 SEVERE, 작업에는 영향 없음) '트레이스 내보내기 실패' 알림이 울린다. tempo 없이 오래 띄울 때는 `deploy/.env` 에 `TRACING_SAMPLING_PROBABILITY=0`. 부하 시험도 같은 값을 물려받는다(낮추려면 같은 줄).
   - 가리는 것: 서버 span 의 `http.url` 은 로그와 같은 규칙으로 공유 토큰의 앞 6자만 남긴다(`TracingConfig`, 2026-11-26 배포 전 검토).
-  - 확인 **[구현됨]**: `TracingPropagationTest`(span 나무·링크·traceparent·로그의 traceId·retry·MDC), `TracingExportConfigTest`(엔드포인트가 있을 때만 내보내기), CI 가 tempo 설정 검사(`-config.verify`)·기동·OTLP span 한 개 받기·Grafana 데이터소스 `beside-tempo` 를 본다(PR CI 에서 돈다, 개발 PC 에 Docker 없음). VM 에서 실제 트레이스를 본 것은 **[계획]**(배포 전).
+  - 확인 **[구현됨]**: `TracingPropagationTest`(span 나무·링크·traceparent·로그의 traceId·retry·MDC), `TracingExportConfigTest`(엔드포인트가 있을 때만 내보내기), CI 가 tempo 설정 검사(`-config.verify`)·기동·OTLP span 한 개 받기·Grafana 데이터소스 `beside-tempo` 를 본다(PR CI 에서 돈다, 개발 PC 에 Docker 없음). VM 에서는 2026-11-26 00:08 UTC 에 요청의 서버 span 을 Tempo 에서 찾았다 **[구현됨: 적용]**(위 '적용 기록'). 작업 한 건의 단계 그림(`beside.job.run`)은 GPU Pod 를 켠 뒤 [계획].
 
 ## 운영
 

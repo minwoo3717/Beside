@@ -167,10 +167,10 @@ flowchart LR
 
 | 갈래 | 무엇 | 하나를 따라가는 열쇠 | 상태 |
 |---|---|---|---|
-| 지표 | `beside.*`·Spring 내장 지표 → Prometheus, 대시보드 'Beside 운영', 알림 11개([METRICS.md](METRICS.md) §5) | `env`·`worker` 태그 | [구현됨] VM 적용(Prometheus·Grafana 2026-11-25), 알림은 배포 전 |
-| 로그 | backend 는 prod 에서 한 줄 JSON(`requestId`·`jobId`·`attempt`·`traceId`·`spanId`), Caddy 접근 로그 → Alloy → Loki, 'Beside 로그' | `requestId`(앱의 X-Request-Id), `jobId`, `traceId` | [구현됨, 배포 전] |
-| 추적 | 작업 실행 하나 = 트레이스 하나(`beside.job.run` → 크롭·슬롯 대기·healthz 대기·추론 HTTP 3개·GLB 저장), 업로드 요청 트레이스에 링크, OTLP → Tempo | `traceId`(로그 줄에서 Tempo 로, span 에서 로그로) | [구현됨, 배포 전] 2026-11-26 W8 |
-| 추론 서비스 로그 | Pod 의 `inference.log`: UTC 시각·수준, 실패 응답마다 WARNING, 줄 끝 `rid=<jobId>-<attempt> trace=<id>`, 요청별 시간 줄(기본 켬) | `rid`, `trace` | [구현됨, 배포 전] 2026-11-26 B4. Loki 로는 오지 않는다(Pod 에서 grep) |
+| 지표 | `beside.*`·Spring 내장 지표 → Prometheus, 대시보드 'Beside 운영', 알림 13개([METRICS.md](METRICS.md) §5, [ops/SLO.md](ops/SLO.md)) | `env`·`worker` 태그 | [구현됨: 적용] Prometheus·Grafana 2026-11-25, 알림 11개 배포 창 1(2026-11-25 17:21 UTC) → 13개 배포 창 2(2026-11-26 00:08 UTC) |
+| 로그 | backend 는 prod 에서 한 줄 JSON(`requestId`·`jobId`·`attempt`·`traceId`·`spanId`), Caddy 접근 로그 → Alloy → Loki, 'Beside 로그' | `requestId`(앱의 X-Request-Id), `jobId`, `traceId` | [구현됨: 적용] 배포 창 1(2026-11-25 17:21 UTC) |
+| 추적 | 작업 실행 하나 = 트레이스 하나(`beside.job.run` → 크롭·슬롯 대기·healthz 대기·추론 HTTP 3개·GLB 저장), 업로드 요청 트레이스에 링크, OTLP → Tempo | `traceId`(로그 줄에서 Tempo 로, span 에서 로그로) | [구현됨: 적용] 2026-11-26 W8, 배포 창 2(00:08 UTC). 요청 span 확인, 작업 한 건의 단계 그림은 Pod 를 켠 뒤 [계획] |
+| 추론 서비스 로그 | Pod 의 `inference.log`: UTC 시각·수준, 실패 응답마다 WARNING, 줄 끝 `rid=<jobId>-<attempt> trace=<id>`, 요청별 시간 줄(기본 켬) | `rid`, `trace` | [구현됨] 2026-11-26 B4, main 병합. Pod 는 다음 시작 때 main 을 받는다 [계획]. Loki 로는 오지 않는다(Pod 에서 grep) |
 
 추적은 span 만 남긴다: 시간 값은 이미 지표(`beside.job.*`, `beside.inference.request`)에 있어 같은 수치를 새 이름으로 더하지 않는다. backend 는 `management.otlp.tracing.endpoint` 가 있을 때만 span 을 내보낸다(Spring Boot 3.2 동작). 그래서 테스트·로컬 실행은 연결을 열지 않고 trace id 만 로그에 남는다. Python 서비스는 span 을 만들지 않고 받은 `traceparent` 를 로그에만 적는다([CONTRACT.md](CONTRACT.md) §6).
 
