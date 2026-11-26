@@ -38,8 +38,8 @@
 | backend 죽음(FD1) | 외부 가동 감시 R3 [계획: 채널] | `restart: unless-stopped`, 19 s [실험 결과] | 없음. 진행 중이던 작업은 `INTERNAL_ERROR` 라 앱에서 다시 시도 | 잠깐 502, 진행 중 작업 실패 |
 | backend 멈춤(FD2) | 1차: Docker unhealthy 101 s, **재시작은 없음** [실험 결과]. R4 감시 스크립트가 actuator health 3번(30 s 간격) 실패면 재시작 + 디스코드 🔁 [적용] 2026-11-20 05:34 | R4 가 멈춘 지 112 s 뒤 재시작 [실험 결과 2차]. 정상까지는 재지 못했다(훈련 스크립트가 곧바로 backend 를 다시 만들어서). 부팅 14~15 s 를 더해 약 2분 [계산] | 보통 없음. 🔁 를 받으면 원인을 본다. 점검 표시(`/etc/beside-maintenance`)가 있거나 감시가 꺼져 있으면 `docker restart beside-backend-1`. 멈춘 동안 쌓인 POST 가 SIGCONT 뒤 처리될 수 있다 | 응답 없음(1차 189 s, R4 로 약 2분) |
 | Caddy 죽음(FD7) | R3 | 재시작 1.4 s [실험 결과]. 인증서는 `caddy_data` | 없음. `caddy_data` 는 지우지 않는다(Let's Encrypt 한도) | 1~2 s 연결 끊김 |
-| backend·Caddy 가 꺼졌다가 Docker 가 다시 띄움(커널 OOM kill, Java 힙 부족, 크래시) | 전에는 알림이 없었다(🧱 는 backend 가 3번 넘게 꺼질 때만). 이제 R4 가 Docker `RestartCount` 가 늘면 한 번 알린다 [구현됨, 배포 전]. 메모리면 🧠(`State.OOMKilled`, Docker 의 `oom` 이벤트, backend 종료 코드 3), 아니면 ♻️ 와 종료 코드. 컨테이너마다 10분에 한 번이고, 그 사이에 또 꺼진 것은 다음 메시지의 횟수에 합친다. 점검 표시가 있으면 오지 않는다. 재현은 [계획] | `restart: unless-stopped`. Java 힙 부족이면 JVM 이 종료 코드 3 으로 끝나고 힙 덤프 `/app/storage/backend-oom.hprof` 를 남긴다 [구현됨, 배포 전] | 🧠: `docker stats --no-stream` 으로 메모리를 보고, 되풀이되면 `mem_limit` 를 다시 정한다. 힙 덤프는 꺼내 분석한 뒤 꼭 지운다(남아 있으면 다음 덤프가 안 생긴다, [deploy/README.md](../../deploy/README.md) '메모리'). ♻️: `docker logs --tail 50 <컨테이너>` | 잠깐 502. backend 면 진행 중 작업이 `INTERNAL_ERROR`(앱에서 다시 시도) |
-| Caddy 멈춤·제거(`stop`·`rm`. Docker 가 다시 띄우지 않는다) | R4 가 두 번 연속(30 s 간격) 실행 중이 아니면 🚪, 1시간마다 다시, 돌아오면 ✅ [구현됨, 배포 전]. 점검 표시가 있으면 오지 않는다. 재현은 [계획] | 없음 | `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d caddy`. 일부러 멈출 때는 점검 표시(`/etc/beside-maintenance`)를 먼저 둔다 | 공개 주소 전체 접속 불가 |
+| backend·Caddy 가 꺼졌다가 Docker 가 다시 띄움(커널 OOM kill, Java 힙 부족, 크래시) | 전에는 알림이 없었다(🧱 는 backend 가 3번 넘게 꺼질 때만). 이제 R4 가 Docker `RestartCount` 가 늘면 한 번 알린다 [구현됨: 적용] 배포 창 1. 메모리면 🧠(`State.OOMKilled`, Docker 의 `oom` 이벤트, backend 종료 코드 3), 아니면 ♻️ 와 종료 코드. 컨테이너마다 10분에 한 번이고, 그 사이에 또 꺼진 것은 다음 메시지의 횟수에 합친다. 점검 표시가 있으면 오지 않는다. 재현은 [계획] | `restart: unless-stopped`. Java 힙 부족이면 JVM 이 종료 코드 3 으로 끝나고 힙 덤프 `/app/storage/backend-oom.hprof` 를 남긴다 [구현됨: 적용] 배포 창 1 | 🧠: `docker stats --no-stream` 으로 메모리를 보고, 되풀이되면 `mem_limit` 를 다시 정한다. 힙 덤프는 꺼내 분석한 뒤 꼭 지운다(남아 있으면 다음 덤프가 안 생긴다, [deploy/README.md](../../deploy/README.md) '메모리'). ♻️: `docker logs --tail 50 <컨테이너>` | 잠깐 502. backend 면 진행 중 작업이 `INTERNAL_ERROR`(앱에서 다시 시도) |
+| Caddy 멈춤·제거(`stop`·`rm`. Docker 가 다시 띄우지 않는다) | R4 가 두 번 연속(30 s 간격) 실행 중이 아니면 🚪, 1시간마다 다시, 돌아오면 ✅ [구현됨: 적용] 배포 창 1. 점검 표시가 있으면 오지 않는다. 재현은 [계획] | 없음 | `docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d caddy`. 일부러 멈출 때는 점검 표시(`/etc/beside-maintenance`)를 먼저 둔다 | 공개 주소 전체 접속 불가 |
 | VM 재시작·호스트 유지보수(FD3) | R3 | GCE 자동 재시작·실시간 이전(켜짐). 컨테이너·Tailscale 자동 복귀 [실험 결과] | 없음. 외부 82.8 s [실험 결과] | 1~2분 연결 실패 |
 | 디스크 가득 참(FD4) | **healthz 는 200** [실험 결과]. R4 가 디스크 80 % 이상이면 시간당 1번 알림 [적용] 2026-11-20 05:34, 재현은 안 함 | 없음. 비우면 재시작 없이 회복 [실험 결과] | 공간 확보(오래된 `results/`·`uploads/` 정리는 보존 정책 안건 #23 — 2026-11-21 결정: 사진 7일·GLB 30일, 자동 삭제는 [계획]이라 그 전에는 손으로), 그다음 실패한 작업 다시 시도 | 1차: 2 MB 남았을 때 `CONVERSION_FAILED`(원인과 다른 코드), 0 이면 업로드 500. 이제 GLB 를 쓰거나 결과 폴더로 복사하지 못하면 `INTERNAL_ERROR`("서버에 문제", 다시 시도 가능) [구현됨: PR #22] [적용] 2026-11-20 15:53, 재현은 [계획]. 업로드 500 은 그대로(이미 `INTERNAL_ERROR`) |
 | DB 파일 손상·유실(FD5) | 1차: **없음**, H2 가 빈 DB 를 만들고 healthz 200 [실험 결과]. 이제 prod backend 는 DB 파일이 없으면 시작하지 않는다(로그 `H2 database file ... does not exist`) [구현됨: PR #22] [적용] 2026-11-20 15:53(컨테이너 `STORAGE_DB_CREATEIFMISSING=false` 확인). 시작하자마자 꺼지는 것을 Docker 가 계속 다시 띄우면 R4 가 🧱 "시작하자마자 계속 꺼져요" 를 보낸다 [적용] 2026-11-20 15:53 다시 설치(점검 표시 `/etc/beside-maintenance` 가 있으면 🧱 도 오지 않는다). 5차(2026-11-21, 훈련 backend)에서 재현: 시작 거부 10번·빈 DB 없음, 🧱 시작 44.6 s 뒤 [실험 결과]([5차 7절](../perf/load/2026-11-21_vm-5th.md) FD5). 그 🧱 는 따로 띄운 감시 인스턴스(점검 표시 무시)가 훈련 수집기로 보냈다. 운영 R4 가 팀 채널로 🧱 를 보내는 것은 재현하지 않았다 | 없음 | 아래 "DB 복구". `STORAGE_DB_CREATE_IF_MISSING=true` 로 띄우지 않는다(빈 DB 로 뜬다) | 1차: 기존 작업이 404. 이제 복구할 때까지 접속 실패(502) |
@@ -66,18 +66,18 @@
 | 장애 | 지금 | 대응 |
 |---|---|---|
 | 디스코드 웹훅 실패(FD9) | 작업은 안 막힘. 1차: 알림은 5 s 시간 초과로 하나씩 밀렸다(8분에 32건) [실험 결과] | GPU 상태·알림을 작업 결과보다 먼저 보낸다. 실패하면 5 s 에서 두 배씩(최대 5분) 쉬며 다시 해 본다(429 는 Retry-After). 실패한 GPU 알림은 다시 보내고(8번까지), 실패한 작업 결과는 버리고 세어 두었다가 다시 보내지면 📭 한 줄로 알린다. 3건 이상 밀린 작업 결과는 📦 한 메시지로 묶고, 1분 넘게 늦은 메시지에는 그 시각(⏱)을 붙인다 [구현됨: PR #22] [적용] 2026-11-20 15:53. 5차(2026-11-21, 훈련 backend·수집기 `docker pause` 240 s)에서 재현: 재시도 간격 5 → 160 s, 회복 뒤 GPU 메시지가 먼저, 그다음 📭·📦, GPU 메시지 손실 0, 작업 55건 모두 완료 [실험 결과]. `pause` 는 연결을 받아 둔 채 멈춰, 늦게 닿은 요청과 다시 보낸 것이 겹쳤다('적어도 한 번'). 연결 자체가 안 되는 진짜 블랙홀은 [계획]. VM 감시(R4)의 웹훅은 따로다 |
-| backend·VM 이 죽어 알림 자체가 없음 | backend 웹훅은 자기와 함께 멈춘다. backend 가 멈추면 VM 감시(R4)가 재시작하며 🔁 를 보낸다 [적용, 실험 결과 2차]. Docker 가 backend·Caddy 를 다시 띄우면 ♻️·🧠, Caddy 가 멈춰 있으면 🚪 를 R4 가 보낸다 [구현됨, 배포 전]. VM 이 죽으면 알림이 없다 | R3 외부 가동 감시(1분, 2개 지역 2분 실패 → 메일) [계획: 사용자가 콘솔에서 알림 채널을 만든 뒤 `deploy/gcp/uptime_check.sh create <channel>`] |
+| backend·VM 이 죽어 알림 자체가 없음 | backend 웹훅은 자기와 함께 멈춘다. backend 가 멈추면 VM 감시(R4)가 재시작하며 🔁 를 보낸다 [적용, 실험 결과 2차]. Docker 가 backend·Caddy 를 다시 띄우면 ♻️·🧠, Caddy 가 멈춰 있으면 🚪 를 R4 가 보낸다 [구현됨: 적용] 배포 창 1. VM 이 죽으면 알림이 없다 | R3 외부 가동 감시(1분, 2개 지역 2분 실패 → 메일) [계획: 사용자가 콘솔에서 알림 채널을 만든 뒤 `deploy/gcp/uptime_check.sh create <channel>`] |
 
 ## 절차
 
 ### DB 복구 (FD5 에서 연습, 20 s)
 1. `docker compose ... stop backend`
 2. 어느 백업으로 돌아갈지 고른다.
-   - VM 안 `storage/backup/beside-*.zip`(매시 5분, 48개 [적용] 2026-11-20 05:33 UTC 배포, 설정 `0 5 * * * *` 확인. 그 전 zip 은 매일 04:30 KST 것)
-   - 또는 버킷 `gs://beside-514511-backups/db/`(매시 20분에 올림 [적용]). VM 의 서비스 계정 `beside-backup@` 은 버킷을 읽지 못하므로(`roles/storage.objectCreator` 뿐) 소유자 계정으로 받아 볼륨의 `backup/` 에 넣은 뒤 3번으로 간다. 이 순서는 연습하지 않았다 [계획].
+   - VM 안 `storage/backup/beside-*.zip`(5분마다, 288개 [적용] 배포 창 1: 2026-11-25 17:16~17:21 UTC. 그 전은 매시 5분·48개(2026-11-20 05:33 UTC 배포), 그보다 전은 매일 04:30 KST)
+   - 또는 버킷 `gs://beside-514511-backups/db/`(5분마다, 매시 3·8·13…분에 올림 [적용] 배포 창 1. 그 전은 매시 20분). VM 의 서비스 계정 `beside-backup@` 은 버킷을 읽지 못하므로(`roles/storage.objectCreator` 뿐) 소유자 계정으로 받아 볼륨의 `backup/` 에 넣은 뒤 3번으로 간다. 이 순서는 연습하지 않았다 [계획].
      1. 개발 PC(소유자 계정으로 `gcloud` 로그인)에서 `gcloud storage cp gs://beside-514511-backups/db/<zip> .`. 다음 단계의 SSH 별칭과 키가 개발 PC 에만 있으므로 Cloud Shell 에서 받지 않는다.
      2. VM 으로 옮긴다: 개발 PC 에서 `scp <zip> beside-gcp:~`([deploy/README.md](../../deploy/README.md) 의 SSH 별칭).
-     3. VM 에서 backend 이미지로 넣는다. 파일과 `backup/` 폴더의 주인이 uid 10001 이어야 backend 의 매시 백업이 계속 된다(sudo 로 폴더를 만들면 root 소유가 되어 매시 백업이 실패한다):
+     3. VM 에서 backend 이미지로 넣는다. 파일과 `backup/` 폴더의 주인이 uid 10001 이어야 backend 의 주기 백업이 계속 된다(sudo 로 폴더를 만들면 root 소유가 되어 주기 백업이 실패한다):
         `docker run --rm -v beside-storage:/app/storage -v "$HOME/<zip>:/in.zip:ro" --entrypoint sh beside-backend:local -c 'mkdir -p /app/storage/backup && cp /in.zip /app/storage/backup/<zip>'`
 3. backend 이미지로 복구한다(파일 주인 uid 10001). zip 이 볼륨에 없으면 'zip 없음' 을 출력하고 멈춰 DB 파일을 지우지 않는다. 이 줄이 나오면 4번으로 가지 않는다(지금 DB 그대로 떠서 복구된 것처럼 보인다):
    `docker run --rm -v beside-storage:/app/storage --entrypoint sh beside-backend:local -c 'test -f /app/storage/backup/<zip> || { echo "zip 없음: /app/storage/backup/<zip> — 아무것도 바꾸지 않았어요" >&2; exit 1; }; rm -f /app/storage/db/beside-real.mv.db && java -Dloader.main=org.h2.tools.Restore -cp /app/app.jar org.springframework.boot.loader.launch.PropertiesLauncher -file /app/storage/backup/<zip> -dir /app/storage/db -db beside-real'`
@@ -91,8 +91,58 @@
    - `--service-account=beside-backup@beside-514511.iam.gserviceaccount.com --scopes=storage-rw,logging-write,monitoring-write` 를 준다(VM 밖 백업이 계속되게).
 2. 스냅샷 시각에 돌던 설정으로 뜬다(훈련 때는 부하 덮어쓰기). `cd ~/Beside && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 로 운영 설정에 맞춘다.
 3. 고정 IP `beside-ip` 를 새 VM 에 옮기거나, DuckDNS A 레코드를 바꾼다. `caddy_data` 는 스냅샷에 들어 있어 인증서를 새로 받지 않는다.
-4. healthz·공개 경로 61개 확인. 스냅샷 뒤에 생긴 작업은 VM 밖 백업 zip(매시)으로 DB 를 더 최근으로 돌릴 수 있다(위 'DB 복구' 2번의 버킷 순서).
-- 3~4번(진짜 전환)은 연습하지 않았다 [계획].
+4. healthz·공개 경로 확인(`bash scripts/check_public_routes.sh`, 2026-11-26 부터 63개). 스냅샷 뒤에 생긴 작업은 VM 밖 백업 zip(5분마다)으로 DB 를 더 최근으로 돌릴 수 있다(위 'DB 복구' 2번의 버킷 순서).
+- 3~4번(진짜 전환)은 연습하지 않았다 [계획]. 운영 VM 이 살아 있을 때의 계획 전환은 아래 '대기 서버로 넘기기·되돌리기'.
+
+### 대기 서버로 넘기기·되돌리기 (계획 전환, REDUNDANCY 1-5) — 스크립트 [구현됨], 훈련 [계획]
+운영 VM `beside-vm`(zone a)이 살아 있을 때 대기 VM `beside-standby`(zone b)로 넘기고 되돌린다. 대기 VM 은 켜져 있지만 서비스는 멈춰 있다. 개발 PC 에서 한다(소유자 `gcloud` 로그인, `~/.ssh/beside-vm.key`, Git Bash 면 `gcloud` 를 PATH 에). 운영 VM 이 죽었으면 위 'VM 다시 세우기'.
+- 대기 VM 에 SSH: `ssh -i ~/.ssh/beside-vm.key -o HostKeyAlias=beside-standby -o ProxyCommand="ssh -i ~/.ssh/beside-vm.key beside@34.64.91.254 -W %h:%p" beside@<대기 VM 내부 IP>`(외부 IP 를 쓰지 않는다. 내부 IP 는 `gcloud compute instances list`).
+- 준비 기록: [2026-11-26 준비](data/2026-11-26_failover-prep/README.md).
+
+**준비** (훈련 전날까지. 운영은 읽기만 한다)
+1. 대기 VM 에 서비스 계정 `beside-backup@`(storage-rw)이 붙어 있는지 본다: `gcloud compute instances describe beside-standby --zone=asia-northeast3-b --format="value(serviceAccounts[0].email)"`. 없으면 넘긴 뒤 VM 밖 백업이 실패한다. 이미 있는 VM 은 멈춤 → `set-service-account`(위 'VM 다시 세우기' 1번의 값) → 시작.
+2. 대기 VM 에 임시 외부 IP 가 있어야 한다(git·이미지·Tailscale 이 밖으로 나간다). 없으면 `bash deploy/gcp/clone_vm.sh ip standby`. 전환 4단계가 이 IP 를 뗀다.
+3. Tailscale 로그인: 대기 VM 에서 `sudo systemctl enable --now tailscaled`(`clone_init.sh` 가 꺼 둔다) → `sudo tailscale up --hostname=beside-standby --accept-dns=false`(운영 VM 과 같은 옵션, [deploy/README.md](../../deploy/README.md) 'Tailscale').
+   - 나온 주소를 팀 tailnet 계정으로 사람이 열어 승인한다. 관리 화면에 `beside-vm`·`beside-standby` 두 노드가 따로 보이고 "Duplicate node key" 가 없어야 한다. ACL 이 `beside-standby` 를 막지 않는지도 본다.
+   - Pod 가 켜져 있으면 대기 VM 에서 `tailscale ping <Pod 의 100.x>` 로 닿는지 본다.
+   - 복사본에서 `tailscale logout` 은 하지 않는다.
+   - 승인이 안 되면 훈련을 미룬다. `failover_vm.sh` 가 멈추고(`BESIDE_ALLOW_NO_TAILNET=1` 로만 넘어간다), 넘기면 GPU Pod 에 닿지 않아 작업이 PENDING 으로 기다리다 30분 뒤 `INFERENCE_UNAVAILABLE` 로 끝난다.
+4. `bash scripts/sync_standby.sh`: 대기 VM 을 운영 커밋으로 빨리 감고, 모델·이미지를 빌드·받는다. 아무것도 시작하지 않는다. 끝나면 `~/.beside-built` 에 커밋을 남긴다(도중에는 `pending`). 운영을 다시 배포하면 이것도 다시 돌린다.
+5. `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`: 점검만 한다. 같은 커밋, 대상 이미지가 다 있음, 빌드 표시, tailnet 을 본다. `would STOP` 줄이 있으면 진행하지 않는다.
+6. 공지:
+   - 1시간 창이고, 끊김은 수 분이다(목표 ≤ 3분 [제안값]).
+   - 그때 진행 중인 작업은 `INTERNAL_ERROR` 로 끝나니 앱에서 다시 시도한다.
+   - 원본 Grafana 가 팀 Discord 로 알림을 보낼 수 있다('backend 지표 수집 실패' 2분, '작업 실패가 이어짐').
+
+**당일** (창 안)
+1. 재기 준비:
+   - Runpod CPU Pod 를 만든다(GCP 밖에서 재기. 개발 PC 는 쓰지 않는다).
+   - 그 Pod 에서 다음을 켜 둔다:
+     `python3 drill_client.py run --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1 --interval 20 --duration 3600`
+     기본값 그대로면 10분 뒤 멈춘다. GPU Pod 를 켜지 않았으면 `--no-jobs` 로 healthz 만 잰다.
+   - 개발 PC 에서 `export BESIDE_TIMELINE_DIR=docs/ops/data/<날짜>_failover-drills` 를 해 둔다. 타임라인 TSV 가 그 폴더에 생긴다.
+2. Grafana 화면을 캡처한다(넘긴 뒤에는 대기 VM 의 Prometheus·Loki·Tempo 가 스냅샷 시점 기록부터 이어진다).
+3. 표지 작업 A 를 만든다: `python3 drill_client.py mark --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1a --count 1`(id 는 `out/d1/marked-d1a.txt`).
+4. VM 밖 업로드(매시 3·8·13…분)가 한 번 지나간 뒤 표지 작업 B 를 만든다(같은 명령, `--run d1b`). B 는 넘기기 **전에** 만든다. 마지막 백업 뒤에 생긴 B 까지 남아야 RPO 0 이다.
+5. 넘기기(D-1): `bash scripts/failover_vm.sh --planned beside-vm beside-standby`
+   - 순서: 점검 → 운영 점검 표시·backend 멈춤 → DB·`uploads`·`results`·`preprocessed`·`events.jsonl`·`.env` 복사 → 대상 `compose up`·healthz → 고정 IP 옮기기 → 공개 healthz·`check_public_routes.sh` → 역할·감시·백업 타이머·스냅샷 일정 넘기기.
+   - 단계마다 UTC 시각이 `failover-<시각>-beside-vm-to-beside-standby.tsv` 에 남는다.
+   - 되돌림: 1단계(멈춤), 2단계(복사), 3단계(대상 기동·healthz), 4단계(IP), 5단계(공개 healthz)가 실패하면, 스크립트가 IP 를 운영 VM 에 다시 붙이고 그 backend 를 다시 켠다. 그 뒤 `https://beside-team.duckdns.org` 를 손으로 확인한다.
+   - 경로 검사(63개)가 실패하면 기록만 하고 되돌리지 않는다. 그 줄을 보고 판단한다.
+6. 넘긴 뒤 확인:
+   - `python3 drill_client.py check --base https://beside-team.duckdns.org --ids out/d1/marked-d1a.txt`(B 는 `marked-d1b.txt`)로 A·B 가 404 가 아닌지 본다.
+   - 진행 중이던 작업은 `POST /api/v1/jobs/{id}/retry` 로 다시 보낸다(drill_client 에는 다시 보내기가 없다). Pod 를 켰다면 전환 뒤 1건이 COMPLETED 인지 본다.
+   - Tailscale 관리 화면을 본다.
+7. SSH: 고정 IP 가 대기 VM 에 있는 동안 `ssh beside-gcp` 는 호스트 키가 달라 실패한다. 그동안은 `ssh -o HostKeyAlias=beside-standby beside-gcp` 를 쓴다.
+   - 옛 운영 VM 은 외부 IP 가 없어 Tailscale 이 오프라인이다.
+   - 6단계가 옛 운영 VM 에 빌드 표시(그 VM 이 돌리던 커밋)를 남긴다. 그래서 되돌리기 점검을 통과한다.
+   - **D-1 과 D-3 사이에는 배포하지 않는다**(`deploy_vm.sh beside-gcp` 도 호스트 키 때문에 실패한다). 대기 VM 의 커밋이 바뀌면 D-3 이 커밋 검사에서 멈춘다. 옛 운영 VM 은 외부 IP 가 없어 `sync_standby.sh` 로 맞출 수도 없다.
+8. 되돌리기(D-3): 3~6번처럼 표지 작업을 만들고 재기한 뒤 `bash scripts/failover_vm.sh --planned beside-standby beside-vm`.
+   - 끝나면 대기 VM 은 다시 standby 가 되고 외부 IP 가 없다. 데이터·`.env` 는 넘긴 시점 것이다. 그래서 다음 전환 전에 준비 2~5번을 다시 한다.
+   - D-3 뒤에는 다시 그냥 `ssh beside-gcp` 를 쓴다.
+   - 대기 VM 디스크에 붙은 스냅샷 일정은 남는다. 떼려면 `gcloud compute disks remove-resource-policies beside-standby-boot --zone=asia-northeast3-b --resource-policies=beside-daily-snapshot`.
+9. Runpod CPU Pod(그리고 켰다면 GPU Pod)를 지운다.
+10. 결과를 `docs/ops/<날짜>_failover-drills.md` 에 REDUNDANCY 1-5 의 DoD 대로 적는다.
 
 ### GPU Pod 다시 세우기 (FD16a: 98 s)
 1. 멈춘 Pod 를 start 한다. "not enough free GPUs" 면 같은 볼륨 `z4kgw4v5zi`, EU-SE-1, A40, `minVcpuCountPerGpu 4`, `minRamPerGpu 24`, Secret 토큰으로 새 Pod 를 만든다.
@@ -137,7 +187,7 @@
 
 ## 남은 일 [계획]
 - 2026-11-25 확인으로 이 목록에서 뺀 것(끝난 일):
-  - `inference.timeout-ms` 120 s(2026-11-21 안건 #7)는 운영에 들어갔다. 5차 시험 전 main `fe10683`(`api-v1.1`) 배포(2026-11-21 01:06~01:07 UTC)부터 120 s 다. 지금 VM 은 `625c2a5`(2026-11-22 07:05~07:08 UTC 배포, `application-real.properties:17` `120000`)다.
+  - `inference.timeout-ms` 120 s(2026-11-21 안건 #7)는 운영에 들어갔다. 5차 시험 전 main `fe10683`(`api-v1.1`) 배포(2026-11-21 01:06~01:07 UTC)부터 120 s 다. 2026-11-22 에는 `625c2a5`(07:05~07:08 UTC 배포)였고, 지금 VM 은 `a44b3ed`(배포 창 2, 2026-11-26 00:04~00:08 UTC)다. 두 커밋 모두 `application-real.properties:17` 이 `120000` 이다.
   - FD16b·FD4·FD5·FD9 의 고침은 PR #22 로 병합하고 VM 에 배포했다(2026-11-20 15:53 UTC, VM 감시 재설치 포함) [적용]. Pod 를 main 으로 다시 켜기(`instanceId`)와 FD16b·FD5·FD9 다시 재현은 [5차 부하 시험](../perf/load/2026-11-21_vm-5th.md) 7절(2026-11-21)에서 했다 [실험 결과]. 단 운영 backend 가 아니라 훈련 backend 였고, 알림(🧱 포함)은 팀 채널이 아니라 VM 안 훈련 수집기로 갔다. FD16b 는 `instanceId` 길만, FD9 는 `docker pause` 로만 봤다.
   - 스냅샷 일정이 만든 스냅샷: READY 5개(`beside-vm-asia-northeast3-a-20261120191411-6ww5dte2` ~ `beside-vm-asia-northeast3-a-20261124191411-l434mv0g`, 매일 19:14 UTC, `gcloud compute snapshots list`). 첫 것은 2026-11-20 19:14 UTC 다.
 - 아직 재현하지 않은 것: FD4(디스크 가득 참 → `INTERNAL_ERROR`), FD16b 의 다른 두 길(120 s 시간 초과, GLB 내려받기 60 s 무응답), FD9 진짜 블랙홀(연결 자체가 안 됨), 운영 R4 가 🧱 를 팀 채널로 보내는 것.

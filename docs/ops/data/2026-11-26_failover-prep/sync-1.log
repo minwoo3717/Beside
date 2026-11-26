@@ -1,0 +1,27 @@
+13:17:10  check: beside-vm a44b3ed, beside-standby d5f4a32 (external IP <임시 외부 IP> for egress)
+13:17:13  1 code: d5f4a32 -> a44b3ed
+ok    yolox_s.onnx
+ok    u2net.onnx
+models in backend/models (point PREPROCESS_MODELSDIR at it unless it is backend/models)
+13:17:15  2 models: backend/models
+ Image beside-backend:local Building
+ Image beside-backend:local Built
+ Image beside-backend:local Skipped Image can be built
+ Image grafana/alloy:v1.4.3 Pulling
+ Image prom/prometheus:v2.54.1 Pulling
+ Image grafana/tempo:2.6.1 Pulling
+ Image caddy:2.11.7 Pulling
+ Image grafana/grafana-oss:11.2.0 Pulling
+ Image grafana/loki:3.2.1 Pulling
+ Image grafana/alloy:v1.4.3 Pulled
+ Image caddy:2.11.7 Pulled
+ Image grafana/grafana-oss:11.2.0 Pulled
+ Image prom/prometheus:v2.54.1 Pulled
+ Image grafana/loki:3.2.1 Pulled
+ Image grafana/tempo:2.6.1 Pulled
+13:20:15  3 images: built and pulled
+13:20:16  4 marker: ~/.beside-built = a44b3ed
+13:20:21  5 ok: beside-standby at a44b3ed, all images present, nothing started
+13:20:21  tailnet on beside-standby: Logged out.
+next: DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby
+exit=0

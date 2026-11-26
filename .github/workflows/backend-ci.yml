@@ -59,6 +59,7 @@ jobs:
           bash scripts/test_gcp_ops.sh
           bash scripts/test_clone_vm.sh
           bash scripts/test_failover_vm.sh
+          bash scripts/test_sync_standby.sh
 
       - name: systemd units of deploy/backup and deploy/watchdog (systemd-analyze verify)
         run: |

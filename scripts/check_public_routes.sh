@@ -2,7 +2,8 @@
 # Live check of the public routes of a running server, without credentials: internal paths answer 404, team pages and
 # admin/library/Grafana 401 (Basic auth), the app's public endpoints reach Spring, security headers are set.
 # Mirrors deploy/test_caddy_routes.sh (which runs in CI against a local Caddy) where it can. Used after every VM deploy
-# ("공개 경로 61/61"), after a failover to the standby VM, and on a staging copy.
+# ("공개 경로 61/61", 63 since the two product-event checks of 2026-11-26), after a failover to the standby VM, and on
+# a staging copy.
 #   bash scripts/check_public_routes.sh                                 # https://beside-team.duckdns.org
 #   bash scripts/check_public_routes.sh https://beside-team.duckdns.org 10.178.0.9   # same name, sent to that IP
 # The second argument pins the domain to an IP with curl --resolve (staging copy via its internal IP, or the standby on
@@ -46,6 +47,9 @@ check 401 GET /api/v1/jobs -u "team:wrong-password"
 check 200 GET /api/v1/healthz
 check 404 GET "/api/v1/jobs/$JOB"
 check 415 POST /api/v1/jobs   # no multipart body: Spring answers 415 (public upload path reaches Spring)
+# Product events (2026-11-26 #24): only POST is public; a batch that is not an object is refused whole and stores nothing.
+check 401 GET /api/v1/events
+check 400 POST /api/v1/events -H 'Content-Type: application/json' --data '[]'
 hdr="$(curl -s "${PIN[@]}" -o /dev/null -D - --max-time 15 "$D/index.html" | tr -d '\r')"
 for h in '^strict-transport-security: max-age=15552000' '^x-content-type-options: nosniff' '^x-frame-options: DENY'; do
   if grep -qiE "$h" <<<"$hdr"; then pass=$((pass + 1)); else fail=$((fail + 1)); echo "FAIL header $h"; fi
