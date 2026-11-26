@@ -139,8 +139,9 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "tools")
 # Now one stderr handler (the Pod's inference.log) for beside.* (INFO and up) and the converter's warnings:
 #   2026-11-26T01:02:03.456Z WARNING beside.inference job <id>: 503 INFERENCE_UNAVAILABLE ... rid=<id>-1 trace=<32 hex>
 # rid / trace: the X-Request-Id ("<jobId>-<attempt>") and the trace id of the W3C traceparent Spring sends with every job
-# request (docs/CONTRACT.md §6), on every line logged while that request runs. Spring logs the same rid and its job
-# run's trace (Tempo), so the two logs can be matched. Header values of another form are not logged (log injection).
+# request (docs/CONTRACT.md §6), on every line these loggers write while that request runs. Spring logs the job run
+# with jobId and attempt as separate fields and the same trace id (Tempo), so the two logs can be matched. Header values
+# of another form are not logged (log injection). uvicorn's own access line keeps its format (no rid, query kept).
 # beside.timing (BESIDE_REQUEST_TIMING) keeps its own message-only line: docs/perf parses that format.
 LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 REQUEST_ID_FORMAT = re.compile(r"[A-Za-z0-9._-]{1,128}")
