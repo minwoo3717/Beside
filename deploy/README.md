@@ -240,7 +240,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 free -h                                   # Swap: 2.0Gi
 ```
 
-**메모리 부족(OOM)이 나면** — 이미지와 감시 **[구현됨, 배포 전]**(2026-11-26):
+**메모리 부족(OOM)이 나면** — 이미지와 감시 **[구현됨: 적용]**(2026-11-26, 배포 창 1: 2026-11-25 17:16~17:21 UTC, main `d5f4a32`(PR #34). OOM 을 VM 에서 일부러 낸 적은 없다):
 
 - 두 가지가 있다.
   - **Java 힙 부족**(`java.lang.OutOfMemoryError`, 힙은 `mem_limit` 의 40 %): JVM 이 종료 코드 3 으로 스스로 끝난다(`-XX:+ExitOnOutOfMemoryError`, [backend/Dockerfile](../backend/Dockerfile)). 전에는 스레드 일부만 죽은 채 계속 떠 있을 수 있었다.
@@ -320,7 +320,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env logs -f --tai
 
 컨테이너 로그는 서비스마다 10MB × 5개에서 돈다(compose 의 `x-logging`, json-file `max-size`·`max-file`). 그보다 오래된 로그가 필요하면 그때그때 파일로 꺼내 둔다(`... logs --no-color backend > backend-$(date +%F).log`).
 
-로그 파일(`/var/lib/docker/containers/<id>/<id>-json.log`)의 줄마다 서비스 이름이 `"attrs":{"com.docker.compose.service":"backend"}` 처럼 붙는다(json-file 의 `labels` 옵션) **[구현됨, 배포 전]**. 로그 수집기가 `docker.sock` 없이 파일만 읽어도 서비스를 가를 수 있게 하려는 것이다. 수집기 자체는 [계획]. 이 옵션이 들어간 compose 로 처음 `up -d` 하면 모든 컨테이너가 다시 만들어진다(backend 진행 중 작업은 `INTERNAL_ERROR`, caddy 몇 초 끊김). 붙은 줄은 그 뒤에 쓴 로그부터다.
+로그 파일(`/var/lib/docker/containers/<id>/<id>-json.log`)의 줄마다 서비스 이름이 `"attrs":{"com.docker.compose.service":"backend"}` 처럼 붙는다(json-file 의 `labels` 옵션) **[구현됨: 적용]**(배포 창 1: 2026-11-25 17:16~17:21 UTC, main `d5f4a32`(PR #34)). 로그 수집기(Alloy, 아래 '로그 · 알림')가 `docker.sock` 없이 파일만 읽어도 서비스를 가를 수 있게 하려는 것이다. 이 옵션이 들어간 compose 로 처음 `up -d` 하면 모든 컨테이너가 다시 만들어진다(backend 진행 중 작업은 `INTERNAL_ERROR`, caddy 몇 초 끊김). 붙은 줄은 그 뒤에 쓴 로그부터다.
 
 측정 로그는 `docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backend:/app/storage/events.jsonl ./events.jsonl` 로 꺼낸다(prod 는 H2 콘솔이 꺼져 있다. `job_runs` CSV 내보내기 API 는 S5 — 계약 추가라 검토 브랜치에 있다. 그 전에는 H2 백업 zip 을 개발 PC 로 가져와 h2-console 로 연다).
 
@@ -351,7 +351,7 @@ $C start backend
 - `deploy/backups/` 는 gitignore 다. VM 디스크가 날아가면 같이 사라지므로 중요한 시점(실측 전후)에는 개발 PC 로 옮긴다.
 - **[구현됨]** prod 는 서버를 멈추지 않고 매시 5분(한국 시각 기준 `storage.backup.zone` — 컨테이너는 UTC 로 돈다) H2 온라인 백업(`BACKUP TO`)을 볼륨의 `storage/backup/beside-<시각>.zip` 으로 만들고 최신 48개(이틀)를 남긴다(`storage.backup.*`, 2026-11-20 까지는 매일 04:30·7개). 꺼내기: `$C cp backend:/app/storage/backup ./h2-backup`. 업로드 사진·GLB 까지 묶으려면 위의 tar 절차.
 - 이 백업들은 모두 VM 디스크 안에 있다. VM 밖(GCS 버킷 `beside-514511-backups`)으로 매시 20분에 올리는 것이 아래 '운영 대응 설치' R1 이고, 버킷·계정·메타데이터 차단·업로드 타이머를 2026-11-20 에 적용했다 **[구현됨: 적용]**(아래 '적용 기록'). 백엔드 배포(1번)는 2026-11-20 05:33 UTC 에 했다. 그 전까지 VM 의 prod 는 매일 04:30 KST·7개로 백업해서 버킷에 새로 올라가는 DB zip 이 하루 1개였다. 이제 매시 5분 zip 이 그 시각 20분에 올라간다 **[구현됨: 적용]**: 2026-11-20 13:05·14:05·15:05 UTC zip 이 생겼고, 13:20·14:20·15:20 UTC 업로드가 한 번에 1개씩 보냈다(`db: 1 new backup(s) sent`).
-- **5분 백업 [구현됨, 배포 전]**(REDUNDANCY Phase 1-1, 2026-11-26): `deploy/.env` 의 `STORAGE_BACKUP_CRON=0 */5 * * * *`·`STORAGE_BACKUP_KEEP=288` 로 backend 가 5분마다 zip 을 만들고 하루 치(288개, 하나 약 16 KB)를 남긴다. 두 줄이 없으면 compose 기본값(매시 5분·48개, `application-prod.properties` 와 같다)이다. VM 밖 업로드도 5분마다(매시 3·8·13…분) 새 zip 과 새 사진·GLB 를 보낸다(`beside-backup.service` 의 `FORCE_FILES=1`). 바꾸는 순서는 아래 '운영 대응 설치' 4번의 '5분 백업으로 바꾸기'. 운영 VM 은 아직 매시다.
+- **5분 백업 [구현됨: 적용]**(REDUNDANCY Phase 1-1, 2026-11-26): `deploy/.env` 의 `STORAGE_BACKUP_CRON=0 */5 * * * *`·`STORAGE_BACKUP_KEEP=288` 로 backend 가 5분마다 zip 을 만들고 하루 치(288개, 하나 약 16 KB)를 남긴다. 두 줄이 없으면 compose 기본값(매시 5분·48개, `application-prod.properties` 와 같다)이다. VM 밖 업로드도 5분마다(매시 3·8·13…분) 새 zip 과 새 사진·GLB 를 보낸다(`beside-backup.service` 의 `FORCE_FILES=1`). 바꾸는 순서는 아래 '운영 대응 설치' 4번의 '5분 백업으로 바꾸기'. 운영 VM 은 배포 창 1: 2026-11-25 17:16~17:21 UTC, main `d5f4a32`(PR #34)부터 5분이다(첫 업로드 17:23·17:28 UTC 에 db zip 1개씩).
 
 ### 부하 시험
 
@@ -370,7 +370,7 @@ VM 에서 k6 부하를 걸 때는 운영 backend 를 내리고 [docker-compose.l
 | R5 Caddy 메모리 상한 | A1 에서 한도 없는 Caddy 가 2.2 GiB | `docker-compose.yml` caddy `mem_limit: 2g`, `GOMEMLIMIT: 1638MiB`(위 '메모리') | compose 값 [구현됨] · CI 확인은 PR CI 통과 뒤 · VM 반영 [구현됨: 적용] 2026-11-20 05:33 |
 
 - **얼마나 잃는가 [계산]**: VM 을 통째로 잃을 때 잃는 최근 작업의 길이(RPO)다.
-  - **5분 백업을 배포한 뒤 [구현됨, 배포 전]**: DB 는 5분마다 백업해 3분 뒤 올린다. 그래서 최근 약 5분, 최악 약 8분이다(백업 직후 쓴 작업은 다음 백업 5분 + 업로드 3분 뒤에 버킷에 닿는다). 사진·GLB 도 매 실행 새 파일을 올리므로 최악 약 5~8분이다(만든 지 2분이 안 된 파일은 다음 실행으로 넘긴다).
+  - **5분 백업(2026-11-25 배포 창 1부터) [구현됨: 적용]**: DB 는 5분마다 백업해 3분 뒤 올린다. 그래서 최근 약 5분, 최악 약 8분이다(백업 직후 쓴 작업은 다음 백업 5분 + 업로드 3분 뒤에 버킷에 닿는다). 사진·GLB 도 매 실행 새 파일을 올리므로 최악 약 5~8분이다(만든 지 2분이 안 된 파일은 다음 실행으로 넘긴다).
   - **지금 운영 VM(매시) [적용]**: DB 는 매시 5분 백업이 20분에 올라가므로 최근 약 1시간(최악 약 75분)이다. 사진·GLB 는 하루 1번(그날 첫 실행, 00:20 KST 무렵)이라 최악 약 24시간이다.
   - 스냅샷은 최악 약 24시간 전 디스크다.
   - 그 전: 1번(매시 백업)을 배포한 2026-11-20 05:33 UTC 전에는 VM 밖으로 가는 DB zip 이 하루 1번(04:30 KST 백업, 05:20 KST 업로드)이라 DB 도 최악 약 25시간이었다(2026-11-20 에 4번을 적용하기 전에는 DB 가 하루 1번 같은 디스크에만 있었고 사진·GLB 는 VM 밖 사본이 없었다).
@@ -430,10 +430,10 @@ sudo systemctl enable --now beside-backup.timer
 systemctl list-timers beside-backup.timer
 ```
 
-- 실패하면 서비스가 failed 로 남고 다음 실행에서 못 보낸 것부터 다시 보낸다(5분 판은 5분 뒤, 지금 VM 의 매시 판은 다음 20분). 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 볼륨의 가장 새 H2 zip 이 `DB_STALE_MIN` 보다 오래됐으면 보낼 것이 없어도 실패로 끝낸다. 기준은 스크립트 기본값 150분(매시 백업이 두 번 빠짐)이고, 5분 판 `beside-backup.service` 는 20분(5분 백업이 약 4번 빠짐)이다. 유지보수 표시(`/etc/beside-maintenance`, `~beside/fault/MAINTENANCE`)가 있거나(부하 덮어쓰기는 백업을 끈다) VM 이 켜진 지 `DB_STALE_MIN` 이 안 됐으면(오래 꺼졌거나 스냅샷으로 다시 세운 VM 은 backend 의 다음 백업 전에 이 실행이 돈다) 보지 않는다. 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남긴다. 7번 VM 감시는 이것이 `BACKUP_STALE_S` 보다 묵거나 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 기준은 스크립트 기본값 3시간(매시 실행 세 번)이고, 5분 판 `beside-watchdog.service` 는 30분(5분 실행 여섯 번)이다. 감시를 설치하기 전에는 실패해도 저널에만 남는다.
+- 실패하면 서비스가 failed 로 남고 다음 실행에서 못 보낸 것부터 다시 보낸다(5분 판은 5분 뒤, 매시 판은 다음 20분. 운영 VM 은 2026-11-25 부터 5분 판). 계정·범위가 없으면 고치는 방법을 로그에 적고 멈춘다. 볼륨의 가장 새 H2 zip 이 `DB_STALE_MIN` 보다 오래됐으면 보낼 것이 없어도 실패로 끝낸다. 기준은 스크립트 기본값 150분(매시 백업이 두 번 빠짐)이고, 5분 판 `beside-backup.service` 는 20분(5분 백업이 약 4번 빠짐)이다. 유지보수 표시(`/etc/beside-maintenance`, `~beside/fault/MAINTENANCE`)가 있거나(부하 덮어쓰기는 백업을 끈다) VM 이 켜진 지 `DB_STALE_MIN` 이 안 됐으면(오래 꺼졌거나 스냅샷으로 다시 세운 VM 은 backend 의 다음 백업 전에 이 실행이 돈다) 보지 않는다. 성공한 실행은 시각을 `/var/lib/beside-backup/last.ok` 에 남긴다. 7번 VM 감시는 이것이 `BACKUP_STALE_S` 보다 묵거나 설치 뒤 한 번도 성공하지 못한 채 failed 면 디스코드로 알린다(6시간마다, 다시 성공하면 한 번). 기준은 스크립트 기본값 3시간(매시 실행 세 번)이고, 5분 판 `beside-watchdog.service` 는 30분(5분 실행 여섯 번)이다. 감시를 설치하기 전에는 실패해도 저널에만 남는다.
 - 백업이 멈춘 뒤 알림까지 [계산]: 5분 판은 약 50분(가장 새 zip 20분 + 마지막 성공 30분), 매시 판은 약 5.5시간(150분 + 3시간).
 
-**5분 백업으로 바꾸기** (REDUNDANCY Phase 1-1) — 파일 **[구현됨, 배포 전]**, VM 적용 [계획]. 세 가지를 이 순서로 함께 바꾼다. 업로드 단위(`DB_STALE_MIN=20`)를 backend 보다 먼저 바꾸면 매시 백업 사이 40분 동안 실행이 실패하고, 감시(`BACKUP_STALE_S=1800`)를 매시 타이머와 함께 두면 6시간마다 거짓 🗄️ 가 간다. backend 를 다시 띄우므로 진행 중 작업은 `INTERNAL_ERROR` 다(팀 공지 뒤):
+**5분 백업으로 바꾸기** (REDUNDANCY Phase 1-1) — 파일 [구현됨], VM 적용 **[구현됨: 적용]**(배포 창 1: 2026-11-25 17:16~17:21 UTC, main `d5f4a32`(PR #34). `deploy/.env` 백업 `deploy/.env.bak-20261126-wave1`, 업로드·감시 단위는 `install` 뒤 `cmp` 로 리포와 같음, 첫 업로드 17:23·17:28 UTC 에 db zip 1개씩). 세 가지를 이 순서로 함께 바꾼다. 업로드 단위(`DB_STALE_MIN=20`)를 backend 보다 먼저 바꾸면 매시 백업 사이 40분 동안 실행이 실패하고, 감시(`BACKUP_STALE_S=1800`)를 매시 타이머와 함께 두면 6시간마다 거짓 🗄️ 가 간다. backend 를 다시 띄우므로 진행 중 작업은 `INTERNAL_ERROR` 다(팀 공지 뒤):
 
 ```bash
 cd ~/Beside
@@ -476,9 +476,9 @@ journalctl -u beside-watchdog -n 20 --no-pager      # 정상이면 아무것도 
 - **알림 목록**(디스코드, 모두 `(VM 감시 · <호스트>)` 가 붙는다):
   - 🔁 backend 를 다시 시작함(health 3번 실패) · ✅ 재시작 뒤 정상 · ⚠️ 재시작 뒤에도 실패(10분 안에는 다시 시작하지 않음) · 🔴 `docker restart` 실패
   - 🧱 backend 가 시작하자마자 계속 꺼짐(마지막 정상 뒤 Docker 재시작 3번, 1시간마다) · ✅ 다시 정상으로 뜸
-  - ♻️ backend·caddy 가 꺼져서 Docker 가 다시 띄움(횟수·종료 코드) **[구현됨, 배포 전]**: Docker 의 `RestartCount` 가 늘면 컨테이너마다 10분에 한 번, 그 사이 것은 다음 메시지의 횟수에 합친다. 배포로 다시 만든 컨테이너는 0 부터 센다. 🧱 가 나간 backend 재시작 반복 중에는 보내지 않는다
-  - 🧠 메모리로 꺼짐 **[구현됨, 배포 전]**: 커널 OOM kill(`State.OOMKilled` 또는 Docker 의 `oom` 이벤트. Docker 는 다시 띄울 때 `OOMKilled` 를 지울 수 있어서 지난 확인 뒤의 이벤트 기록도 본다. VM 에서 재현하지는 않았다) 또는 backend 의 종료 코드 3(Java 힙 부족, 힙 덤프 안내 — 위 '메모리')
-  - 🚪 caddy 가 멈춰 있음(실행 중도 재시작 중도 아님, 지워짐 포함) **[구현됨, 배포 전]**: 30초 간격 두 번 연속이면(배포의 다시 만들기는 그 안에 끝난다) 알리고 1시간마다 다시 · ✅ caddy 가 다시 실행 중
+  - ♻️ backend·caddy 가 꺼져서 Docker 가 다시 띄움(횟수·종료 코드) **[구현됨: 적용]**(배포 창 1에 감시 다시 설치): Docker 의 `RestartCount` 가 늘면 컨테이너마다 10분에 한 번, 그 사이 것은 다음 메시지의 횟수에 합친다. 배포로 다시 만든 컨테이너는 0 부터 센다. 🧱 가 나간 backend 재시작 반복 중에는 보내지 않는다
+  - 🧠 메모리로 꺼짐 **[구현됨: 적용]**(배포 창 1): 커널 OOM kill(`State.OOMKilled` 또는 Docker 의 `oom` 이벤트. Docker 는 다시 띄울 때 `OOMKilled` 를 지울 수 있어서 지난 확인 뒤의 이벤트 기록도 본다. VM 에서 재현하지는 않았다) 또는 backend 의 종료 코드 3(Java 힙 부족, 힙 덤프 안내 — 위 '메모리')
+  - 🚪 caddy 가 멈춰 있음(실행 중도 재시작 중도 아님, 지워짐 포함) **[구현됨: 적용]**(배포 창 1): 30초 간격 두 번 연속이면(배포의 다시 만들기는 그 안에 끝난다) 알리고 1시간마다 다시 · ✅ caddy 가 다시 실행 중
   - 💾 디스크 80 % 이상(1시간마다) · 🗄️ VM 밖 백업이 멈춤(6시간마다) · ✅ VM 밖 백업이 다시 성공 · 🛠️ 유지보수 표시가 12시간 넘게 있음
   - 유지보수 표시가 있는 동안 ♻️·🧠·🚪 도 오지 않는다. 그동안의 재시작은 표시를 지운 뒤에도 알리지 않지만, 표시를 지웠는데 caddy 가 아직 멈춰 있으면 약 1분 안에 🚪 가 온다.
 - **부하 시험·장애 훈련 전에** `sudo touch /etc/beside-maintenance`(또는 `~/fault/MAINTENANCE`), 끝나면 `sudo rm /etc/beside-maintenance`. 표시가 12시간 넘게 남으면 디스코드로 알린다. 표시가 있는 동안은 backend 검사를 통째로 건너뛰므로 재시작뿐 아니라 아래 재시작 반복 알림(🧱)도 오지 않는다 — FD5 를 다시 재현해 🧱 를 확인할 때는 표시 없이 한다. [loadtest/README.md](loadtest/README.md) 절차에 이 줄과 6번 pause/resume 을 넣는 것은 [계획]이다.
