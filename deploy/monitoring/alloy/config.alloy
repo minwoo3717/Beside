@@ -1,5 +1,6 @@
 // Grafana Alloy 설정 (deploy/docker-compose.yml 의 alloy 서비스, profile monitoring).
-// 하는 일: VM 의 Docker 로그 파일(json-file)을 읽어 Loki 로 보낸다.
+// 하는 일: VM 의 Docker 로그 파일(json-file)을 읽어 Loki 로 보낸다. GPU Pod 가 보낸 로그(3500)·span(4320)도 받아 Loki·Tempo 로
+// 넘긴다(맨 아래 'GPU Pod 로그·span 받는 곳', 2026-11-27).
 // - docker.sock 을 쓰지 않는다(소켓은 :ro 여도 사실상 root 권한이다). 대신 compose 의 x-logging 이
 //   json-file 의 labels 옵션으로 각 줄에 compose 서비스 이름(attrs."com.docker.compose.service")을 넣는다.
 // - compose 밖 컨테이너(beside-stub 등)는 service="other" 로 들어간다.
@@ -90,5 +91,80 @@ loki.process "docker" {
 loki.write "local" {
   endpoint {
     url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// ---- GPU Pod 로그·span 받는 곳 (2026-11-27) ----
+// Runpod Pod 의 deploy/runpod/ship_logs.py 가 tailnet 으로 로그 줄을 Loki push 형식으로 3500 에, 추론 서비스(app.py)가 span 을
+// OTLP/HTTP JSON 으로 4320 에 보낸다. compose 가 두 포트를 VM 에 게시한다(GCP 방화벽이 인터넷에서는 막는다 — docker-compose.yml).
+// 받은 줄은 service="inference" 로 고정한다: tailnet 의 다른 기기가 보내도 backend·caddy 줄로 보일 수 없다(그쪽 알림을 울리거나
+// 숨기지 못하게). 남기는 라벨은 service·file(inference.log 등)·host(Pod 의 tailnet 이름)·level·env(prod | loadtest) 뿐이다.
+loki.source.api "pod" {
+  http {
+    listen_address = "0.0.0.0"
+    listen_port    = 3500
+  }
+  // 보낸 쪽이 줄을 읽은 시각을 쓴다(묶어 보내거나 다시 보내도 시각이 그대로다).
+  use_incoming_timestamp = true
+  forward_to             = [loki.process.pod.receiver]
+}
+
+loki.process "pod" {
+  forward_to = [loki.write.local.receiver]
+
+  stage.static_labels {
+    values = {
+      service = "inference",
+    }
+  }
+
+  // 수준은 줄 맨 앞에서 읽는다. 두 형식이 섞여 있다:
+  //   app.py 의 로거  : 2026-11-26T01:02:03.456Z WARNING beside.inference ... rid=... trace=...
+  //   uvicorn·셸 스크립트: WARNING:  ...  /  2026-11-26T01:02:03Z ERROR: ...(supervisor.log)
+  // ship_logs.py 가 스택 줄을 앞 줄에 붙여 보내므로 ERROR 와 그 스택이 한 항목이고, 수준은 첫 줄에서 정해진다.
+  stage.regex {
+    expression = "^(?:\\d{4}-\\d{2}-\\d{2}T\\S+Z\\s+)?(?P<level>DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL)(?::|\\s)"
+  }
+
+  // Python 의 WARNING·CRITICAL 을 backend 와 같은 WARN·ERROR 로 맞춘다(대시보드·알림이 level=~"ERROR|WARN" 로 본다).
+  stage.template {
+    source   = "level"
+    template = "{{ if .Value }}{{ if eq .Value \"WARNING\" }}WARN{{ else if eq .Value \"CRITICAL\" }}ERROR{{ else }}{{ .Value }}{{ end }}{{ end }}"
+  }
+
+  stage.labels {
+    values = {
+      level = "",
+    }
+  }
+
+  stage.label_keep {
+    values = ["service", "file", "host", "level", "env"]
+  }
+}
+
+otelcol.receiver.otlp "pod" {
+  // HTTP 만(gRPC 없음). 경로는 /v1/traces, 본문은 OTLP JSON 또는 protobuf.
+  http {
+    endpoint = "0.0.0.0:4320"
+  }
+
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  // backend 와 같은 Tempo 의 OTLP HTTP(compose 내부망). /v1/traces 는 exporter 가 붙인다.
+  client {
+    endpoint = "http://tempo:4318"
+    tls {
+      insecure = true
+    }
+  }
+
+  // 메모리 상한 384m 이라 대기열을 작게 둔다(Tempo 가 꺼져 있으면 넘친 span 은 버린다. Pod 쪽도 실패는 버린다).
+  sending_queue {
+    queue_size = 100
   }
 }
