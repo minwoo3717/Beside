@@ -39,6 +39,19 @@
 #   BESIDE_REQUEST_TIMING (1: one "timing ..." line per request in inference.log, since 2026-11-26; 0 = off) - these
 #   apply when the service starts, NORESTART_FILE (/workspace/beside-norestart), RESTART_DELAY_S (5),
 #   RESTART_MAX_DELAY_S (60), RESTART_STABLE_S (300: a run this long resets the delay) - read by the supervisor
+#
+# Logs and spans to the VM (2026-11-27, off unless BESIDE_TELEMETRY_VM is set, e.g. as a Runpod environment variable):
+#   BESIDE_TELEMETRY_VM=<the VM's tailnet IP>   tailscaled also serves an HTTP + SOCKS5 proxy on 127.0.0.1:1055 (in
+#       userspace networking no other process here reaches a 100.x address), the service gets BESIDE_OTLP_URL
+#       (http://<VM>:4320/v1/traces) and BESIDE_TELEMETRY_PROXY (its spans, generation/inference_service/otlp_spans.py),
+#       and deploy/runpod/ship_logs.py sends inference.log, start.log and supervisor.log to http://<VM>:3500 (the VM's
+#       Alloy -> Loki; its own status in ship_logs.log; stop: kill $(cat /var/run/beside/ship_logs.pid)).
+#   BESIDE_TELEMETRY_ENV (prod)   the env label of both; a load-test Pod: loadtest (or no BESIDE_TELEMETRY_VM at all).
+#   Without BESIDE_TELEMETRY_VM: no proxy flags, no shipper, and BESIDE_OTLP_URL / BESIDE_LOG_PUSH_URL /
+#   BESIDE_TELEMETRY_PROXY are not passed on. A tailscaled already running keeps its flags (a NOTE says when the proxy
+#   is missing). After a switch to the standby VM: set its tailnet IP and run this again (the shipper follows; the
+#   service needs a restart for its spans, a NOTE says so). Like every port of this node, 1055 is also reachable from
+#   the tailnet (userspace tailscaled forwards its 100.x ports to loopback): the tailnet is the team's own.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -58,6 +71,10 @@ MODE="${MODE:-}"
 SERVE="uvicorn app:app --host 127.0.0.1 --port $PORT"   # also how a running service is recognised
 SUPERVISOR="$REPO/deploy/runpod/supervise_inference.sh"
 NORESTART_FILE="${NORESTART_FILE:-$WS/beside-norestart}"   # while it exists the supervisor does not restart the service
+TELEMETRY_VM="${BESIDE_TELEMETRY_VM:-}"     # empty: no log shipping, no spans (as before 2026-11-27)
+TELEMETRY_ENV="${BESIDE_TELEMETRY_ENV:-prod}"
+TELEMETRY_PROXY="127.0.0.1:1055"           # tailscaled's outbound HTTP + SOCKS5 proxy, only with TELEMETRY_VM
+SHIPPER="$REPO/deploy/runpod/ship_logs.py"
 # Service defaults measured on the A40 Pod (2026-11-19 load test round 3, docs/perf/load/2026-11-19_vm-3rd.md 2절):
 # - uvicorn closes an idle connection after 5 s by default, so with jobs more than 5 s apart Spring opened a new
 #   VM <-> Pod connection for every job; 75 s keeps it (processing median 9.09 -> 8.22 s at one job per 30 s).
@@ -81,6 +98,12 @@ port_busy() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }   # something ac
   die "THREADS must be a number of threads, 1-999, or default (got: $THREADS)"
 [[ "${BESIDE_REQUEST_TIMING:-1}" =~ ^[01]$ ]] ||
   die "BESIDE_REQUEST_TIMING must be 1 (timing lines, the default) or 0 (got: $BESIDE_REQUEST_TIMING)"
+if [[ -n "$TELEMETRY_VM" ]]; then
+  [[ "$TELEMETRY_VM" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]] ||
+    die "BESIDE_TELEMETRY_VM must be the VM's tailnet address alone, e.g. 100.101.102.103 - no scheme, port or path (got: $TELEMETRY_VM)"
+  [[ "$TELEMETRY_ENV" =~ ^[A-Za-z0-9_-]{1,32}$ ]] ||
+    die "BESIDE_TELEMETRY_ENV must be a short label such as prod or loadtest (got: $TELEMETRY_ENV)"
+fi
 if [[ -z "${BESIDE_INFERENCE_TOKEN:-}" && -r "$TOKEN_FILE" ]]; then
   BESIDE_INFERENCE_TOKEN="$(cat "$TOKEN_FILE")"
   perms="$(stat -c %a "$TOKEN_FILE" 2>/dev/null || echo unknown)"
@@ -141,6 +164,28 @@ stop_supervisor() {   # SIGTERM: the supervisor passes it on to the service and 
 }
 STOP_HINT="touch $NORESTART_FILE && kill"   # stop the service so that its supervisor does not start it again
 
+# The log shipper's restart loop ($0 = ship_logs.py, $1 = the log dir): ship_logs.py again 10 s after it exits.
+# SIGTERM ends the loop after passing it on to ship_logs.py, which saves how far it got.
+SHIP_LOOP='trap "kill \$child \$nap 2>/dev/null; wait \$child; exit 0" TERM INT
+while :; do
+  "$SHIP_LOGS_PYTHON" "$0" "$1" & child=$!
+  wait "$child"; status=$?
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ship_logs.py exited (status $status), starting it again in 10 s"
+  sleep 10 & nap=$!; wait "$nap"
+done'
+shipper_settings() {   # push URL, env label and host the running shipper loop got
+  local env
+  env="$(tr '\0' '\n' 2>/dev/null < "/proc/$1/environ")" || return 0
+  echo "$(sed -n 's/^BESIDE_LOG_PUSH_URL=//p' <<< "$env") $(sed -n 's/^BESIDE_TELEMETRY_ENV=//p' <<< "$env") $(sed -n 's/^TS_HOSTNAME=//p' <<< "$env")"
+}
+stop_shipper() {
+  kill -TERM "$1" 2>/dev/null || return 0
+  for _ in $(seq 1 40); do alive "$1" || return 0; sleep 0.25; done
+  pkill -9 -P "$1" 2>/dev/null || true
+  kill -9 "$1" 2>/dev/null || true
+  echo "WARNING: the log shipper (pid $1) did not end within 10 s - killed" >&2
+}
+
 mkdir -p "$TS_DIR/state" "$RUN_DIR" "$LOG_DIR"
 # One run at a time: an exec tool that stops waiting does not stop the command, so a retry could overlap it.
 # Background children close fd 9 (9>&-) so they do not keep the lock after this script exits.
@@ -174,18 +219,29 @@ else
 fi
 
 # 2. tailscaled in userspace mode (no TUN device, no root network changes).
+TS_PROXY_FLAGS=()
+TS_PROXY_LABEL=""
+if [[ -n "$TELEMETRY_VM" ]]; then   # logs and spans reach the VM's 100.x only through this proxy
+  TS_PROXY_FLAGS=(--outbound-http-proxy-listen="$TELEMETRY_PROXY" --socks5-server="$TELEMETRY_PROXY")
+  TS_PROXY_LABEL=", proxy $TELEMETRY_PROXY for logs and spans"
+fi
 if pid="$(running_pid "$RUN_DIR/tailscaled.pid" "$TS_BIN/tailscaled")"; then
   echo "[2/4] tailscaled already running (pid $pid)"
+  if [[ -n "$TELEMETRY_VM" ]] && ! port_busy "${TELEMETRY_PROXY##*:}"; then
+    echo "NOTE: nothing listens on $TELEMETRY_PROXY: this tailscaled was started without the proxy (an older start_pod.sh"
+    echo "      or no BESIDE_TELEMETRY_VM), so logs and spans cannot reach $TELEMETRY_VM. Between jobs: kill $pid and run"
+    echo "      this again (the VM loses this Pod for the seconds tailscaled needs to come back)"
+  fi
 else
   rm -f "$SOCK"
   stamp "$LOG_DIR/tailscaled.log"
   nohup "$TS_BIN/tailscaled" --tun=userspace-networking --statedir="$TS_DIR/state" --socket="$SOCK" \
-    >> "$LOG_DIR/tailscaled.log" 2>&1 9>&- &
+    ${TS_PROXY_FLAGS[@]+"${TS_PROXY_FLAGS[@]}"} >> "$LOG_DIR/tailscaled.log" 2>&1 9>&- &
   tspid=$!
   echo "$tspid" > "$RUN_DIR/tailscaled.pid"
   for _ in $(seq 1 30); do [[ -S "$SOCK" ]] && break; kill -0 "$tspid" 2>/dev/null || break; sleep 1; done
   [[ -S "$SOCK" ]] || { tail -n 20 "$LOG_DIR/tailscaled.log" >&2; die "tailscaled did not start ($LOG_DIR/tailscaled.log)"; }
-  echo "[2/4] tailscaled started (userspace networking, state $TS_DIR/state)"
+  echo "[2/4] tailscaled started (userspace networking, state $TS_DIR/state$TS_PROXY_LABEL)"
 fi
 
 # 3. Join the tailnet. Known node: returns at once. New node: prints a login link and waits for approval.
@@ -195,6 +251,39 @@ stamp "$LOG_DIR/tailscale-up.log"
 ts up --reset --hostname="$TS_HOSTNAME" --timeout=15m 2>&1 | tee -a "$LOG_DIR/tailscale-up.log"
 TS_IP="$(ts ip -4)"
 [[ "$TS_IP" =~ ^100\. ]] || die "unexpected tailnet address: $TS_IP"
+
+# Logs and spans to the VM (BESIDE_TELEMETRY_VM, see the header). The shipper is a process of its own: whatever it
+# does, the service goes on. One at a time (pid file + running_pid); with other settings (a new VM) it is replaced.
+if [[ -n "$TELEMETRY_VM" ]]; then
+  export BESIDE_LOG_PUSH_URL="http://$TELEMETRY_VM:3500/loki/api/v1/push" \
+    BESIDE_OTLP_URL="http://$TELEMETRY_VM:4320/v1/traces" \
+    BESIDE_TELEMETRY_PROXY="http://$TELEMETRY_PROXY" BESIDE_TELEMETRY_ENV="$TELEMETRY_ENV"
+  echo "      telemetry: logs -> $BESIDE_LOG_PUSH_URL, spans -> $BESIDE_OTLP_URL (env $TELEMETRY_ENV, via $TELEMETRY_PROXY)"
+  shpid=""
+  if old="$(running_pid "$RUN_DIR/ship_logs.pid" "$SHIPPER")"; then
+    if [[ "$(shipper_settings "$old")" == "$BESIDE_LOG_PUSH_URL $TELEMETRY_ENV $TS_HOSTNAME" ]]; then
+      shpid="$old"
+      echo "      log shipper already running (pid $shpid, status $LOG_DIR/ship_logs.log)"
+    else
+      stop_shipper "$old"
+      echo "      log shipper pid $old had other settings (VM, env or host): stopped it"
+    fi
+  fi
+  if [[ -z "$shpid" ]]; then
+    if py="$(command -v python3)"; then
+      stamp "$LOG_DIR/ship_logs.log"
+      TS_HOSTNAME="$TS_HOSTNAME" LOG_DIR="$LOG_DIR" SHIP_LOGS_PYTHON="$py" \
+        nohup bash -c "$SHIP_LOOP" "$SHIPPER" "$LOG_DIR" >> "$LOG_DIR/ship_logs.log" 2>&1 9>&- &
+      shpid=$!
+      echo "$shpid" > "$RUN_DIR/ship_logs.pid"
+      echo "      log shipper started (pid $shpid: inference.log, start.log, supervisor.log; status $LOG_DIR/ship_logs.log)"
+    else
+      echo "NOTE: no python3 on this Pod: no log shipping (the service's spans still go)"
+    fi
+  fi
+else
+  unset BESIDE_LOG_PUSH_URL BESIDE_OTLP_URL BESIDE_TELEMETRY_PROXY
+fi
 
 # 4. The inference service, loopback only (tailscaled forwards tailnet connections to it).
 export HF_HOME="${HF_HOME:-$WS/.cache/huggingface}" TORCH_HOME="${TORCH_HOME:-$WS/.cache/torch}"  # SD VAE, DINOv2
@@ -220,6 +309,13 @@ if pid="$(running_pid "$RUN_DIR/inference.pid" "$SERVE")"; then
   echo "[4/4] inference service already running ($MODE, pid $pid, $settings, stop: $STOP_HINT $pid)"
   if [[ "$settings" != "$WANTED_SETTINGS" && "$settings" != "settings unknown"* ]]; then
     echo "NOTE: it was started with other settings; stop it ($STOP_HINT $pid) and run this again for $WANTED_SETTINGS"
+  fi
+  if [[ -n "$TELEMETRY_VM" ]]; then
+    running_otlp="$(tr '\0' '\n' 2>/dev/null < "/proc/$pid/environ" | sed -n 's/^BESIDE_OTLP_URL=//p')" || true
+    if [[ "$running_otlp" != "$BESIDE_OTLP_URL" ]]; then
+      echo "NOTE: it sends no spans to $BESIDE_OTLP_URL (it has BESIDE_OTLP_URL=${running_otlp:-unset}); for them stop it"
+      echo "      ($STOP_HINT $pid) and run this again. Its log lines are shipped either way"
+    fi
   fi
   if sup="$(supervisor_pid)"; then
     if [[ -e "$NORESTART_FILE" ]]; then
@@ -330,4 +426,7 @@ echo "VM deploy/.env      : INFERENCE_BASE_URL=http://$TS_IP:$PORT"
 echo "check from the VM   : curl -sS http://$TS_IP:$PORT/healthz"
 echo "service log         : tail -f $LOG_DIR/inference.log"
 echo "restart log         : $LOG_DIR/supervisor.log (stop on purpose: touch $NORESTART_FILE first)"
+if [[ -n "$TELEMETRY_VM" ]]; then
+  echo "logs and spans      : Loki {service=\"inference\", host=\"$TS_HOSTNAME\", env=\"$TELEMETRY_ENV\"}, Tempo beside-inference (shipper: $LOG_DIR/ship_logs.log)"
+fi
 if [[ "$MODE" == model ]]; then echo "model               : wait for 'model loaded ... on cuda' in the log (healthz modelLoaded)"; fi

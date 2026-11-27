@@ -57,13 +57,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Distributed tracing of a job run (W8, 2026-11-26): with tracing on (as on the VM; tests switch it off unless asked),
- * a real-profile job in upload mode is one trace of its own — root beside.job.run (no parent, linked to the upload
- * request's trace) with the stages and the inference client spans as children — every request to the inference
- * service carries that client span's W3C traceparent next to X-Request-Id, the run's log lines carry its trace id, a
- * retry is a new trace linked to the retry request, and nothing stays in the MDC after a span closes. With tracing on
- * and no management.otlp.tracing.endpoint there is no exporter at all (no connection from tests or local runs). Spans
- * are collected in memory (a SimpleSpanProcessor bean next to Boot's own processor).
+ * Distributed tracing of a job run (W8, 2026-11-26; one trace with its request since 2026-11-27, obs-wave3 A2): with
+ * tracing on (as on the VM; tests switch it off unless asked), a real-profile job in upload mode lives in the trace of the
+ * request that dispatched it. Under the upload's server span are the photo check and save, the wait for a worker
+ * (beside.job.dispatch-wait, the @Async queue) and the run beside.job.run, whose children are the stages and the
+ * inference client spans; the app's W3C traceparent (trace id = its X-Request-Id) makes that the app's trace. Every
+ * request to the inference service carries its client span's traceparent next to X-Request-Id, the run's log lines carry
+ * the trace id, a retry runs in the retry request's trace, and nothing stays in the MDC after a span closes. A traceparent
+ * with flags 00 keeps the old shape: the run is a trace of its own linked to the request. With tracing on and no
+ * management.otlp.tracing.endpoint there is no exporter at all (no connection from tests or local runs). Spans are
+ * collected in memory (a SimpleSpanProcessor bean next to Boot's own processor).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -167,46 +170,59 @@ class TracingPropagationTest {
     @Autowired
     ApplicationContext context;
 
+    /** Spans of the request around the run: children of the server span, not of the run. */
+    private static final List<String> REQUEST_SPANS =
+            List.of("beside.upload.check", "beside.upload.save", JobTracing.DISPATCH_WAIT_SPAN);
+
     @Test
-    void aJobRunIsOneTraceFromTheCutoutToTheCleanupLinkedToItsUpload(CapturedOutput output) throws Exception {
+    void aJobRunIsInItsUploadsTraceFromTheCheckToTheCleanup(CapturedOutput output) throws Exception {
         String jobId = create("rid-trace-upload-1");
         SpanData root = awaitRoot(jobId, 1);
         String trace = root.getTraceId();
 
-        // its own trace: no parent, tagged with the job, linked to the upload request's trace (not the same one)
-        assertThat(root.getParentSpanContext().isValid()).isFalse();
+        // the upload's trace: the run is a child of the upload request's server span, which names the app's id
+        SpanData server = named(spansOf(trace), "http post /api/v1/jobs");
+        assertThat(server.getKind()).isEqualTo(SpanKind.SERVER);
+        assertThat(server.getParentSpanContext().isValid()).as("no traceparent: the server span starts the trace").isFalse();
+        assertThat(attr(server, TracingConfig.REQUEST_ID_TAG)).as("the app's X-Request-Id on the upload's span")
+                .isEqualTo("rid-trace-upload-1");
+        assertThat(root.getParentSpanId()).isEqualTo(server.getSpanId());
         assertThat(attr(root, "jobId")).isEqualTo(jobId);
         assertThat(attr(root, "attempt")).isEqualTo("1");
         assertThat(attr(root, "worker")).isEqualTo("real");
         assertThat(attr(root, "job.result")).isEqualTo("COMPLETED");
-        String upload = attr(root, JobTracing.DISPATCHED_FROM);
-        assertThat(upload).isNotNull().isNotEqualTo(trace);
-        assertThat(root.getLinks()).extracting(link -> link.getSpanContext().getTraceId()).containsExactly(upload);
-        SpanData server = SPANS.getFinishedSpanItems().stream()
-                .filter(span -> span.getKind() == SpanKind.SERVER && span.getTraceId().equals(upload))
-                .findFirst().orElseThrow();
-        assertThat(server.getName()).isEqualTo("http post /api/v1/jobs");
-        assertThat(attr(server, TracingConfig.REQUEST_ID_TAG)).as("the app's X-Request-Id on the upload's span")
-                .isEqualTo("rid-trace-upload-1");
+        assertThat(attr(root, JobTracing.REQUEST_ID_ATTRIBUTE)).isEqualTo("rid-trace-upload-1");
+        assertThat(attr(root, JobTracing.DISPATCHED_FROM)).as("only a run in a trace of its own names its request").isNull();
+        assertThat(root.getLinks()).isEmpty();
 
-        // the stages and the three calls to the inference service, all in the run's trace under its root
-        List<SpanData> inRun = spansOf(trace);
-        assertThat(inRun).extracting(SpanData::getName).containsExactlyInAnyOrder(JobTracing.RUN_SPAN,
+        // the request's own steps and the wait for a worker hang under the server span; the dispatch is outside the save
+        List<SpanData> inTrace = spansOf(trace);
+        assertThat(inTrace).extracting(SpanData::getName).containsExactlyInAnyOrder("http post /api/v1/jobs",
+                "beside.upload.check", "beside.upload.save", JobTracing.DISPATCH_WAIT_SPAN, JobTracing.RUN_SPAN,
                 "beside.job.cutout", "beside.job.slot-wait", "POST /infer/upload", "GET /artifacts/{jobId}/base.glb",
                 "beside.job.store", "DELETE /artifacts/{jobId}");
-        for (SpanData span : inRun) {
-            if (span != root) {
+        for (String name : REQUEST_SPANS) {
+            assertThat(named(inTrace, name).getParentSpanId()).as(name).isEqualTo(server.getSpanId());
+        }
+        SpanData wait = named(inTrace, JobTracing.DISPATCH_WAIT_SPAN);
+        assertThat(wait.getStartEpochNanos()).isLessThanOrEqualTo(root.getStartEpochNanos());
+        assertThat(wait.getEndEpochNanos()).isGreaterThanOrEqualTo(wait.getStartEpochNanos());
+        for (SpanData span : inTrace) {
+            if (span != root && span != server && !REQUEST_SPANS.contains(span.getName())) {
                 assertThat(span.getParentSpanId()).as(span.getName()).isEqualTo(root.getSpanId());
             }
         }
-        SpanData post = named(inRun, "POST /infer/upload");
-        SpanData get = named(inRun, "GET /artifacts/{jobId}/base.glb");
-        SpanData delete = named(inRun, "DELETE /artifacts/{jobId}");
+        SpanData post = named(inTrace, "POST /infer/upload");
+        SpanData get = named(inTrace, "GET /artifacts/{jobId}/base.glb");
+        SpanData delete = named(inTrace, "DELETE /artifacts/{jobId}");
         assertThat(List.of(post, get, delete)).allSatisfy(span -> assertThat(span.getKind()).isEqualTo(SpanKind.CLIENT));
         assertThat(attr(post, "http.status_code")).isEqualTo("200");
         assertThat(attr(get, "http.status_code")).isEqualTo("200");
         assertThat(attr(delete, "http.status_code")).isEqualTo("204");
-        assertThat(attr(named(inRun, "beside.job.store"), "glb.bytes")).isEqualTo(String.valueOf(GLB.length));
+        assertThat(attr(named(inTrace, "beside.job.store"), "glb.bytes")).isEqualTo(String.valueOf(GLB.length));
+        // the service's own numbers on its call; one it did not send (gpuPeakMB, as in passthrough) is left out
+        assertThat(attr(post, "inferMs")).isEqualTo("4500");
+        assertThat(attr(post, "gpuPeakMB")).isNull();
 
         // each request carried its client span's traceparent next to X-Request-Id (CONTRACT §6)
         assertThat(requests).containsExactly(
@@ -223,7 +239,37 @@ class TracingPropagationTest {
     }
 
     @Test
-    void aFailedRunIsMarkedAndItsRetryIsANewTraceLinkedToTheRetryRequest() throws Exception {
+    void theAppsTraceparentMakesItsFlowIdTheTraceOfTheUploadTheRunAndTheInferenceCalls() throws Exception {
+        String flow = "0af7651916cd43dd8448eb211c80319c";   // the app's X-Request-Id for the flow, 32 lowercase hex
+        String appSpan = "b7ad6b7169203331";
+        String jobId = create(flow, "00-" + flow + "-" + appSpan + "-01");
+        SpanData root = awaitRoot(jobId, 1);
+
+        assertThat(root.getTraceId()).isEqualTo(flow);
+        SpanData server = named(spansOf(flow), "http post /api/v1/jobs");
+        assertThat(server.getParentSpanId()).as("the app's span (never exported) is the parent").isEqualTo(appSpan);
+        assertThat(root.getParentSpanId()).isEqualTo(server.getSpanId());
+        assertThat(named(spansOf(flow), JobTracing.DISPATCH_WAIT_SPAN).getParentSpanId()).isEqualTo(server.getSpanId());
+        assertThat(attr(root, JobTracing.REQUEST_ID_ATTRIBUTE)).isEqualTo(flow);
+        assertThat(requests).isNotEmpty().allSatisfy(line -> assertThat(line).contains(" | 00-" + flow + "-"));
+    }
+
+    @Test
+    void aTraceparentThatIsNotSampledKeepsTheRunInATraceOfItsOwnLinkedToTheApp() throws Exception {
+        String flow = "4bf92f3577b34da6a3ce929d0e0e4736";
+        String jobId = create(flow, "00-" + flow + "-00f067aa0ba902b7-00");
+        SpanData root = awaitRoot(jobId, 1);
+
+        assertThat(root.getTraceId()).isNotEqualTo(flow);
+        assertThat(root.getParentSpanContext().isValid()).isFalse();
+        assertThat(attr(root, JobTracing.DISPATCHED_FROM)).isEqualTo(flow);
+        assertThat(root.getLinks()).extracting(link -> link.getSpanContext().getTraceId()).containsExactly(flow);
+        assertThat(spansOf(flow)).as("flags 00: the server records nothing of the request").isEmpty();
+        assertThat(spansOf(root.getTraceId())).extracting(SpanData::getName).doesNotContain(JobTracing.DISPATCH_WAIT_SPAN);
+    }
+
+    @Test
+    void aFailedRunIsMarkedAndItsRetryRunsInTheRetryRequestsTrace() throws Exception {
         artifactStatus = 404;
         String jobId = create("rid-trace-retry-1");
         SpanData first = awaitRoot(jobId, 1);
@@ -239,16 +285,15 @@ class TracingPropagationTest {
         mvc.perform(post("/api/v1/jobs/{id}/retry", jobId).header("X-Request-Id", "rid-trace-retry-2"))
                 .andExpect(status().isAccepted());
         SpanData second = awaitRoot(jobId, 2);
-        assertThat(second.getTraceId()).as("a new trace, nothing carried over on the pool thread")
+        assertThat(second.getTraceId()).as("the retry request's trace, nothing carried over on the pool thread")
                 .isNotEqualTo(first.getTraceId());
-        assertThat(second.getParentSpanContext().isValid()).isFalse();
         assertThat(attr(second, "job.result")).isEqualTo("COMPLETED");
-        String retryRequest = attr(second, JobTracing.DISPATCHED_FROM);
-        assertThat(retryRequest).isNotEqualTo(attr(first, JobTracing.DISPATCHED_FROM));
-        assertThat(SPANS.getFinishedSpanItems()).anySatisfy(span -> {
-            assertThat(span.getTraceId()).isEqualTo(retryRequest);
-            assertThat(attr(span, TracingConfig.REQUEST_ID_TAG)).isEqualTo("rid-trace-retry-2");
-        });
+        SpanData retryRequest = named(spansOf(second.getTraceId()), "http post /api/v1/jobs/{jobId}/retry");
+        assertThat(attr(retryRequest, TracingConfig.REQUEST_ID_TAG)).isEqualTo("rid-trace-retry-2");
+        assertThat(second.getParentSpanId()).isEqualTo(retryRequest.getSpanId());
+        assertThat(attr(second, JobTracing.REQUEST_ID_ATTRIBUTE)).isEqualTo("rid-trace-retry-2");
+        assertThat(named(spansOf(second.getTraceId()), JobTracing.DISPATCH_WAIT_SPAN).getParentSpanId())
+                .isEqualTo(retryRequest.getSpanId());
         assertThat(requests).filteredOn(line -> line.startsWith("POST ")).extracting(line -> line.split(" \\| ")[1])
                 .containsExactly(jobId + "-1", jobId + "-2");
     }
@@ -310,8 +355,16 @@ class TracingPropagationTest {
     }
 
     private String create(String requestId) throws Exception {
-        MvcResult created = mvc.perform(multipart("/api/v1/jobs").file(new MockMultipartFile("photos", "dog.png", "image/png", PNG))
-                        .header("X-Request-Id", requestId))
+        return create(requestId, null);
+    }
+
+    private String create(String requestId, String traceparent) throws Exception {
+        var request = multipart("/api/v1/jobs").file(new MockMultipartFile("photos", "dog.png", "image/png", PNG))
+                .header("X-Request-Id", requestId);
+        if (traceparent != null) {
+            request = request.header("traceparent", traceparent);
+        }
+        MvcResult created = mvc.perform(request)
                 .andExpect(status().isAccepted())
                 .andReturn();
         return JSON.readTree(created.getResponse().getContentAsByteArray()).path("jobId").asText();

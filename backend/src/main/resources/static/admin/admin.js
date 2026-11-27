@@ -238,21 +238,34 @@
     }
   }
 
+  function stepRow(step) {
+    const row = document.createElement("tr");
+    row.append(
+      cell(step.label),
+      cell(step.event, "muted"),
+      cell(step.sessions, "num"),
+      cell(step.conversion, "num"),
+      cell(step.fromPrev, "num"),
+      cell(step.median, "num"),
+      cell(step.dropped, "num"));
+    return row;
+  }
+
+  function countRow(item) {
+    const row = document.createElement("tr");
+    row.append(cell(item.label), cell(item.sessions, "num"));
+    return row;
+  }
+
   function renderFunnel(view) {
     $("#funnel-summary").textContent = view.summary;
-    const rows = view.rows.map((step) => {
-      const row = document.createElement("tr");
-      row.append(
-        cell(step.label),
-        cell(step.event, "muted"),
-        cell(step.sessions, "num"),
-        cell(step.conversion, "num"),
-        cell(step.fromPrev, "num"),
-        cell(step.median, "num"));
-      return row;
-    });
-    $("#funnel-body").replaceChildren(...rows);
+    $("#funnel-body").replaceChildren(...view.rows.map(stepRow));
     $("#funnel-empty").hidden = !view.empty;
+    $("#funnel-jobs").textContent = view.jobs;
+    $("#funnel-screens-body").replaceChildren(...view.lastScreens.map(countRow));
+    $("#funnel-reasons-body").replaceChildren(...view.dropReasons.map(countRow));
+    $("#funnel-drops-empty").hidden = view.lastScreens.length > 0 || view.dropReasons.length > 0;
+    $("#library-funnel-body").replaceChildren(...view.libraryRows.map(stepRow));
   }
 
   funnelRange.addEventListener("change", () => refreshFunnel(true));

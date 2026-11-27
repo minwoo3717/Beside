@@ -53,22 +53,56 @@ test("funnel rows read as Korean steps with percentages and median times", () =>
   const view = M.funnelView({
     sessions: 6,
     steps: [
-      { step: "home", event: "screen_view(screen=home)", sessions: 5, conversionPct: 100, fromPrevPct: null, medianSecondsFromPrev: null },
-      { step: "photos_selected", event: "photos_selected(count!=0)", sessions: 3, conversionPct: 60, fromPrevPct: 60, medianSecondsFromPrev: 20 },
+      { step: "home", event: "screen_view(screen=home)", sessions: 5, conversionPct: 100, fromPrevPct: null, medianSecondsFromPrev: null, droppedSessions: 0 },
+      { step: "photos_selected", event: "photos_selected(count!=0)", sessions: 3, conversionPct: 60, fromPrevPct: 60, medianSecondsFromPrev: 20, droppedSessions: 2 },
       { step: "model_ready", event: "model_ready", sessions: 2, conversionPct: 40, fromPrevPct: 200 / 3, medianSecondsFromPrev: 95.4 },
       { step: "new_step", event: "x", sessions: 0, conversionPct: 0, fromPrevPct: 0, medianSecondsFromPrev: 12.5 }
     ]
   });
   assert.equal(view.summary, "이 기간 세션 6개 · 홈을 본 세션 5개");
   assert.equal(view.empty, false);
-  assert.deepEqual(view.rows[0], { label: "홈 화면", event: "screen_view(screen=home)", sessions: "5", conversion: "100.0%", fromPrev: "—", median: "—" });
-  assert.deepEqual(view.rows[1], { label: "사진 고름", event: "photos_selected(count!=0)", sessions: "3", conversion: "60.0%", fromPrev: "60.0%", median: "20초" });
+  // dropped (이탈, 2026-11-27): "—" on the first step and when an older server leaves it out
+  assert.deepEqual(view.rows[0], { label: "홈 화면", event: "screen_view(screen=home)", sessions: "5", conversion: "100.0%", fromPrev: "—", median: "—", dropped: "—" });
+  assert.deepEqual(view.rows[1], { label: "사진 고름", event: "photos_selected(count!=0)", sessions: "3", conversion: "60.0%", fromPrev: "60.0%", median: "20초", dropped: "2" });
   assert.equal(view.rows[2].fromPrev, "66.7%");
   assert.equal(view.rows[2].median, "1분 35초");
+  assert.equal(view.rows[2].dropped, "—");
   assert.equal(view.rows[3].label, "new_step", "a step this page does not know keeps its name");
   assert.equal(view.rows[3].median, "12.5초");
   assert.equal(M.funnelView(null).empty, true);
   assert.deepEqual(M.funnelView({ sessions: 0, steps: [] }).rows, []);
+});
+
+test("the funnel panel shows where dropped sessions stopped, why, the library funnel and the job completion", () => {
+  const view = M.funnelView({
+    sessions: 8,
+    steps: [],
+    lastScreens: [{ screen: "ar", sessions: 2 }, { screen: "library", sessions: 1 }, { screen: "new_screen", sessions: 1 }],
+    dropReasons: [
+      { event: "app_error", key: "kind", value: "exception", sessions: 2 },
+      { event: "job_cancel_tap", key: "stage", value: "queued", sessions: 1 },
+      { event: "job_failed_shown", key: "code", value: "INFERENCE_TIMEOUT", sessions: 1 },
+      { event: "photos_selected", key: "count", value: "0", sessions: 1 }
+    ],
+    librarySteps: [
+      { step: "home", event: "screen_view(screen=home)", sessions: 8, conversionPct: 100, fromPrevPct: null, medianSecondsFromPrev: null, droppedSessions: 0 },
+      { step: "library", event: "screen_view(screen=library)", sessions: 2, conversionPct: 25, fromPrevPct: 25, medianSecondsFromPrev: 5, droppedSessions: 6 },
+      { step: "saved_dog_open", event: "saved_dog_open(ok=true)", sessions: 1, conversionPct: 12.5, fromPrevPct: 50, medianSecondsFromPrev: 5, droppedSessions: 1 }
+    ],
+    jobs: { created: 7, completed: 3, failed: 1, canceled: 1, inProgress: 2, completionPct: 50 }
+  });
+  assert.deepEqual(view.lastScreens, [
+    { label: "AR", sessions: "2" }, { label: "저장한 강아지", sessions: "1" }, { label: "new_screen", sessions: "1" }]);
+  assert.deepEqual(view.dropReasons.map((reason) => reason.label), [
+    "앱 오류 (kind=exception)", "만드는 중 취소 (stage=queued)", "실패 화면 (code=INFERENCE_TIMEOUT)", "사진을 고르지 않고 닫음"]);
+  assert.equal(view.dropReasons[0].sessions, "2");
+  assert.deepEqual(view.libraryRows.map((row) => [row.label, row.sessions, row.dropped]), [
+    ["홈 화면", "8", "—"], ["저장한 강아지 화면", "2", "6"], ["강아지 엶", "1", "1"]]);
+  assert.equal(view.jobs, "작업 완료율(서버) 50.0% · 만든 작업 7 · 완료 3 · 실패 1 · 취소 1 · 진행 중 2");
+  // an older server without these fields: empty tables and no job line
+  const old = M.funnelView({ sessions: 1, steps: [] });
+  assert.deepEqual([old.lastScreens, old.dropReasons, old.libraryRows], [[], [], []]);
+  assert.equal(old.jobs, "작업 완료율(서버) —");
 });
 
 test("a refused upload explains itself", () => {

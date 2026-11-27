@@ -95,6 +95,7 @@ class ObservabilityEndpointTest {
             assertThat(scrape.body())
                     .contains("http_server_requests_seconds_bucket{")
                     .contains("uri=\"/api/v1/healthz\"")
+                    .contains("le=\"0.005\"").contains("le=\"0.01\"")   // p50 of fast endpoints (2026-11-27)
                     .contains("le=\"0.025\"").contains("le=\"2.5\"").contains("le=\"30.0\"")
                     .contains("env=\"local\"")
                     .contains("jvm_memory_used_bytes")

@@ -13,11 +13,11 @@ from pathlib import Path
 
 import collect
 
-REQUIRED = ["http_p95_by_uri", "http_rps_by_uri", "http_5xx_ratio", "jobs_queue", "jobs_refused_rate", "process_cpu", "system_cpu",
-            "jvm_heap_used", "jvm_heap_max", "jvm_heap_after_gc", "tomcat_busy", "disk_free"]
+REQUIRED = ["http_p50_by_uri", "http_p95_by_uri", "http_rps_by_uri", "http_5xx_ratio", "jobs_queue", "jobs_refused_rate",
+            "process_cpu", "system_cpu", "jvm_heap_used", "jvm_heap_max", "jvm_heap_after_gc", "tomcat_busy", "disk_free"]
 # The number of CSVs collect.py writes. scripts/load/README.md names it too ("Prometheus query_range CSV N개"):
 # ReadmeTest compares the two.
-CSV_COUNT = 19
+CSV_COUNT = 20
 
 
 def matrix(*series):
@@ -67,6 +67,8 @@ class QueryListTest(unittest.TestCase):
         self.assertIn('status=~"5.."', qs["http_5xx_ratio"])
         self.assertIn("histogram_quantile(0.95", qs["http_p95_by_uri"])
         self.assertIn("by (le, uri)", qs["http_p95_by_uri"])
+        self.assertIn("histogram_quantile(0.5,", qs["http_p50_by_uri"])
+        self.assertIn("by (le, uri)", qs["http_p50_by_uri"])
         self.assertIn('area="heap"', qs["jvm_heap_used"])
         self.assertEqual(len(qs), len(collect.queries("loadtest")))  # names are unique
         self.assertEqual(len(qs), CSV_COUNT)

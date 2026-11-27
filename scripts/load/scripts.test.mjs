@@ -117,7 +117,8 @@ test('poll_saturation.js: IDS_FILE ids are checked in setup', async () => {
   state.handler = server;
   const data = mod.setup();
   assert.equal(data.idsChecked, 2);
-  assert.ok(state.requests.every((r) => r.tags.endpoint === 'setup'));
+  // the start mark (lib/marker.js) is the only other request setup sends
+  assert.ok(state.requests.filter((r) => r.tags.endpoint !== 'marker').every((r) => r.tags.endpoint === 'setup'));
 
   const other = join(TMP, 'ids-other.json'); // ids of another server or an emptied volume: every GET is 404
   const many = Array.from({ length: 50 }, (_, i) => `00000000-0000-4000-9000-${String(i).padStart(12, '0')}`);

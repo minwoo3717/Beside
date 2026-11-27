@@ -95,3 +95,17 @@ v1.0 몫은 위 'v1.0 — 2026-11-21 확정'(태그 `api-v1.0`), v1.1 몫은 위
 - 측정 이름(추가, [METRICS.md](../METRICS.md) §6): 이벤트 이름·속성 표, Prometheus `beside_app_events_total{name,platform}`, `beside_app_events_dropped_total{reason}`.
 - 배포(Caddy, 계약 밖): `POST /api/v1/events` 만 공개, 같은 경로의 다른 method 와 관리 API 는 Basic 인증 뒤(`deploy/test_caddy_routes.sh`).
 - 구현 상태: 서버(`EventV1Controller`·`ProductEventService`)·관리 페이지 '세션 퍼널'·공유 뷰어 신호·Unity `ProductEvents` **[구현됨]**(브랜치 `w7/product-events`, backend 시험·node 시험 통과, Unity 는 Roslyn 컴파일만). main 병합(PR #34 `d5f4a32`)과 운영 VM 배포(배포 창 1, 2026-11-25 17:16~17:21 UTC)는 끝났다 **[구현됨: 적용]**. 기기 확인과 운영에서 쌓인 이벤트·퍼널 수치 확인은 [계획].
+
+### 2026-11-27 — 추적 헤더·제품 이벤트·퍼널 필드 (모두 추가, v1.3 후보)
+
+멘토링(2026-11-25 '로깅·트레이싱·모니터링') 보강 계획(obs-wave3)에서 사용자가 정했다(2026-11-27, 11-21·#24 와 같은 방식의 사용자 결정). 기존 필드 이름·타입·enum 값·상태 코드는 그대로이고 [openapi.yaml](openapi.yaml) `info.version` 은 1.2.0 그대로 둔다(태그를 올릴 때 1.3.0).
+
+- 추가(선택 요청 헤더): W3C `traceparent`. 앱은 작업 업로드·retry·cancel·GLB 내려받기에 `00-<흐름의 X-Request-Id 32자 hex>-<16자 hex>-01` 을 보낼 수 있다. backend 는 그 trace 에 이어 붙이고, 그 요청이 시작한 작업 실행(`beside.job.run`)도 같은 trace 에서 요청 span 의 자식이 된다(flags `00` 이면 예전처럼 따로 된 trace + 링크). 헤더가 없어도 작업 실행은 업로드 요청의 trace 안에 있다. 응답·상태 코드는 그대로이고 계약 테스트는 헤더를 비교하지 않는다(`info.description`).
+- 추가(`ProductEvent.name` enum, 12 → 15): `app_error`(`kind` exception|error|assert, `sig` 0~2147483647 — 메시지 원문은 보내지 않음), `saved_dog_open`(`ok`, `from` home|ar, `count` 0~50, `ageDays` 0~3650, `loadMs` 0~600000), `saved_dog_change`(`action` saved|replaced|skipped|edited|deleted, `count` 0~50). 모르는 이름을 버리는 옛 서버에서도 앱은 깨지지 않는다.
+- 추가(`ProductEvent.screen` enum, 8 → 10): `library`(저장한 강아지), `camera`(촬영 화면) — PR #39(2026-11-27)로 앱에 생긴 화면. 그 전 서버는 이 값만 버렸다.
+- 추가(props): `model_placed` 에 `again`(bool, 같은 모델 두 번째 배치부터 true)·`source`(job|library).
+- 뜻 변경(이름·형태 그대로): `model_placed` 는 작업의 첫 배치만이 아니라 **모든 배치**다(`again`·`source` 로 가른다). 그래서 퍼널 마지막 단계는 `source` 가 `library` 가 아닌 `model_placed` 만 센다. 옛 앱(첫 배치만, `source` 없음)의 이벤트도 이 정의 안에 들어간다.
+- 중단(삭제 아님): `photo_saved` — 앱은 2026-11-27 부터 보내지 않는다(AR 타일이 '불러오기'로 바뀜). 이름은 enum 에 남긴다.
+- 응답 필드 추가(`GET /api/v1/admin/funnel`, tag admin): `AdminFunnelStep.droppedSessions`, `AdminFunnel.lastScreens[]`(새 `AdminFunnelScreen {screen, sessions}`), `dropReasons[]`(새 `AdminFunnelReason {event, key, value, sessions}`), `librarySteps[]`(불러오기 퍼널 5단계), `jobs`(새 `AdminJobCompletion {created, completed, failed, canceled, inProgress, completionPct}` — 작업 기준 완료율, 취소 = FAILED+CANCELED). 이탈 분석은 마지막 이벤트가 to 와 지금 중 이른 때보다 30분 넘게 앞인 세션만 본다. 정의는 `adminFunnel` 설명. 새 필드에는 enum 을 달지 않았다.
+- 측정 이름([METRICS.md](../METRICS.md) §6): `beside_app_events_total` 의 `name` 이 15개(× platform 2 = 30 조합). 이름 변경은 없다.
+- 구현 상태 **[구현됨]**(브랜치 `feat/obs-wave3`): openapi `609e84c`·`0e0236f`, 서버 `ProductEventCatalog`·퍼널·작업 완료율·관리 페이지(`0ab57bc`·`870143f`·`82660e2`·`7a2d81d`), trace 구조(`f4e33c0`), Unity `traceparent`·이벤트(`8bb5914`·`35f6de6`, batchmode 컴파일만). 시험: backend 전체(`JobV1ContractTest`·`TracingPropagationTest`·`ProductEvents*`), `node --test backend/src/test/js/*.cjs`. main 병합·운영 배포(배포 창 3)·에디터·기기 확인은 [계획].

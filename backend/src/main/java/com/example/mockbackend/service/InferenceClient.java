@@ -359,7 +359,7 @@ public class InferenceClient {
                     .build();
             HttpResponse<String> response = send(request, call, watch);
             span.tag("http.status_code", response.statusCode());
-            return answerOf(response, call);
+            return tagServiceTimes(span, answerOf(response, call));
         });
         String glbPath = root.path("glbPath").asText(null);
         if (glbPath == null || glbPath.isBlank()) {
@@ -399,7 +399,7 @@ public class InferenceClient {
                     .build();
             HttpResponse<String> response = send(request, call, watch);
             span.tag("http.status_code", response.statusCode());
-            return answerOf(response, call);
+            return tagServiceTimes(span, answerOf(response, call));
         });
         String glbUrl = root.path("glbUrl").asText(null);
         URI artifact = artifactUri(glbUrl);
@@ -713,6 +713,18 @@ public class InferenceClient {
             log.debug("inference request watch failed: {}", e.toString());
             return null;
         }
+    }
+
+    /** Service times the answer's metrics carry (inferMs, convertMs, gpuPeakMB) as tags of its client span; absent ones skipped. */
+    private static JsonNode tagServiceTimes(JobTracing.Scoped span, JsonNode answer) {
+        JsonNode metrics = answer.path("metrics");
+        for (String key : List.of("inferMs", "convertMs", "gpuPeakMB")) {
+            JsonNode value = metrics.path(key);
+            if (value.isNumber()) {
+                span.tag(key, value.asLong());
+            }
+        }
+        return answer;
     }
 
     /** The JSON body of a 200; any other status becomes its job failure code. */

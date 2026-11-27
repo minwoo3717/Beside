@@ -221,6 +221,54 @@ class ProductEventsApiTest {
     }
 
     @Test
+    void theSavedDogAndAppErrorEventsTheLibraryAndCameraScreensAndEveryPlacementAreStored() throws Exception {
+        // 2026-11-27 (openapi v1.3 후보): app_error, saved_dog_open, saved_dog_change, screens library·camera,
+        // model_placed's again·source
+        double badBefore = dropped("bad_prop");
+        double errorsBefore = accepted("app_error", "android");
+        ObjectNode batch = batch(UUID.randomUUID().toString(), "android",
+                event("screen_view", 0).put("screen", "library"),
+                event("screen_view", 1).put("screen", "camera"),
+                withProps(event("saved_dog_open", 2).put("screen", "library"),
+                        "{\"ok\":true,\"from\":\"ar\",\"count\":3,\"ageDays\":2,\"loadMs\":840}"),
+                withProps(event("saved_dog_change", 3).put("screen", "library"), "{\"action\":\"replaced\",\"count\":5}"),
+                withProps(event("model_placed", 4).put("screen", "ar"),
+                        "{\"method\":\"tap\",\"secSinceArEnter\":4,\"again\":true,\"source\":\"library\"}"),
+                // sig as text (a message would be text too): only that value goes
+                withProps(event("app_error", 5).put("screen", "ar"), "{\"kind\":\"exception\",\"sig\":\"NullReferenceException at Foo\"}"),
+                withProps(event("app_error", 6), "{\"kind\":\"error\",\"sig\":2147483647}"),
+                // outside the lists: action, from, count over 50, source, kind
+                withProps(event("saved_dog_change", 7), "{\"action\":\"renamed\",\"count\":51}"),
+                withProps(event("saved_dog_open", 8), "{\"ok\":\"yes\",\"from\":\"settings\",\"ageDays\":3651,\"loadMs\":600001}"),
+                withProps(event("model_placed", 9), "{\"source\":\"url\",\"again\":1}"),
+                withProps(event("app_error", 10), "{\"kind\":\"warning\",\"sig\":-1}"));
+
+        mvc.perform(send(batch))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.accepted").value(11))
+                .andExpect(jsonPath("$.dropped").value(0));
+
+        List<ProductEventRow> rows = stored();
+        assertThat(rows).extracting(ProductEventRow::getScreen).containsExactly(
+                "library", "camera", "library", "library", "ar", "ar", null, null, null, null, null);
+        assertThat(objectMapper.readTree(rows.get(2).getPropsJson())).isEqualTo(
+                objectMapper.readTree("{\"ok\":true,\"from\":\"ar\",\"count\":3,\"ageDays\":2,\"loadMs\":840}"));
+        assertThat(objectMapper.readTree(rows.get(3).getPropsJson()))
+                .isEqualTo(objectMapper.readTree("{\"action\":\"replaced\",\"count\":5}"));
+        assertThat(objectMapper.readTree(rows.get(4).getPropsJson())).isEqualTo(
+                objectMapper.readTree("{\"method\":\"tap\",\"secSinceArEnter\":4,\"again\":true,\"source\":\"library\"}"));
+        assertThat(objectMapper.readTree(rows.get(5).getPropsJson())).isEqualTo(objectMapper.readTree("{\"kind\":\"exception\"}"));
+        assertThat(objectMapper.readTree(rows.get(6).getPropsJson()))
+                .isEqualTo(objectMapper.readTree("{\"kind\":\"error\",\"sig\":2147483647}"));
+        for (int i = 7; i <= 10; i++) {
+            assertThat(rows.get(i).getPropsJson()).as("row %d", i).isNull();
+        }
+        // sig text, action, count, ok, from, ageDays, loadMs, source, again, kind, sig -1: 11 values
+        assertThat(dropped("bad_prop") - badBefore).isEqualTo(11.0);
+        assertThat(accepted("app_error", "android") - errorsBefore).isEqualTo(3.0);
+    }
+
+    @Test
     void aBatchSentAgainIsStoredOnce() throws Exception {
         double duplicateBefore = dropped("duplicate");
         ObjectNode batch = batch(UUID.randomUUID().toString(), "android",

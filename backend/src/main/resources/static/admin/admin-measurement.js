@@ -89,6 +89,17 @@
     home: "홈 화면", photos_selected: "사진 고름", generate_tap: "만들기 누름",
     model_ready: "모델 받음", ar: "AR 화면", model_placed: "AR 에 놓음"
   });
+  /** The library funnel's own names where they differ (librarySteps, 2026-11-27). */
+  const LIBRARY_LABELS = Object.freeze({ library: "저장한 강아지 화면", saved_dog_open: "강아지 엶" });
+  /** ProductEvent.screen → Korean (the app's DesignedUIController pages and the share viewer). */
+  const SCREEN_LABELS = Object.freeze({
+    home: "홈", confirm: "사진 확인", progress: "만드는 중", preview: "미리보기", ar: "AR", error: "오류",
+    settings: "설정", library: "저장한 강아지", camera: "촬영", share: "공유 뷰어"
+  });
+  /** Drop reason events (AdminFunnelReason.event) → Korean. */
+  const REASON_LABELS = Object.freeze({
+    job_cancel_tap: "만드는 중 취소", job_failed_shown: "실패 화면", app_error: "앱 오류"
+  });
 
   function rangeStart(days, nowMs) {
     const span = Number.isFinite(days) && days > 0 ? days : 7;
@@ -118,28 +129,61 @@
     return `${Math.floor(whole / 60)}분 ${whole % 60}초`;
   }
 
-  /** AdminFunnel → table rows of text and the line above the table. */
-  function funnelView(funnel) {
-    const steps = funnel && Array.isArray(funnel.steps) ? funnel.steps : [];
-    const sessions = funnel && Number.isFinite(funnel.sessions) ? funnel.sessions : 0;
-    const rows = steps.map((step) => ({
-      label: FUNNEL_LABELS[step.step] || String(step.step),
+  function count(value) {
+    return Number.isFinite(value) ? String(value) : DASH;
+  }
+
+  function stepRows(steps, labels) {
+    return steps.map((step, index) => ({
+      label: labels[step.step] || FUNNEL_LABELS[step.step] || String(step.step),
       event: String(step.event || ""),
-      sessions: Number.isFinite(step.sessions) ? String(step.sessions) : DASH,
+      sessions: count(step.sessions),
       conversion: formatPct(step.conversionPct),
       fromPrev: formatPct(step.fromPrevPct),
-      median: formatSeconds(step.medianSecondsFromPrev)
+      median: formatSeconds(step.medianSecondsFromPrev),
+      dropped: index === 0 ? DASH : count(step.droppedSessions)
     }));
+  }
+
+  function list(funnel, field) {
+    return funnel && Array.isArray(funnel[field]) ? funnel[field] : [];
+  }
+
+  function reasonLabel(reason) {
+    if (reason.event === "photos_selected") return "사진을 고르지 않고 닫음";
+    const name = REASON_LABELS[reason.event] || String(reason.event);
+    return `${name} (${reason.key}=${reason.value})`;
+  }
+
+  function jobsLine(jobs) {
+    if (!jobs || !Number.isFinite(jobs.created)) return `작업 완료율(서버) ${DASH}`;
+    return `작업 완료율(서버) ${formatPct(jobs.completionPct)} · 만든 작업 ${jobs.created} · 완료 ${count(jobs.completed)}`
+      + ` · 실패 ${count(jobs.failed)} · 취소 ${count(jobs.canceled)} · 진행 중 ${count(jobs.inProgress)}`;
+  }
+
+  /**
+   * AdminFunnel → table rows of text and the line above the table, plus (2026-11-27) the drop analysis (last screens,
+   * reasons), the library funnel and the server's job completion line. Fields an older server leaves out read as empty.
+   */
+  function funnelView(funnel) {
+    const steps = list(funnel, "steps");
+    const sessions = funnel && Number.isFinite(funnel.sessions) ? funnel.sessions : 0;
     const first = steps.length > 0 && Number.isFinite(steps[0].sessions) ? steps[0].sessions : 0;
     return {
-      rows,
+      rows: stepRows(steps, {}),
       summary: `이 기간 세션 ${sessions}개 · 홈을 본 세션 ${first}개`,
-      empty: sessions === 0
+      empty: sessions === 0,
+      lastScreens: list(funnel, "lastScreens").map((item) => ({
+        label: SCREEN_LABELS[item.screen] || String(item.screen), sessions: count(item.sessions)
+      })),
+      dropReasons: list(funnel, "dropReasons").map((item) => ({ label: reasonLabel(item), sessions: count(item.sessions) })),
+      libraryRows: stepRows(list(funnel, "librarySteps"), LIBRARY_LABELS),
+      jobs: jobsLine(funnel && funnel.jobs)
     };
   }
 
   return Object.freeze({
-    DASH, CLIENT_METRICS_URL, CLIENT_METRICS_CSV_URL, SCORE_COLUMNS, FUNNEL_RANGES, FUNNEL_LABELS,
+    DASH, CLIENT_METRICS_URL, CLIENT_METRICS_CSV_URL, SCORE_COLUMNS, FUNNEL_RANGES, FUNNEL_LABELS, SCREEN_LABELS,
     jobPageUrl, ratingSummaryUrl, ratingsCsvUrl, e2eCsvUrl, formatScore, importSummary, uploadErrorText,
     funnelUrl, eventsCsvUrl, formatPct, formatSeconds, funnelView
   });

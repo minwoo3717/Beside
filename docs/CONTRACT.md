@@ -84,7 +84,13 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 - 요청 헤더 `X-Request-Id`(선택): 앱은 요청마다 보낸다(`BesideApiClient.Prepare`). 서버는 1~64자의 `A-Z a-z 0-9 . _ : -` 만 그대로 쓴다. 없거나 규칙 밖이면 새 UUID 를 만든다.
 - 응답 헤더 `X-Request-Id`: backend(Spring)가 쓰는 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다. backend 까지 오지 않는 응답에는 없다: Caddy 가 직접 답하는 404(막은 경로)·401(Basic 인증)·413(25 MB 초과), Tomcat 이 답하는 잘못된 요청의 400, 관리 포트.
 - 서버 로그는 이 id 로 찾는다(텍스트 로그 `rid=`, prod JSON 로그 필드 `requestId`, [ops/RUNBOOK.md](ops/RUNBOOK.md) '먼저 볼 곳'). 앱은 응답 헤더를 읽지 않아도 된다. 모르는 헤더는 무시한다(필드 추가와 같은 규칙).
-- [api/openapi.yaml](api/openapi.yaml) 에는 아직 없다. 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만). 다음 태그 때 openapi 에 옮긴다 [계획].
+- [api/openapi.yaml](api/openapi.yaml) 에는 2026-11-27 에 옮겼다(`info.description`, `components/headers/XRequestId`, 작업 접수 202 와 공통 오류 응답). 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만).
+
+### 추적 헤더 `traceparent` (v1.3 후보, 2026-11-27) — 서버·앱 [구현됨], 운영 적용·기기 확인 [계획]
+
+- 요청 헤더 W3C `traceparent`(선택): `00-<trace id 32자 hex>-<span id 16자 hex>-<flags>`. 앱은 작업 업로드·retry·cancel·GLB 내려받기에만 붙인다(trace id = 그 흐름의 `X-Request-Id`, 32자 소문자 hex 일 때만). 상태 조회(폴링)·이벤트·healthz 에는 붙이지 않는다(30분 대기면 trace 하나에 span 이 수백 개가 된다). retry 는 retry 가 만든 id 를 이어지는 폴링·GLB 내려받기가 그대로 쓴다.
+- 서버는 그 trace 에 이어 붙인다: 서버 요청 span 의 부모가 되고, 그 요청이 시작한 작업 실행(`beside.job.run`)도 같은 trace 에서 요청 span 의 자식이다(§6). flags `00` 이면 서버도 기록하지 않고 작업 실행은 따로 된 trace(링크)다. 형식이 틀리면 없는 것으로 본다. 응답은 그대로다.
+- 앱은 span 을 보내지 않는다. 그래서 Tempo 에는 서버 요청 span 의 부모가 '없음'으로 보인다(정상). 앱 오류 화면의 '문의 번호'(흐름 id 앞 8자)로 Grafana 'Beside 로그' 에서 그 요청을 찾는다.
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
@@ -209,7 +215,7 @@ Unity 는 호출하지 않는다. `POST /infer`(경로 모드)는 같은 호스�
 
 요청 id(2026-11-26, [구현됨]): Spring 은 작업마다 `POST /infer`·`/infer/upload`, GLB `GET`, `DELETE /artifacts` 에 `X-Request-Id: <jobId>-<attempt>`(형식 `[A-Za-z0-9._-]{1,128}`)를 붙인다. 본문은 바뀌지 않는다. 추론 서비스는 이 헤더를 무시해도 되고, 지금 서비스는 그 요청을 처리하는 동안 남기는 서비스 로그 줄(UTC 시각·수준이 붙은 줄)마다 `rid=` 로 남긴다. uvicorn 접근 줄과 요청별 시간 줄에는 없다 **[구현됨: 적용]**(2026-11-26 Pod 에서 작업 1건으로 확인. 같은 작업의 retry 를 서비스 로그에서 가르기 위해, [inference_service/README.md](../generation/inference_service/README.md) '로그'). `/healthz` 에는 붙이지 않는다.
 
-추적(2026-11-26, 선택 요청 헤더 추가 **[구현됨: 적용]**, 운영 VM main `a44b3ed`. 2026-11-26 08:07 UTC 작업 1건에서 Pod 요청 줄 `traceparent=` 의 trace id 가 Tempo 의 작업 트레이스와 같았다): 같은 요청들에 W3C Trace Context 헤더 `traceparent: 00-<trace id 32자>-<span id 16자>-<flags>` 도 붙는다. 값은 그 작업 실행(`beside.job.run` 트레이스, Grafana Tempo)의 HTTP 호출 span 이다. 서비스는 무시해도 되고(span 을 만들지 않는다), 지금 서비스는 요청 줄에 `traceparent=` 를, 그 요청의 서비스 줄마다 `trace=<trace id>` 를 남긴다. W3C 형식이 아니면 남기지 않는다. 본문·응답은 바뀌지 않는다.
+추적(2026-11-26, 선택 요청 헤더 추가 **[구현됨: 적용]**, 운영 VM main `a44b3ed`. 2026-11-26 08:07 UTC 작업 1건에서 Pod 요청 줄 `traceparent=` 의 trace id 가 Tempo 의 작업 트레이스와 같았다): 같은 요청들에 W3C Trace Context 헤더 `traceparent: 00-<trace id 32자>-<span id 16자>-<flags>` 도 붙는다. 값은 그 작업 실행(`beside.job.run`, Grafana Tempo)의 HTTP 호출 span 이다. 2026-11-27 부터 **[구현됨]**(운영 적용은 배포 창 3 [계획]) 그 실행은 따로 된 트레이스가 아니라 업로드·retry 요청의 트레이스 안에 있다(요청 span 아래 `beside.upload.check`·`beside.upload.save`·`beside.job.dispatch-wait`·`beside.job.run`, 앱이 `traceparent` 를 보내면 trace id = 앱 흐름의 `X-Request-Id` — §2). 그래서 Python 이 받는 `traceparent` 의 trace id 로 앱·Caddy·backend 줄을 함께 찾는다. 서비스는 무시해도 되고, 지금 서비스는 요청 줄에 `traceparent=` 를, 그 요청의 서비스 줄마다 `trace=<trace id>` 를 남긴다. W3C 형식이 아니면 남기지 않는다. 서비스가 이 trace 에 자기 span 을 더하는 것(`BESIDE_OTLP_URL` 이 있을 때 표준 라이브러리 OTLP/JSON 으로 VM 의 Alloy 4320 → Tempo 에 보냄: 경로 틀 이름의 SERVER span 과 `beside.inference.save-photos`·`lock-wait`·`predict`·`convert`·`rig`·`simulate`, 토큰 401 은 span 없음)은 2026-11-27 **[구현됨]**(`test_app`), Pod 에서 확인은 [계획]([inference_service/README.md](../generation/inference_service/README.md) 'Span'). 본문·응답은 바뀌지 않는다.
 
 `detail.code` 가 Job 실패 코드면 HTTP 상태와 관계없이 그 코드를 쓴다. Spring 은 `/infer` 를 `inference.max-concurrency`(기본 1)건만 동시에 부르고, `error.message` 에 경로·내부 주소·추론 서비스 원문 메시지를 싣지 않는다(서버 로그에만).
 

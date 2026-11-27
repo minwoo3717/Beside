@@ -37,6 +37,13 @@ info:
     A-Z a-z 0-9 . _ : -, 앱은 요청마다 보낸다). backend 는 모든 응답에 그 값을 돌려준다(없거나 규칙 밖이면 새 UUID).
     서버 로그를 이 값으로 찾는다. OpenAPI 3.0 은 모든 응답에 붙는 헤더를 한 번에 적을 수 없어 components/headers/XRequestId
     로 정의하고 작업 접수(202)와 공통 오류 응답(components/responses)에 붙였다. 계약 테스트는 헤더를 비교하지 않는다.
+
+    다음 태그 전 추가(v1.3 후보, 2026-11-27, 응답 형태 변경 없음): 선택 요청 헤더 W3C traceparent
+    (`00-<trace id 32자 hex>-<span id 16자 hex>-<flags 2자>`). 앱은 작업 업로드·retry·cancel·GLB 내려받기에 보낼 수 있다
+    (trace id = 그 흐름의 X-Request-Id 가 32자 소문자 hex 일 때 그 값). backend 는 그 trace 에 이어 붙인다: 서버 요청 span 의
+    부모가 되고, 그 요청이 시작한 작업 실행(beside.job.run)도 같은 trace 에서 그 요청 span 의 자식이다. flags 가 00(기록 안 함)
+    이면 서버도 그 요청을 기록하지 않고 작업 실행은 따로 trace(링크로 이음)다. 형식이 틀린 값은 없는 것으로 본다(새 trace).
+    헤더가 없어도 작업 실행은 업로드 요청과 같은 trace 다. 응답·상태 코드는 그대로이고 계약 테스트는 헤더를 비교하지 않는다.
 servers:
   - url: http://localhost:8080
     description: 개발 PC 의 로컬 Mock 서버. Android 기기에서는 같은 Wi-Fi 의 PC IP 로 바꾼다.
@@ -1159,6 +1166,20 @@ paths:
         fromPrevPct = 바로 앞 단계 대비 %(첫 단계 null), medianSecondsFromPrev = 앞 단계에서 이 단계까지 걸린 초의 중앙값
         (nearest-rank, adminStats 와 같은 방식, 첫 단계·세션 0 이면 null). 분모가 0 이면 % 는 0.
         이어보기(generate_tap mode=resume)처럼 앞 단계를 건너뛴 세션은 그 뒤 단계에 세지 않는다. 잘못된 from·to 는 400 INVALID_REQUEST.
+        마지막 단계 model_placed 는 props.source 가 library 가 아닌 것만 센다(저장한 강아지를 불러와 놓은 것은 librarySteps,
+        2026-11-27 부터 model_placed 는 모든 배치 — props.source·again). droppedSessions = 앞 단계 sessions − 이 단계 sessions(첫 단계 0).
+        2026-11-27 추가(모두 추가 필드):
+        - 이탈 분석 lastScreens·dropReasons: 첫 단계(home)에 이르렀지만 마지막 단계에 이르지 못한 세션 중, 그 세션의 마지막
+          이벤트(receivedAt)가 to 와 지금 중 이른 때(to 가 없으면 지금)보다 30분 넘게 앞인 세션만 본다(아직 쓰는 중일 수 있는
+          세션은 뺀다).
+          lastScreens = 그 세션의 마지막 screen_view 화면별 세션 수. dropReasons = 그 세션에 있었던 이유 이벤트의 (이름, 속성, 값)별
+          세션 수: job_cancel_tap.stage, job_failed_shown.code, photos_selected.count=0, app_error.kind(한 세션이 여러 줄에 들어갈 수
+          있다). 둘 다 세션 수가 많은 순(같으면 이름 순).
+        - librarySteps: 저장한 강아지 불러오기 퍼널 다섯 단계 home(screen_view screen=home) → library(screen_view screen=library) →
+          saved_dog_open(ok=true) → ar(screen_view screen=ar) → model_placed(source=library). 세는 법은 steps 와 같다.
+        - jobs: 서버 작업 기준 완료율. createdAt 이 [from, to) 인 작업을 지금 상태로 센다. canceled = FAILED 중 error.code CANCELED,
+          failed = 그 밖의 FAILED, inProgress = PENDING·PROCESSING, completionPct = completed ÷ (created − canceled) × 100(분모 0 이면 0).
+          retry 한 작업은 마지막 상태 하나로 센다(실행마다 세는 adminStats 의 successRate 와 다르다). 펫과 함께 지운 작업은 빠진다.
       parameters:
         - name: from
           in: query
@@ -2507,8 +2528,11 @@ components:
         name:
           type: string
           enum: [screen_view, photos_selected, generate_tap, job_cancel_tap, job_failed_shown, model_ready, fur_toggle,
-                 ar_issue_shown, model_placed, animation_play, photo_saved, start_over]
-          description: 이벤트 이름. 목록에 없는 이름은 서버가 버리고 dropped 로 센다(400 이 아님).
+                 ar_issue_shown, model_placed, animation_play, photo_saved, start_over, app_error, saved_dog_open,
+                 saved_dog_change]
+          description: |
+            이벤트 이름. 목록에 없는 이름은 서버가 버리고 dropped 로 센다(400 이 아님).
+            app_error·saved_dog_open·saved_dog_change 는 2026-11-27 추가(v1.3 후보).
         at:
           type: string
           format: date-time
@@ -2526,10 +2550,11 @@ components:
         screen:
           type: string
           nullable: true
-          enum: [home, confirm, progress, preview, ar, error, settings, share]
+          enum: [home, confirm, progress, preview, ar, error, settings, library, camera, share]
           description: |
             이벤트가 일어난 화면. screen_view 에서는 보여 준 화면이며 꼭 있어야 한다(없으면 그 이벤트를 버림).
-            앱 화면 7개(Unity DesignedUIController.Page 이름의 소문자)와 웹 공유 뷰어 share. 목록에 없는 값은 이 값만 버린다.
+            앱 화면 9개(Unity DesignedUIController.Page 이름의 소문자, library·camera 는 2026-11-27 추가)와 웹 공유 뷰어 share.
+            목록에 없는 값은 이 값만 버린다.
         props:
           type: object
           nullable: true
@@ -2541,8 +2566,13 @@ components:
             elapsedSec(0~86400) · job_failed_shown: code(ERROR_CODES.md 의 코드 또는 앱 코드 NETWORK_ERROR·BAD_RESPONSE·DOWNLOAD_FAILED·
             FILE_CORRUPT·LOAD_FAILED·WAIT_TIMEOUT), retryable(bool) · model_ready: cached(bool), loadMs(0~3600000), waitMs(0~3600000) ·
             fur_toggle: on(bool) · ar_issue_shown: issue(CameraDenied|Unsupported|NeedsInstall|SessionError|NoPlane) ·
-            model_placed: method(tap|center), secSinceArEnter(0~86400) · animation_play: clip(Walk|Sit|TailWag|HeadTilt|Idle) ·
-            photo_saved: 없음 · start_over: from(preview|ar|error).
+            model_placed(2026-11-27 부터 작업의 첫 배치가 아니라 모든 배치): method(tap|center), secSinceArEnter(0~86400),
+            again(bool, 같은 모델의 두 번째 배치부터 true), source(job|library — 작업 결과 또는 저장한 강아지, 시험용 GLB 주소로
+            띄운 모델은 없음) · animation_play: clip(Walk|Sit|TailWag|HeadTilt|Idle) ·
+            photo_saved: 없음(앱은 2026-11-27 부터 보내지 않음 — AR 타일이 '불러오기'로 바뀜) · start_over: from(preview|ar|error) ·
+            app_error: kind(exception|error|assert), sig(0~2147483647, 오류 종류·첫 스택 줄의 해시 — 메시지 원문은 보내지 않음) ·
+            saved_dog_open: ok(bool), from(home|ar), count(0~50, 저장한 강아지 수), ageDays(0~3650, 저장한 뒤 지난 날),
+            loadMs(0~600000) · saved_dog_change: action(saved|replaced|skipped|edited|deleted), count(0~50, 바뀐 뒤 수).
     ProductEventsAccepted:
       type: object
       description: POST /api/v1/events 의 202 결과.
@@ -2601,7 +2631,7 @@ components:
     AdminFunnel:
       type: object
       description: GET /api/v1/admin/funnel. 계산 방법은 adminFunnel 설명.
-      required: [sessions, steps]
+      required: [sessions, steps, lastScreens, dropReasons, librarySteps, jobs]
       properties:
         from:
           type: string
@@ -2621,14 +2651,33 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdminFunnelStep'
+        lastScreens:
+          type: array
+          description: (2026-11-27) 이탈한 세션의 마지막 screen_view 화면별 세션 수. 세는 세션은 adminFunnel 설명.
+          items:
+            $ref: '#/components/schemas/AdminFunnelScreen'
+        dropReasons:
+          type: array
+          description: (2026-11-27) 이탈한 세션에 있었던 이유 이벤트별 세션 수(한 세션이 여러 줄에 들어갈 수 있음).
+          items:
+            $ref: '#/components/schemas/AdminFunnelReason'
+        librarySteps:
+          type: array
+          description: (2026-11-27) 저장한 강아지 불러오기 퍼널 5단계. 세는 법은 steps 와 같다.
+          items:
+            $ref: '#/components/schemas/AdminFunnelStep'
+        jobs:
+          $ref: '#/components/schemas/AdminJobCompletion'
     AdminFunnelStep:
       type: object
       description: 퍼널 한 단계.
-      required: [step, event, sessions, conversionPct]
+      required: [step, event, sessions, conversionPct, droppedSessions]
       properties:
         step:
           type: string
-          description: 단계 이름(home, photos_selected, generate_tap, model_ready, ar, model_placed)
+          description: |
+            단계 이름. steps: home, photos_selected, generate_tap, model_ready, ar, model_placed.
+            librarySteps: home, library, saved_dog_open, ar, model_placed.
         event:
           type: string
           description: 세는 이벤트, 예 `screen_view(screen=ar)`
@@ -2649,3 +2698,66 @@ components:
           format: double
           nullable: true
           description: 앞 단계에서 이 단계까지 걸린 초의 중앙값(nearest-rank). 첫 단계·세션 0 이면 null.
+        droppedSessions:
+          type: integer
+          format: int64
+          description: (2026-11-27) 앞 단계에 이르렀지만 이 단계에 이르지 못한 세션 수(앞 단계 sessions − sessions). 첫 단계 0.
+    AdminFunnelScreen:
+      type: object
+      description: (2026-11-27) 이탈한 세션의 마지막 화면 하나.
+      required: [screen, sessions]
+      properties:
+        screen:
+          type: string
+          description: ProductEvent.screen 값(home, confirm, … library, camera)
+        sessions:
+          type: integer
+          format: int64
+    AdminFunnelReason:
+      type: object
+      description: (2026-11-27) 이탈 사유 한 줄 — 이탈한 세션에 있었던 이벤트의 (이름, 속성, 값).
+      required: [event, key, value, sessions]
+      properties:
+        event:
+          type: string
+          description: job_cancel_tap, job_failed_shown, photos_selected, app_error
+        key:
+          type: string
+          description: stage(job_cancel_tap), code(job_failed_shown), count(photos_selected, 값은 0 만), kind(app_error)
+        value:
+          type: string
+          description: 속성 값(글자로), 예 queued, INFERENCE_TIMEOUT, 0, exception
+        sessions:
+          type: integer
+          format: int64
+    AdminJobCompletion:
+      type: object
+      description: |
+        (2026-11-27) 서버 작업 기준 완료율. createdAt 이 [from, to) 인 작업을 지금 상태로 센다(adminFunnel 설명).
+        created = completed + failed + canceled + inProgress.
+      required: [created, completed, failed, canceled, inProgress, completionPct]
+      properties:
+        created:
+          type: integer
+          format: int64
+          description: 기간 안에 만든 작업 수(펫과 함께 지운 작업은 빠짐)
+        completed:
+          type: integer
+          format: int64
+          description: 지금 COMPLETED
+        failed:
+          type: integer
+          format: int64
+          description: 지금 FAILED(취소 제외)
+        canceled:
+          type: integer
+          format: int64
+          description: 지금 FAILED 이고 error.code CANCELED
+        inProgress:
+          type: integer
+          format: int64
+          description: 지금 PENDING 또는 PROCESSING
+        completionPct:
+          type: number
+          format: double
+          description: completed ÷ (created − canceled) × 100 (0~100, 분모 0 이면 0)

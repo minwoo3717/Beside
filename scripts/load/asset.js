@@ -20,6 +20,7 @@ import { preflight, seedJobs } from './lib/seed.js';
 import { buildLevels, holdScopes, levelScenarios, levelTagsAt, maxTarget, shareMaxVUs } from './lib/stages.js';
 import { droppedThresholds, errorThresholds, flowCountThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
+import { mark } from './lib/marker.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const A4 = TIERS.load.a4;
@@ -93,7 +94,12 @@ export function setup() {
     throw new Error(`setup: asset is ${small[0].asset ? small[0].asset.bytes : 'missing'} bytes < MIN_ASSET_BYTES ${MIN_ASSET}; ` +
       'put the 1.5 MB synthetic GLB on the load-test volume (deploy/loadtest) or lower MIN_ASSET_BYTES for a local check');
   }
+  mark(CONFIG, 'begin');
   return markReady(Object.assign(info, { jobs: seeded.completed }));
+}
+
+export function teardown() {
+  mark(CONFIG, 'end');
 }
 
 export function download(data) {

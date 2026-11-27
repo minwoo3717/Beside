@@ -34,6 +34,10 @@ namespace Beside.Job
 
         public State CurrentState { get; private set; } = State.Idle;
         public string CurrentJobId { get; private set; }
+        /// <summary>X-Request-Id of the current (or last) flow: one id from upload or POST /retry through the polls to the
+        /// GLB download, also the trace id of its traceparent. Null before the first flow and after an upload refused in
+        /// the app (nothing sent). The error screen shows its first 8 characters as the 문의 번호.</summary>
+        public string CurrentRequestId => requestId;
         public string LastErrorCode { get; private set; }
         public bool LastErrorRetryable { get; private set; }
         /// <summary>UTC time before which neither Retry() nor StartJob() sends anything: set by a failure that carried
@@ -86,6 +90,7 @@ namespace Beside.Job
         Stopwatch waitClock;
         ObjectSpawner spawner;
         MetricsRecorder.Row pendingRow;      // waits for the first placement to record e2eMs
+        string pendingRid;                   // X-Request-Id of the flow that made pendingRow
         // uploadMs of jobs uploaded in this session: a resumed / retried run of the same job writes the real value
         readonly System.Collections.Generic.Dictionary<string, long> uploadMsByJob = new System.Collections.Generic.Dictionary<string, long>();
         Stopwatch pendingE2e;
@@ -112,7 +117,7 @@ namespace Beside.Job
         {
             if (pendingRow == null || instance == null || !instance.name.StartsWith("Runtime_job_" + pendingRow.jobId)) return;
             pendingRow.e2eMs = pendingE2e.ElapsedMilliseconds;
-            MetricsRecorder.Log(requestId, pendingRow.jobId, "first_ar_display", pendingRow.e2eMs);
+            MetricsRecorder.Log(pendingRid, pendingRow.jobId, "first_ar_display", pendingRow.e2eMs);
             if (metrics != null) metrics.Complete(pendingRow);   // samples FPS for 30 s, then writes the row
             ModelPlaced?.Invoke(pendingRow.jobId, instance);
             pendingRow = null;
@@ -135,6 +140,7 @@ namespace Beside.Job
                 Debug.Log($"[JobManager] upload ignored: Retry-After has {RetryWaitSeconds:0} s left");
                 return;
             }
+            requestId = null;   // a refusal below sends nothing: no 문의 번호 of an older flow on the error screen
             if (photos == null || photos.Count == 0) { Fail("NO_PHOTOS"); return; }
             if (photos.Count > ApiV1Routes.MaxPhotos) { Fail("TOO_MANY_PHOTOS"); return; }
             long total = 0;
@@ -215,14 +221,16 @@ namespace Beside.Job
             }
             bool queuedOnServer = CurrentState == State.Waiting && !string.IsNullOrEmpty(jobId)
                 && (LastJobStatus == null || LastJobStatus.Status != JobStatus.Processing);
+            string flowId = requestId;   // the cancel belongs to the flow it stops (same trace)
             if (forget) ClearSavedJob();
             else CancelJob();
-            if (queuedOnServer) CancelOnServer(jobId);
+            if (queuedOnServer) CancelOnServer(jobId, flowId);
         }
 
-        void CancelOnServer(string jobId)
+        /// <summary>flowRequestId: X-Request-Id of the flow being canceled (null = a new id).</summary>
+        void CancelOnServer(string jobId, string flowRequestId)
         {
-            StartCoroutine(api.CancelJob(jobId, Guid.NewGuid().ToString("N"),
+            StartCoroutine(api.CancelJob(jobId, flowRequestId ?? Guid.NewGuid().ToString("N"),
                 job =>
                 {
                     Debug.Log($"[JobManager] cancel {jobId}: {(job != null ? job.Status.ToString() : "ok")}");
@@ -290,9 +298,12 @@ namespace Beside.Job
 
         // ---------- the flow ----------
 
-        IEnumerator Flow(IList<Photo> photos, string existingJobId)
+        /// <summary>flowRequestId: X-Request-Id to use for the whole flow (POST /retry passes its own, so the retry, the polls
+        /// and the GLB download share one id and one trace); null = a new id.</summary>
+        IEnumerator Flow(IList<Photo> photos, string existingJobId, string flowRequestId = null)
         {
-            requestId = Guid.NewGuid().ToString("N");
+            string rid = flowRequestId ?? Guid.NewGuid().ToString("N");   // this flow's id even if another flow starts later
+            requestId = rid;
             int myCancelGen = cancelGen;
             var e2e = Stopwatch.StartNew();
             var row = new MetricsRecorder.Row();
@@ -303,12 +314,12 @@ namespace Beside.Job
                 SetState(State.Uploading, "사진을 업로드하는 중이에요");
                 var sw = Stopwatch.StartNew();
                 string jobId = null; ApiError err = null;
-                yield return api.UploadPhotos(photos, requestId, r => jobId = r.jobId, e => err = e, uploadKey);
+                yield return api.UploadPhotos(photos, rid, r => jobId = r.jobId, e => err = e, uploadKey);
                 row.uploadMs = sw.ElapsedMilliseconds;
-                MetricsRecorder.Log(requestId, jobId, "upload", row.uploadMs, err?.code, err?.message);
+                MetricsRecorder.Log(rid, jobId, "upload", row.uploadMs, err?.code, err?.message);
                 if (myCancelGen != cancelGen)   // canceled while uploading: drop the job the server made, touch nothing here
                 {
-                    if (jobId != null) CancelOnServer(jobId);
+                    if (jobId != null) CancelOnServer(jobId, rid);
                     yield break;
                 }
                 if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // CurrentJobId stays null
@@ -334,10 +345,10 @@ namespace Beside.Job
             while (true)
             {
                 JobResponse got = null; ApiError err = null;
-                yield return api.GetJob(CurrentJobId, requestId, j => got = j, e => err = e);
+                yield return api.GetJob(CurrentJobId, rid, j => got = j, e => err = e);
                 if (err != null)
                 {
-                    MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", wait.ElapsedMilliseconds, err.code, err.message);
+                    MetricsRecorder.Log(rid, CurrentJobId, "status_wait", wait.ElapsedMilliseconds, err.code, err.message);
                     if (err.code == "JOB_NOT_FOUND") PlayerPrefs.DeleteKey(JobIdPrefKey);
                     Fail(err.code, retryAfterSeconds: err.retryAfterSeconds);
                     yield break;
@@ -354,7 +365,7 @@ namespace Beside.Job
 
                 if (wait.Elapsed.TotalSeconds > maxWaitSeconds)
                 {
-                    MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", wait.ElapsedMilliseconds, ErrorMessages.WaitTimeout);
+                    MetricsRecorder.Log(rid, CurrentJobId, "status_wait", wait.ElapsedMilliseconds, ErrorMessages.WaitTimeout);
                     Fail(ErrorMessages.WaitTimeout);
                     yield break;
                 }
@@ -365,11 +376,11 @@ namespace Beside.Job
             if (job.Status == JobStatus.Failed)
             {
                 string code = job.error?.code ?? "INFERENCE_FAILED";
-                MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", row.waitMs, code, job.error?.message);
+                MetricsRecorder.Log(rid, CurrentJobId, "status_wait", row.waitMs, code, job.error?.message);
                 Fail(code, fromJob: true);   // e.g. INTERNAL_ERROR after a server restart -> POST /retry
                 yield break;
             }
-            MetricsRecorder.Log(requestId, CurrentJobId, "status_wait", row.waitMs);
+            MetricsRecorder.Log(rid, CurrentJobId, "status_wait", row.waitMs);
 
             // 3. cache or download
             string path = CachePath(CurrentJobId);
@@ -377,7 +388,7 @@ namespace Beside.Job
             if (fromCache)
             {
                 row.downloadMs = 0;
-                MetricsRecorder.Log(requestId, CurrentJobId, "download", 0, null, "cache hit", new FileInfo(path).Length);
+                MetricsRecorder.Log(rid, CurrentJobId, "download", 0, null, "cache hit", new FileInfo(path).Length);
             }
             else
             {
@@ -385,12 +396,12 @@ namespace Beside.Job
                 string assetUrl = job.asset?.url ?? ApiV1Routes.Asset(CurrentJobId);
                 var dl = Stopwatch.StartNew();
                 long bytes = 0; ApiError err = null;
-                yield return api.DownloadAsset(assetUrl, path, requestId, (p, b) => bytes = b, e => err = e);
+                yield return api.DownloadAsset(assetUrl, path, rid, (p, b) => bytes = b, e => err = e);
                 row.downloadMs = dl.ElapsedMilliseconds;
                 string code = err?.code;
                 if (code == ApiError.Network) code = ErrorMessages.DownloadFailed;
                 if (code == null && !IsValidCachedGlb(path)) { code = ErrorMessages.FileCorrupt; TryDelete(path); }
-                MetricsRecorder.Log(requestId, CurrentJobId, "download", row.downloadMs, code, err?.message, bytes);
+                MetricsRecorder.Log(rid, CurrentJobId, "download", row.downloadMs, code, err?.message, bytes);
                 if (code != null) { Fail(code); yield break; }
             }
 
@@ -407,11 +418,12 @@ namespace Beside.Job
                 template = task.IsCompletedSuccessfully ? task.Result : null;
             }
             row.loadMs = ld.ElapsedMilliseconds;
-            MetricsRecorder.Log(requestId, CurrentJobId, "model_load", row.loadMs, template == null ? ErrorMessages.LoadFailed : null);
+            MetricsRecorder.Log(rid, CurrentJobId, "model_load", row.loadMs, template == null ? ErrorMessages.LoadFailed : null);
             if (template == null) { Fail(ErrorMessages.LoadFailed); yield break; }
 
-            MetricsRecorder.Log(requestId, CurrentJobId, "ready", e2e.ElapsedMilliseconds);
+            MetricsRecorder.Log(rid, CurrentJobId, "ready", e2e.ElapsedMilliseconds);
             pendingRow = row;            // e2eMs is finished by OnObjectSpawned (first placement)
+            pendingRid = rid;
             pendingE2e = e2e;
 
             running = null;
@@ -422,19 +434,20 @@ namespace Beside.Job
 
         IEnumerator RetryOnServer(string jobId)
         {
-            requestId = Guid.NewGuid().ToString("N");
+            string rid = Guid.NewGuid().ToString("N");   // kept by the Flow that follows (one trace: retry → polls → GLB)
+            requestId = rid;
             int myCancelGen = cancelGen;
             SetState(State.Uploading, "다시 시도하는 중이에요");
             ApiError err = null;
-            yield return api.RetryJob(jobId, requestId, _ => { }, e => err = e);
-            MetricsRecorder.Log(requestId, jobId, "retry", 0, err?.code, err?.message);
+            yield return api.RetryJob(jobId, rid, _ => { }, e => err = e);
+            MetricsRecorder.Log(rid, jobId, "retry", 0, err?.code, err?.message);
             if (myCancelGen != cancelGen)   // canceled while the retry was on its way: the accepted retry is canceled again
             {
-                if (err == null) CancelOnServer(jobId);
+                if (err == null) CancelOnServer(jobId, rid);
                 yield break;
             }
             if (err != null) { Fail(err.code, retryAfterSeconds: err.retryAfterSeconds); yield break; }   // QUEUE_FULL: the job is still FAILED
-            running = StartCoroutine(Flow(null, jobId));
+            running = StartCoroutine(Flow(null, jobId, rid));
         }
 
         // ---------- helpers ----------

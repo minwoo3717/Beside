@@ -29,6 +29,7 @@ import { buildLevels, expectedIterations, holdScopes, levelScenarios, levelTagsA
 import { bytesSentThresholds, droppedThresholds, errorThresholds, flowCountThresholds, latencyReportThresholds,
   latencyThresholds, merge, zeroCountThresholds } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
+import { mark } from './lib/marker.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const SIZE = readStr(ENV, 'SIZE', 'small').toLowerCase();
@@ -113,7 +114,13 @@ const ctx = makeContext({
 });
 
 export function setup() {
-  return markReady(preflight(CONFIG));
+  const info = preflight(CONFIG);
+  mark(CONFIG, 'begin');
+  return markReady(info);
+}
+
+export function teardown() {
+  mark(CONFIG, 'end');
 }
 
 export function upload() {

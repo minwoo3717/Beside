@@ -163,12 +163,15 @@ public class JobServiceImpl implements JobService {
         try (admitted) {
             // The first photo is the one the 3D model is made from. Checked before anything is stored: a refused
             // request leaves no file, no job and no key behind (ERROR_CODES.md "대표 사진 검사").
-            UploadCheck.Outcome check = uploadCheck.check(photos.get(0));
+            UploadCheck.Outcome check;
+            try (JobTracing.Scoped ignored = jobTracing.stage("beside.upload.check")) {
+                check = uploadCheck.check(photos.get(0));
+            }
             if (check.isRefused()) {
                 throw uploadRejected(ErrorCode.valueOf(check.refused().name()),
                         "photos[0] " + safeName(photos.get(0)) + ": " + check.detail());
             }
-            try {
+            try (JobTracing.Scoped ignored = jobTracing.stage("beside.upload.save")) {
                 job = saveUploads(photos, check);
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to store uploads", e);
@@ -190,6 +193,7 @@ public class JobServiceImpl implements JobService {
                 }
             }
         }
+        // Outside the check and save spans: the run's parent is the request's own span (JobTracing.dispatching).
         try {
             dispatch(job);
         } catch (TaskRejectedException shuttingDown) {

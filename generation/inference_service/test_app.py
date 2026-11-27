@@ -25,6 +25,8 @@ WORK = tempfile.mkdtemp(prefix="beside-infer-test-")
 os.environ.setdefault("BESIDE_WORK_DIR", WORK)
 os.environ.pop("BESIDE_INFERENCE_TOKEN", None)
 os.environ.pop("BESIDE_REQUEST_TIMING", None)   # RequestTimingTest wraps the app itself
+for _name in ("BESIDE_OTLP_URL", "BESIDE_TELEMETRY_PROXY", "BESIDE_TELEMETRY_ENV"):   # span export: SpanExportTest
+    os.environ.pop(_name, None)
 for _switch in ("EMBED_HAIR", "HAIR_META", "PAD_TEXTURE"):   # converter switches: the tests patch them on the module
     os.environ.pop("BESIDE_" + _switch, None)
 KNOBS = ("DELAY_MS", "JITTER_MS", "SLOTS", "FAIL_RATE", "FAIL_TOKEN", "SLOW_TOKEN", "SLOW_MS")
@@ -1921,6 +1923,277 @@ class ServiceLogTest(_ModelModeCase):
         weird = self.client.get("/artifacts/a%0Afake-line/base.glb")
         self.assertEqual(weird.status_code, 404)
         self.assertFalse(any("\n" in r.getMessage() for r in self.records.records))
+
+
+class _FakeCollector:
+    """OTLP/HTTP stand-in: records each POST (its path as sent: absolute-form when it came as a proxy) and answers 200."""
+
+    def __init__(self):
+        import http.server
+        self.posts = []
+        collector = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                collector.posts.append({"path": self.path, "type": self.headers.get("Content-Type"),
+                                        "body": json.loads(body.decode("utf-8"))})
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *_):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.url = self.base + "/v1/traces"
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def spans(self):
+        return [span for post in self.posts for resource in post["body"]["resourceSpans"]
+                for scope in resource["scopeSpans"] for span in scope["spans"]]
+
+
+def _attrs(span):
+    return {a["key"]: a["value"] for a in span.get("attributes", [])}
+
+
+def _closed_port():
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+class _SpanExport:
+    """Span export on, to a fake collector, flushed by the test (no background thread)."""
+
+    TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
+    PARENT_ID = "00f067aa0ba902b7"
+    STEPS = ("beside.inference.save-photos", "beside.inference.lock-wait", "beside.inference.predict",
+             "beside.inference.convert")
+
+    def setUp(self):
+        super().setUp()
+        self.collector = _FakeCollector()
+        self.addCleanup(self.collector.close)
+        self.exporter = service.otlp_spans.Exporter(self.collector.url, environment="test", background=False)
+        patcher = mock.patch.object(service.otlp_spans, "EXPORTER", self.exporter)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def traceparent(self, flags="01"):
+        return f"00-{self.TRACE_ID}-{self.PARENT_ID}-{flags}"
+
+    def upload_traced(self, flags="01", attempt=1):
+        return self.client.post("/infer/upload", headers={"traceparent": self.traceparent(flags),
+                                                          "X-Request-Id": f"{self.job}-{attempt}"},
+                                data={"request": json.dumps({"jobId": self.job})},
+                                files=[("photos", ("dog.jpg", b"\xff\xd8\xff\xe0 jpeg", "image/jpeg"))])
+
+    def spans(self):
+        self.exporter.flush()
+        return self.collector.spans()
+
+    def named(self):
+        spans = self.spans()
+        named = {s["name"]: s for s in spans}
+        self.assertEqual(len(named), len(spans), [s["name"] for s in spans])
+        return named
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class SpanExportTest(_SpanExport, _ModelModeCase):
+    """Python spans (plan C2, 2026-11-27, otlp_spans.py): a SERVER span per job request under Spring's traceparent,
+    the run's steps as its children, OTLP/JSON to the VM's collector; off without BESIDE_OTLP_URL or with flags 00,
+    and a collector that is down changes no answer."""
+
+    def test_an_upload_is_a_server_span_under_springs_span_with_its_steps_as_children(self):
+        predict = self.model.predict
+        self.model.predict = lambda image, out: types.SimpleNamespace(**dict(vars(predict(image, out)), gpu_peak_mb=2048))
+        answer = self.upload_traced(attempt=2)
+        self.assertEqual(answer.status_code, 200, answer.text)
+        named = self.named()
+        self.assertEqual(sorted(named), sorted(("POST /infer/upload",) + self.STEPS))
+        (post,) = self.collector.posts
+        self.assertEqual((post["path"], post["type"]), ("/v1/traces", "application/json"))
+        (resource,) = post["body"]["resourceSpans"]
+        self.assertEqual({a["key"]: a["value"] for a in resource["resource"]["attributes"]},
+                         {"service.name": {"stringValue": "beside-inference"},
+                          "deployment.environment": {"stringValue": "test"}})
+
+        server = named["POST /infer/upload"]
+        self.assertEqual((server["traceId"], server["parentSpanId"], server["kind"]), (self.TRACE_ID, self.PARENT_ID, 2))
+        self.assertNotIn("status", server)
+        self.assertEqual(_attrs(server), {"http.request.method": {"stringValue": "POST"},
+                                          "http.route": {"stringValue": "/infer/upload"},
+                                          "beside.request_id": {"stringValue": f"{self.job}-2"},
+                                          "jobId": {"stringValue": self.job}, "attempt": {"intValue": "2"},
+                                          "http.response.status_code": {"intValue": "200"}})
+        for name in self.STEPS:
+            step = named[name]
+            self.assertEqual((step["traceId"], step["parentSpanId"], step["kind"]), (self.TRACE_ID, server["spanId"], 1))
+            self.assertEqual(_attrs(step)["jobId"], {"stringValue": self.job})
+            self.assertNotIn("status", step)
+            self.assertLessEqual(int(server["startTimeUnixNano"]), int(step["startTimeUnixNano"]))
+            self.assertLessEqual(int(step["endTimeUnixNano"]), int(server["endTimeUnixNano"]))
+        self.assertEqual({k: v for k, v in _attrs(named["beside.inference.convert"]).items() if k != "jobId"},
+                         {"tris": {"intValue": "4"}, "bytes": {"intValue": str(len(GLB_STUB))}})
+        self.assertEqual({k: v for k, v in _attrs(named["beside.inference.predict"]).items() if k != "jobId"},
+                         {"inferMs": {"intValue": "5"}, "gpuPeakMB": {"intValue": "2048"}})
+        self.assertEqual({k: v for k, v in _attrs(named["beside.inference.save-photos"]).items() if k != "jobId"},
+                         {"photos": {"intValue": "1"}, "bytes": {"intValue": str(len(b"\xff\xd8\xff\xe0 jpeg"))}})
+        for span in named.values():
+            self.assertRegex(span["traceId"], r"^[0-9a-f]{32}$")
+            self.assertRegex(span["spanId"], r"^[0-9a-f]{16}$")
+            self.assertRegex(span["startTimeUnixNano"], r"^\d{19}$")
+            self.assertRegex(span["endTimeUnixNano"], r"^\d{19}$")
+            self.assertLessEqual(int(span["startTimeUnixNano"]), int(span["endTimeUnixNano"]))
+
+    def test_the_glb_download_and_the_delete_are_spans_of_their_own(self):
+        answer = self.upload()   # no traceparent: a trace of its own
+        self.assertEqual(answer.status_code, 200, answer.text)
+        headers = {"traceparent": self.traceparent(), "X-Request-Id": f"{self.job}-1"}
+        glb = self.client.get(answer.json()["glbUrl"], headers=headers)
+        self.assertEqual((glb.status_code, glb.content), (200, GLB_STUB))
+        self.assertEqual(self.client.delete(f"/artifacts/{self.job}", headers=headers).status_code, 204)
+        named = self.named()
+        upload = named["POST /infer/upload"]
+        self.assertNotIn("parentSpanId", upload)
+        self.assertRegex(upload["traceId"], r"^[0-9a-f]{32}$")
+        self.assertNotEqual(upload["traceId"], self.TRACE_ID)
+        for name, status in (("GET /artifacts/{jobId}/{name}", "200"), ("DELETE /artifacts/{jobId}", "204")):
+            span = named[name]
+            self.assertEqual((span["traceId"], span["parentSpanId"], span["kind"]), (self.TRACE_ID, self.PARENT_ID, 2))
+            attributes = _attrs(span)
+            self.assertEqual((attributes["http.response.status_code"], attributes["jobId"], attributes["attempt"]),
+                             ({"intValue": status}, {"stringValue": self.job}, {"intValue": "1"}))
+
+    def test_a_traceparent_with_flags_00_records_nothing(self):
+        answer = self.upload_traced(flags="00")
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(self.client.get(answer.json()["glbUrl"], headers={"traceparent": self.traceparent("00")})
+                         .status_code, 200)
+        self.assertEqual(self.spans(), [])
+        self.assertEqual(self.collector.posts, [])
+
+    def test_without_an_otlp_url_nothing_is_recorded(self):
+        with mock.patch.object(service.otlp_spans, "EXPORTER", None):
+            self.assertEqual(self.upload_traced().status_code, 200)
+        self.assertEqual(self.spans(), [])
+        self.assertIsNone(service.otlp_spans.from_env({"BESIDE_OTLP_URL": " ", "BESIDE_TELEMETRY_PROXY": "http://x:1"}))
+        pod = service.otlp_spans.from_env({"BESIDE_OTLP_URL": "http://100.64.0.9:4320/v1/traces",
+                                           "BESIDE_TELEMETRY_PROXY": "http://127.0.0.1:1055"})
+        self.assertEqual((pod.url, pod.proxy, pod.environment),
+                         ("http://100.64.0.9:4320/v1/traces", "http://127.0.0.1:1055", "prod"))
+
+    def test_a_failed_model_run_marks_its_step_and_its_request_as_errors(self):
+        def out_of_memory(_):
+            raise RuntimeError("CUDA out of memory")
+
+        self.model.hook = out_of_memory
+        answer = self.upload_traced()
+        self.assertEqual(answer.status_code, 500)
+        named = self.named()
+        self.assertEqual(sorted(named), sorted(("POST /infer/upload",) + self.STEPS[:3]))
+        self.assertEqual(named["beside.inference.predict"]["status"], {"code": 2, "message": "RuntimeError: CUDA out of memory"})
+        self.assertEqual(named["POST /infer/upload"]["status"], {"code": 2, "message": "500"})
+        self.assertEqual(_attrs(named["POST /infer/upload"])["http.response.status_code"], {"intValue": "500"})
+
+    def test_a_request_refused_by_the_token_check_has_no_span(self):
+        with mock.patch.object(service, "INFERENCE_TOKEN", "right-secret"):
+            self.assertEqual(self.upload_traced().status_code, 401)
+        self.assertEqual(self.spans(), [])
+
+    def test_a_passthrough_simulation_is_a_step(self):
+        sample = Path(tempfile.mkdtemp(prefix="beside-span-")) / "sample.glb"
+        self.addCleanup(shutil.rmtree, sample.parent, True)
+        sample.write_bytes(GLB_STUB)
+        with mock.patch.object(service, "SAMPLE_GLB", str(sample)), mock.patch.object(service, "_sleep"):
+            self.assertEqual(self.upload_traced().status_code, 200)
+            with _knobs(DELAY_MS=5):
+                self.assertEqual(self.upload_traced(attempt=2).status_code, 200)
+        names = [s["name"] for s in self.spans()]
+        self.assertEqual(sorted(names), sorted(["POST /infer/upload", "beside.inference.save-photos"] * 2
+                                               + ["beside.inference.simulate"]))
+
+    def test_a_collector_that_is_down_changes_no_answer(self):
+        down = service.otlp_spans.Exporter(f"http://127.0.0.1:{_closed_port()}/v1/traces", interval=0.05)
+        with mock.patch.object(service.otlp_spans, "EXPORTER", down):
+            answer = self.upload_traced()
+            self.assertEqual(answer.status_code, 200, answer.text)
+            glb = self.client.get(answer.json()["glbUrl"], headers={"traceparent": self.traceparent()})
+            self.assertEqual((glb.status_code, glb.content), (200, GLB_STUB))
+            self.assertTrue(_wait_until(lambda: down.failed == 1 + len(self.STEPS) + 1, timeout=30), down.failed)
+        self.assertEqual(down.sent, 0)
+
+    def test_a_full_queue_drops_spans_instead_of_waiting(self):
+        small = service.otlp_spans.Exporter(self.collector.url, max_queue=2, background=False)
+        for _ in range(3):
+            small.submit({"name": "x"})
+        self.assertEqual((small.dropped, small.queue.qsize()), (1, 2))
+
+    def test_spans_go_through_the_proxy(self):
+        # the fake collector stands in for tailscaled's HTTP proxy: the request arrives in absolute form
+        via = service.otlp_spans.Exporter("http://collector.invalid:4320/v1/traces", proxy=self.collector.base,
+                                          background=False)
+        with mock.patch.object(service.otlp_spans, "EXPORTER", via):
+            self.assertEqual(self.client.delete(f"/artifacts/{self.job}",
+                                                headers={"traceparent": self.traceparent()}).status_code, 204)
+        self.assertTrue(via.flush())
+        self.assertEqual([p["path"] for p in self.collector.posts], ["http://collector.invalid:4320/v1/traces"])
+
+    def test_a_fresh_process_exports_only_with_an_otlp_url(self):
+        """As the Pod starts it: the setting read at import, a background thread posts within the 2 s interval."""
+        import subprocess
+        script = ("import sys, threading, time; sys.path.insert(0, sys.argv[1]); import app\n"
+                  "from fastapi.testclient import TestClient\n"
+                  "r = TestClient(app.app).delete('/artifacts/j-1', headers={'traceparent': sys.argv[2], "
+                  "'X-Request-Id': 'j-1-3'})\n"
+                  "assert r.status_code == 204, r.status_code\n"
+                  "e = app.otlp_spans.EXPORTER\n"
+                  "if e is None:\n"
+                  "    assert not [t for t in threading.enumerate() if t.name == 'otlp-export']\n"
+                  "    print('no exporter'); sys.exit(0)\n"
+                  "deadline = time.time() + 20\n"
+                  "while e.sent < 1 and time.time() < deadline: time.sleep(0.05)\n"
+                  "assert e.sent == 1, (e.sent, e.failed)\n")
+        base = {k: v for k, v in os.environ.items() if not k.startswith(("BESIDE_OTLP", "BESIDE_TELEMETRY"))}
+        base["BESIDE_WORK_DIR"] = WORK
+        off = subprocess.run([sys.executable, "-c", script, str(HERE), self.traceparent()], env=base,
+                             capture_output=True, text=True, timeout=120)
+        self.assertEqual((off.returncode, off.stdout.strip()), (0, "no exporter"), off.stderr[-2000:])
+        on = subprocess.run([sys.executable, "-c", script, str(HERE), self.traceparent()],
+                            env=dict(base, BESIDE_OTLP_URL=self.collector.url, BESIDE_TELEMETRY_ENV="loadtest"),
+                            capture_output=True, text=True, timeout=120)
+        self.assertEqual(on.returncode, 0, on.stderr[-2000:])
+        (post,) = self.collector.posts
+        resource = {a["key"]: a["value"] for a in post["body"]["resourceSpans"][0]["resource"]["attributes"]}
+        self.assertEqual(resource["deployment.environment"], {"stringValue": "loadtest"})
+        (span,) = self.collector.spans()
+        self.assertEqual((span["name"], span["traceId"], span["parentSpanId"], _attrs(span)["attempt"]),
+                         ("DELETE /artifacts/{jobId}", self.TRACE_ID, self.PARENT_ID, {"intValue": "3"}))
+
+
+@unittest.skipIf(TestClient is None, "fastapi/httpx not installed")
+class RigSpanTest(_SpanExport, _RiggedCase):
+    def test_the_rig_step_is_a_span_with_the_rigged_size(self):
+        self.assertEqual(self.upload_traced().status_code, 200)
+        named = self.named()
+        rig = named["beside.inference.rig"]
+        self.assertEqual(rig["parentSpanId"], named["POST /infer/upload"]["spanId"])
+        self.assertEqual({k: v for k, v in _attrs(rig).items() if k != "jobId"},
+                         {"bytes": {"intValue": str(self.rigged_size)}, "joints": {"intValue": "2"}})
+        self.assertNotIn("status", rig)
 
 
 class UprightPhotoTest(unittest.TestCase):

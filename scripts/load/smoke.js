@@ -11,6 +11,7 @@ import { makeContext, userFlow } from './lib/flow.js';
 import { preflight } from './lib/seed.js';
 import { errorThresholds, flowThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
+import { mark } from './lib/marker.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const SMOKE = TIERS.load.smoke;
@@ -54,7 +55,13 @@ export const options = {
 const ctx = makeContext({ cfg: CONFIG, body: BODIES.body, makeFailBody: BODIES.makeFailBody, failRatio: FAIL_RATIO });
 
 export function setup() {
-  return markReady(preflight(CONFIG));
+  const info = preflight(CONFIG);
+  mark(CONFIG, 'begin');
+  return markReady(info);
+}
+
+export function teardown() {
+  mark(CONFIG, 'end');
 }
 
 export function flow() {

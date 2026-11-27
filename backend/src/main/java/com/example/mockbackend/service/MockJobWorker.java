@@ -29,7 +29,7 @@ import java.util.Locale;
 public class MockJobWorker implements JobWorker {
     private final JobTransitions jobTransitions;
     private final JobFinisher jobFinisher;
-    /** Each run is a trace of its own, as in the real worker: beside.job.run with the two waits as stages. */
+    /** Each run is a span tree as in the real worker: beside.job.run (under the upload's span) with the two waits as stages. */
     private final JobTracing tracing;
     private final ShutdownSignal shutdown;
     private final Logger log = LoggerFactory.getLogger(MockJobWorker.class);

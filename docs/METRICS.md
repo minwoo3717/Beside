@@ -178,6 +178,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 - **이름**: Prometheus 이름은 Micrometer 이름의 `.` 을 `_` 로 바꾸고 카운터에는 `_total`, 시간에는 `_seconds` 를 붙인 것이다. 모든 시계열에 `env` 태그(`local` | `prod` | `loadtest`, 환경변수 `METRICS_ENV`, 기본 `local`)가 붙어 부하 시험 값이 실제 사용 값과 섞이지 않는다.
 - **단위 예외**: 이 절의 시간은 Prometheus 관례대로 **초(소수)** 다(이 문서 머리의 "시간 ms 정수" 규칙의 예외). 값 자체는 §1 과 같다. 예를 들어 `beside_job_processing_seconds` 에 기록되는 값은 같은 실행의 `processingMs / 1000` 이다(둘 다 `JobRun` 한 객체에서 나온다). 보고서 표에 옮길 때는 ms 로 바꾸고 §1 이름을 쓴다.
 - **정확도**: 백분위수는 아래 고정 버킷 사이를 `histogram_quantile` 이 선형 보간한 **근사값**이다. 정확한 분포와 실행별 값은 §1.1 `job_runs` 에서 SQL 로 뽑는다. 카운터는 서버를 재시작하면 0 부터 다시 센다(`rate`·`increase` 가 이를 보정한다).
+- **p50·p95**: 같은 버킷 시계열에 `histogram_quantile(0.5, …)`·`(0.95, …)` 를 쓴다. API 응답은 대부분 수 ms 라 2026-11-27 에 0.005·0.01 버킷을 더했다(그 전에는 가장 작은 버킷이 0.025 라 p50 이 0~25 ms 사이 보간값이었다) **[구현됨]**, 운영 적용은 배포 창 3 **[계획]**. Grafana `beside-ops` 맨 위 '응답 시간 한눈에' 줄이 API 전체 p50·p95·p99, uri 별 p50, 추론 호출 p50·p95 를 보인다.
 - 부하 시험 도구(k6) 쪽 값 `load.*` 는 `bench.*` 처럼 `docs/perf` 전용이며 여기 등록하지 않는다(REVIEW_CHECKLIST 안건 #15).
 
 ### 5.1 서버 지표 (`beside.*`)
@@ -228,9 +229,9 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 
 `beside.jobs.upload.rejected` 의 `code`(docs/api/ERROR_CODES.md 와 같은 이름): `INVALID_REQUEST`(빈 파일, 깨진 multipart, 128자 넘는 Idempotency-Key), `NO_PHOTOS`(`photos` 파트 없음 포함), `TOO_MANY_PHOTOS`, `UNSUPPORTED_IMAGE_TYPE`, `PAYLOAD_TOO_LARGE`, 대표 사진 검사 7개 `UNREADABLE_IMAGE`·`IMAGE_TOO_SMALL`·`NO_ANIMAL_DETECTED`·`TOO_MANY_ANIMALS`·`ANIMAL_TOO_SMALL`·`IMAGE_TOO_DARK`·`IMAGE_TOO_BLURRY`(검사가 켜진 real·prod 에서만 0 이 아니다). 업로드 시도는 `beside_jobs_created_total + beside_jobs_upload_rejected_total + beside_jobs_refused_total{op="create"}` 로 본다(`created` 에는 v0 도 들어 있다).
 
-추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽은 서비스 줄마다 `rid=` 로 남긴다, 2026-11-26 **[구현됨: 적용]**, 같은 날 Pod 작업 1건으로 확인. 이 서버의 작업 실행 줄에는 `requestId` 가 없고 `jobId`·`attempt` 필드가 따로 있다). `health` 에는 붙지 않는다. 같은 요청들은 작업 실행 트레이스(`beside.job.run`, Grafana Tempo)의 client span 이기도 하고 W3C `traceparent` 를 함께 보낸다(2026-11-26 **[구현됨: 적용]**, 작업 1건의 Pod 요청 줄과 Tempo 트레이스로 확인, [CONTRACT.md](CONTRACT.md) §6). 트레이스는 span 만 남기고 지표를 더하지 않는다: 시간은 이 절의 타이머와 같은 것이다.
+추론 서비스에 보내는 작업별 요청(`infer`·`download`·`cleanup`)에는 `X-Request-Id: {jobId}-{attempt}` 헤더가 붙는다(attempt 를 모르는 호출은 `{jobId}` 만). 본문은 바뀌지 않는다. 추론 서비스 로그와 이 서버 로그를 이 값으로 잇는다(Python 쪽은 서비스 줄마다 `rid=` 로 남긴다, 2026-11-26 **[구현됨: 적용]**, 같은 날 Pod 작업 1건으로 확인. 이 서버의 작업 실행 줄에는 `requestId` 가 없고 `jobId`·`attempt` 필드가 따로 있다). `health` 에는 붙지 않는다. 같은 요청들은 작업 실행 트레이스(`beside.job.run`, Grafana Tempo)의 client span 이기도 하고 W3C `traceparent` 를 함께 보낸다(2026-11-26 **[구현됨: 적용]**, 작업 1건의 Pod 요청 줄과 Tempo 트레이스로 확인, [CONTRACT.md](CONTRACT.md) §6). 2026-11-27 부터 **[구현됨]**(운영 적용은 배포 창 3 **[계획]**) 작업 실행은 따로 된 트레이스가 아니라 그 실행을 시작한 요청(업로드·retry)의 트레이스 안에 있다: 서버 요청 span(`http post /api/v1/jobs`) 아래에 `beside.upload.check`·`beside.upload.save`, 워커를 기다린 시간 `beside.job.dispatch-wait`, 그리고 `beside.job.run`(태그 `beside.request_id`)이 형제로 붙는다. 앱이 `traceparent`(trace id = 흐름의 `X-Request-Id`)를 보내면 그 trace id 를 그대로 쓰므로 앱 흐름 id·업로드·작업 실행·추론 서비스 호출이 한 trace 다(앱은 span 을 보내지 않아 Tempo 에는 '부모 없음'으로 보이는 것이 정상). 앱이 flags `00` 을 보냈거나 서버가 재시작해 시작 요청을 모르는 실행은 예전처럼 따로 된 트레이스(링크 + `beside.dispatched.trace_id`)다. client span 에는 응답 `metrics` 의 `inferMs`·`convertMs`·`gpuPeakMB` 가 있으면 태그로 붙는다. 로컬 mock 에서 앱 흐름 id 가 업로드·작업 줄의 trace 로 이어진 기록: [ops/data/2026-11-27_obs-wave3-local](ops/data/2026-11-27_obs-wave3-local/README.md) **[실험 결과]**. 트레이스는 span 만 남기고 지표를 더하지 않는다: 시간은 이 절의 타이머와 같은 것이다.
 
-버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30. 추론 요청 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600(health 는 수십 ms, A40 한 실행은 8.7초, `inference.timeout-ms` 는 real 120초).
+버킷(SLO, 초): 작업 타이머 1, 5, 10, 30, 60, 120, 300, 600, 1800(앱은 600초에 포기하고, real,prod 의 오프라인 대기는 최대 1800초). 에셋 다운로드 0.1, 0.25, 0.5, 1, 2.5, 3, 5, 6, 10, 30, 60(부하 합격 기준 3초·6초 포함). API 응답 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30(0.005·0.01 은 2026-11-27 p50 을 위해 추가). 추론 요청 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 600(health 는 수십 ms, A40 한 실행은 8.7초, `inference.timeout-ms` 는 real 120초).
 
 주의: 재시작으로 끊긴 실행(`code="INTERNAL_ERROR"`, §1 주의)도 `FAILED` 로 세어지고 시간에는 서버가 꺼져 있던 시간이 들어간다. 패스스루 실행은 `passthrough="true"` 로 거른다. Mock 실행은 `worker="mock"` 이다. 단, `passthrough="true"` 가 붙는 것은 **성공한** 패스스루 실행뿐이다. 추론 서비스의 실패 응답에는 패스스루 여부가 없어서 백엔드는 스텁(패스스루)의 실패와 모델의 실패를 구별하지 못하고, FAILED 실행은 늘 `passthrough="false"` 로 남는다(§1 `passthrough` 가 null → 태그 `false`). 그래서 `passthrough="false"` 로 거른 성공률은 스텁의 성공만 빼고 스텁의 실패는 남긴다. 이 성공률은 추론 서비스가 실제 모델을 돌리는 동안에만 맞다(§5.3 아래).
 
@@ -245,6 +246,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `hikaricp_connections_active`, `hikaricp_connections_pending`, `hikaricp_connections_acquire_seconds_*` | DB 커넥션 풀 |
 | `executor_active_threads`, `executor_queued_tasks` (`name="applicationTaskExecutor"`) | 워커가 쓰는 `@Async` 풀 |
 | `disk_free_bytes` | 저장소 디스크 여유 |
+| `up{job="loki"}`, `up{job="alloy"}`, `up{job="tempo"}` | (2026-11-27, Prometheus 가 스스로 만드는 값) 로그·트레이스 수집기가 살아 있는지. 0 이 5분 이어지면 알림(`deploy/monitoring/grafana/provisioning/alerting/rules.yml`). Alloy 가 Loki 에 못 쓴 줄은 `loki_write_dropped_entries_total`(Alloy 자체 지표) |
 
 ### 5.3 멘토 지표 5종 → PromQL
 
@@ -278,7 +280,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 
 ### 6.1 이벤트와 속성
 
-공통 필드: `name`, `at`(클라이언트 시각, ISO 8601), `seq`(세션 안 0 부터 1씩), `jobId`(관계된 작업이 있을 때, UUID), `screen`(이벤트가 일어난 화면: `home` `confirm` `progress` `preview` `ar` `error` `settings` — Unity `DesignedUIController.Page` 이름의 소문자 — 와 웹 `share`). 묶음 공통: `installId`, `sessionId`, `appVersion`, `platform`. 속성(`props`)은 아래 값만 저장하고 그 밖의 키·값은 서버가 버린다.
+공통 필드: `name`, `at`(클라이언트 시각, ISO 8601), `seq`(세션 안 0 부터 1씩), `jobId`(관계된 작업이 있을 때, UUID), `screen`(이벤트가 일어난 화면: `home` `confirm` `progress` `preview` `ar` `error` `settings` `library` `camera` — Unity `DesignedUIController.Page` 이름의 소문자, `library`·`camera` 는 2026-11-27 추가 — 와 웹 `share`). 묶음 공통: `installId`, `sessionId`, `appVersion`, `platform`. 속성(`props`)은 아래 값만 저장하고 그 밖의 키·값은 서버가 버린다.
 
 | 이름 | 언제 (어디서) | props | 왜 (무엇을 알려 주나) |
 |---|---|---|---|
@@ -290,14 +292,23 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `model_ready` | 모델을 받아 미리보기를 띄울 때(JobManager `ModelReady`) | `cached`(bool, 앱 캐시에서 읽음), `loadMs`(0~3600000), `waitMs`(0~3600000, 상태 폴링 시간) | 생성이 끝까지 간 세션 수, 앱 쪽 로딩 시간(§3 `loadMs`·`waitMs` 와 같은 값, 서버로 바로 옴) |
 | `fur_toggle` | 미리보기의 털 표현 버튼 | `on`(bool, 누른 뒤 상태) | 털 표현을 끄는 비율 — 셸 털의 비용(FPS) 대비 쓰임 |
 | `ar_issue_shown` | AR 안내가 바뀔 때(`ARGuidance.GuidanceChanged`, None 제외) | `issue`(`CameraDenied`\|`Unsupported`\|`NeedsInstall`\|`SessionError`\|`NoPlane`) | AR 에서 막히는 이유(권한 거부·미지원 기기·바닥 인식 실패) |
-| `model_placed` | 작업의 첫 AR 배치(JobManager `ModelPlaced`, 작업당 한 번) | `method`(`tap`\|`center`, "화면 가운데에 바로 놓기"), `secSinceArEnter`(0~86400, AR 화면에 들어온 뒤 초) | 퍼널의 끝. 바닥 탭과 가운데 버튼 중 무엇으로 놓는지, 놓기까지 걸린 시간 |
+| `model_placed` | AR 배치마다(2026-11-27 부터 모든 배치: 다시 배치·저장한 강아지 포함. 앱은 spawner `objectSpawned` 로 받는다. 그 전 앱은 작업의 첫 배치만 `JobManager.ModelPlaced`) | `method`(`tap`\|`center`, "화면 가운데에 바로 놓기"), `secSinceArEnter`(0~86400, AR 화면에 들어온 뒤 초), `again`(bool, 같은 모델의 두 번째 배치부터 true, 앱 세션 안), `source`(`job`\|`library` — 작업 결과 또는 저장한 강아지. 시험용 GLB 주소로 띄운 모델은 없음, 옛 앱도 없음 = 작업으로 셈) | 퍼널의 끝(§6.2 는 `source` 가 `library` 가 아닌 것만, 불러오기 퍼널은 `library`). 바닥 탭과 가운데 버튼 중 무엇으로 놓는지, 놓기까지 걸린 시간, 다시 놓는 비율 |
 | `animation_play` | 동작 칩·키보드 1~5(`PetAnimationPlayer.ClipStarted`), 웹은 공유 뷰어의 동작 칩 | `clip`(`Walk`\|`Sit`\|`TailWag`\|`HeadTilt`\|`Idle`) | 리깅·애니메이션 기능을 실제로 쓰는지, 어떤 동작이 인기인지 |
-| `photo_saved` | AR 화면의 "사진 찍기"가 저장을 마쳤을 때 | 없음 | 결과를 남길 만큼 만족했는지(공유의 대리 지표) |
+| `photo_saved` | (앱은 2026-11-27 부터 보내지 않는다: AR 의 "사진 찍기" 타일이 "불러오기"로 바뀜. 이름은 남긴다) AR 화면의 "사진 찍기"가 저장을 마쳤을 때 | 없음 | 결과를 남길 만큼 만족했는지(공유의 대리 지표) |
 | `start_over` | "다른 사진으로 다시 만들기"·"새로 만들기"·"다른 사진 고르기" | `from`(`preview`\|`ar`\|`error`) | 결과가 마음에 들지 않아 다시 만드는 비율과 그 위치 |
+| `app_error` | (2026-11-27) 앱이 잡은 예외·오류 로그(`AppErrorReporter`, `Application.logMessageReceivedThreaded` 의 Exception·Error·Assert, `[BesideMetric]`·`[BesideEvent]` 줄 제외). 세션당 20건, 같은 `sig` 3건까지 | `kind`(`exception`\|`error`\|`assert`), `sig`(0~2147483647: 오류 종류·첫 스택 줄의 FNV-1a 해시. **메시지 원문은 보내지 않는다** — 원인은 기기 logcat 의 `[BesideEvent] app_error sig=…` 줄과 맞춰 찾는다) | 사용자가 겪은 앱 쪽 오류 수와 종류(작업 실패는 `job_failed_shown` 이 따로 센다), 이탈 사유(§6.2) |
+| `saved_dog_open` | (2026-11-27) 저장한 강아지(폰 안 보관함, 최대 5마리)를 열 때. 성공은 미리보기로 넘어가기 전에 보내 `screen=library`, 파일 읽기·GLB 열기 실패도 보낸다 | `ok`(bool), `from`(`home`\|`ar`, 보관함을 연 화면), `count`(0~50, 저장한 강아지 수), `ageDays`(0~3650, 저장한 뒤 지난 날), `loadMs`(0~600000) | 저장한 강아지 불러오기를 실제로 쓰는지·실패하는지(불러오기 퍼널), 여는 데 걸린 시간 |
+| `saved_dog_change` | (2026-11-27) 보관함이 바뀔 때 | `action`(`saved` 자동 저장 \| `replaced` 꽉 찬 보관함에서 하나 지우고 새 강아지 저장 — 이때 `deleted` 는 보내지 않음 \| `skipped` 꽉 찼을 때 저장하지 않음 \| `edited` 이름·키·메모 수정 \| `deleted` 삭제), `count`(0~50, 바뀐 뒤 수) | 보관함 5마리가 모자란지(`replaced`·`skipped`), 정보를 고쳐 쓰는지 |
 
 ### 6.2 세션 퍼널 (`GET /api/v1/admin/funnel`, 관리 페이지 '세션 퍼널')
 
-`receivedAt` 이 `[from, to)` 인 이벤트를 `sessionId` 로 묶어 새로 만들기 흐름 여섯 단계를 센다: `home`(screen_view `screen=home`) → `photos_selected`(`count` 가 0 이 아닌 것) → `generate_tap` → `model_ready` → `ar`(screen_view `screen=ar`) → `model_placed`. 세션마다 단계 시각은 앞 단계 시각 이후(같은 세션 안에서 `at`, 같으면 `seq` 순)에 처음 나온 그 이벤트의 `at` 이고, 앞 단계에 이르지 못한 세션은 뒤 단계에 세지 않는다(이어보기처럼 단계를 건너뛴 세션은 빠진다). 값: `sessions`(그 단계에 이른 세션 수), `conversionPct`(첫 단계 대비 %), `fromPrevPct`(바로 앞 단계 대비 %), `medianSecondsFromPrev`(앞 단계에서 걸린 초의 중앙값, nearest-rank — 관리 stats 의 백분위와 같은 방식). 단계 사이 시간은 같은 기기의 시계끼리 뺀 값이라 기기 시계가 틀려도 영향이 적다.
+`receivedAt` 이 `[from, to)` 인 이벤트를 `sessionId` 로 묶어 새로 만들기 흐름 여섯 단계를 센다: `home`(screen_view `screen=home`) → `photos_selected`(`count` 가 0 이 아닌 것) → `generate_tap` → `model_ready` → `ar`(screen_view `screen=ar`) → `model_placed`(`source` 가 `library` 가 아닌 것 — 2026-11-27 부터 `model_placed` 가 모든 배치라, 저장한 강아지를 놓은 것은 아래 불러오기 퍼널로 뺀다. `source` 가 없는 옛 앱의 배치는 여기 든다). 세션마다 단계 시각은 앞 단계 시각 이후(같은 세션 안에서 `at`, 같으면 `seq` 순)에 처음 나온 그 이벤트의 `at` 이고, 앞 단계에 이르지 못한 세션은 뒤 단계에 세지 않는다(이어보기처럼 단계를 건너뛴 세션은 빠진다). 값: `sessions`(그 단계에 이른 세션 수), `conversionPct`(첫 단계 대비 %), `fromPrevPct`(바로 앞 단계 대비 %), `medianSecondsFromPrev`(앞 단계에서 걸린 초의 중앙값, nearest-rank — 관리 stats 의 백분위와 같은 방식), `droppedSessions`(2026-11-27, 앞 단계에 이르렀지만 이 단계에 이르지 못한 세션 수, 첫 단계 0). 단계 사이 시간은 같은 기기의 시계끼리 뺀 값이라 기기 시계가 틀려도 영향이 적다.
+
+2026-11-27 추가 **[구현됨]**(`ProductEventsAdminApiTest`, 관리 페이지 '세션 퍼널' 아래 표, 운영 적용은 배포 창 3 **[계획]**):
+
+- **이탈 분석**(`lastScreens`·`dropReasons`): 첫 단계(home)에 이르렀지만 마지막 단계에 이르지 못한 세션 중, 그 세션의 마지막 이벤트(`receivedAt`)가 `to` 와 지금 중 이른 때(`to` 가 없으면 지금)보다 30분 넘게 앞인 세션만 본다(아직 쓰는 중일 수 있는 세션은 뺀다). `lastScreens` = 그 세션의 마지막 `screen_view` 화면별 세션 수(이탈 직전 화면). `dropReasons` = 그 세션에 있었던 이유 이벤트의 (이름, 속성, 값)별 세션 수: `job_cancel_tap.stage`, `job_failed_shown.code`, `photos_selected` `count=0`(사진을 고르지 않고 닫음), `app_error.kind`. 한 세션이 여러 줄에 들어갈 수 있다. 둘 다 세션 수가 많은 순.
+- **불러오기 퍼널**(`librarySteps`, 저장한 강아지): `home` → `library`(screen_view `screen=library`) → `saved_dog_open`(`ok=true`) → `ar` → `model_placed`(`source=library`). 세는 법은 위와 같다.
+- **작업 완료율**(`jobs`, 서버 기준): `createdAt` 이 `[from, to)` 인 작업을 **지금 상태**로 센다. `canceled` = FAILED 중 `error.code` CANCELED, `failed` = 그 밖의 FAILED, `inProgress` = PENDING·PROCESSING, `completionPct` = completed ÷ (created − canceled). retry 한 작업은 마지막 상태 하나로 센다 — 실행(attempt)마다 세는 관리 stats 의 `successRate`·§5.3 생성 성공률과 다르다. 펫과 함께 지운 작업은 빠진다.
 
 ### 6.3 개인정보 규칙
 
@@ -320,9 +331,9 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 
 | Micrometer 이름 | Prometheus 이름 | 종류 | 태그 | 정의 |
 |---|---|---|---|---|
-| `beside.app.events` | `beside_app_events_total` | counter | `name`(§6.1 의 12개), `platform`(`android`\|`web`) | 저장한 이벤트 수. 기동할 때 24개 조합을 0 으로 등록한다 |
+| `beside.app.events` | `beside_app_events_total` | counter | `name`(§6.1 의 15개, 2026-11-27 에 12 → 15), `platform`(`android`\|`web`) | 저장한 이벤트 수. 기동할 때 30개 조합(15 × 2)을 0 으로 등록한다 |
 | `beside.app.events.dropped` | `beside_app_events_dropped_total` | counter | `reason`(`unknown_name`\|`invalid`\|`duplicate`\|`rate_limited`\|`bad_prop`) | 버린 이벤트 수(`bad_prop` 만 이벤트가 아니라 버린 속성·필드 수). 기동할 때 0 으로 등록. 400·413 으로 거절한 묶음은 여기 세지 않는다(§5.2 `http_server_requests` 의 `uri="/api/v1/events"`) |
 
-예: 하루 화면별 노출은 카운터에 화면 태그가 없으므로 `GET /api/v1/admin/events` 로, 이름별 흐름은 `sum by (name) (increase(beside_app_events_total{env="prod"}[1d]))`, 생성 탭 대비 첫 배치(이벤트 수 비율, 세션 퍼널의 근사) `sum(increase(beside_app_events_total{env="prod",name="model_placed"}[1d])) / sum(increase(beside_app_events_total{env="prod",name="generate_tap"}[1d]))`. 정확한 세션 퍼널은 §6.2 API 다.
+예: 하루 화면별 노출은 카운터에 화면 태그가 없으므로 `GET /api/v1/admin/events` 로, 이름별 흐름은 `sum by (name) (increase(beside_app_events_total{env="prod"}[1d]))`, 생성 탭 대비 모델 준비(이벤트 수 비율, 세션 퍼널의 근사) `sum(increase(beside_app_events_total{env="prod",name="model_ready"}[1d])) / sum(increase(beside_app_events_total{env="prod",name="generate_tap"}[1d]))`. 2026-11-27 부터 `model_placed` 는 모든 배치(다시 배치·저장한 강아지 포함)라 '생성 탭 대비 첫 배치' 비율에 쓰지 않는다(Grafana `beside-ops` 패널 45 도 같은 이유로 바꿨다). 정확한 세션 퍼널·이탈·작업 완료율은 §6.2 API 다.
 
-확인 범위 **[구현됨]**(브랜치 `w7/product-events`): 수집·검사·중복·지표·내보내기·퍼널은 backend 테스트(`ProductEventsApiTest`, `ProductEventsRateLimitTest`, `ProductEventsAdminApiTest`, `ProductEventMetersTest`, 계약 `JobV1ContractTest`), 공유 뷰어 신호는 `share-viewer.test.cjs`, 관리 페이지 문구는 `admin-measurement.test.cjs`, Caddy 경로는 `deploy/test_caddy_routes.sh`(CI), Unity 는 Roslyn 컴파일만. main 병합(PR #34 `d5f4a32`)과 운영 VM 배포(배포 창 1, 2026-11-25 17:16~17:21 UTC)는 끝났다 **[구현됨: 적용]**. **[계획]**: 에디터·기기에서 보낸 실제 이벤트와 수치, 운영에서 쌓인 이벤트·퍼널 확인, Grafana `beside-ops` '앱 이벤트' 줄의 화면 확인, 30일 자동 삭제(#23).
+확인 범위 **[구현됨]**(브랜치 `w7/product-events`): 수집·검사·중복·지표·내보내기·퍼널은 backend 테스트(`ProductEventsApiTest`, `ProductEventsRateLimitTest`, `ProductEventsAdminApiTest`, `ProductEventMetersTest`, 계약 `JobV1ContractTest`), 공유 뷰어 신호는 `share-viewer.test.cjs`, 관리 페이지 문구는 `admin-measurement.test.cjs`, Caddy 경로는 `deploy/test_caddy_routes.sh`(CI), Unity 는 Roslyn 컴파일만. main 병합(PR #34 `d5f4a32`)과 운영 VM 배포(배포 창 1, 2026-11-25 17:16~17:21 UTC)는 끝났다 **[구현됨: 적용]**. 2026-11-27 추가분(이벤트 3개·화면 2개·`model_placed` 의 `again`·`source`·이탈·불러오기 퍼널·작업 완료율)은 브랜치 `feat/obs-wave3` 에서 같은 시험(새 단언 포함)과 Unity batchmode 컴파일로 확인했고 **[구현됨]**, 로컬 mock 에 앱처럼 보낸 묶음 15개가 모두 저장되고 두 퍼널이 끝 단계까지 센 기록은 [ops/data/2026-11-27_obs-wave3-local](ops/data/2026-11-27_obs-wave3-local/README.md) **[실험 결과]**. **[계획]**: 에디터·기기에서 보낸 실제 이벤트와 수치, 운영에서 쌓인 이벤트·퍼널 확인(2026-11-27 추가분은 배포 창 3 뒤), Grafana `beside-ops` '앱 이벤트' 줄의 화면 확인, 30일 자동 삭제(#23).

@@ -54,6 +54,14 @@ public interface JobRepository extends JpaRepository<Job, String>, JobQueueQueri
     long countByStatusAndQueuedAtLessThanEqual(JobStatus status, Instant cutoff);
 
     /**
+     * Jobs created in [from, to) by where they are now: status, errorCode, count (the admin funnel's job completion).
+     * A canceled job is FAILED with errorCode CANCELED; a job deleted with its pet is gone.
+     */
+    @Query("select j.status, j.errorCode, count(j) from Job j where j.createdAt >= :from and j.createdAt < :to"
+            + " group by j.status, j.errorCode")
+    List<Object[]> countCreatedByState(@Param("from") Instant from, @Param("to") Instant to);
+
+    /**
      * Retry as one conditional update: a {@code failed} job becomes {@code pending} with the next attempt and without
      * what the failed attempt left. Returns 1 when it changed the row and 0 when the job is not (or no longer) FAILED,
      * so of two retries racing on one FAILED job only one wins and the attempt is dispatched once. The states are

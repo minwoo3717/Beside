@@ -59,9 +59,10 @@ import java.util.List;
  *   <li>Upload mode, success or failure: InferenceClient.cleanup deletes the temporary GLB and sends
  *       DELETE /artifacts/{jobId}; a failed cleanup is only logged.</li>
  * </ol>
- * Each run is one trace ({@link JobTracing}, 2026-11-26): root beside.job.run with the stages beside.job.cutout,
- * beside.job.slot-wait, beside.job.service-wait (offline wait on), the inference client spans and beside.job.store,
- * linked to the trace of the request that dispatched it; the PROCESSING line names its traceId.
+ * Each run is one span tree ({@link JobTracing}, 2026-11-26; inside the dispatching request's trace since 2026-11-27):
+ * beside.job.run with the stages beside.job.cutout, beside.job.slot-wait, beside.job.service-wait (offline wait on), the
+ * inference client spans and beside.job.store, a child of the upload or retry request's span (a trace of its own, linked
+ * to it, when that request was not sampled or is not known); the PROCESSING line names its traceId.
  * Failures end the run FAILED with their job failure code (InferenceClient documents the mapping). An interrupted
  * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end;
  * that includes an error before PROCESSING (reading the job, the cutout, the inference-service check, the PROCESSING
@@ -155,8 +156,8 @@ public class RealJobWorker implements JobWorker {
         // The place in the slot line is taken now and kept through the cutout, so the line stays in dispatch
         // (accepted-or-retried) order: a retry whose cutout is reused must not get ahead of new jobs still in theirs.
         Object place = inferenceSlots.join();
-        // The run is a trace of its own (JobTracing: root beside.job.run, a child span per stage, linked to the
-        // upload's trace), opened first so every line of the run carries its traceId too.
+        // The run's span (JobTracing: beside.job.run under the upload's span, a child span per stage), opened first so
+        // every line of the run carries its traceId too.
         JobTracing.Run trace = tracing.startRun(jobId, attempt, type());
         // Every line of this run (and of JobFinisher and its listeners on this thread) carries the job: MDC does not
         // follow @Async from the request, and the pool thread must not keep it for the next job.

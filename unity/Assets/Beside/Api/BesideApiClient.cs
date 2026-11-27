@@ -51,10 +51,15 @@ namespace Beside.Api
 
     /// <summary>
     /// Backend API v1 boundary (docs/api/openapi.yaml). Coroutine based; every call carries X-Request-Id.
+    /// Upload, GLB download, retry and cancel also carry a W3C traceparent whose trace id is that request id
+    /// (<see cref="TraceParent"/>), so the server's trace of the flow has the id the app logs and shows. Status polls,
+    /// events and health do not: a 30 minute wait would put hundreds of polls into one trace.
     /// Unknown JSON fields are ignored by Newtonsoft, unknown enum values become Unknown through the DTOs.
     /// </summary>
     public sealed class BesideApiClient
     {
+        public const string TraceParentHeader = "traceparent";
+
         public string BaseUrl { get; private set; }
         public int TimeoutSeconds = 60;
         public int DownloadTimeoutSeconds = 300;
@@ -77,7 +82,7 @@ namespace Beside.Api
 
             using (var req = UnityWebRequest.Post(Url(ApiV1Routes.Jobs), sections))
             {
-                Prepare(req, requestId);
+                Prepare(req, requestId, traced: true);
                 req.SetRequestHeader(ApiV1Routes.IdempotencyKeyHeader, idempotencyKey ?? requestId); // same key -> same jobId on a retried upload
                 yield return req.SendWebRequest();
 
@@ -129,7 +134,7 @@ namespace Beside.Api
             using (var req = new UnityWebRequest(Url(assetRelativeUrl), UnityWebRequest.kHttpVerbGET))
             {
                 req.downloadHandler = new DownloadHandlerFile(tmp) { removeFileOnAbort = true };
-                Prepare(req, requestId);
+                Prepare(req, requestId, traced: true);
                 req.timeout = DownloadTimeoutSeconds;
                 yield return req.SendWebRequest();
 
@@ -156,7 +161,7 @@ namespace Beside.Api
         {
             using (var req = UnityWebRequest.PostWwwForm(Url(ApiV1Routes.Retry(jobId)), ""))
             {
-                Prepare(req, requestId);
+                Prepare(req, requestId, traced: true);
                 yield return req.SendWebRequest();
 
                 if (!Succeeded(req, out var error)) { onError(error); yield break; }
@@ -174,7 +179,7 @@ namespace Beside.Api
         {
             using (var req = UnityWebRequest.PostWwwForm(Url(ApiV1Routes.Cancel(jobId)), ""))
             {
-                Prepare(req, requestId);
+                Prepare(req, requestId, traced: true);
                 yield return req.SendWebRequest();
 
                 if (!Succeeded(req, out var error)) { onError(error); yield break; }
@@ -224,11 +229,52 @@ namespace Beside.Api
 
         string Url(string path) => ApiV1Routes.Combine(BaseUrl, path);
 
-        void Prepare(UnityWebRequest req, string requestId)
+        /// <summary>traced: also send traceparent (upload, GLB download, retry, cancel), when the id allows one.</summary>
+        void Prepare(UnityWebRequest req, string requestId, bool traced = false)
         {
             req.timeout = TimeoutSeconds;
             req.SetRequestHeader("X-Request-Id", requestId);
             req.SetRequestHeader("ngrok-skip-browser-warning", "1");   // ngrok free tier: skip the HTML warning page (ignored elsewhere)
+            string traceParent = traced ? TraceParent(requestId) : null;
+            if (traceParent != null) req.SetRequestHeader(TraceParentHeader, traceParent);
+        }
+
+        /// <summary>W3C traceparent "00-{requestId}-{new span id}-01" (sampled), or null when requestId is not 32
+        /// lower-case hex digits (or all zero) and so cannot be a trace id. The span id is 16 random lower-case hex
+        /// digits, never all zero, new for every request: the app sends no spans, so it only marks this request.</summary>
+        public static string TraceParent(string requestId)
+        {
+            if (!IsLowerHex(requestId, 32)) return null;
+            return "00-" + requestId + "-" + NewSpanId() + "-01";
+        }
+
+        static string NewSpanId()
+        {
+            while (true)
+            {
+                byte[] b = Guid.NewGuid().ToByteArray();
+                var sb = new System.Text.StringBuilder(16);
+                bool zero = true;
+                for (int i = 0; i < 8; i++)
+                {
+                    if (b[i] != 0) zero = false;
+                    sb.Append(b[i].ToString("x2", CultureInfo.InvariantCulture));
+                }
+                if (!zero) return sb.ToString();
+            }
+        }
+
+        static bool IsLowerHex(string s, int length)
+        {
+            if (s == null || s.Length != length) return false;
+            bool zero = true;
+            foreach (char c in s)
+            {
+                bool digit = c >= '0' && c <= '9';
+                if (!digit && !(c >= 'a' && c <= 'f')) return false;
+                if (c != '0') zero = false;
+            }
+            return !zero;
         }
 
         /// <summary>True on HTTP 2xx. Otherwise fills error from the v1 error envelope when present.

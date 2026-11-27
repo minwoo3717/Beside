@@ -15,18 +15,19 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * The product events the server stores (docs/METRICS.md §6.1, openapi ProductEvent): the 12 names, the screens, the
+ * The product events the server stores (docs/METRICS.md §6.1, openapi ProductEvent): the 15 names, the screens, the
  * platforms and, per name, the props it keeps. Everything else is dropped, so no free text, path, address, token or
  * file name can reach the table even if a client sends one. Adding a name or a prop: this class, the openapi enum and
  * the METRICS table together (the server drops names it does not know, so an app-only change stores nothing).
  */
 public final class ProductEventCatalog {
-    /** Same order as METRICS §6.1 and the openapi enum. */
+    /** Same order as METRICS §6.1 and the openapi enum (app_error, saved_dog_open, saved_dog_change: 2026-11-27). */
     public static final List<String> NAMES = List.of("screen_view", "photos_selected", "generate_tap", "job_cancel_tap",
             "job_failed_shown", "model_ready", "fur_toggle", "ar_issue_shown", "model_placed", "animation_play",
-            "photo_saved", "start_over");
-    /** Unity DesignedUIController.Page names in lower case, and the web share viewer. */
-    public static final Set<String> SCREENS = Set.of("home", "confirm", "progress", "preview", "ar", "error", "settings", "share");
+            "photo_saved", "start_over", "app_error", "saved_dog_open", "saved_dog_change");
+    /** Unity DesignedUIController.Page names in lower case (library, camera: 2026-11-27), and the web share viewer. */
+    public static final Set<String> SCREENS = Set.of("home", "confirm", "progress", "preview", "ar", "error", "settings",
+            "library", "camera", "share");
     public static final List<String> PLATFORMS = List.of("android", "web");
     public static final String SCREEN_VIEW = "screen_view";
     /** Codes the app shows besides ERROR_CODES.md (Unity ErrorMessages, BesideApiClient.ApiError). */
@@ -87,10 +88,17 @@ public final class ProductEventCatalog {
         props.put("model_ready", byKey(Prop.flag("cached"), Prop.number("loadMs", 0, 3_600_000), Prop.number("waitMs", 0, 3_600_000)));
         props.put("fur_toggle", byKey(Prop.flag("on")));
         props.put("ar_issue_shown", byKey(Prop.oneOf("issue", "CameraDenied", "Unsupported", "NeedsInstall", "SessionError", "NoPlane")));
-        props.put("model_placed", byKey(Prop.oneOf("method", "tap", "center"), Prop.number("secSinceArEnter", 0, 86_400)));
+        props.put("model_placed", byKey(Prop.oneOf("method", "tap", "center"), Prop.number("secSinceArEnter", 0, 86_400),
+                Prop.flag("again"), Prop.oneOf("source", "job", "library")));
         props.put("animation_play", byKey(Prop.oneOf("clip", "Walk", "Sit", "TailWag", "HeadTilt", "Idle")));
         props.put("photo_saved", byKey());
         props.put("start_over", byKey(Prop.oneOf("from", "preview", "ar", "error")));
+        // sig: a hash of the error's kind and first stack line, never the message itself (Unity AppErrorReporter)
+        props.put("app_error", byKey(Prop.oneOf("kind", "exception", "error", "assert"), Prop.number("sig", 0, Integer.MAX_VALUE)));
+        props.put("saved_dog_open", byKey(Prop.flag("ok"), Prop.oneOf("from", "home", "ar"), Prop.number("count", 0, 50),
+                Prop.number("ageDays", 0, 3_650), Prop.number("loadMs", 0, 600_000)));
+        props.put("saved_dog_change", byKey(Prop.oneOf("action", "saved", "replaced", "skipped", "edited", "deleted"),
+                Prop.number("count", 0, 50)));
         if (!props.keySet().equals(new LinkedHashSet<>(NAMES))) {
             throw new IllegalStateException("every product event name needs its props entry");
         }

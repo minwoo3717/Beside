@@ -22,6 +22,7 @@ import { preflight } from './lib/seed.js';
 import { buildLevels, expectedIterations, holdScopes, maxTarget, tagsAt } from './lib/stages.js';
 import { droppedReportThresholds, merge, stagedThresholds } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
+import { mark } from './lib/marker.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const PATHS = photoPaths(ENV, TIERS.defaults.photoCount, './out/fixtures/photo-400k.png');
@@ -131,7 +132,13 @@ const flowCtx = makeContext({
 const browseCtx = makeContext({ cfg: CONFIG, tags: () => tagsAt(BROWSE.segments, exec.scenario.startTime, Date.now()) });
 
 export function setup() {
-  return markReady(preflight(CONFIG));
+  const info = preflight(CONFIG);
+  mark(CONFIG, 'begin');
+  return markReady(info);
+}
+
+export function teardown() {
+  mark(CONFIG, 'end');
 }
 
 export function flow() {

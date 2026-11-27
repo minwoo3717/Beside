@@ -47,6 +47,12 @@ Logs (README '로그', 2026-11-26): stderr, "<UTC time> <LEVEL> <logger> <messag
 (/infer, /infer/upload, /artifacts/*) gets an INFO "request ..." line, every failure answer a WARNING (or the ERROR
 with the traceback where one is logged), and every line logged while a request runs ends with "rid=<X-Request-Id>
 trace=<trace id of traceparent>" when Spring sent them (docs/CONTRACT.md §6). The token is never logged.
+
+Spans (2026-11-27, off unless BESIDE_OTLP_URL is set; start_pod.sh sets it with BESIDE_TELEMETRY_VM): every job request
+that passed the token check is a SERVER span named by its route ("POST /infer/upload", "GET /artifacts/{jobId}/{name}")
+under the traceparent Spring sent, with children beside.inference.save-photos / lock-wait / predict / convert / rig /
+simulate (passthrough knobs). OTLP/JSON to the VM's Alloy -> Tempo through BESIDE_TELEMETRY_PROXY, from a background
+thread (otlp_spans.py); flags 00 records nothing. A request the token check refused (401) has no span.
 """
 from __future__ import annotations
 
@@ -74,6 +80,8 @@ from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, ValidationError
+
+import otlp_spans
 
 SAMPLE_GLB = os.environ.get("BESIDE_SAMPLE_GLB")  # passthrough mode when set
 ANIMALLIFT_DIR = os.environ.get("BESIDE_MODEL_DIR") or os.environ.get("BESIDE_ANIMALLIFT_DIR")  # model mode when set
@@ -225,11 +233,26 @@ def _header(scope, name: bytes) -> Optional[str]:
     return None
 
 
+# Span names: the route, not the path (no job ids in names). Paths no route takes keep only their first segment.
+_ROUTES = ((re.compile(r"/infer"), "/infer"), (re.compile(r"/infer/upload"), "/infer/upload"),
+           (re.compile(r"/artifacts/[^/]+/[^/]+"), "/artifacts/{jobId}/{name}"),
+           (re.compile(r"/artifacts/[^/]+"), "/artifacts/{jobId}"))
+
+
+def _route_of(path: str) -> str:
+    for pattern, route in _ROUTES:
+        if pattern.fullmatch(path):
+            return route
+    return "/infer/*" if path.startswith("/infer") else "/artifacts/*"
+
+
 class _RequestContext:
     """Pure ASGI middleware, inside the token check: rid / trace of the request for every line logged while it runs
     (contextvars follow FastAPI's thread pool), and one INFO line per job request (the paths the token guards):
     "request <METHOD> <path> client=<ip>:<port> traceparent=<header or ->" (+ rid / trace). /healthz gets no line:
-    Spring polls it every 15 s. Neither the token nor the query string is logged."""
+    Spring polls it every 15 s. Neither the token nor the query string is logged.
+    With span export on (otlp_spans), each job request is also a SERVER span: route, status code, rid; the endpoint adds
+    jobId / attempt, and the steps of the run are its children. It ends when the answer has been handed on."""
 
     def __init__(self, app):
         self.app = app
@@ -241,14 +264,40 @@ class _RequestContext:
         traceparent = _traceparent_of(_header(scope, b"traceparent"))
         rid_token = _REQUEST_ID.set(_request_id_of(_header(scope, b"x-request-id")))
         trace_token = _TRACE_ID.set(_trace_id_of(traceparent))
+        path = scope.get("path", "")
+        method = scope.get("method", "-")
+        span = otlp_spans.server_span(f"{method} {_route_of(path)}", traceparent) if _needs_token(path) else None
+        span_token = otlp_spans.CURRENT.set(span)
+        status = []
+
+        async def send_recording_status(message):
+            if message["type"] == "http.response.start":
+                status.append(message["status"])
+            await send(message)
+
         try:
-            path = scope.get("path", "")
             if _needs_token(path):
                 client = scope.get("client") or ("-", "-")
-                log.info("request %s %s client=%s:%s traceparent=%s", scope.get("method", "-"), _printable(path),
+                log.info("request %s %s client=%s:%s traceparent=%s", method, _printable(path),
                          client[0], client[1], traceparent or "-")
-            await self.app(scope, receive, send)
+            if span is None:
+                await self.app(scope, receive, send)
+            else:
+                span.set(**{"http.request.method": method, "http.route": _route_of(path),
+                            "beside.request_id": _REQUEST_ID.get()})
+                await self.app(scope, receive, send_recording_status)
+        except BaseException as e:
+            if span is not None:
+                span.fail(otlp_spans.describe(e))
+            raise
         finally:
+            if span is not None:
+                code = status[0] if status else 500   # an exception: Starlette answers 500 outside this layer
+                span.set(**{"http.response.status_code": code})
+                if code >= 500 and span.error is None:
+                    span.fail(str(code))
+                span.end()
+            otlp_spans.CURRENT.reset(span_token)
             _TRACE_ID.reset(trace_token)
             _REQUEST_ID.reset(rid_token)
 
@@ -256,6 +305,13 @@ class _RequestContext:
 # Added before the token check below, so it runs inside it (and inside _RequestTiming): user middleware added later
 # wraps what was added earlier.
 app.add_middleware(_RequestContext)
+
+
+def _span_job(job_id: str) -> None:
+    """jobId on the request's span, and the attempt when X-Request-Id is Spring's "<jobId>-<attempt>"."""
+    rid = _REQUEST_ID.get() or ""
+    number = rid[len(job_id) + 1:] if rid.startswith(job_id + "-") else ""
+    otlp_spans.current().set(jobId=_printable(job_id, 64), attempt=int(number) if number.isdigit() else None)
 
 
 def _token_matches(given: str) -> bool:
@@ -414,6 +470,9 @@ def _load_model() -> None:
 
 @app.on_event("startup")
 def _startup() -> None:
+    if otlp_spans.EXPORTER is not None:
+        log.info("spans on: OTLP/JSON to %s (proxy %s, deployment.environment %s)", otlp_spans.EXPORTER.url,
+                 otlp_spans.EXPORTER.proxy or "none", otlp_spans.EXPORTER.environment)
     if ANIMALLIFT_DIR and not SAMPLE_GLB:
         threading.Thread(target=_load_model, name="animallift-load", daemon=True).start()
     minutes = _sweep_minutes()
@@ -860,6 +919,11 @@ def _simulate_generation(job_id: str, image_paths: List[str], attempt: Optional[
     knobs = _passthrough_knobs()
     if not knobs.active:
         return None
+    with otlp_spans.span("beside.inference.simulate", jobId=job_id):   # slot wait + simulated time, like lock + predict
+        return _simulated(job_id, image_paths, attempt, knobs)
+
+
+def _simulated(job_id: str, image_paths: List[str], attempt: Optional[_Attempt], knobs: _Knobs) -> int:
     name = re.split(r"[\\/]", image_paths[0])[-1]   # the first photo's file name (upload mode: 00_<sanitized name>)
     slow = bool(knobs.slow_token and knobs.slow_ms and knobs.slow_token in name)
     slots = _passthrough_slots(knobs.slots)
@@ -931,11 +995,14 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
     if len(image_paths) > 1:
         log.info("job %s: %d photos, using the first one", job_id, len(image_paths))
 
-    with MODEL_LOCK:
+    with contextlib.ExitStack() as gpu:
+        with otlp_spans.span("beside.inference.lock-wait", jobId=job_id):
+            gpu.enter_context(MODEL_LOCK)
         _stop_if_cancelled(attempt, "before the model")   # waited here after its client gave up: no GPU time for it
         try:
-            with _busy_work():   # /healthz busyForMs
+            with _busy_work(), otlp_spans.span("beside.inference.predict", jobId=job_id) as predicting:   # busyForMs
                 pred = MODEL.predict(image, str(raw_dir))
+                predicting.set(inferMs=pred.infer_ms, gpuPeakMB=pred.gpu_peak_mb)
         except Exception as e:  # noqa: BLE001  OOM, unreadable image, model errors
             _stop_if_cancelled(attempt, "after a model error")   # e.g. its folder was deleted under it
             log.exception("job %s: inference failed", job_id)
@@ -949,10 +1016,12 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
     if PAD_TEXTURE:
         extras["padded_texture"] = True
     try:
-        # make_dirs=False: a job folder that DELETE removed during the conversion is not recreated
-        m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
-                    hair_npz=str(pred.hair_npz) if pred.hair_npz and EMBED_HAIR else None, forward_axis=FORWARD_AXIS,
-                    make_dirs=False, **extras)
+        with otlp_spans.span("beside.inference.convert", jobId=job_id) as converting:
+            # make_dirs=False: a job folder that DELETE removed during the conversion is not recreated
+            m = convert(str(pred.mesh_obj), str(pred.uv_png), str(glb), str(job_dir / "base.metrics.json"),
+                        hair_npz=str(pred.hair_npz) if pred.hair_npz and EMBED_HAIR else None, forward_axis=FORWARD_AXIS,
+                        make_dirs=False, **extras)
+            converting.set(tris=m["triangles"], bytes=m["bytes"])
     except ConversionError as e:
         _stop_if_cancelled(attempt, "after a conversion error")
         raise _failure(job_id, 500, "CONVERSION_FAILED", str(e))
@@ -972,10 +1041,12 @@ def _run(job_id: str, image_paths: List[str], options: InferOptions, attempt: Op
         padded = job_dir / "texture_padded.png"   # convert wrote it only with BESIDE_PAD_TEXTURE=1
         texture = padded if PAD_TEXTURE and padded.is_file() else pred.uv_png
         try:
-            info = transfer(str(glb), str(texture), RIG_TEMPLATE, str(tmp))
-            # the rigged file (template skin + clips + uv.png) never went through convert's size check
-            if info["bytes"] > MAX_GLB_BYTES:
-                raise RigError(f"rigged GLB {info['bytes']} bytes > limit {MAX_GLB_BYTES}")
+            with otlp_spans.span("beside.inference.rig", jobId=job_id) as rigging:
+                info = transfer(str(glb), str(texture), RIG_TEMPLATE, str(tmp))
+                rigging.set(bytes=info["bytes"], joints=info["joints"])
+                # the rigged file (template skin + clips + uv.png) never went through convert's size check
+                if info["bytes"] > MAX_GLB_BYTES:
+                    raise RigError(f"rigged GLB {info['bytes']} bytes > limit {MAX_GLB_BYTES}")
             os.replace(tmp, glb)
             m["bytes"] = info["bytes"]
             m["convertMs"] += int((time.perf_counter() - rig_started) * 1000)
@@ -1028,6 +1099,7 @@ def healthz(request: Request) -> HealthResponse:
 @app.post("/infer", response_model=InferResponse)
 def infer(request: InferRequest) -> InferResponse:
     """Path mode: Spring and this service share a filesystem."""
+    _span_job(request.jobId)
     request.imagePaths = [_to_local(p) for p in request.imagePaths]
     with _job_attempt(request.jobId) as attempt:
         result = _run(request.jobId, request.imagePaths, request.options, attempt)
@@ -1056,18 +1128,23 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
         log.warning("job %s: 422 1 to %d photos, got %d", parsed.jobId, MAX_PHOTOS, len(photos))
         raise HTTPException(status_code=422, detail=[{"loc": ["body", "photos"], "msg": f"1 to {MAX_PHOTOS} photos, got {len(photos)}"}])
 
+    _span_job(parsed.jobId)
     job_dir = _job_dir(parsed.jobId)
     with _job_attempt(parsed.jobId) as attempt:   # registered before the photos land, so a DELETE from now on cancels
-        input_dir = job_dir / "input"
-        if input_dir.exists():   # a retry of the same job: only this attempt's photos
-            shutil.rmtree(input_dir)
-        input_dir.mkdir(parents=True)
-        saved: List[str] = []
-        for index, photo in enumerate(photos):
-            target = input_dir / _safe_photo_name(index, photo.filename)
-            with target.open("wb") as out:
-                shutil.copyfileobj(photo.file, out)
-            saved.append(str(target))
+        with otlp_spans.span("beside.inference.save-photos", jobId=parsed.jobId) as saving:
+            input_dir = job_dir / "input"
+            if input_dir.exists():   # a retry of the same job: only this attempt's photos
+                shutil.rmtree(input_dir)
+            input_dir.mkdir(parents=True)
+            saved: List[str] = []
+            size = 0
+            for index, photo in enumerate(photos):
+                target = input_dir / _safe_photo_name(index, photo.filename)
+                with target.open("wb") as out:
+                    shutil.copyfileobj(photo.file, out)
+                    size += out.tell()
+                saved.append(str(target))
+            saving.set(photos=len(saved), bytes=size)
 
         result = _run(parsed.jobId, saved, parsed.options, attempt)
         artifact = job_dir / "base.glb"
@@ -1098,6 +1175,7 @@ def infer_upload(request: str = Form(..., description="JSON {jobId, options}"),
          responses={200: {"content": {"model/gltf-binary": {}}}, 404: {"description": "unknown job, file or name"}})
 def get_artifact(job_id: str, name: str) -> FileResponse:
     """A result file of an upload mode job. Only names in ARTIFACTS, only inside {WORK_DIR}/{jobId}."""
+    _span_job(job_id)
     job_dir = _job_dir(job_id)
     path = job_dir / name
     if name not in ARTIFACTS:
@@ -1112,6 +1190,7 @@ def delete_artifacts(job_id: str) -> Response:
     """Removes {WORK_DIR}/{jobId} (uploaded photos, intermediate files, the GLB). Idempotent: 204 when already gone.
     Also cancels a run of this job still on this machine (Spring gave up on it): it stops at its next step, answers
     INFERENCE_FAILED to nobody and removes what it wrote after this (_job_attempt). A retry of the job is a new attempt."""
+    _span_job(job_id)
     job_dir = _job_dir(job_id)
     with _JOBS_GUARD:   # a retry's POST registering now waits, so its new photos are not removed with the old folder
         number = _CURRENT.pop(job_id, None)

@@ -1,5 +1,7 @@
 package com.example.mockbackend.service;
 
+import com.example.mockbackend.config.RequestIdFilter;
+import com.example.mockbackend.config.TracingConfig;
 import io.micrometer.tracing.Link;
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.TraceContext;
@@ -13,17 +15,23 @@ import org.springframework.stereotype.Component;
 import java.net.http.HttpRequest;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Distributed tracing of a job run (W8, 2026-11-26; deploy/README.md '로그 · 알림'): where the time of one job goes,
- * between this server and the GPU service, as one trace in Grafana Tempo.
+ * Distributed tracing of a job run (W8, 2026-11-26; one trace with its request since 2026-11-27, obs-wave3 A2;
+ * deploy/README.md '로그 · 알림'): where the time of one job goes, between the app, this server and the GPU service, as
+ * one trace in Grafana Tempo.
  * <ul>
- *   <li>A job runs on an {@code @Async} worker thread after the upload's 202 has gone out, so it is not part of the
- *       upload request's trace. Each run is a trace of its own: root span {@value #RUN_SPAN} (tags jobId, attempt,
- *       worker; at the end job.result and job.error_code), started with no parent. It links to the trace of the request
- *       that dispatched it (upload or retry) and names it in the attribute {@value #DISPATCHED_FROM}:
- *       {@link #dispatching} remembers that request's trace in memory until the worker starts (nothing in the
- *       database).</li>
+ *   <li>A job runs on an {@code @Async} worker thread after the upload's 202 has gone out. {@link #dispatching}
+ *       remembers the dispatching request's span (upload or retry), its X-Request-Id and the time in memory until the
+ *       worker starts (nothing in the database). The run's root span {@value #RUN_SPAN} (tags jobId, attempt, worker,
+ *       {@value #REQUEST_ID_ATTRIBUTE}; at the end job.result and job.error_code) is then a child of that request's
+ *       server span, next to a span {@value #DISPATCH_WAIT_SPAN} for the time in the @Async queue. When the app sent a
+ *       W3C traceparent whose trace id is its flow's X-Request-Id, that is the trace of the whole flow.</li>
+ *   <li>The old shape stays for a run whose request was not sampled (the app's traceparent flags 00) or is not known
+ *       (the server restarted in between, a test that starts a run directly): a trace of its own, started with no parent,
+ *       linked to the request's trace and naming it in {@value #DISPATCHED_FROM}. The builder never gets both
+ *       setNoParent and setParent: with micrometer-tracing-bridge-otel 1.2 no-parent wins.</li>
  *   <li>Stages are child spans ({@link #stage}): cutout, waiting for the inference slot, the /healthz wait, storing the
  *       GLB; the inference HTTP calls are client spans ({@link #call}) whose W3C {@code traceparent} InferenceClient
  *       sends to the Python service with X-Request-Id ({@link #inject}).</li>
@@ -40,8 +48,12 @@ import java.util.concurrent.ConcurrentHashMap;
 public class JobTracing {
     /** Root span of one job run (one attempt). */
     public static final String RUN_SPAN = "beside.job.run";
-    /** Attribute of the root span: trace id of the request that dispatched the run (upload or retry). */
+    /** Sibling of the run under the request's span: from the hand-over to the worker thread picking the run up. */
+    public static final String DISPATCH_WAIT_SPAN = "beside.job.dispatch-wait";
+    /** Attribute of a run in a trace of its own: trace id of the request that dispatched it (upload or retry). */
     public static final String DISPATCHED_FROM = "beside.dispatched.trace_id";
+    /** Attribute of the run: X-Request-Id of the request that dispatched it (same key as on the server spans). */
+    public static final String REQUEST_ID_ATTRIBUTE = TracingConfig.REQUEST_ID_TAG;
     /** MDC keys (Micrometer Tracing's names; logback-spring.xml, application.properties logging.pattern.level). */
     public static final String MDC_TRACE_ID = "traceId";
     public static final String MDC_SPAN_ID = "spanId";
@@ -49,9 +61,13 @@ public class JobTracing {
     static final int MAX_REMEMBERED = 1_000;
     public static final JobTracing NOOP = new JobTracing(Tracer.NOOP, Propagator.NOOP);
 
+    /** What {@link #dispatching} remembers of the request until the run starts. */
+    record Origin(TraceContext context, String requestId, long dispatchedAtMs) {
+    }
+
     private final Tracer tracer;
     private final Propagator propagator;
-    private final Map<String, TraceContext> dispatchedFrom = new ConcurrentHashMap<>();
+    private final Map<String, Origin> dispatchedFrom = new ConcurrentHashMap<>();
 
     @Autowired
     public JobTracing(ObjectProvider<Tracer> tracer, ObjectProvider<Propagator> propagator) {
@@ -64,13 +80,14 @@ public class JobTracing {
     }
 
     /**
-     * Called by the request thread right before it hands the job to the worker: the request's trace (if any) becomes
-     * the run's link. {@link #forget} when the hand-over failed.
+     * Called by the request thread right before it hands the job to the worker: the request's span (if any) becomes
+     * the run's parent, or its link when it is not sampled. {@link #forget} when the hand-over failed.
      */
     public void dispatching(String jobId, int attempt) {
         TraceContext current = tracer.currentTraceContext().context();
         if (current != null && !current.traceId().isEmpty() && dispatchedFrom.size() < MAX_REMEMBERED) {
-            dispatchedFrom.put(key(jobId, attempt), current);
+            dispatchedFrom.put(key(jobId, attempt),
+                    new Origin(current, MDC.get(RequestIdFilter.MDC_KEY), System.currentTimeMillis()));
         }
     }
 
@@ -80,11 +97,25 @@ public class JobTracing {
 
     /** The root span of a run, in scope on this thread until {@link Run#close()}. */
     public Run startRun(String jobId, int attempt, String worker) {
-        TraceContext origin = dispatchedFrom.remove(key(jobId, attempt));
-        Span.Builder builder = tracer.spanBuilder().setNoParent().name(RUN_SPAN)
-                .tag("jobId", jobId).tag("attempt", attempt).tag("worker", worker);
-        if (origin != null) {
-            builder = builder.addLink(new Link(origin)).tag(DISPATCHED_FROM, origin.traceId());
+        Origin origin = dispatchedFrom.remove(key(jobId, attempt));
+        boolean inRequestTrace = origin != null && Boolean.TRUE.equals(origin.context().sampled());
+        Span.Builder builder = tracer.spanBuilder();
+        if (inRequestTrace) {
+            Span wait = tracer.spanBuilder().setParent(origin.context()).name(DISPATCH_WAIT_SPAN)
+                    .tag("jobId", jobId).tag("attempt", attempt)
+                    .startTimestamp(origin.dispatchedAtMs(), TimeUnit.MILLISECONDS)
+                    .start();
+            wait.end();
+            builder = builder.setParent(origin.context());
+        } else {
+            builder = builder.setNoParent();
+            if (origin != null) {
+                builder = builder.addLink(new Link(origin.context())).tag(DISPATCHED_FROM, origin.context().traceId());
+            }
+        }
+        builder = builder.name(RUN_SPAN).tag("jobId", jobId).tag("attempt", attempt).tag("worker", worker);
+        if (origin != null && origin.requestId() != null) {
+            builder = builder.tag(REQUEST_ID_ATTRIBUTE, origin.requestId());
         }
         return new Run(builder.start());
     }
