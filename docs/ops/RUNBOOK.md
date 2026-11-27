@@ -27,7 +27,25 @@
 | 작업 하나 | 같은 명령에 `grep <jobId>`. 워커 줄은 `"jobId"`(prod) 또는 `job=<jobId>`(텍스트)이고, 접수 줄 `Job created: <jobId>` 의 요청 id 로 만든 요청도 찾는다 [구현됨: 적용] 배포 창 1. 2026-11-26 같은 작업의 크롭·PROCESSING·COMPLETED 줄에 `jobId` 가 있었다(워커 줄의 `requestId` 는 비어 있다) |
 | 오류 응답 수 | `exec -T backend curl -s localhost:8081/actuator/prometheus \| grep ^beside_api_errors_total`(status·code 별). 5xx 는 로그에 `Internal error: ... requestId=<id>` 와 스택 [구현됨: 적용] 배포 창 1. 운영에서 5xx 줄은 아직 보지 못했다 |
 | VM 감시(R4) | `journalctl -u beside-watchdog -n 20 --no-pager`(정상이면 비어 있다), 디스코드 🔁(재시작)·✅(재시작 뒤 정상) |
-| Pod | Runpod 콘솔, Pod `/workspace/beside-logs/{inference,start,supervisor}.log`, `curl -s 127.0.0.1:8002/healthz` |
+| Pod | 2026-11-27 부터 Pod 를 `BESIDE_TELEMETRY_VM` 으로 켰다면 Grafana 'Beside 로그' 또는 Explore 의 Loki `{service="inference", env="prod"}`(`file`=inference.log·start.log·supervisor.log, `host`=Pod 이름, ERROR 와 스택이 한 항목, `|= "<jobId>"`·`|= "trace=<32hex>"`)와 Tempo `{resource.service.name="beside-inference"}` [구현됨], Pod 확인 [계획]. 보내는 쪽 상태는 Pod `/workspace/beside-logs/ship_logs.log`. 보내지 않는 Pod(또는 보내기가 멈췄을 때)는 Runpod 콘솔, Pod `/workspace/beside-logs/{inference,start,supervisor}.log`, `curl -s 127.0.0.1:8002/healthz` |
+| 문의 번호(앱 오류 화면) | 아래 '문의 번호로 한 요청 따라가기' |
+| 앱 오류 `app_error` | 아래 '앱 오류 sig 로 원인 찾기' |
+
+### 문의 번호로 한 요청 따라가기 (2026-11-27 [구현됨], 운영은 배포 창 3 뒤)
+
+앱 오류 화면의 "문의 번호 yyyyyyyy" 는 그 흐름의 `X-Request-Id`(32자 hex) 앞 8자이고, 그 흐름의 업로드·retry·cancel·GLB 내려받기는 같은 값을 trace id 로 쓴다(`traceparent`, [CONTRACT.md](../CONTRACT.md) §2).
+
+1. Grafana **Beside 로그** → '찾기' 행의 `q` 에 8자를 넣는다. Caddy 접근 줄(`request.headers.X-Request-Id`)·backend 줄(`requestId`·`traceId`)·Pod 를 보낸다면 inference 줄(`trace=`)이 나온다. 같은 시각대로 좁히면 8자로도 충분하다.
+2. backend 줄을 펼쳐 `traceId`(= 전체 흐름 id)를 누르면 Tempo 트레이스: 서버 span `http post /api/v1/jobs` → `beside.upload.check`·`save` → `beside.job.dispatch-wait` → `beside.job.run`(크롭·슬롯 대기·추론 호출·GLB·저장) → (Pod 가 보내면) Python `POST /infer/upload` → lock-wait·predict·convert·rig. 어느 막대가 긴지·빨간지가 막힌 단계다.
+3. 앱은 span 을 보내지 않아 서버 span 의 부모가 '없음'으로 보이는 것이 정상이다. 서버가 재시작해 업로드를 잊은 작업은 작업 실행이 따로 된 트레이스(링크 `beside.dispatched.trace_id`)라 `jobId` 로 찾는다.
+
+### 앱 오류 sig 로 원인 찾기 (2026-11-27 [구현됨], 기기 확인 [계획])
+
+앱 오류는 제품 이벤트 `app_error`(`kind` = exception|error|assert, `sig` = 오류 종류·호출 위치의 해시)로만 서버에 온다. 메시지 원문은 보내지 않는다.
+
+1. `/admin` 의 이벤트 CSV(`name=app_error`)나 Grafana 'Beside 운영' 의 '앱 오류' 통계에서 많이 나온 `sig` 를 고른다. `/admin` 세션 퍼널의 '이탈 사유' 에 `앱 오류 (kind=…)` 로도 보인다.
+2. 팀 기기라면 `adb logcat -s Unity | findstr /C:"app_error sig=<sig>"` 로 `type`·`frame`(호출 위치)을 찾는다. 원래 오류 줄(메시지·스택)은 logcat 에서 그 줄보다 앞(보통 바로 앞)에 있다.
+3. 팀 밖 기기는 logcat 이 없으므로 sig 로 같은 오류끼리 묶어 세기만 하고 원인은 팀 기기에서 재현한다. 한 실행에 최대 20건, 같은 sig 는 3건까지라 건수는 '영향받은 세션 수'에 가깝게 본다.
 
 ## 시나리오별 대응
 
@@ -137,6 +155,7 @@
      - 넘길 때 PENDING 이던 작업도 대상 backend 가 켜질 때 `INTERNAL_ERROR`("Interrupted by a server restart while PENDING")가 된다(2026-11-26 표지 작업 4건 모두).
      - 2026-11-27 부터 `failover_vm.sh` 0단계가 원본 대기열(PENDING·PROCESSING)이 0 이 아니면 멈춘다. 비워질 때까지 기다리거나, 잃어도 되면 `BESIDE_ALLOW_QUEUE=1` 로 넘긴다 [구현됨]. 표지 작업을 GPU 없이 만들면 대기열에 남으므로, 그때는 `BESIDE_ALLOW_QUEUE=1` 이 필요하다.
    - Tailscale 관리 화면을 본다.
+   - GPU Pod 를 `BESIDE_TELEMETRY_VM`(로그·span 보내기, 2026-11-27)으로 켰다면 그 값은 옛 운영 VM 의 tailnet IP 를 가리킨다. 대기 VM 의 tailnet IP 로 바꾸고 Pod 에서 `start_pod.sh` 를 다시 돌린다: 로그 보내는 쪽(`ship_logs.py`)은 새 주소로 다시 뜨고, 추론 서비스의 span 은 NOTE 대로 서비스를 내렸다 다시 띄워야 바뀐다. 바꾸기 전에는 Pod 로그·span 이 옛 VM 으로 가다 실패해 버려진다(추론에는 영향 없음). 자동 전환은 [계획].
    - 2026-11-26 훈련에서는 넘긴 직후 대상의 VM 밖 백업 1~2번이 실패했고, 감시가 '🗄️ VM 밖 백업(R1)이 멈췄어요' 를 보냈다(15:51 알림 → 15:58 성공). 전환이 볼륨의 `backup/` 을 복사하지 않아 대상의 가장 새 zip 이 오래됐기 때문이다. 2026-11-27 부터 2단계가 가장 새 zip 1개도 복사한다 [구현됨, 실제 전환으로는 아직 확인 전]. 그래도 알림이 오면 backend 의 첫 5분 백업 뒤 '✅ 다시 성공' 이 오는지 본다.
    - 대상 Grafana 는 자기 디스크에 저장된 옛 알림 상태로 켜진다. 몇 분 동안 해결된 알림을 다시 보낼 수 있다.
 7. SSH: 고정 IP 가 대기 VM 에 있는 동안 `ssh beside-gcp` 는 호스트 키가 달라 실패한다. 그동안은 `ssh -o HostKeyAlias=beside-standby beside-gcp` 를 쓴다.

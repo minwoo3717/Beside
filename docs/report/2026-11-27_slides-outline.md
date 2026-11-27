@@ -54,9 +54,10 @@
 
 - 배포: GCP VM + Caddy(HTTPS) + Docker Compose. 계약 v1 과 계약 테스트.
 - 관측:
-  - Prometheus·Grafana(지표 5종), Loki(로그), Tempo(트레이스)
-  - 알림 13개 → Discord
-  - 요청 id `X-Request-Id` 로 앱 → 서버 → GPU 를 한 줄로 찾기
+  - Prometheus·Grafana(지표 5종, API·추론 p50·p95 상시 그래프), Loki(로그), Tempo(트레이스)
+  - 알림 13개 → Discord [적용]. 2026-11-27 18개(수집기 감시·GPU Pod 오류 포함) [구현됨, 적용은 배포 창 3]
+  - 요청 id `X-Request-Id` 로 앱 → 서버 → GPU 를 한 줄로 찾기. 2026-11-27 부터 앱 흐름 id = trace id 라 업로드·작업·추론 단계가 한 트레이스, 앱 오류 화면의 '문의 번호'로 찾는다 [구현됨]
+  - 제품 지표: 화면·버튼 이벤트 15종, 세션 퍼널·이탈 직전 화면·이탈 사유·불러오기 퍼널·작업 완료율(/admin) [구현됨]
 - 보호: 큐 상한(19건, 503 `QUEUE_FULL`) [구현됨, 운영은 꺼 둠], VM 감시 자동 재시작, 5분 백업 → VM 밖 버킷
 - 왜: 멘토링이 '감지가 빨라야 원인을 빨리 찾는다', '실제 제품처럼' 이라고 했다.
 - 출처: 최종보고서 3절, [REDUNDANCY](../ops/REDUNDANCY.md) 3절

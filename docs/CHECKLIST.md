@@ -37,6 +37,7 @@
 | M14 | [BE·전원] | 발표 수치 한 장과 측정표 3종. 표마다 조건(사진 1장 반복, 1회 실행)을 적는다. → 2026-11-27 초안: [발표 수치와 측정표](report/2026-11-27_measurements.md)(발표 수치 8줄, 서버·추론 표는 기존 [실험 결과] 를 출처 줄과 함께 옮김, 앱(기기) 표는 0건 [계획]). 팀 검토 [사람] | 3절 5단계, [perf/load](perf/load/), [장애 훈련](ops/2026-11-20_failure-drills.md) |
 | M15 | [전원] | 슬라이드(문제 → 구현 → 실험 → 결과 → 개선). → 2026-11-27 장별 내용 초안 14장: [슬라이드 초안](report/2026-11-27_slides-outline.md)('왜' 를 넣은 흐름, 숫자는 측정표에서만). 같은 날 이 내용으로 claude.ai Slides 덱 초안 18장(11-06 발표 형식·이미지 위주, 리포 밖·비공개). 팀 공유·검토는 [사람] | 리포에는 내용 초안, 덱은 claude.ai(비공개) |
 | M16 | [전원·사람] | GPU 를 켠 리허설 1회(M12 포함) | 3절 5단계 '리허설' |
+| M17 | [BE·UN·GEN·사람] | 멘토링 '로깅·트레이싱·모니터링' 보강(obs-wave3, 계획 2026-11-27 승인): p50·부하 시험 구분·수집기 감시, 앱 → 서버 → 생성 서버 한 trace, 제품 지표 이탈·불러오기. → 2026-11-27 브랜치 `feat/obs-wave3` 에 **[구현됨]**(조각 C0·A1~A4·B1~B3·C1~C2·D1~D3·E1, backend 501·node·Python·셸·Unity 컴파일 통과, 로컬 확인 [기록](ops/data/2026-11-27_obs-wave3-local/README.md)). 남은 것: push·PR·main 병합, 배포 창 3(VM backend 재시작·alloy·prometheus·grafana) [사람: 승인], Pod 세션에서 `BESIDE_TELEMETRY_VM` 으로 Pod 로그·한 trace 확인(E4, M7·M8 과 같이) [사람], 에디터·기기에서 앱 이벤트·`traceparent` 확인(E2) [사람], Grafana 캡처 [사람], 시연 태그(M4)가 새 `start_pod.sh` 를 포함하는지 | [deploy/README.md](../deploy/README.md) '관측 보강 (2026-11-27)', [report/2026-11-25_mentoring-response.md](report/2026-11-25_mentoring-response.md) 6절 |
 
 ### should
 
