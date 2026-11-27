@@ -257,6 +257,10 @@ jobs:
           vols = [v.get("source", "") + ":" + v.get("target", "") for v in alloy.get("volumes", [])]
           assert not any("docker.sock" in v for v in vols), f"alloy mounts docker.sock: {vols}"
           assert any(v.get("target") == "/var/lib/docker/containers" and v.get("read_only") for v in alloy["volumes"]), vols
+          # Prometheus reads alloy:12345/metrics for up{job="alloy"} (collector alerts, 2026-11-27): listen on the compose
+          # network, expose only (no ports, checked above for every service)
+          assert "--server.http.listen-addr=0.0.0.0:12345" in alloy["command"], alloy["command"]
+          assert "12345" in [str(p) for p in alloy.get("expose", [])], alloy.get("expose")
           for name in ("loki", "alloy", "tempo"):
               assert mem_bytes(mon["services"][name]["mem_limit"]) <= 384 * 1024**2, (name, mon["services"][name]["mem_limit"])
           # tracing (W8, 2026-11-26): tempo is internal only (no ports, checked above for every service), keeps its blocks
@@ -324,6 +328,9 @@ jobs:
       - name: log pipeline, traces and Grafana provisioning load (Loki config, Alloy syntax, Tempo, datasources, dashboards, alert rules)
         run: |
           img() { grep -m1 -oE "$1:[^\"[:space:]]+" deploy/docker-compose.yml; }
+          # Prometheus scrape config (2026-11-27: loki, alloy and tempo jobs for the collector alerts) with the image's own promtool
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+            "$(img prom/prometheus)" check config /etc/prometheus/prometheus.yml
           docker run --rm -v "$PWD/deploy/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro" "$(img grafana/loki)" \
             -config.file=/etc/loki/loki.yml -verify-config
           docker run --rm -v "$PWD/deploy/monitoring/alloy/config.alloy:/tmp/config.alloy:ro" "$(img grafana/alloy)" \
@@ -366,6 +373,9 @@ jobs:
           n="$(curl "${A[@]}" http://127.0.0.1:3300/api/v1/provisioning/alert-rules | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')"
           want="$(grep -c '^      - uid: ' deploy/monitoring/grafana/provisioning/alerting/rules.yml)"
           test "$n" = "$want" || { docker logs ci-grafana | tail -50; echo "alert rules loaded: $n, in the file: $want"; exit 1; }
+          # the count the docs name (deploy/README.md '로그 · 알림', docker-compose.yml, .env.example, docs/ops/SLO.md): 13 rules of
+          # 2026-11-26 + 4 collector rules of 2026-11-27 (up of loki/alloy/tempo, Alloy write drops). Change the docs with this line
+          test "$want" = 17 || { echo "rules.yml has $want rules; the docs say 17"; exit 1; }
           docker logs ci-grafana 2>&1 | grep -iE 'level=error.*provision' && exit 1 || true
           docker rm -f ci-grafana > /dev/null
           echo "loki, alloy, tempo and grafana provisioning ok ($n alert rules)"
