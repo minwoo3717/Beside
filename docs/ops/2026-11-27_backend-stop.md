@@ -77,7 +77,12 @@
 - 종료 코드 130 은 SIGINT(Ctrl+C)라서다. 리눅스의 SIGTERM 이면 같은 종료 훅을 거쳐 143 이 된다(JVM 동작, 여기서는 재지 않음).
 - 자바 시험(`gradlew test`, 2026-11-27): 496개 중 실패 0, 건너뜀 12. 그 전 한 번의 전체 실행에서 `ShareApiTest` 1건이 mock 작업 완료를 5 s 안에 보지 못해 실패했는데, 혼자 3번·전체 다시 1번 모두 통과했다 [가설: 시간에 민감한 시험의 흔들림. 이 변경은 mock 의 잠을 같은 길이의 `CountDownLatch.await` 로 바꾼 것뿐이다]. 브라우저 JS 시험(`node --test backend/src/test/js/*.cjs`): 75개 중 통과 74, 건너뜀 1(실행 중 서버가 필요한 것).
 
+## 운영 VM 적용 (2026-11-27) [실험 결과]
+
+- PR #40 병합(main `2569998`) 뒤 08:08:31~08:10:18 UTC `scripts/deploy_vm.sh` 로 배포했다. 배포 직전 대기열 PENDING 0·PROCESSING 0. backend 만 다시 만들어졌다. healthz `real,prod`, 공개 경로 `scripts/check_public_routes.sh` 63/63.
+- 배포 직후 `docker compose stop backend`: 1.18 s 에 멈추고 종료 코드 **143**(`StopTimeout` 30). 로그 마지막은 `SpringApplicationShutdownHook` 의 JPA·Hikari 정리. `up -d backend` 로 다시 켜 약 26 s 뒤 healthy. 이 정지 동안 약 30 s 끊겼다.
+- 조건: 대기열이 비어 있을 때 1회. PENDING 작업이 GPU 를 기다리는 중의 정지(고친 경로 자체)는 운영에서 재지 않았다. 그 경로는 개발 PC 3회(0.66~0.72 s)가 근거다.
+
 ## 남은 것 [계획]
 
-- 실제 SIGTERM·종료 코드 143 은 리눅스에서만 잴 수 있다. 개발 PC 에는 리눅스 JDK·Docker 가 없어 재지 않았다. 배포 뒤 VM 에서 PENDING 작업을 하나 둔 채 `docker compose stop backend` 를 하고 `docker inspect` 의 종료 코드(143 기대)와 정지 시간, 로그의 "Server stopping" 줄을 본다.
-- 운영 VM 배포는 하지 않았다(배포 동결 12/01 전, 사용자가 정한다). 배포 전까지 운영 backend 의 정지는 여전히 작업이 있으면 SIGKILL 이다.
+- PENDING 작업이 있는 상태에서 리눅스 정지 시간 재기(스테이징이나 대기 VM 에서, GPU 없이 시간 초과 경로로).
