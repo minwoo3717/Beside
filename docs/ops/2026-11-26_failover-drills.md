@@ -178,6 +178,7 @@
   - 넘기기 전에 대기 VM → Pod `tailscale ping` 과 8002 번 TCP 를 본다.
   - 진행 중 작업 retry 와 전환 뒤 COMPLETED 1건을 본다.
 - 찾은 것 2(훈련 때 알림 경로) 고치기. 1(a)·3 은 2026-11-27 스크립트에 넣었고, 4 는 backend 코드를 고쳤다 [구현됨]. 다음 실제 전환에서 확인한다.
+  - 2026-11-27: 셋 모두 main `2569998`(PR #40)으로 운영 VM 에 배포했고, 대기 VM 도 `sync_standby.sh` 로 같은 커밋·이미지에 맞췄다(08:14~08:16 UTC). 같은 날 08:16 UTC `DRY_RUN=1 failover_vm.sh --planned beside-vm beside-standby` 의 0단계 검사(같은 커밋, 빌드 표시, tailnet, 새 원본 대기열 검사)가 모두 통과했다. 실제 전환으로 확인하는 것은 아직이다.
 - 대기 VM 의 tailnet 재연결 시간 재기(4단계 IP 교체 동안).
 - 팀 Discord 에 Grafana 알림이 갔는지 확인 [사람].
 - 비계획 전환 D-2 와 5분 당겨 오기(`standby_pull.sh`)는 Phase 2(발표 뒤)다.
