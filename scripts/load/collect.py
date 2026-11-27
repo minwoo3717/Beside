@@ -83,6 +83,8 @@ def queries(env: str) -> list:
     return [
         ("http_p95_by_uri", f"histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
         ("http_p99_by_uri", f"histogram_quantile(0.99, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
+        # p50 next to p95 (mentoring 2026-11-25: p50·p95 side by side); the 5 ms and 10 ms buckets make it more than a guess
+        ("http_p50_by_uri", f"histogram_quantile(0.5, sum by (le, uri) (rate(http_server_requests_seconds_bucket{s()}[1m])))"),
         ("http_rps_by_uri", f"sum by (uri) (rate({req_count}[1m]))"),
         ("http_rps_by_status", f"sum by (status) (rate({req_count}[1m]))"),
         ("http_5xx_ratio", f"clamp_min(sum(rate(http_server_requests_seconds_count{status_5xx}[1m])) - {refused_rate}, 0)"
