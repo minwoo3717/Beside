@@ -1,4 +1,6 @@
-# Grafana 알림 규칙(파일 공급). 운영 지표(env="prod")만 본다. 부하 시험·스테이징의 env="loadtest" 는 울리지 않는다.
+# Grafana 알림 규칙(파일 공급). 지표·로그 모두 운영만 본다: 지표는 env="prod", backend 로그는 env 라벨이 loadtest·local 이 아닌 줄
+# (env 라벨이 없는 옛 줄도 본다), Caddy 로그는 k6 요청(X-Request-Id lt-*)을 뺀 줄. 부하 시험·스테이징의 env="loadtest" 는 울리지 않는다.
+# 수집기 감시(up{job="loki|alloy|tempo"}, Alloy 쓰기 실패)는 VM 의 컨테이너 자체라 env 가 없다(2026-11-27).
 # 만든 곳: 2026-11-25 멘토링 '모니터링을 해야 장애 감지가 빠르다'. 그 전에는 지표 알림이 0개였다(대시보드는 사람이 볼 때만 쓸모).
 # 이 파일은 scratchpad 의 생성기에서 만들었다. 규칙을 고칠 때는 아래 구조를 그대로 따른다:
 #   A = 순간 질의, C = A 의 임계값. 데이터 없음(트래픽 없음)은 정상(OK)으로 본다.
@@ -207,7 +209,7 @@ groups:
           - refId: A
             relativeTimeRange: {from: 300, to: 0}
             datasourceUid: beside-loki
-            model: {"refId": "A", "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | request_method=\"GET\" | request_uri=~\"/api/v1/jobs/[0-9a-f-]+\" | unwrap duration | __error__=\"\" [2m]) by (service)", "queryType": "instant"}
+            model: {"refId": "A", "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | request_method=\"GET\" | request_uri=~\"/api/v1/jobs/[0-9a-f-]+\" | json rid=`request.headers[\"X-Request-Id\"][0]` | rid !~ \"lt-.*\" | unwrap duration | __error__=\"\" [2m]) by (service)", "queryType": "instant"}
           - refId: C
             datasourceUid: __expr__
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [1]}}]}
@@ -216,7 +218,7 @@ groups:
         for: 2m
         isPaused: false
         annotations:
-          summary: "앞단(Caddy)에서 잰 작업 조회(GET /api/v1/jobs/{id}) p95 가 1 s 를 넘은 지 2분. Spring 지표에는 backend 앞 네트워크·Caddy 대기열 지연이 안 보인다(2026-11-26 스테이징 훈련 S2: 앞단 17.8 s 동안 Spring 0.025 s). 작업 조회만 본다: Grafana 웹소켓(연결 내내 한 줄)·GLB 다운로드·업로드는 원래 길어 트래픽이 적을 때 p95 를 끌어올린다(2026-11-26 배포 전 검토). Grafana 'Beside 로그' 의 Caddy 응답 시간과 'Beside 운영' 의 CPU 를 본다."
+          summary: "앞단(Caddy)에서 잰 작업 조회(GET /api/v1/jobs/{id}) p95 가 1 s 를 넘은 지 2분. Spring 지표에는 backend 앞 네트워크·Caddy 대기열 지연이 안 보인다(2026-11-26 스테이징 훈련 S2: 앞단 17.8 s 동안 Spring 0.025 s). 작업 조회만 본다: Grafana 웹소켓(연결 내내 한 줄)·GLB 다운로드·업로드는 원래 길어 트래픽이 적을 때 p95 를 끌어올린다(2026-11-26 배포 전 검토). 부하 시험의 k6 요청(X-Request-Id lt-*)은 뺀다(2026-11-27). Grafana 'Beside 로그' 의 Caddy 응답 시간과 'Beside 운영' 의 CPU 를 본다."
         labels:
           severity: warning
       - uid: beside-backend-errors
@@ -226,7 +228,7 @@ groups:
           - refId: A
             relativeTimeRange: {from: 300, to: 0}
             datasourceUid: beside-loki
-            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"} | json | logger_name!~\"io[.]opentelemetry[.].*\" [5m]))", "queryType": "instant"}
+            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\", env!~\"loadtest|local\"} | json | logger_name!~\"io[.]opentelemetry[.].*\" [5m]))", "queryType": "instant"}
           - refId: C
             datasourceUid: __expr__
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
@@ -235,7 +237,7 @@ groups:
         for: 0s
         isPaused: false
         annotations:
-          summary: "backend 가 지난 5분에 ERROR 로그를 남겼다. Grafana 'Beside 로그' 의 'backend ERROR · WARN' 에서 requestId·jobId 로 따라간다. 트레이스 내보내기 실패(io.opentelemetry)는 따로 '트레이스 내보내기 실패' 알림이 본다."
+          summary: "backend 가 지난 5분에 ERROR 로그를 남겼다. Grafana 'Beside 로그' 의 'backend · inference ERROR · WARN' 에서 requestId·jobId 로 따라간다. 트레이스 내보내기 실패(io.opentelemetry)는 따로 '트레이스 내보내기 실패' 알림이 본다."
         labels:
           severity: warning
       - uid: beside-trace-export
@@ -245,7 +247,7 @@ groups:
           - refId: A
             relativeTimeRange: {from: 600, to: 0}
             datasourceUid: beside-loki
-            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\"} | json | logger_name=~\"io[.]opentelemetry[.].*\" [10m]))", "queryType": "instant"}
+            model: {"refId": "A", "expr": "sum(count_over_time({service=\"backend\", level=\"ERROR\", env!~\"loadtest|local\"} | json | logger_name=~\"io[.]opentelemetry[.].*\" [10m]))", "queryType": "instant"}
           - refId: C
             datasourceUid: __expr__
             model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
@@ -255,5 +257,81 @@ groups:
         isPaused: false
         annotations:
           summary: "backend 가 지난 10분에 트레이스를 tempo 로 보내지 못했다(OpenTelemetry 내보내기 ERROR, 1분에 최대 5줄). 작업에는 영향 없다. tempo 컨테이너가 떠 있는지(메모리 상한 384m) 본다. 'backend ERROR 로그' 와 나눈 이유: 한 알림에 묶이면 tempo 가 꺼진 동안 그 알림이 계속 울린 상태라 진짜 오류가 새 메시지 없이 묻힌다(반복 4시간, 2026-11-26 배포 전 검토)."
+        labels:
+          severity: warning
+      - uid: beside-loki-down
+        title: "Loki 지표 수집 실패 (로그 저장 멈춤)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "up{job=\"loki\"}", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "lt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "Loki 를 5분 넘게 못 읽었다. 그동안 로그가 저장되지 않고, 로그 알림(앞단 지연·backend ERROR·트레이스 내보내기)도 판단하지 못한다. Alloy 가 잠시 다시 보내다 못 보낸 줄은 버린다('Alloy 로그 전송 실패'). VM 에서 docker compose(--profile monitoring)의 ps loki · logs --tail 50 loki 를 본다(메모리 상한 384m). 다시 띄우기는 up -d --no-deps loki(deploy/README '로그 · 알림')."
+        labels:
+          severity: warning
+      - uid: beside-alloy-down
+        title: "Alloy 지표 수집 실패 (로그 수집 멈춤)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "up{job=\"alloy\"}", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "lt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "로그 수집기 Alloy 를 5분 넘게 못 읽었다. 그동안 새 로그가 Loki 에 들어오지 않는다. 다시 뜨면 볼륨에 남은 읽은 위치부터 이어 읽지만, 그 사이 Docker 로그 파일(서비스마다 10 MB × 5)이 돌아 지워진 줄은 잃는다. VM 에서 docker compose(--profile monitoring)의 ps alloy · logs --tail 50 alloy 를 본다(메모리 상한 384m, 2026-11-26 훈련 때 부하 없이 230 MiB)."
+        labels:
+          severity: warning
+      - uid: beside-tempo-down
+        title: "Tempo 지표 수집 실패 (트레이스 저장 멈춤)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "up{job=\"tempo\"}", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "lt", "params": [1]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        isPaused: false
+        annotations:
+          summary: "Tempo 를 5분 넘게 못 읽었다. 그동안 트레이스가 저장되지 않는다(작업에는 영향 없음). backend 가 보내지 못하면 '트레이스 내보내기 실패' 도 울린다. VM 에서 docker compose(--profile monitoring)의 ps tempo · logs --tail 50 tempo 를 본다(메모리 상한 384m)."
+        labels:
+          severity: warning
+      - uid: beside-alloy-dropped
+        title: "Alloy 로그 전송 실패 (Loki 에 못 쓴 줄)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: beside-prometheus
+            model: {"refId": "A", "expr": "sum(increase(loki_write_dropped_entries_total[10m]))", "instant": true, "range": false}
+          - refId: C
+            datasourceUid: __expr__
+            model: {"refId": "C", "type": "threshold", "expression": "A", "conditions": [{"evaluator": {"type": "gt", "params": [0]}}]}
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        isPaused: false
+        annotations:
+          summary: "Alloy 가 지난 10분에 로그 줄을 Loki 에 쓰지 못하고 버렸다(Alloy 자체 지표 loki_write_dropped_entries_total). 그 구간의 로그는 'Beside 로그' 에 없다. Loki 가 떠 있는지('Loki 지표 수집 실패')와 alloy 컨테이너 로그(logs --tail 50 alloy)를 본다. 로그가 0줄 들어오는 것을 보는 규칙은 두지 않는다: 조용한 밤에도 울린다."
         labels:
           severity: warning

@@ -69,8 +69,11 @@ services:
       # 업로드도 5분 판으로 함께 설치한다(deploy/backup, README '운영 대응 설치' 4번).
       STORAGE_BACKUP_CRON: "${STORAGE_BACKUP_CRON:-0 5 * * * *}"
       STORAGE_BACKUP_KEEP: "${STORAGE_BACKUP_KEEP:-48}"
-      # 분산 추적(W8, 2026-11-26): 작업 실행 하나의 트레이스(beside.job.run, 추론 서비스 호출 포함)와 HTTP 요청을 아래
-      # tempo(monitoring 프로필)로 보낸다. management.otlp.tracing.endpoint ↔ MANAGEMENT_OTLP_TRACING_ENDPOINT: Spring Boot 3.2 는
+      # 분산 추적(W8, 2026-11-26. 구조는 2026-11-27 고침): 업로드 요청 하나가 트레이스 하나다. 서버 span(http post /api/v1/jobs)
+      # 아래에 사진 검사·저장(beside.upload.check·save), @Async 대기(beside.job.dispatch-wait), 작업 실행(beside.job.run, 크롭·추론
+      # 서비스 호출 포함)이 있다. 앱이 traceparent 를 보내면 trace id = 앱 흐름의 X-Request-Id. flags 00 이거나 재시작으로 기억이
+      # 없으면 실행은 따로 루트 + 링크. 이것과 다른 HTTP 요청의 span 을 아래 tempo(monitoring 프로필)로 보낸다.
+      # management.otlp.tracing.endpoint ↔ MANAGEMENT_OTLP_TRACING_ENDPOINT: Spring Boot 3.2 는
       # 이 값이 있을 때만 내보낸다(application.properties). tempo 가 없으면 내보내기가 실패해 backend 가 ERROR 를 1분에 최대
       # 5줄 남기고(OpenTelemetry 의 SEVERE, 작업에는 영향 없음) Grafana '트레이스 내보내기 실패' 알림이 울린다. 그래서 배포는
       # tempo 먼저(README '로그 · 알림'). tempo 없이 오래 띄울 때는 deploy/.env 에 TRACING_SAMPLING_PROBABILITY=0 (span 은 안
@@ -205,7 +208,7 @@ services:
       # 데이터소스(Prometheus)와 대시보드 'Beside 운영'을 파일로 넣는다. 폴더 마운트라 git pull 이 바로 보인다.
       - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
-      # 알림 규칙 13개(지표 10·로그 3) → Discord(2026-11-26). 웹훅은 위 GRAFANA_ALERT_WEBHOOK_URL.
+      # 알림 규칙 17개(지표 14·로그 3) → Discord(2026-11-26, 2026-11-27 에 수집기 감시 4개). 웹훅은 위 GRAFANA_ALERT_WEBHOOK_URL.
       - ./monitoring/grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
       # 사용자·세션·직접 만든 대시보드(SQLite).
@@ -246,16 +249,20 @@ services:
     command:
       - run
       - --storage.path=/var/lib/alloy/data
-      - --server.http.listen-addr=127.0.0.1:12345
+      # 0.0.0.0: Prometheus 가 compose 내부망에서 /metrics 를 읽는다(up{job="alloy"} 알림, 2026-11-27). ports 가 아니라 expose 라
+      # VM 밖에는 열리지 않는다. Alloy 의 디버그 화면도 이 주소에 있지만 compose 내부망에서만 닿는다.
+      - --server.http.listen-addr=0.0.0.0:12345
       - /etc/alloy/config.alloy
     environment:
-      # 2026-11-26 스테이징 훈련: 부하가 없어도 230 MiB(옛 상한 256m)라 384m 으로 올렸다. 죽어도 알림이 없어 여유를 둔다.
+      # 2026-11-26 스테이징 훈련: 부하가 없어도 230 MiB(옛 상한 256m)라 384m 으로 올렸다. 죽으면 up{job="alloy"} 알림(2026-11-27).
       GOMEMLIMIT: 300MiB
     volumes:
       - ./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
       # Docker 의 json-file 로그(읽기만). docker.sock 은 붙이지 않는다(읽기 전용이어도 사실상 root 권한).
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - alloy_data:/var/lib/alloy/data
+    expose:
+      - "12345"
     mem_limit: 384m
     logging: *default-logging
 

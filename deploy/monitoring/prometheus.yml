@@ -17,3 +17,31 @@ scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  # 로그·트레이스 수집기 감시(2026-11-27): 수집기가 죽으면 로그·트레이스가 조용히 끊기므로 up{job="loki|alloy|tempo"} 를 알림이 본다
+  # (provisioning/alerting/rules.yml). 셋 다 compose 내부망의 /metrics 다(alloy 는 compose 의 --server.http.listen-addr=0.0.0.0:12345).
+  # 셋의 자체 지표는 수천 개라 디스크 상한(retention.size 1GB)을 backend 지표와 나눠 먹지 않게 필요한 것만 남긴다. up 은 Prometheus 가
+  # 스스로 만드는 값이라 아래 keep 과 상관없이 남는다.
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "process_resident_memory_bytes|go_memstats_heap_inuse_bytes|loki_distributor_lines_received_total|loki_discarded_samples_total|loki_ingester_memory_streams"
+        action: keep
+
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "process_resident_memory_bytes|go_memstats_heap_inuse_bytes|loki_write_.*|loki_source_.*|otelcol_receiver_.*|otelcol_exporter_.*"
+        action: keep
+
+  - job_name: tempo
+    static_configs:
+      - targets: ["tempo:3200"]
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: "process_resident_memory_bytes|go_memstats_heap_inuse_bytes|tempo_distributor_spans_received_total|tempo_discarded_spans_total|tempo_ingester_live_traces"
+        action: keep
