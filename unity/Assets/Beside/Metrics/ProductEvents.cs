@@ -10,6 +10,7 @@ using Beside.Job;
 using Beside.Pet;
 using Newtonsoft.Json;
 using UnityEngine;
+using UnityEngine.XR.Interaction.Toolkit.Samples.StarterAssets;
 
 namespace Beside.Metrics
 {
@@ -47,11 +48,16 @@ namespace Beside.Metrics
         static readonly float[] RetryDelaySeconds = { 5f, 10f, 20f };
         static readonly HashSet<string> KnownClips = new HashSet<string> { "Walk", "Sit", "TailWag", "HeadTilt", "Idle" };
         static readonly JsonSerializerSettings Json = new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore };
+        // RuntimeModelLoader names a template "Runtime_" + name: JobManager loads "job_{jobId}", the saved models "lib_{id}"
+        const string TemplatePrefix = "Runtime_", JobTemplatePrefix = "Runtime_job_", LibraryTemplatePrefix = "Runtime_lib_";
+        const string CloneSuffix = "(Clone)";
 
         static ProductEvents instance;
         static bool quitting;
         static float arEnteredAt = -1f;
         static float centerPlacementAt = -100f;
+        /// <summary>Models placed in this session (template name): the next placement of one is model_placed again=true.</summary>
+        static readonly HashSet<string> placedModels = new HashSet<string>();
 
         /// <summary>The screen of the last screen_view (lower-case DesignedUIController.Page name), null before the first.</summary>
         public static string CurrentScreen { get; private set; }
@@ -72,6 +78,7 @@ namespace Beside.Metrics
         int failures;
         float nextFlushAt, nextBindAt;
         JobManager jobManager;
+        ObjectSpawner spawner;
         ARGuidance guidance;
         PetAnimationPlayer petAnim;
 
@@ -145,6 +152,7 @@ namespace Beside.Metrics
         static void ResetStatics()   // Enter Play Mode without a domain reload keeps statics
         {
             instance = null; quitting = false; CurrentScreen = null; arEnteredAt = -1f; centerPlacementAt = -100f;
+            placedModels.Clear();
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -215,8 +223,10 @@ namespace Beside.Metrics
             {
                 jobManager.JobFailed += OnJobFailed;
                 jobManager.ModelReady += OnModelReady;
-                jobManager.ModelPlaced += OnModelPlaced;
             }
+            // model_placed: every placement (2026-11-27), not JobManager.ModelPlaced (the first one of a job only)
+            if (spawner == null && (spawner = FindAnyObjectByType<ObjectSpawner>()) != null)
+                spawner.objectSpawned += OnObjectSpawned;
             if (guidance == null && (guidance = FindAnyObjectByType<ARGuidance>()) != null)
                 guidance.GuidanceChanged += OnGuidance;
             if (petAnim == null && (petAnim = FindAnyObjectByType<PetAnimationPlayer>()) != null)
@@ -229,8 +239,8 @@ namespace Beside.Metrics
             {
                 jobManager.JobFailed -= OnJobFailed;
                 jobManager.ModelReady -= OnModelReady;
-                jobManager.ModelPlaced -= OnModelPlaced;
             }
+            if (spawner != null) spawner.objectSpawned -= OnObjectSpawned;
             if (guidance != null) guidance.GuidanceChanged -= OnGuidance;
             if (petAnim != null) petAnim.ClipStarted -= OnClipStarted;
         }
@@ -245,14 +255,30 @@ namespace Beside.Metrics
                 ("loadMs", Clamp(ready.loadMs, 3_600_000)), ("waitMs", Clamp(ready.waitMs, 3_600_000)));
         }
 
-        void OnModelPlaced(string jobId, GameObject placedModel)
+        /// <summary>
+        /// model_placed for every placement of a runtime model: source job (Runtime_job_{jobId}) or library
+        /// (Runtime_lib_{id}, a saved dog), none for a test GLB URL (Runtime_{file}); again from the second placement of
+        /// the same model in this session. Other spawns (template objects) are not ours.
+        /// </summary>
+        void OnObjectSpawned(GameObject placedModel)
         {
+            if (placedModel == null) return;
+            string name = placedModel.name;
+            if (name.EndsWith(CloneSuffix, StringComparison.Ordinal)) name = name.Substring(0, name.Length - CloneSuffix.Length);
+            if (!name.StartsWith(TemplatePrefix, StringComparison.Ordinal)) return;
+            string source = null, id = null;
+            if (name.StartsWith(JobTemplatePrefix, StringComparison.Ordinal)) { source = "job"; id = name.Substring(JobTemplatePrefix.Length); }
+            else if (name.StartsWith(LibraryTemplatePrefix, StringComparison.Ordinal)) { source = "library"; id = name.Substring(LibraryTemplatePrefix.Length); }
+            bool again = !placedModels.Add(name);
+
             float now = Time.realtimeSinceStartup;
             string method = now - centerPlacementAt < 1f ? "center" : "tap";
+            var props = new List<(string, object)> { ("method", method) };
             if (CurrentScreen == "ar" && arEnteredAt >= 0f)
-                TrackJob("model_placed", jobId, ("method", method), ("secSinceArEnter", Mathf.Clamp(Mathf.FloorToInt(now - arEnteredAt), 0, 86400)));
-            else
-                TrackJob("model_placed", jobId, ("method", method));
+                props.Add(("secSinceArEnter", Mathf.Clamp(Mathf.FloorToInt(now - arEnteredAt), 0, 86400)));
+            props.Add(("again", again));
+            if (source != null) props.Add(("source", source));
+            TrackJob("model_placed", id, props.ToArray());
         }
 
         void OnGuidance(ARGuidance.Issue issue, string text, bool showSettings)

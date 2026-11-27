@@ -952,7 +952,9 @@ namespace Beside.UI.Designed
             errorBody.text = cut > 0 ? userText.Substring(cut + 2).Trim() : "";
             errorBody.gameObject.SetActive(errorBody.text.Length > 0);
             errorCode.text = code;
-            errorStage.text = string.IsNullOrEmpty(jobManager.CurrentJobId) ? "사진을 보내지 못했어요" : "작업 번호 " + Short(jobManager.CurrentJobId);
+            string stage = string.IsNullOrEmpty(jobManager.CurrentJobId) ? "사진을 보내지 못했어요" : "작업 번호 " + Short(jobManager.CurrentJobId);
+            string flowId = jobManager.CurrentRequestId;   // X-Request-Id = trace id: finds this flow in the server logs
+            errorStage.text = string.IsNullOrEmpty(flowId) ? stage : stage + " · 문의 번호 " + Short(flowId);
             errorRetry.text = retryable ? "가능" : "불가";
             errorRetry.color = retryable ? DesignKit.Accent : DesignKit.Danger;
             errorRetryButton.gameObject.SetActive(retryable);
@@ -1014,6 +1016,7 @@ namespace Beside.UI.Designed
                 entry = ModelLibrary.Add(jobId, path, photo, NextDefaultName(), autoCm);
                 if (entry != null)
                 {
+                    TrackSavedDogChange("saved", jobId);
                     SetModelIdentity(entry);
                     ShowPageToast($"강아지를 저장했어요 · 저장한 강아지 {ModelLibrary.Count}/{ModelLibrary.MaxItems}", 3f);
                 }
@@ -1048,7 +1051,9 @@ namespace Beside.UI.Designed
             if (photoPicker == null) return;
             photoPicker.Pick(photos =>
             {
-                if (photoPicker.GalleryAvailable) ProductEvents.PhotosSelected("gallery", photos?.Count ?? 0);
+                // the editor's test photos count as a gallery pick too, so an editor session's funnel goes past home
+                if (photoPicker.GalleryAvailable || (photos != null && photos.Count > 0))
+                    ProductEvents.PhotosSelected("gallery", photos?.Count ?? 0);
                 if (photos == null || photos.Count == 0)
                 {
                     if (!photoPicker.GalleryAvailable) OpenCamera(); // editor / no plugin
@@ -1443,11 +1448,17 @@ namespace Beside.UI.Designed
 
         IEnumerator LoadFromLibraryRoutine(ModelLibrary.Entry e)
         {
+            var clock = System.Diagnostics.Stopwatch.StartNew();   // saved_dog_open loadMs
             string path = ModelLibrary.GlbPath(e);
             byte[] bytes = null;
             try { bytes = File.ReadAllBytes(path); }
             catch (System.Exception ex) { Debug.LogWarning("[DesignedUI] could not read the saved model: " + ex.Message); }
-            if (bytes == null) { ShowPageToast("저장한 강아지 파일을 읽지 못했어요", 3f); yield break; }
+            if (bytes == null)
+            {
+                TrackSavedDogOpen(e, false, clock.ElapsedMilliseconds);
+                ShowPageToast("저장한 강아지 파일을 읽지 못했어요", 3f);
+                yield break;
+            }
 
             libLoading = true;
             ShowPageToast($"'{e.name}' 불러오는 중…", 60f);
@@ -1459,6 +1470,7 @@ namespace Beside.UI.Designed
             pageToast.gameObject.SetActive(false);
 
             GameObject template = task.IsCompletedSuccessfully ? task.Result : null;
+            TrackSavedDogOpen(e, template != null, clock.ElapsedMilliseconds);   // before Show: the event's screen is library
             if (template == null) { ShowPageToast("강아지를 열지 못했어요", 3f); yield break; }
             readyTemplate = template; placed = false;
             instructionDismissed = false;   // another model: the AR hint shows again
@@ -1475,7 +1487,8 @@ namespace Beside.UI.Designed
             {
                 if (e.id == currentEntryId) currentEntryId = null;   // the model on screen stays until another one is loaded
                 ModelLibrary.Remove(e);
-                if (libDeleteMode) { TrySavePending(); return; }
+                if (libDeleteMode) { TrySavePending(); return; }   // freeing a slot for the new model is not a "deleted"
+                TrackSavedDogChange("deleted", e.id);
                 RefreshLibrary();
                 ShowPageToast("지웠어요", 2f);
             });
@@ -1533,6 +1546,7 @@ namespace Beside.UI.Designed
             }
             e.name = name; e.heightCm = cm; e.memo = (memo ?? "").Trim();
             ModelLibrary.SaveChanges();
+            TrackSavedDogChange("edited", e.id);
             if (e.id == currentEntryId && readyTemplate != null)   // the model on screen: new size and name now
             {
                 ApplyHeight(readyTemplate, cm);
@@ -1554,6 +1568,7 @@ namespace Beside.UI.Designed
             libDeleteMode = false;
             if (entry != null)
             {
+                TrackSavedDogChange("replaced", entry.id);   // a slot freed by a delete in the full library: one event, no "deleted"
                 if (readyTemplate != null) SetModelIdentity(entry);   // the waiting model is the one on screen
                 ShowPageToast($"방금 만든 강아지를 저장했어요 · {ModelLibrary.Count}/{ModelLibrary.MaxItems}", 3f);
             }
@@ -1563,6 +1578,7 @@ namespace Beside.UI.Designed
 
         void SkipPendingSave()
         {
+            if (!string.IsNullOrEmpty(pendingSaveJobId)) TrackSavedDogChange("skipped", pendingSaveJobId);
             ClearPendingSave();
             libDeleteMode = false;
             Show(readyTemplate != null ? Page.Preview : Page.Home);
@@ -1574,6 +1590,22 @@ namespace Beside.UI.Designed
             pendingSavePhoto = null;
             pendingSaveAutoCm = 0;
         }
+
+        /// <summary>saved_dog_open (METRICS §6.1): from = the page the library was opened from, count = saved models,
+        /// ageDays = days since the model was saved.</summary>
+        void TrackSavedDogOpen(ModelLibrary.Entry e, bool ok, long loadMs)
+        {
+            string from = libReturnPage == Page.AR ? "ar" : libReturnPage == Page.Home ? "home" : null;   // null = left out
+            long ageMs = System.DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - e.createdUnixMs;
+            ProductEvents.TrackJob("saved_dog_open", e.id, ("ok", ok), ("from", from),
+                ("count", Mathf.Clamp(ModelLibrary.Count, 0, 50)),
+                ("ageDays", (int)System.Math.Clamp(ageMs / 86_400_000L, 0L, 3650L)),
+                ("loadMs", (int)System.Math.Clamp(loadMs, 0L, 600_000L)));
+        }
+
+        /// <summary>saved_dog_change (METRICS §6.1): saved | replaced | skipped | edited | deleted, count = saved models after it.</summary>
+        static void TrackSavedDogChange(string action, string jobId) =>
+            ProductEvents.TrackJob("saved_dog_change", jobId, ("action", action), ("count", Mathf.Clamp(ModelLibrary.Count, 0, 50)));
 
         /// <summary>"우리 아이 n" with the smallest n no saved model uses.</summary>
         static string NextDefaultName()

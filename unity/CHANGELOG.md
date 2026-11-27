@@ -2,6 +2,23 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-27 (관측 보강 트랙 D — 추적 헤더·문의 번호·불러오기 이벤트)
+
+멘토링 '로깅·트레이싱·모니터링' 보강 계획의 트랙 D. 계약은 openapi v1.3 후보(C0, `609e84c`): 요청 헤더 `traceparent`, 이벤트 `saved_dog_open`·`saved_dog_change`·`app_error`, 화면 `library`·`camera`, `model_placed` 새 정의(모든 배치 + `again`·`source`).
+
+- 추적 헤더(`BesideApiClient`): 업로드·GLB 내려받기·`/retry`·`/cancel` 에 W3C `traceparent: 00-<X-Request-Id>-<16 hex>-01`(`BesideApiClient.TraceParent`). X-Request-Id 가 32자 소문자 hex(전부 0 아님)일 때만 붙고, span id 는 요청마다 새 난수(전부 0 아님). 상태 조회(폴링)·이벤트·healthz 는 지금처럼 `X-Request-Id` 만 — 30분 대기면 trace 하나에 폴링 span 이 수백 개가 되므로. 서버가 이 trace 에 이어 붙이면 앱 흐름 id = 서버 trace id
+- 흐름 id 하나(`JobManager`): `POST /retry` 가 만든 id 를 이어지는 `Flow`(폴링·GLB 내려받기)가 그대로 쓴다(전에는 retry 뒤 새 id). 서버 취소(`/cancel`)는 멈추는 흐름의 id. `Flow` 는 자기 id 를 지역 변수로 들고 있어 취소 뒤 새 흐름이 시작돼도 섞이지 않는다(`first_ar_display` 줄도 그 작업을 만든 흐름의 id). `CurrentRequestId` 공개 — 앱 안에서 거절한 업로드(사진 없음·개수·크기 초과)는 요청을 보내지 않았으므로 null
+- 문의 번호(`DesignedUIController.OnJobFailed`): 오류 화면 제목 아래 "작업 번호 xxxxxxxx · 문의 번호 yyyyyyyy"(흐름 id 앞 8자. 업로드 실패는 "사진을 보내지 못했어요 · 문의 번호 …"). Grafana 'Beside 로그' 의 ID 찾기에 이 8자를 넣어 Caddy·backend 줄을 찾는다(B3·E5)
+- 이벤트(`ProductEvents.TrackJob` 한 줄, props 는 openapi·METRICS §6.1 값만 — 강아지 이름·메모 같은 사용자 글은 넣지 않음):
+  - `saved_dog_open`: 저장한 강아지 불러오기. 성공은 미리보기로 넘어가기 **전에** 보내 `screen=library`, 파일 읽기·GLB 열기 실패는 `ok=false`. `from`(home|ar, 목록을 연 화면), `count`(저장 수), `ageDays`(저장 뒤 지난 날), `loadMs`
+  - `saved_dog_change`: `saved`(만든 강아지 자동 저장), `replaced`(꽉 찬 상태에서 하나 지우고 새 강아지 저장 — 이 경로의 `deleted` 는 보내지 않음), `edited`(정보 수정), `deleted`(목록에서 삭제), `skipped`(꽉 찼을 때 '저장하지 않고 계속'·뒤로). `count` 는 바뀐 뒤 수
+  - `model_placed`: `JobManager.ModelPlaced`(작업의 첫 배치만) 대신 spawner `objectSpawned` 를 직접 받아 **모든 배치**를 보낸다. 이름 `Runtime_job_<jobId>`·`Runtime_lib_<id>`(`(Clone)` 뗌)에서 `source=job|library` 와 id, 시험용 GLB 주소로 띄운 모델(`Runtime_<file>`)은 `source` 없음. 같은 모델의 두 번째 배치부터 `again=true`(세션 안). `method`·`secSinceArEnter` 규칙 그대로. UI 의 `OnModelPlaced`·`metrics.csv` 의 `e2eMs` 는 그대로(`JobManager.ModelPlaced`)
+  - `photos_selected`: 에디터 시험 사진(`PhotoPicker.editorTestImagePaths`)으로 고른 것도 `source=gallery` 로 보낸다(전에는 갤러리 플러그인이 있을 때만이라 에디터 퍼널이 home 에서 멈췄다)
+  - 화면 `library`·`camera`: `Show()` 가 이미 `screen_view` 를 보낸다. 서버 목록은 계약(C0)과 서버 코드(A3 `0ab57bc`)에 들어갔다
+- 웹 재현 `docs/ui-preview`: 오류 화면에 문의 번호 한 줄. PR #39 의 저장한 강아지·카메라 화면은 아직 없다 [계획]
+- 못 한 것 [계획]: D3 `app_error`(새 `Metrics/AppErrorReporter.cs`, 우선순위 4)
+- 확인: Unity 6000.6.0f1 batchmode(`-batchmode -nographics -quit`)로 Assembly-CSharp 컴파일 `error CS` 0(D2 나머지를 넣은 뒤 다시 컴파일). `Assets/Beside` 경고는 모두 기존 `CS0618`(`FindFirstObjectByType` 폐기 예정)이고 바꾼 줄에서 새로 난 경고는 없다. batchmode 가 `ProjectSettings` 3개 파일의 줄 끝만 LF 로 다시 썼다(내용 diff 없음, 커밋하지 않음). 에디터 Play(XR Simulation + 로컬 mock)·기기(SM-S947N)에서 헤더·이벤트가 실제로 가는지는 [계획](E2, 사람)
+
 ## 2026-11-27 (기기 확인 피드백)
 
 기기(SM-S947N)에서 확인하며 고친 것. 작업은 브랜치 fix/unity-metrics-one-row 를 복사한 로컬 프로젝트에서 하고 이 브랜치로 옮겼다. 옮긴 코드는 컴파일(오류 0, FurLab StructLayout 오탐 제외)만 다시 확인했다.
@@ -15,7 +32,7 @@ Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연
 - 저장한 강아지(새 `Library/ModelLibrary.cs`): 만든 강아지를 최대 5마리까지 폰에 자동 저장(`persistentDataPath/library`: index.json, GLB 복사본, 사진). 이름(20자)·키(5~200cm, 비우면 자동)·메모(60자) 편집, 키를 바꾸면 모델 크기에 반영. 꽉 차면 지울 강아지를 고르거나 저장 건너뛰기. 홈 카드 "저장한 강아지", AR 의 "사진 찍기" 타일을 "불러오기"로 바꿈 — **`photo_saved` 이벤트는 더 이상 나가지 않는다**
 - "지금 촬영하기": 바로 찍던 것을 카메라 화면(안내 문구 + 셔터 버튼)으로 바꿈. 찍는 동안 AR 에 놓인 강아지는 숨김. 카메라로 찍은 사진의 확인 화면 버튼은 "다시 찍기"
 - 아이콘·예시 이미지 `.meta` 17개를 Sprite 로(홈 버튼 아이콘이 안 보이던 문제). 씬의 `FurBenchmark`·`FpsOverlay` 끔
-- 알아둘 것: 서버 `ProductEventCatalog.SCREENS` 에 `library`·`camera` 가 없어 이 두 화면의 `screen_view` 는 서버에서 버려진다 [계획: 서버 목록에 추가]
+- 알아둘 것: 서버 `ProductEventCatalog.SCREENS` 에 `library`·`camera` 가 없어 이 두 화면의 `screen_view` 는 서버에서 버려진다 → 계약에 추가함(openapi `609e84c`, 서버 코드는 트랙 A3 — 위 '관측 보강' 항목)
 
 ## 2026-11-26 (제품 이벤트, 안건 #24)
 
