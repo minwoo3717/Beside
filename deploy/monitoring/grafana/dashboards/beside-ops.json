@@ -31,11 +31,377 @@
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
+      },
+      {
+        "name": "부하 시험 시작 · 끝",
+        "datasource": {
+          "type": "loki",
+          "uid": "beside-loki"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "target": {
+          "refId": "Anno",
+          "expr": "{service=\"caddy\"} |~ `\"lt-[A-Za-z0-9_.-]+-(begin|end)\"` | json rid=`request.headers[\"X-Request-Id\"][0]`",
+          "queryType": "range"
+        },
+        "titleFormat": "부하 시험 표지",
+        "textFormat": "{{rid}}"
       }
     ]
   },
   "links": [],
   "panels": [
+    {
+      "id": 48,
+      "type": "row",
+      "title": "응답 시간 한눈에 — API p50 · p95 · p99, 추론 호출 p50 · p95",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": 49,
+      "type": "timeseries",
+      "title": "API 응답 시간 p50 · p95 · p99 (전체)",
+      "description": "http_server_requests_seconds_bucket(SLO 버킷 5ms~30s, 2026-11-27 에 5ms·10ms 를 더함)의 전체 백분위. 서버 안에서 잰 시간이라 TLS·Caddy·네트워크는 빠진다(앞단 시간은 'Beside 로그' 의 Caddy p50 · p95). /actuator 는 관리 포트라 뺀다. 버킷 사이를 선형 보간한 근사값이라 5ms 아래는 0~5ms 사이로 보인다. uri 별은 오른쪽(p50)과 아래 'API 응답 시간 p95 (uri 별)'.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "p99",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "type": "timeseries",
+      "title": "API 응답 시간 p50 (uri 별)",
+      "description": "http_server_requests_seconds_bucket(SLO 버킷 5ms~30s)의 p50(중앙값). 보통 사용자가 겪는 시간이다. p95 는 아래 'API 응답 시간 p95 (uri 별)'. 서버 안에서 잰 시간이라 TLS·Caddy·네트워크는 빠진다. /actuator 는 관리 포트라 뺀다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, uri) (rate(http_server_requests_seconds_bucket{env=\"$env\",uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "{{uri}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "type": "timeseries",
+      "title": "추론 호출 시간 p50 · p95 (call 별, $window 창)",
+      "description": "beside_inference_request_seconds_bucket 의 p50·p95, 200(cleanup 은 2xx)으로 답한 요청만. health(/healthz, 15초마다 수십 ms)는 빼서 드문 infer·download 가 묻히지 않게 한다. infer = POST /infer·/infer/upload(모델 실행 포함), download = 업로드 모드의 GLB 받기, cleanup = DELETE /artifacts. 버킷 0.05~600초 사이의 근사값. 작업이 드물면 $window 창을 넓힌다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, call) (rate(beside_inference_request_seconds_bucket{env=\"$env\",outcome=\"ok\",call!=\"health\"}[$window])))",
+          "legendFormat": "{{call}} p50",
+          "instant": false,
+          "range": true
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, call) (rate(beside_inference_request_seconds_bucket{env=\"$env\",outcome=\"ok\",call!=\"health\"}[$window])))",
+          "legendFormat": "{{call}} p95",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 52,
+      "type": "row",
+      "title": "트레이스 — 느리거나 실패한 작업 (Tempo, 펼쳐서 본다)",
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 53,
+          "type": "table",
+          "title": "실패했거나 30초 넘은 작업 실행 (Tempo, 최근 20개)",
+          "description": "TraceQL {name=\"beside.job.run\" && (status=error || duration>30s)}. 줄의 Trace ID 를 누르면 단계 그림이 열린다. 구조(2026-11-27 고침, 배포 창 3 부터): 업로드 요청의 서버 span 'http post /api/v1/jobs' 아래에 beside.upload.check · beside.upload.save · beside.job.dispatch-wait(@Async 대기열) · beside.job.run(태그 beside.request_id)이 형제로 있고, run 아래에 크롭·GPU 슬롯 대기·추론 서비스 호출·GLB 전송·저장 단계가 있다. 앱이 traceparent 를 보내면 trace id 가 앱 흐름의 X-Request-Id 와 같다. 앱은 span 을 보내지 않으므로 루트가 '부모 없음'으로 보이는 것은 정상이다. traceparent flags 00 이거나 서버가 재시작해 업로드 trace 를 잊은 작업은 run 이 따로 루트가 되고 링크(beside.dispatched.trace_id)로 잇는다. 그 전(배포 창 2)의 작업은 run 하나가 trace 하나다. 행을 펼칠 때만 질의한다(Tempo 메모리 384m).",
+          "datasource": {
+            "type": "tempo",
+            "uid": "beside-tempo"
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 24,
+            "x": 0,
+            "y": 10
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "filterable": true
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "footer": {
+              "show": false,
+              "reducer": [
+                "sum"
+              ],
+              "fields": ""
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "tempo",
+                "uid": "beside-tempo"
+              },
+              "refId": "A",
+              "queryType": "traceql",
+              "query": "{name=\"beside.job.run\" && (status=error || duration>30s)}",
+              "limit": 20,
+              "tableType": "traces"
+            }
+          ]
+        }
+      ],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      }
+    },
     {
       "id": 1,
       "type": "row",
@@ -46,7 +412,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 10
       }
     },
     {
@@ -62,7 +428,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -136,7 +502,7 @@
         "h": 4,
         "w": 4,
         "x": 4,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -202,7 +568,7 @@
         "h": 4,
         "w": 4,
         "x": 8,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -268,7 +634,7 @@
         "h": 4,
         "w": 4,
         "x": 12,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -334,7 +700,7 @@
         "h": 4,
         "w": 4,
         "x": 16,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -408,7 +774,7 @@
         "h": 4,
         "w": 4,
         "x": 20,
-        "y": 1
+        "y": 11
       },
       "fieldConfig": {
         "defaults": {
@@ -482,7 +848,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 5
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -574,7 +940,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 5
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
@@ -654,7 +1020,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -767,7 +1133,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
@@ -862,7 +1228,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 21
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -948,7 +1314,7 @@
       "id": 13,
       "type": "timeseries",
       "title": "API 응답 시간 p95 (uri 별)",
-      "description": "http_server_requests_seconds_bucket(SLO 버킷 25ms~30s)의 p95. 서버 안에서 잰 시간이라 TLS·Caddy·네트워크는 빠진다. /actuator 는 관리 포트라 뺀다.",
+      "description": "http_server_requests_seconds_bucket(SLO 버킷 5ms~30s)의 p95. 서버 안에서 잰 시간이라 TLS·Caddy·네트워크는 빠진다. /actuator 는 관리 포트라 뺀다.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -957,7 +1323,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 21
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -1037,7 +1403,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 29
+        "y": 39
       },
       "fieldConfig": {
         "defaults": {
@@ -1117,7 +1483,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 29
+        "y": 39
       },
       "fieldConfig": {
         "defaults": {
@@ -1198,7 +1564,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 37
+        "y": 47
       },
       "fieldConfig": {
         "defaults": {
@@ -1289,7 +1655,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 37
+        "y": 47
       },
       "fieldConfig": {
         "defaults": {
@@ -1388,7 +1754,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 55
       }
     },
     {
@@ -1404,7 +1770,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 46
+        "y": 56
       },
       "fieldConfig": {
         "defaults": {
@@ -1495,7 +1861,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 46
+        "y": 56
       },
       "fieldConfig": {
         "defaults": {
@@ -1590,7 +1956,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 54
+        "y": 64
       },
       "fieldConfig": {
         "defaults": {
@@ -1692,7 +2058,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 54
+        "y": 64
       },
       "fieldConfig": {
         "defaults": {
@@ -1783,7 +2149,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 54
+        "y": 64
       },
       "fieldConfig": {
         "defaults": {
@@ -1879,7 +2245,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 62
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -1970,7 +2336,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 62
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -2072,7 +2438,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 62
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -2157,7 +2523,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 70
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -2259,7 +2625,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 70
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -2343,7 +2709,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 78
+        "y": 88
       },
       "fieldConfig": {
         "defaults": {
@@ -2416,6 +2782,86 @@
       ]
     },
     {
+      "id": 54,
+      "type": "timeseries",
+      "title": "오류 응답 — status · code 별 ($window 창)",
+      "description": "beside_api_errors_total{status, code}: 서버가 답한 오류 응답 수(v1·v0·웹 페이지). code 는 응답의 error.code (docs/api/ERROR_CODES.md), Spring 이 직접 답한 오류는 FRAMEWORK. 알 수 없는 경로의 404(스캐너)는 NOT_FOUND, 의도한 503 QUEUE_FULL 도 여기 든다. 5xx 는 backend 가 ERROR 한 줄(requestId)을 남기므로 'Beside 로그' 에서 찾는다. 0 인 조합은 그리지 않는다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 88
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "showPoints": "never",
+            "pointSize": 4,
+            "spanNulls": true,
+            "lineInterpolation": "linear",
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum by (status, code) (increase(beside_api_errors_total{env=\"$env\"}[$window])) > 0",
+          "legendFormat": "{{status}} {{code}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 30,
       "type": "row",
       "title": "GPU·추론",
@@ -2425,7 +2871,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 86
+        "y": 96
       }
     },
     {
@@ -2441,7 +2887,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 87
+        "y": 97
       },
       "fieldConfig": {
         "defaults": {
@@ -2533,7 +2979,7 @@
         "h": 4,
         "w": 4,
         "x": 0,
-        "y": 91
+        "y": 101
       },
       "fieldConfig": {
         "defaults": {
@@ -2607,7 +3053,7 @@
         "h": 8,
         "w": 20,
         "x": 4,
-        "y": 87
+        "y": 97
       },
       "fieldConfig": {
         "defaults": {
@@ -2700,7 +3146,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 95
+        "y": 105
       },
       "fieldConfig": {
         "defaults": {
@@ -2780,7 +3226,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 95
+        "y": 105
       },
       "fieldConfig": {
         "defaults": {
@@ -2860,7 +3306,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 103
+        "y": 113
       },
       "fieldConfig": {
         "defaults": {
@@ -2941,7 +3387,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 111
+        "y": 121
       }
     },
     {
@@ -2957,7 +3403,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 112
+        "y": 122
       },
       "fieldConfig": {
         "defaults": {
@@ -3081,7 +3527,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 112
+        "y": 122
       },
       "fieldConfig": {
         "defaults": {
@@ -3172,7 +3618,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 121
+        "y": 131
       },
       "fieldConfig": {
         "defaults": {
@@ -3252,7 +3698,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 121
+        "y": 131
       },
       "fieldConfig": {
         "defaults": {
@@ -3326,7 +3772,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 121
+        "y": 131
       },
       "fieldConfig": {
         "defaults": {
@@ -3399,7 +3845,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 129
+        "y": 139
       },
       "panels": []
     },
@@ -3416,7 +3862,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 130
+        "y": 140
       },
       "fieldConfig": {
         "defaults": {
@@ -3454,8 +3900,8 @@
     {
       "id": 45,
       "type": "stat",
-      "title": "생성 탭 → 첫 AR 배치 (이벤트 수 비율, 선택 기간)",
-      "description": "model_placed ÷ generate_tap. 이벤트 수 비율이라 세션 퍼널의 근사다(같은 사람이 여러 번 누르면 섞인다).",
+      "title": "생성 탭 → 모델 준비 (이벤트 수 비율, 선택 기간)",
+      "description": "model_ready ÷ generate_tap. 생성을 누른 수 대비 모델이 앱 화면에 준비된 수다. 이벤트 수 비율이라 세션 퍼널의 근사다(같은 사람이 여러 번 누르면 섞이고, 캐시에서 다시 연 model_ready 도 센다). 2026-11-27 부터 model_placed 는 모든 배치(다시 배치·불러온 강아지 포함)라 이 비율에 쓰지 않는다(예전 제목 '생성 탭 → 첫 AR 배치'). 서버 쪽 짝은 '생성 완료율 (서버, 근사)', 사람 단위는 /admin 세션 퍼널.",
       "datasource": {
         "type": "prometheus",
         "uid": "beside-prometheus"
@@ -3464,7 +3910,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 130
+        "y": 140
       },
       "fieldConfig": {
         "defaults": {
@@ -3493,7 +3939,7 @@
             "uid": "beside-prometheus"
           },
           "refId": "A",
-          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"model_placed\"}[$__range])) / sum(increase(beside_app_events_total{env=\"$env\",name=\"generate_tap\"}[$__range]))",
+          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"model_ready\"}[$__range])) / sum(increase(beside_app_events_total{env=\"$env\",name=\"generate_tap\"}[$__range]))",
           "legendFormat": "비율",
           "instant": true,
           "range": false
@@ -3513,7 +3959,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 130
+        "y": 140
       },
       "fieldConfig": {
         "defaults": {
@@ -3561,7 +4007,7 @@
         "h": 5,
         "w": 12,
         "x": 12,
-        "y": 134
+        "y": 144
       },
       "fieldConfig": {
         "defaults": {
@@ -3591,6 +4037,180 @@
           "refId": "A",
           "expr": "sum by (reason) (increase(beside_app_events_dropped_total{env=\"$env\"}[$window])) > 0",
           "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "type": "stat",
+      "title": "생성 완료율 (서버, 근사, 선택 기간)",
+      "description": "beside_jobs_finished_total{result=\"COMPLETED\",passthrough=\"false\"} ÷ beside_jobs_created_total. '제품 퍼널' 의 생성 완료 ÷ 접수의 짝이고, 왼쪽 위 '생성 탭 → 모델 준비'(앱)와 견준다. 근사인 이유: 분자는 끝난 실행(retry 포함), 분모는 새 작업(v0 포함)이라 같은 작업을 잇지 않고, 기간 경계에 걸친 작업이 섞인다. 패스스루(시험용 GLB) 실행은 분자에서 뺀다. 작업을 만든 시각 기준의 정확한 완료율(취소 제외)은 /admin 퍼널의 작업 완료율.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 149
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "-",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum(increase(beside_jobs_finished_total{env=\"$env\",result=\"COMPLETED\",passthrough=\"false\"}[$__range])) / sum(increase(beside_jobs_created_total{env=\"$env\"}[$__range]))",
+          "legendFormat": "완료율",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 56,
+      "type": "stat",
+      "title": "저장한 강아지 — 불러오기 · 저장 변경 (선택 기간)",
+      "description": "beside_app_events_total 의 saved_dog_open(폰에 저장한 강아지를 연 수, 실패 ok=false 포함)과 saved_dog_change(저장·바꾸기·건너뛰기·고치기·지우기). 지표에는 이름·platform 만 있어 ok·action 별 수는 /admin 의 불러오기 퍼널과 이벤트 CSV 에서 본다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 149
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"saved_dog_open\"}[$__range]))",
+          "legendFormat": "불러오기",
+          "instant": true,
+          "range": false
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "B",
+          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"saved_dog_change\"}[$__range]))",
+          "legendFormat": "저장 변경",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "type": "stat",
+      "title": "앱 오류 app_error (선택 기간)",
+      "description": "beside_app_events_total{name=\"app_error\"}: 앱이 잡은 예외·오류 로그 수(세션당 20건, 같은 sig 3건까지). 메시지 원문은 보내지 않는다. 원인은 이벤트 CSV 의 sig 를 기기 logcat 의 '[BesideEvent] app_error sig=' 줄과 맞춰 찾는다. 작업 실패는 job_failed_shown 이 따로 센다. 앱 쪽 수집이 들어간 빌드부터 값이 생긴다.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "beside-prometheus"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 149
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "beside-prometheus"
+          },
+          "refId": "A",
+          "expr": "sum(increase(beside_app_events_total{env=\"$env\",name=\"app_error\"}[$__range]))",
+          "legendFormat": "app_error",
+          "instant": true,
+          "range": false
         }
       ]
     }

@@ -28,12 +28,42 @@
           "value": ""
         },
         "hide": 0,
-        "description": "jobId, requestId, 오류 코드 등"
+        "description": "jobId, requestId, 앱 오류 화면의 문의 번호(8자), 오류 코드 등"
+      },
+      {
+        "name": "run",
+        "label": "부하 시험 RUN_ID",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "description": "k6 의 RUN_ID(영문·숫자·_.-). k6 요청의 X-Request-Id 는 lt-<RUN_ID>-<8 hex>, 시작·끝 표지는 lt-<RUN_ID>-begin·end 다. '부하 시험' 행이 이 실행의 요청만 본다."
       }
     ]
   },
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "name": "부하 시험 시작 · 끝",
+        "datasource": {
+          "type": "loki",
+          "uid": "beside-loki"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "purple",
+        "target": {
+          "refId": "Anno",
+          "expr": "{service=\"caddy\"} |~ `\"lt-[A-Za-z0-9_.-]+-(begin|end)\"` | json rid=`request.headers[\"X-Request-Id\"][0]`",
+          "queryType": "range"
+        },
+        "titleFormat": "부하 시험 표지",
+        "textFormat": "{{rid}}"
+      }
+    ]
   },
   "links": [
     {
@@ -238,8 +268,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Caddy 응답 시간 p95 (method 별, 5분 창)",
-      "description": "Caddy 접근 로그의 duration(초) p95. TLS·프록시를 포함한 앞단 지연이다(Spring 의 http_server_requests 는 backend 안만 잰다). 1차 부하 시험의 붕괴는 이쪽에서만 보였다.",
+      "title": "Caddy 응답 시간 p50 · p95 (method 별, 5분 창)",
+      "description": "Caddy 접근 로그의 duration(초) p50(보통 사용자가 겪는 시간)과 p95. TLS·프록시를 포함한 앞단 지연이다(Spring 의 http_server_requests 는 backend 안만 잰다). 1차 부하 시험의 붕괴는 이쪽에서만 보였다. 부하 시험 한 번의 요청만 보려면 아래 '부하 시험' 행.",
       "datasource": {
         "type": "loki",
         "uid": "beside-loki"
@@ -288,7 +318,17 @@
           },
           "refId": "A",
           "expr": "quantile_over_time(0.95, {service=\"caddy\"} | json | status=~\".+\" | unwrap duration | __error__=\"\" [5m]) by (request_method)",
-          "legendFormat": "{{request_method}}",
+          "legendFormat": "{{request_method}} p95",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "B",
+          "expr": "quantile_over_time(0.5, {service=\"caddy\"} | json | status=~\".+\" | unwrap duration | __error__=\"\" [5m]) by (request_method)",
+          "legendFormat": "{{request_method}} p50",
           "queryType": "range"
         }
       ]
@@ -309,8 +349,8 @@
     {
       "id": 7,
       "type": "logs",
-      "title": "backend ERROR · WARN",
-      "description": "backend 의 ERROR·WARN 줄. 줄을 펼치면 requestId·jobId 로 같은 요청·작업의 다른 로그나 작업 페이지로 간다(데이터소스의 derived field).",
+      "title": "backend · inference ERROR · WARN",
+      "description": "backend 와 GPU 추론 서비스(inference, Pod 가 로그를 보내기 시작한 뒤)의 ERROR·WARN 줄. 줄을 펼치면 requestId·jobId·traceId 로 같은 요청·작업의 다른 로그, 작업 페이지, 트레이스로 간다(데이터소스의 derived field).",
       "datasource": {
         "type": "loki",
         "uid": "beside-loki"
@@ -336,7 +376,7 @@
             "uid": "beside-loki"
           },
           "refId": "A",
-          "expr": "{service=\"backend\", level=~\"ERROR|WARN\"}",
+          "expr": "{service=~\"backend|inference\", level=~\"ERROR|WARN\"}",
           "queryType": "range",
           "maxLines": 500
         }
@@ -510,18 +550,34 @@
       "panels": []
     },
     {
+      "id": 16,
+      "type": "text",
+      "title": "문의 번호로 한 요청 따라가기",
+      "description": "앱 오류 화면의 문의 번호에서 Caddy·backend·추론 서비스 줄과 트레이스까지 가는 순서.",
+      "gridPos": {
+        "h": 14,
+        "w": 8,
+        "x": 0,
+        "y": 45
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "1. 앱 오류 화면의 **문의 번호**(앱 흐름 id 의 앞 8자)를 맨 위 **찾을 글자** 상자에 넣는다. 작업 번호(jobId 앞 8자)도 된다.\n2. 오른쪽 **ID·글자로 찾기** 에 그 요청의 줄이 모인다: Caddy(요청 헤더 `X-Request-Id`), backend(`requestId`), GPU 추론 서비스(`rid=`, Pod 가 VM 으로 로그를 보내도록 설정된 뒤).\n3. backend 줄을 펼쳐 `traceId` 의 **트레이스 보기** → Tempo 에서 업로드 검사·저장 → 대기열 → 작업 실행(크롭·GPU 대기·추론·GLB 전송) 중 어디서 느렸거나 실패했는지 본다.\n4. `jobId` 의 **작업 페이지** 로 그 작업의 상태·오류 코드를 본다.\n\n- 문의 번호는 그 표시가 들어간 앱 빌드부터 보인다.\n- 8자는 짧아 드물게 다른 요청과 겹친다. 시각으로 가른다.\n- 로그 보관 7일, 트레이스 보관 72시간."
+      }
+    },
+    {
       "id": 12,
       "type": "logs",
       "title": "ID·글자로 찾기 ($q)",
-      "description": "위 상자에 jobId·requestId(앱이 보내는 X-Request-Id)·오류 코드 같은 글자를 넣으면 모든 서비스의 로그에서 찾는다.",
+      "description": "위 상자에 jobId·requestId(앱이 보내는 X-Request-Id)·문의 번호·오류 코드 같은 글자를 넣으면 모든 서비스의 로그에서 찾는다.",
       "datasource": {
         "type": "loki",
         "uid": "beside-loki"
       },
       "gridPos": {
         "h": 14,
-        "w": 24,
-        "x": 0,
+        "w": 16,
+        "x": 8,
         "y": 45
       },
       "options": {
@@ -542,6 +598,155 @@
           "expr": "{service=~\".+\"} |= \"$q\"",
           "queryType": "range",
           "maxLines": 500
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "row",
+      "title": "부하 시험 — RUN_ID $run 의 k6 요청만 (X-Request-Id lt-$run-…)",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 59
+      },
+      "panels": []
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "부하 시험 $run — Caddy 응답 시간 p50 · p95 (method 별, 1분 창)",
+      "description": "k6 요청(X-Request-Id lt-<RUN_ID>-<8 hex>)만 골라 앞단 duration 의 p50·p95 를 본다. 맨 위 '부하 시험 RUN_ID' 상자에 RUN_ID 를 넣는다. 보라색 표지가 시작·끝이다(k6 setup·teardown 의 healthz, lt-<RUN_ID>-begin·end). 튀는 구간을 끌어 고른 뒤 '찾을 글자' 에 lt-<RUN_ID> 를 넣으면 그때의 줄이 보인다. backend 지표는 'Beside 운영' 의 env=loadtest. Caddy 를 거치지 않은 실행(개발 PC 에서 8080 으로 바로)은 비어 있다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "quantile_over_time(0.5, {service=\"caddy\"} |= \"lt-$run-\" | json rid=`request.headers[\"X-Request-Id\"][0]`, request_method=\"request.method\", duration=\"duration\" | rid=~\"lt-$run-.*\" | unwrap duration | __error__=\"\" [1m]) by (request_method)",
+          "legendFormat": "{{request_method}} p50",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "B",
+          "expr": "quantile_over_time(0.95, {service=\"caddy\"} |= \"lt-$run-\" | json rid=`request.headers[\"X-Request-Id\"][0]`, request_method=\"request.method\", duration=\"duration\" | rid=~\"lt-$run-.*\" | unwrap duration | __error__=\"\" [1m]) by (request_method)",
+          "legendFormat": "{{request_method}} p95",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "부하 시험 $run — 요청 · 5xx 줄/분 (Caddy)",
+      "description": "같은 k6 요청의 앞단 응답 수와 그중 5xx(502·504 처럼 backend 까지 못 간 것과 의도한 503 QUEUE_FULL 포함). 5xx 가 튄 구간을 고른 뒤 '찾을 글자' 에 lt-<RUN_ID> 를 넣고, 같은 시각의 '오류' 행 ERROR · WARN 목록을 본다.",
+      "datasource": {
+        "type": "loki",
+        "uid": "beside-loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 60
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "calcs": [
+            "max",
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "A",
+          "expr": "sum(count_over_time({service=\"caddy\"} |= \"lt-$run-\" | json rid=`request.headers[\"X-Request-Id\"][0]` | rid=~\"lt-$run-.*\" [1m]))",
+          "legendFormat": "요청/분",
+          "queryType": "range"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "beside-loki"
+          },
+          "refId": "B",
+          "expr": "sum(count_over_time({service=\"caddy\"} |= \"lt-$run-\" | json rid=`request.headers[\"X-Request-Id\"][0]`, status=\"status\" | rid=~\"lt-$run-.*\" | status >= 500 [1m]))",
+          "legendFormat": "5xx/분",
+          "queryType": "range"
         }
       ]
     }
