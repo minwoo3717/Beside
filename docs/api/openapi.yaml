@@ -1170,7 +1170,8 @@ paths:
         2026-11-27 부터 model_placed 는 모든 배치 — props.source·again). droppedSessions = 앞 단계 sessions − 이 단계 sessions(첫 단계 0).
         2026-11-27 추가(모두 추가 필드):
         - 이탈 분석 lastScreens·dropReasons: 첫 단계(home)에 이르렀지만 마지막 단계에 이르지 못한 세션 중, 그 세션의 마지막
-          이벤트(receivedAt)가 to(없으면 지금) 30분 전보다 앞인 세션만 본다(아직 쓰는 중일 수 있는 세션은 뺀다).
+          이벤트(receivedAt)가 to 와 지금 중 이른 때(to 가 없으면 지금)보다 30분 넘게 앞인 세션만 본다(아직 쓰는 중일 수 있는
+          세션은 뺀다).
           lastScreens = 그 세션의 마지막 screen_view 화면별 세션 수. dropReasons = 그 세션에 있었던 이유 이벤트의 (이름, 속성, 값)별
           세션 수: job_cancel_tap.stage, job_failed_shown.code, photos_selected.count=0, app_error.kind(한 세션이 여러 줄에 들어갈 수
           있다). 둘 다 세션 수가 많은 순(같으면 이름 순).
