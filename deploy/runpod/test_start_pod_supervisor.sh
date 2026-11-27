@@ -2,7 +2,8 @@
 # Test of deploy/runpod/supervise_inference.sh and of start_pod.sh running the service under it, without a Pod:
 # a fake service (python3; answers GET /healthz when given --port), fake tailscale/tailscaled, a fake venv python
 # (MODE=passthrough) and a fake conda env (MODE=model: the real scripts/start_inference_wsl.sh activates it and execs
-# its python), all under a temp dir. Nothing goes to the network except 127.0.0.1. Short delays (RESTART_DELAY_S=1,
+# its python), all under a temp dir; section D runs start_pod.sh with BESIDE_TELEMETRY_VM (proxy flags, telemetry
+# environment, the real ship_logs.py under its restart loop). Nothing goes to the network except 127.0.0.1. Short delays (RESTART_DELAY_S=1,
 # RESTART_MAX_DELAY_S=4, RESTART_STABLE_S=3) keep it at about a minute. Needs Linux bash, python3, curl, flock
 # (WSL works: tr -d '\r' < deploy/runpod/test_start_pod_supervisor.sh | wsl.exe bash -s -- <repo path in WSL>).
 #   bash deploy/runpod/test_start_pod_supervisor.sh [repo]
@@ -12,7 +13,8 @@ SUP="$REPO/deploy/runpod/supervise_inference.sh"
 START="$REPO/deploy/runpod/start_pod.sh"
 T="$(mktemp -d)"
 unset THREADS UVICORN_TIMEOUT_KEEP_ALIVE MODE PORT WORKSPACE RUN_DIR LOG_DIR NORESTART_FILE BESIDE_INFERENCE_TOKEN \
-  RESTART_DELAY_S RESTART_MAX_DELAY_S RESTART_STABLE_S RUNPOD_POD_ID ALLOW_NO_GPU SAMPLE_GLB TOKEN_FILE BESIDE_REQUEST_TIMING
+  RESTART_DELAY_S RESTART_MAX_DELAY_S RESTART_STABLE_S RUNPOD_POD_ID ALLOW_NO_GPU SAMPLE_GLB TOKEN_FILE BESIDE_REQUEST_TIMING \
+  BESIDE_TELEMETRY_VM BESIDE_TELEMETRY_ENV BESIDE_LOG_PUSH_URL BESIDE_OTLP_URL BESIDE_TELEMETRY_PROXY TS_HOSTNAME
 
 cleanup() {
   # every process this test started has $T in its command line, except the model-mode supervisor (section C: its
@@ -211,7 +213,8 @@ mkdir -p "$WS/tailscale/bin" "$WS/beside-venv/bin" "$RUN"
 echo 1.104.6 > "$WS/tailscale/bin/VERSION"
 cat > "$WS/tailscale/bin/tailscaled" <<'SH'
 #!/usr/bin/env bash
-# fake tailscaled: holds the unix socket until this process goes
+# fake tailscaled: records its arguments, holds the unix socket until this process goes
+printf '%s\n' "$*" >> "${FAKE_TS_ARGS:-/dev/null}"
 for a in "$@"; do case "$a" in --socket=*) sock="${a#--socket=}" ;; esac; done
 python3 - "$sock" "$$" <<'PY' &
 import os, socket, sys, time
@@ -242,7 +245,7 @@ SERVE="uvicorn app:app --host 127.0.0.1 --port $PORT "
 run_pod() {   # run_pod [NAME=value ...]: start_pod.sh with the fakes; output in $B/out, exit status in $rc
   timeout 60 env WORKSPACE="$WS" RUN_DIR="$RUN" PORT="$PORT" MODE=passthrough BESIDE_INFERENCE_TOKEN=test-token-not-a-secret \
     RESTART_DELAY_S=1 RESTART_MAX_DELAY_S=4 RESTART_STABLE_S=3 FAKE_STARTS="$B/starts" FAKE_CRASH="$B/crash" \
-    "$@" bash "$START" > "$B/out" 2>&1
+    FAKE_TS_ARGS="$B/ts-args" "$@" bash "$START" > "$B/out" 2>&1
   rc=$?
 }
 bpid() { cat "$RUN/inference.pid" 2>/dev/null || true; }
@@ -250,15 +253,25 @@ bsup() { cat "$RUN/supervisor.pid" 2>/dev/null || true; }
 healthy() { curl -fs --max-time 2 -o /dev/null "http://127.0.0.1:$PORT/healthz"; }
 new_bpid() { local p; p="$(bpid)"; [[ "$p" != "$1" ]] && alive "$p" && healthy; }
 is_service() { tr '\0' ' ' < "/proc/$1/cmdline" | grep -qF -- "$SERVE"; }
+no_var() { ! tr '\0' '\n' < "/proc/$1/environ" | grep -q "^$2="; }   # no_var PID NAME
 show() { sed 's/^/     | /' "$B/out"; }
 
 run_pod BESIDE_REQUEST_TIMING=yes
 check "BESIDE_REQUEST_TIMING other than 0 or 1: refused before anything starts" \
   bash -c "test '$rc' != 0 && grep -q 'BESIDE_REQUEST_TIMING must be 1' '$B/out' && test ! -e '$RUN/inference.pid'"
 
-run_pod
+# telemetry variables without BESIDE_TELEMETRY_VM are not passed on: no telemetry unless the VM is named
+run_pod BESIDE_OTLP_URL=http://100.64.0.250:4320/v1/traces BESIDE_TELEMETRY_PROXY=http://127.0.0.1:1055 \
+  BESIDE_LOG_PUSH_URL=http://100.64.0.250:3500/loki/api/v1/push
 check "first run: exit 0" test "$rc" = 0 || show
 p1="$(bpid)"
+check "no BESIDE_TELEMETRY_VM: tailscaled started without the proxy flags" \
+  bash -c "test -s '$B/ts-args' && ! grep -qE 'outbound-http-proxy|socks5|1055' '$B/ts-args'"
+for v in BESIDE_LOG_PUSH_URL BESIDE_OTLP_URL BESIDE_TELEMETRY_PROXY; do
+  check "no BESIDE_TELEMETRY_VM: service environment has no $v" no_var "$p1" "$v"
+done
+check "no BESIDE_TELEMETRY_VM: no log shipper" test ! -e "$RUN/ship_logs.pid" -a ! -e "$WS/beside-logs/ship_logs.log"
+check "no BESIDE_TELEMETRY_VM: nothing about telemetry in the output" bash -c "! grep -qiE 'telemetry|shipper|1055' '$B/out'"
 check "first run: [4/4] line with mode, port and the service's settings" \
   has "$B/out" "[4/4] inference service up (passthrough, 127.0.0.1:$PORT, X-Inference-Token required, keep-alive 75 s, threads 8)"
 check "first run: names the supervisor and how to stop on purpose" \
@@ -443,6 +456,91 @@ check "model stop on purpose: logged, not restarting" has "$blog" "service pid $
 sleep 1.5
 stays_down() { test "$(lines "$B/starts")" = "$1" && down; }
 check "model stop on purpose: nothing started, healthz down" stays_down "$starts"
+
+echo "== D. start_pod.sh with BESIDE_TELEMETRY_VM (passthrough): proxy flags, telemetry environment, log shipper"
+# The shipper's pushes go to the proxy 127.0.0.1:1055, where nothing listens here: they fail and it keeps trying.
+TVM=100.64.0.99
+SHIP="$REPO/deploy/runpod/ship_logs.py"
+slog="$WS/beside-logs/ship_logs.log"
+spid() { cat "$RUN/ship_logs.pid" 2>/dev/null || true; }
+is_shipper() { tr '\0' ' ' < "/proc/$1/cmdline" 2>/dev/null | grep -qF -- "$SHIP $WS/beside-logs "; }
+shipper_child() { pgrep -P "$1" -f -- 'ship_logs\.py' 2>/dev/null | head -n 1; }
+shippers() { pgrep -f -- "ship_logs\.py $WS/beside-logs" 2>/dev/null | wc -l | tr -d ' '; }   # restart loops + ship_logs.py
+listening() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+run_pod BESIDE_TELEMETRY_VM="http://$TVM:3500"
+check "telemetry VM given as a URL: refused" test "$rc" != 0
+check "telemetry VM given as a URL: says what it must be" has "$B/out" "BESIDE_TELEMETRY_VM must be the VM's tailnet address alone"
+run_pod BESIDE_TELEMETRY_VM="$TVM" BESIDE_TELEMETRY_ENV="load test"
+check "telemetry env label with a space: refused" has "$B/out" "BESIDE_TELEMETRY_ENV must be a short label"
+check "refused telemetry settings: no shipper started" test ! -e "$RUN/ship_logs.pid"
+
+run_pod BESIDE_TELEMETRY_VM="$TVM"
+check "telemetry: exit 0" test "$rc" = 0 || show
+if listening 1055; then
+  ok "telemetry, tailscaled without the proxy: NOTE check skipped (something listens on 127.0.0.1:1055 here)"
+else
+  check "telemetry, tailscaled already running without the proxy: NOTE" \
+    has "$B/out" "NOTE: nothing listens on 127.0.0.1:1055: this tailscaled was started without the proxy"
+fi
+check "telemetry: says where logs and spans go" \
+  has "$B/out" "telemetry: logs -> http://$TVM:3500/loki/api/v1/push, spans -> http://$TVM:4320/v1/traces (env prod, via 127.0.0.1:1055)"
+t1="$(bpid)"
+check "telemetry: service started" new_bpid "$m2"
+for kv in "BESIDE_OTLP_URL=http://$TVM:4320/v1/traces" BESIDE_TELEMETRY_PROXY=http://127.0.0.1:1055 \
+          BESIDE_TELEMETRY_ENV=prod "BESIDE_LOG_PUSH_URL=http://$TVM:3500/loki/api/v1/push"; do
+  check "telemetry: service environment $kv" env_of "$t1" "$kv"
+done
+s1="$(spid)"
+check "telemetry: the pid file names the shipper's restart loop" is_shipper "$s1"
+check "telemetry: output names the shipper" has "$B/out" "log shipper started (pid $s1: inference.log, start.log, supervisor.log"
+wait_for 10 has "$slog" "ship_logs: start: inference.log, start.log, supervisor.log in $WS/beside-logs" || true
+check "telemetry: ship_logs.py started (its start line in ship_logs.log)" \
+  has "$slog" "ship_logs: start: inference.log, start.log, supervisor.log in $WS/beside-logs -> http://$TVM:3500/loki/api/v1/push (proxy http://127.0.0.1:1055"
+c1="$(shipper_child "$s1")"
+check "telemetry: ship_logs.py runs under the loop" alive "$c1"
+for kv in "BESIDE_LOG_PUSH_URL=http://$TVM:3500/loki/api/v1/push" BESIDE_TELEMETRY_PROXY=http://127.0.0.1:1055 \
+          BESIDE_TELEMETRY_ENV=prod TS_HOSTNAME=beside-gpu BESIDE_INFERENCE_TOKEN=test-token-not-a-secret; do
+  check "telemetry: shipper environment $kv" env_of "$c1" "$kv"
+done
+wait_for 5 test -s "$WS/beside-logs/ship_logs.pos" || true
+check "telemetry: the shipper keeps its place in the log dir (ship_logs.pos)" test -s "$WS/beside-logs/ship_logs.pos"
+check "telemetry: the shipper does not hold start_pod.sh's lock (9>&-)" flock -n "$RUN/start.lock" true
+check "telemetry: one shipper (loop + ship_logs.py)" test "$(shippers)" = 2
+
+run_pod BESIDE_TELEMETRY_VM="$TVM"
+check "telemetry again: exit 0" test "$rc" = 0 || show
+check "telemetry again: the same shipper" has "$B/out" "log shipper already running (pid $s1, status $slog)"
+check "telemetry again: still one shipper" test "$(shippers):$(spid)" = "2:$s1"
+check "telemetry again: no spans NOTE for a service that has them" bash -c "! grep -q 'sends no spans' '$B/out'"
+
+kill -9 "$(cat "$RUN/tailscaled.pid")"
+wait_for 3 dead "$(cat "$RUN/tailscaled.pid")" || true
+: > "$B/ts-args"
+run_pod BESIDE_TELEMETRY_VM="$TVM"
+check "telemetry, tailscaled started again: exit 0" test "$rc" = 0 || show
+check "telemetry: tailscaled started with the HTTP and SOCKS5 proxy on 127.0.0.1:1055" \
+  grep -qF -- "--outbound-http-proxy-listen=127.0.0.1:1055 --socks5-server=127.0.0.1:1055" "$B/ts-args"
+check "telemetry: [2/4] line names the proxy" has "$B/out" "proxy 127.0.0.1:1055 for logs and spans)"
+check "telemetry: no proxy NOTE after starting tailscaled" bash -c "! grep -q 'nothing listens on' '$B/out'"
+
+TVM2=100.64.0.98
+run_pod BESIDE_TELEMETRY_VM="$TVM2" BESIDE_TELEMETRY_ENV=loadtest
+check "another VM: exit 0" test "$rc" = 0 || show
+s2="$(spid)"
+check "another VM: the old shipper was stopped" has "$B/out" "log shipper pid $s1 had other settings (VM, env or host): stopped it"
+old_gone() { dead "$s1" && dead "$c1"; }
+check "another VM: old loop and its ship_logs.py ended" old_gone
+check "another VM: a new shipper" is_shipper "$s2"
+wait_for 10 alive "$(shipper_child "$s2")" || true
+c2="$(shipper_child "$s2")"
+check "another VM: new shipper environment (URL)" env_of "$c2" "BESIDE_LOG_PUSH_URL=http://$TVM2:3500/loki/api/v1/push"
+check "another VM: new shipper environment (env label)" env_of "$c2" BESIDE_TELEMETRY_ENV=loadtest
+check "another VM: still one shipper" test "$(shippers)" = 2
+check "another VM: NOTE that the running service sends its spans elsewhere" \
+  has "$B/out" "NOTE: it sends no spans to http://$TVM2:4320/v1/traces (it has BESIDE_OTLP_URL=http://$TVM:4320/v1/traces)"
+wait_for 5 has "$slog" "ship_logs: stopped" || true
+check "another VM: the old ship_logs.py saved its place and said so" has "$slog" "ship_logs: stopped"
 
 echo
 echo "$checks checks, $fails failed"
