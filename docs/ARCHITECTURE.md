@@ -158,21 +158,25 @@ backend/storage/
 
 ```mermaid
 flowchart LR
+  U[Unity 앱] -- "X-Request-Id + traceparent<br/>(trace id = 흐름 id, 2026-11-27)" --> B
+  U -- "POST /api/v1/events" --> B
   B[Spring backend] -- "/actuator/prometheus (8081, 15 s)" --> P[(Prometheus)]
   B -- "JSON 로그 (json-file)" --> A[Alloy] --> L[(Loki)]
   B -- "OTLP HTTP span (4318)" --> T[(Tempo)]
   B -- "X-Request-Id + traceparent" --> I[Python 추론 서비스<br/>Runpod Pod: inference.log]
+  I -. "로그 push 3500 · OTLP span 4320<br/>(tailnet, BESIDE_TELEMETRY_VM 일 때, 2026-11-27)" .-> A
+  A -. "span" .-> T
   P & L & T --> G[Grafana]
 ```
 
 | 갈래 | 무엇 | 하나를 따라가는 열쇠 | 상태 |
 |---|---|---|---|
-| 지표 | `beside.*`·Spring 내장 지표 → Prometheus, 대시보드 'Beside 운영', 알림 13개([METRICS.md](METRICS.md) §5, [ops/SLO.md](ops/SLO.md)) | `env`·`worker` 태그 | [구현됨: 적용] Prometheus·Grafana 2026-11-25, 알림 11개 배포 창 1(2026-11-25 17:21 UTC) → 13개 배포 창 2(2026-11-26 00:08 UTC) |
-| 로그 | backend 는 prod 에서 한 줄 JSON(`requestId`·`jobId`·`attempt`·`traceId`·`spanId`), Caddy 접근 로그 → Alloy → Loki, 'Beside 로그' | `requestId`(앱의 X-Request-Id), `jobId`, `traceId` | [구현됨: 적용] 배포 창 1(2026-11-25 17:21 UTC) |
-| 추적 | 작업 실행 하나 = 트레이스 하나(`beside.job.run` → 크롭·슬롯 대기·healthz 대기·추론 HTTP 3개·GLB 저장), 업로드 요청 트레이스에 링크, OTLP → Tempo | `traceId`(로그 줄에서 Tempo 로, span 에서 로그로) | [구현됨: 적용] 2026-11-26 W8, 배포 창 2(00:08 UTC). 요청 span 확인. 작업 한 건의 트레이스도 2026-11-26 Pod 를 켜고(08:06 UTC) 보낸 작업 1건으로 확인했다(Tempo API, `beside.job.run` 과 단계 span 7개, 루트의 `beside.dispatched.trace_id` = 업로드 요청 트레이스). Grafana 화면에서 보기·캡처는 [계획] |
-| 추론 서비스 로그 | Pod 의 `inference.log`: UTC 시각·수준, 실패 응답마다 WARNING, 줄 끝 `rid=<jobId>-<attempt> trace=<id>`, 요청별 시간 줄(기본 켬) | `rid`, `trace` | [구현됨: 적용] 2026-11-26 B4, main 병합. 같은 날 08:06 UTC 에 켠 Pod 1대가 main `cb2bfc8` 을 받아 띄웠고, 작업 1건의 서비스 줄 끝 `rid=<jobId>-1 trace=<작업 트레이스 id>`, 일부러 보낸 401·404·422 의 WARNING, 요청별 시간 줄을 봤다. uvicorn 접근 줄과 시간 줄에는 rid·trace 가 없다. Loki 로는 오지 않는다(Pod 에서 grep) |
+| 지표 | `beside.*`·Spring 내장 지표 → Prometheus, 대시보드 'Beside 운영'(2026-11-27 부터 맨 위에 API·추론 p50·p95), 알림 13개 → 18개(2026-11-27: 수집기 감시 4개·GPU Pod ERROR 1개, [METRICS.md](METRICS.md) §5, [ops/SLO.md](ops/SLO.md)) | `env`·`worker` 태그 | [구현됨: 적용] Prometheus·Grafana 2026-11-25, 알림 11개 배포 창 1(2026-11-25 17:21 UTC) → 13개 배포 창 2(2026-11-26 00:08 UTC). 18개·p50 패널은 [구현됨], 적용은 배포 창 3 [계획] |
+| 로그 | backend 는 prod 에서 한 줄 JSON(`requestId`·`jobId`·`attempt`·`traceId`·`spanId`, 2026-11-27 부터 `env`), Caddy 접근 로그 → Alloy → Loki, 'Beside 로그'(2026-11-27 부터 부하 시험 행·표지·문의 번호 안내) | `requestId`(앱의 X-Request-Id), `jobId`, `traceId`, k6 는 `lt-<RUN_ID>-` | [구현됨: 적용] 배포 창 1(2026-11-25 17:21 UTC). 2026-11-27 추가분은 [구현됨], 적용 배포 창 3 [계획] |
+| 추적 | 2026-11-27 부터 업로드(또는 retry) 요청 하나 = 트레이스 하나: 서버 span 아래 `beside.upload.check`·`beside.upload.save`·`beside.job.dispatch-wait`·`beside.job.run`(→ 크롭·슬롯 대기·healthz 대기·추론 HTTP 3개·GLB 저장). 앱이 `traceparent` 를 보내 trace id = 앱 흐름 id(flags `00`·서버 재시작은 예전처럼 따로 된 트레이스 + 링크). OTLP → Tempo | `traceId` = 앱 흐름 id(오류 화면 문의 번호는 앞 8자) | 2026-11-26 구조(작업마다 따로 된 트레이스 + 링크)는 [구현됨: 적용] W8, 배포 창 2(00:08 UTC). 작업 한 건의 트레이스도 2026-11-26 Pod 를 켜고(08:06 UTC) 보낸 작업 1건으로 확인했다(Tempo API, `beside.job.run` 과 단계 span 7개, 루트의 `beside.dispatched.trace_id` = 업로드 요청 트레이스). 2026-11-27 구조는 [구현됨](시험·로컬 mock 기록 [ops/data/2026-11-27_obs-wave3-local](ops/data/2026-11-27_obs-wave3-local/README.md)), 적용 배포 창 3 [계획]. Grafana 화면에서 보기·캡처는 [계획] |
+| 추론 서비스 로그·span | Pod 의 `inference.log`: UTC 시각·수준, 실패 응답마다 WARNING, 줄 끝 `rid=<jobId>-<attempt> trace=<id>`, 요청별 시간 줄(기본 켬). 2026-11-27 부터 `BESIDE_TELEMETRY_VM` 이면 Pod 의 `ship_logs.py` 가 로그를 VM Alloy(3500) → Loki `{service="inference"}` 로, 서비스가 SERVER span 과 단계 span(lock-wait·predict·convert·rig 등)을 Alloy(4320) → Tempo 로 보낸다 | `rid`, `trace` | 로그 줄은 [구현됨: 적용] 2026-11-26 B4, main 병합. 같은 날 08:06 UTC 에 켠 Pod 1대가 main `cb2bfc8` 을 받아 띄웠고, 작업 1건의 서비스 줄 끝 `rid=<jobId>-1 trace=<작업 트레이스 id>`, 일부러 보낸 401·404·422 의 WARNING, 요청별 시간 줄을 봤다. uvicorn 접근 줄과 시간 줄에는 rid·trace 가 없다. VM 으로 보내기·Python span 은 [구현됨](`test_ship_logs.py`·`test_app`·CI 실행 시험), Pod 확인은 [계획] |
 
-추적은 span 만 남긴다: 시간 값은 이미 지표(`beside.job.*`, `beside.inference.request`)에 있어 같은 수치를 새 이름으로 더하지 않는다. backend 는 `management.otlp.tracing.endpoint` 가 있을 때만 span 을 내보낸다(Spring Boot 3.2 동작). 그래서 테스트·로컬 실행은 연결을 열지 않고 trace id 만 로그에 남는다. Python 서비스는 span 을 만들지 않고 받은 `traceparent` 를 로그에만 적는다([CONTRACT.md](CONTRACT.md) §6).
+추적은 span 만 남긴다: 시간 값은 이미 지표(`beside.job.*`, `beside.inference.request`)에 있어 같은 수치를 새 이름으로 더하지 않는다. backend 는 `management.otlp.tracing.endpoint` 가 있을 때만 span 을 내보낸다(Spring Boot 3.2 동작). 그래서 테스트·로컬 실행은 연결을 열지 않고 trace id 만 로그에 남는다. Python 서비스는 `BESIDE_OTLP_URL` 이 있을 때만 표준 라이브러리 OTLP/JSON 으로 span 을 보낸다(2026-11-27, OTel SDK 는 conda·torch 환경의 protobuf 충돌 위험 때문에 쓰지 않음). 없으면 받은 `traceparent` 를 로그에만 적는다([CONTRACT.md](CONTRACT.md) §6). 앱은 span 을 보내지 않으므로 Tempo 에서 서버 span 의 부모가 '없음'으로 보이는 것이 정상이다.
 
 ## 계약 경계와 문서
 

@@ -23,6 +23,15 @@ stderr(Pod 에서는 `/workspace/beside-logs/inference.log`)에 한 줄씩 쓴�
 - 요청별 시간 줄(아래 `BESIDE_REQUEST_TIMING`)은 `docs/perf` 의 분석 스크립트가 읽는 형식이라 그대로 둔다(시각 `at=`, 수준·rid 없음). 같은 요청의 `request` 줄과는 `client` 포트와 시각으로 맞춘다. 경로의 제어 문자·공백은 `?` 로 바꿔 한 줄·같은 칸을 지킨다(이 줄은 토큰 검사 바깥이라 401 요청도 남는다, 2026-11-26 배포 전 검토).
 - 확인 **[구현됨]**: `test_app.py` 의 `ServiceLogTest` 6개 — 줄 형식(UTC·수준·로거·rid·trace), 새 프로세스에서 INFO 가 stderr 로 나오고 DEBUG 는 안 나옴, 실패 응답 9가지가 job id 와 함께 WARNING 한 줄씩, 401 에 토큰이 없음, `X-Request-Id`·`traceparent` 가 같은 요청의 모든 줄에 붙고 요청이 끝나면 남지 않음(`/healthz` 줄 없음), 형식이 다른 헤더 값·줄바꿈이 든 경로는 남지 않음. `RequestTimingTest` 는 시간 줄의 경로도 한 줄(`%0A`·`%20` → `?`)인지 본다. Pod 에서 실제 줄은 2026-11-26 에 봤다 **[구현됨: 적용]**(Pod 1대, main `cb2bfc8`, 공개 주소로 보낸 작업 1건 + VM 에서 일부러 보낸 실패 요청 4개, [기록](../../docs/ops/data/2026-11-26_pod-log-check/README.md)): 작업의 서비스 줄 7개 끝에 모두 `rid=<jobId>-1 trace=<id>`(Tempo 의 작업 트레이스 id 와 같음), 401 두 개·404·422 가 WARNING 한 줄씩, 공백이 든 `X-Request-Id` 는 남지 않음, 서비스 토큰 값 0번. 그 전 판(2026-11-25 리허설)의 서비스 줄은 시각·수준·rid 없이 메시지뿐이었다.
 
+## Span (2026-11-27) **[구현됨]**, Pod 확인은 [계획]
+
+- **켜는 법**: `BESIDE_OTLP_URL` 이 있을 때만 켜진다(없으면 span·스레드 없음). Pod 에서는 `deploy/runpod/start_pod.sh` 가 Runpod 환경 변수 `BESIDE_TELEMETRY_VM` 이 있을 때 `BESIDE_OTLP_URL=http://<VM>:4320/v1/traces`·`BESIDE_TELEMETRY_PROXY=http://127.0.0.1:1055`(tailscaled 의 프록시)·`BESIDE_TELEMETRY_ENV` 를 넣는다([deploy/README.md](../../deploy/README.md) 'Runpod Pod 쪽').
+- **무엇**: 토큰 검사를 통과한 작업 요청마다 SERVER span(이름 = 경로 틀 `POST /infer`·`POST /infer/upload`·`GET /artifacts/{jobId}/{name}`·`DELETE /artifacts/{jobId}`, 상태 코드, `beside.request_id`, 5xx 면 오류)이 Spring 의 `traceparent` span 아래에 생긴다. 그래서 Spring 의 작업 트레이스(업로드 요청부터, [CONTRACT.md](../../docs/CONTRACT.md) §6)에 Python 단계가 이어진다. 자식: `beside.inference.save-photos`(업로드 사진 저장), `lock-wait`(모델 잠금 대기), `predict`, `convert`, `rig`, `simulate`(패스스루 부하 설정이 있을 때). 속성 jobId·attempt·tris·bytes·gpuPeakMB·inferMs·photos·joints. `traceparent` 의 flags 가 `00` 이면 기록하지 않고, 헤더가 없으면 그 요청이 새 trace 를 시작한다.
+- **토큰이 틀려 401 을 받은 요청은 span 이 없다**(토큰 검사가 바깥 층이다). 그 요청은 위 401 WARNING 줄과 시간 줄로만 남는다.
+- **보내는 법**: OpenTelemetry SDK 를 쓰지 않고 표준 라이브러리 OTLP/JSON([otlp_spans.py](otlp_spans.py)): 모델 환경은 conda Python 3.10 + torch 이고 시작 때 설치하지 않아, SDK 의 protobuf 가 충돌·설치 실패할 위험이 있다. id 는 소문자 hex, 큐 2048, 백그라운드 스레드가 2초마다 묶어 VM 의 Alloy(4320) → Tempo 로 보내고(시간 초과 5초) 실패는 버린다. 요청을 막지 않는다. resource `service.name=beside-inference`, `deployment.environment=$BESIDE_TELEMETRY_ENV`(기본 prod).
+- 시간 줄(`beside.timing`)·로그 줄 형식은 그대로다(`docs/perf` 분석기가 읽는다).
+- 확인 **[구현됨]**: `test_app.py` 12개(가짜 수집 서버: 부모 = traceparent 의 span id, 자식 이름·속성, hex id 형식, URL 이 없으면 0건, flags 00 이면 0건, 수집 서버가 죽어도 응답 정상 — 전체 97개 통과). Pod 에서 Tempo 에 실제로 오는지는 [계획](obs-wave3 E4).
+
 ## GPU 서버 실행
 
 ```bash
