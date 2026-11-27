@@ -379,10 +379,77 @@ public class RuntimeModelLoader : MonoBehaviour
             Texture baseTex = GetBaseTexture(baseRenderer.sharedMaterial);
             if (baseTex != null) mat.SetTexture("_BaseMap", baseTex);
 
+            Mesh mesh = baseRenderer is SkinnedMeshRenderer smr ? smr.sharedMesh
+                      : baseRenderer.GetComponent<MeshFilter>() is MeshFilter mf2 ? mf2.sharedMesh : null;
+            WeldSeamFurLength(mesh, lengthMap, mat.HasProperty("_FlipHairMaps") && mat.GetFloat("_FlipHairMaps") > 0.5f);
+            // comb (flow map) only with real tangents: a GLB without TANGENT (main converter) does not give the shader
+            // zero tangents on the phone, which laid the hair in a different direction on every UV island
+            bool hasTangents = mesh != null && mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Tangent);
+            mat.SetFloat("_UseTangents", hasTangents ? 1f : 0f);
+            Debug.Log($"[RuntimeModelLoader] Fur comb (flow map) {(hasTangents ? "on: mesh has tangents" : "off: mesh has no tangents")}.");
+
             var fur = baseRenderer.gameObject.AddComponent<ShellFurRenderer>();
             fur.furMaterial = mat;
             fur.shellCount = furShellCount;
         }
+    }
+
+    /// <summary>
+    /// Fur length per vertex, equal for every copy of a vertex at a UV seam, stored in uv2 (x = length 0..1, y = 1 =
+    /// "present") for ShellFur.shader. At a seam the copies share a position but read the length map at different UVs,
+    /// and AnimalLift predicts each UV island on its own: on the spine and the head the two sides differed by up to half
+    /// the map range (2026-11-24, 184 of 400 seam positions > 0.1), so the shells pushed the copies out by different
+    /// amounts and split open along the seam, showing the bare mesh. Averaging the copies keeps the shells closed.
+    /// Skipped (the shader then samples the map per vertex as before) when the mesh or the map is not readable or uv2
+    /// is already used.
+    /// </summary>
+    static void WeldSeamFurLength(Mesh mesh, Texture2D lengthMap, bool flipV)
+    {
+        if (mesh == null || lengthMap == null) return;
+        if (!mesh.isReadable || !lengthMap.isReadable)
+        {
+            Debug.LogWarning("[RuntimeModelLoader] Fur seams not welded: mesh or hair length map is not readable.");
+            return;
+        }
+        if (mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.TexCoord1))
+        {
+            Debug.LogWarning("[RuntimeModelLoader] Fur seams not welded: the mesh already uses uv2.");
+            return;
+        }
+        Vector3[] verts = mesh.vertices;
+        Vector2[] uvs = mesh.uv;
+        if (uvs == null || uvs.Length != verts.Length) return;
+
+        // the same sample the shader takes in the vertex stage (bilinear, mip 0, clamp)
+        var len = new float[verts.Length];
+        for (int i = 0; i < verts.Length; i++)
+        {
+            Vector2 uv = uvs[i];
+            if (flipV) uv.y = 1f - uv.y;
+            len[i] = lengthMap.GetPixelBilinear(uv.x, uv.y).r;
+        }
+
+        // copies of a seam vertex have bit-identical positions (same source vertex)
+        static Vector3Int Key(Vector3 p) =>
+            new Vector3Int(Mathf.RoundToInt(p.x * 1e5f), Mathf.RoundToInt(p.y * 1e5f), Mathf.RoundToInt(p.z * 1e5f));
+        var sums = new Dictionary<Vector3Int, Vector2>(verts.Length);   // x = sum of lengths, y = copies
+        for (int i = 0; i < verts.Length; i++)
+        {
+            var k = Key(verts[i]);
+            sums.TryGetValue(k, out Vector2 s);
+            sums[k] = new Vector2(s.x + len[i], s.y + 1f);
+        }
+
+        var welded = new List<Vector2>(verts.Length);
+        int seamVerts = 0;
+        for (int i = 0; i < verts.Length; i++)
+        {
+            Vector2 s = sums[Key(verts[i])];
+            if (s.y > 1f) seamVerts++;
+            welded.Add(new Vector2(s.x / s.y, 1f));
+        }
+        mesh.SetUVs(1, welded);
+        Debug.Log($"[RuntimeModelLoader] Fur length welded across UV seams ({seamVerts} of {verts.Length} vertices).");
     }
 
     static Texture GetBaseTexture(Material m)

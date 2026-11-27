@@ -4,6 +4,7 @@ using System.IO;
 using Beside.Api;
 using Beside.AR;
 using Beside.Job;
+using Beside.Library;
 using Beside.Metrics;
 using Beside.Pet;
 using UnityEngine;
@@ -52,7 +53,7 @@ namespace Beside.UI.Designed
         [Tooltip("Template UI objects to hide so they don't overlap this UI. Coaching UI stays.")]
         [SerializeField] private string[] hideTemplateObjects = { "Create Button", "Delete Button", "Options Button", "Options Modal", "Object Menu Animator", "Greeting Prompt", "DebugMenu" };
 
-        enum Page { Home, Confirm, Progress, Preview, AR, Error, Settings }
+        enum Page { Home, Confirm, Progress, Preview, AR, Error, Settings, Library, Camera }
 
         // 시안 px × 2.6 in the 1080×1920 reference
         const int Margin = 42;        // 16 px page margin
@@ -71,7 +72,11 @@ namespace Beside.UI.Designed
         InputField urlInput; Text settingsStatus;
         // confirm
         RectTransform thumbGrid; Text confirmCount; List<Photo> pendingPhotos = new List<Photo>();
-        Button confirmGoButton; Text confirmGoLabel;
+        Button confirmGoButton; Text confirmGoLabel; Text confirmAgainLabel; bool confirmFromCamera;
+        // camera ("지금 촬영하기"): live camera with a shutter button
+        RectTransform cameraPage; bool capturing;
+        readonly List<Renderer> hiddenPetRenderers = new List<Renderer>();
+        readonly List<Behaviour> hiddenPetFur = new List<Behaviour>();
         const string GoButtonText = "이 사진으로 만들기";
         readonly List<Texture2D> thumbTextures = new List<Texture2D>();   // destroyed with the thumbnails (not freed by Destroy(gameObject))
         // the job's first photo, shown on the home card, the progress card and the AR sheet
@@ -84,6 +89,14 @@ namespace Beside.UI.Designed
         // AR
         Text arPill, arHint, arModelSize; Image arPillDot; RectTransform arHintCard, arSheet, arShowButton, arToast, arAnimRow;
         RawImage arThumb; GameObject arPlaceButton, arTiles; Text arToastText; float toastUntil; bool placed, hintDirty;
+        Text arName; Texture2D arThumbTex; string currentEntryId;   // the saved model on screen (null = not saved)
+        // saved models ("저장한 강아지", ModelLibrary)
+        RectTransform library, libList, libFullNotice, homeLibCard; Text libSub, homeLibSub;
+        readonly List<Texture2D> libThumbs = new List<Texture2D>();
+        Page libReturnPage = Page.Home; bool libDeleteMode, libLoading;
+        string pendingSaveJobId, pendingSavePath; byte[] pendingSavePhoto; int pendingSaveAutoCm;   // a new model waiting for a free slot
+        // a toast for the pages other than AR, and a dialog over everything
+        RectTransform pageToast, dialogRoot, dialogCard; Text pageToastText; float pageToastUntil;
         // error
         Text errorTitle, errorBody, errorCode, errorStage, errorRetry, errorRetryLabel; Button errorRetryButton;
         const string RetryButtonText = "같은 사진으로 다시 시도";
@@ -165,6 +178,7 @@ namespace Beside.UI.Designed
             if (error.gameObject.activeSelf) SyncRetryWait();
             if (confirm.gameObject.activeSelf) SyncGoWait();
             if (arToast.gameObject.activeSelf && Time.unscaledTime > toastUntil) arToast.gameObject.SetActive(false);
+            if (pageToast.gameObject.activeSelf && Time.unscaledTime > pageToastUntil) pageToast.gameObject.SetActive(false);
 
             if (!arOverlay.gameObject.activeSelf) return;
 
@@ -306,8 +320,12 @@ namespace Beside.UI.Designed
             BuildProgress(root);
             BuildPreview(root);
             BuildAR(root);
+            BuildCamera(root);
             BuildError(root);
             BuildSettings(root);
+            BuildLibrary(root);
+            BuildPageToast(root);
+            BuildDialog(root);   // last: over every page
         }
 
         static RectTransform R(string name, Transform parent) => UiKit.Rect(name, parent, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -356,9 +374,10 @@ namespace Beside.UI.Designed
             DesignKit.Gap(card, 22);
             var tiles = DesignKit.Row("Tiles", card, 240, 26);
             DesignKit.Tile("Gallery", tiles, "gallery", "갤러리에서 고르기", DesignKit.Accent, Color.white, PickFromGallery);
-            DesignKit.Tile("Shoot", tiles, "camera", "지금 촬영하기", DesignKit.Ground, DesignKit.Ink, () => StartCoroutine(CaptureThenConfirm()));
+            DesignKit.Tile("Shoot", tiles, "camera", "지금 촬영하기", DesignKit.Ground, DesignKit.Ink, OpenCamera);
 
             BuildResumeCard(body);
+            BuildLibraryCard(body);
 
             var ex = DesignKit.Card("Examples", body, 62f, 52, 52, 0f);
             DesignKit.Label("Title", ex, "이런 사진이 잘 나와요", 42, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
@@ -395,6 +414,29 @@ namespace Beside.UI.Designed
             resumeSub = DesignKit.Label("Sub", texts, "", 34, DesignKit.InkSoft, 0);
 
             DesignKit.Icon("chevron_right", resumeCard, 52, DesignKit.InkMuted);
+        }
+
+        /// <summary>"저장한 강아지 n/5": opens the saved models.</summary>
+        void BuildLibraryCard(Transform body)
+        {
+            homeLibCard = R("Library", body);
+            DesignKit.MakeButton(homeLibCard, DesignKit.Box(homeLibCard, DesignKit.CardBg, 62f), () => OpenLibrary(Page.Home));
+            var h = UiKit.Row(homeLibCard, 36f);
+            h.padding = new RectOffset(52, 42, 42, 42);
+            h.childForceExpandWidth = false; h.childForceExpandHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
+
+            var icon = R("Icon", homeLibCard);
+            DesignKit.Box(icon, DesignKit.AccentSoft, 36f);
+            DesignKit.Fixed(icon, 146, 146);
+            DesignKit.Icon("cube", icon, 68, DesignKit.Accent);
+
+            var texts = R("Texts", homeLibCard);
+            UiKit.Column(texts, 8f, 0).childAlignment = TextAnchor.MiddleLeft;
+            DesignKit.Flex(texts);
+            DesignKit.Label("Title", texts, "저장한 강아지", 42, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
+            homeLibSub = DesignKit.Label("Sub", texts, "", 34, DesignKit.InkSoft, 0);
+
+            DesignKit.Icon("chevron_right", homeLibCard, 52, DesignKit.InkMuted);
         }
 
         static void Example(Transform row, string photo, string caption, bool good)
@@ -454,7 +496,8 @@ namespace Beside.UI.Designed
             DesignKit.Label("Limits", bottom, "JPG · PNG · WEBP, 장당 5MB 이하", 31, DesignKit.InkMuted, 44, TextAnchor.MiddleCenter);
             confirmGoButton = DesignKit.PrimaryButton("Go", bottom, GoButtonText, StartWithPending);
             confirmGoLabel = confirmGoButton.GetComponentInChildren<Text>();
-            DesignKit.GhostButton("Again", bottom, "다시 고르기", PickFromGallery);
+            confirmAgainLabel = DesignKit.GhostButton("Again", bottom, "다시 고르기",
+                () => { if (confirmFromCamera) OpenCamera(); else PickFromGallery(); }).GetComponentInChildren<Text>();
         }
 
         static void Tip(Transform card, bool good, string text)
@@ -608,7 +651,8 @@ namespace Beside.UI.Designed
             DesignKit.Icon("cube", thumb, 52, DesignKit.Accent);
             arThumb = DesignKit.CoverImage(thumb);
             arThumb.enabled = false;
-            DesignKit.Text("Name", head, "우리 아이", 42, DesignKit.Ink, TextAnchor.MiddleLeft, true).horizontalOverflow = HorizontalWrapMode.Overflow;
+            arName = DesignKit.Text("Name", head, "우리 아이", 42, DesignKit.Ink, TextAnchor.MiddleLeft, true);
+            arName.horizontalOverflow = HorizontalWrapMode.Overflow;
             arModelSize = DesignKit.Text("Size", head, "", 34, DesignKit.InkSoft);
             DesignKit.Flex(arModelSize);
             DesignKit.IconButton("Hide", head, "chevron_down", 104, 47, DesignKit.Ground, DesignKit.InkSoft, ToggleBottomPanels, 31f);
@@ -629,7 +673,7 @@ namespace Beside.UI.Designed
 
             var tiles = DesignKit.Row("Tiles", arSheet, 187, 21);
             DesignKit.Tile("Replace", tiles, "refresh", "다시 배치", DesignKit.Ground, DesignKit.Ink, ResetPlacement, vertical: true);
-            DesignKit.Tile("Snap", tiles, "camera", "사진 찍기", DesignKit.Accent, Color.white, () => StartCoroutine(SavePhoto()), vertical: true);
+            DesignKit.Tile("Load", tiles, "cube", "불러오기", DesignKit.Accent, Color.white, () => OpenLibrary(Page.AR), vertical: true);
             DesignKit.Tile("New", tiles, "plus", "새로 만들기", DesignKit.Ground, DesignKit.Ink, StartOver, vertical: true);
             arTiles = tiles.gameObject;
 
@@ -794,6 +838,10 @@ namespace Beside.UI.Designed
             arOverlay.gameObject.SetActive(p == Page.AR);
             error.gameObject.SetActive(p == Page.Error);
             settings.gameObject.SetActive(p == Page.Settings);
+            library.gameObject.SetActive(p == Page.Library);
+            cameraPage.gameObject.SetActive(p == Page.Camera);
+            SetPetsHidden(p == Page.Camera);   // a pet placed in AR must not end up in the photo
+            CloseDialog();
 
             if (scanOnlyInAR && scanGate != null)
             {
@@ -809,6 +857,7 @@ namespace Beside.UI.Designed
             else if (preview != null) preview.Hide();
 
             if (p == Page.Home) RefreshHome();
+            if (p == Page.Library) RefreshLibrary();
             if (p == Page.AR) { hintDirty = true; SetPlaced(HasPlacedModel()); }
         }
 
@@ -823,6 +872,8 @@ namespace Beside.UI.Designed
                 if (heroJobId != id) LoadHero(id);
                 resumeSub.text = File.Exists(JobManager.CachePath(id)) ? "생성 완료 · 이어서 AR로 보기" : "만들던 중이에요 · 이어서 보기";
             }
+            int saved = ModelLibrary.Count;
+            homeLibSub.text = saved == 0 ? "만든 강아지가 여기에 저장돼요" : $"{saved}/{ModelLibrary.MaxItems} · 눌러서 불러오기";
             healthWanted = true;
         }
 
@@ -940,8 +991,33 @@ namespace Beside.UI.Designed
         void OnModelReady(string jobId, string path, GameObject template)
         {
             readyTemplate = template; placed = false;
+            instructionDismissed = false;   // the AR hint shows again for a new model; × keeps it closed for this one
+            var entry = ModelLibrary.Find(jobId);
+            if (entry != null) ApplyHeight(template, entry.heightCm);   // e.g. the saved job continued after a restart
             FillStats(template, path);
             SetFur(furOn);
+            SetModelIdentity(entry);
+
+            // a finished job goes into the saved models automatically (max ModelLibrary.MaxItems)
+            if (entry == null && !string.IsNullOrEmpty(jobId) && !string.IsNullOrEmpty(path))
+            {
+                byte[] photo = EncodeThumb(heroTex);
+                int autoCm = Mathf.RoundToInt(ModelHeightM(template) * 100f);
+                if (ModelLibrary.IsFull)
+                {
+                    // full: the user frees a slot (or skips saving) before the preview
+                    pendingSaveJobId = jobId; pendingSavePath = path; pendingSavePhoto = photo; pendingSaveAutoCm = autoCm;
+                    libDeleteMode = true; libReturnPage = Page.Preview;
+                    Show(Page.Library);
+                    return;
+                }
+                entry = ModelLibrary.Add(jobId, path, photo, NextDefaultName(), autoCm);
+                if (entry != null)
+                {
+                    SetModelIdentity(entry);
+                    ShowPageToast($"강아지를 저장했어요 · 저장한 강아지 {ModelLibrary.Count}/{ModelLibrary.MaxItems}", 3f);
+                }
+            }
             Show(Page.Preview);
         }
 
@@ -949,6 +1025,7 @@ namespace Beside.UI.Designed
         void OnLoaderReady(GameObject template)
         {
             if (jobManager.IsBusy) return;          // part of a job: JobManager.ModelReady handles it
+            if (libLoading) return;                 // a saved model: LoadFromLibraryRoutine handles it
             OnModelReady(null, null, template);
         }
 
@@ -974,23 +1051,86 @@ namespace Beside.UI.Designed
                 if (photoPicker.GalleryAvailable) ProductEvents.PhotosSelected("gallery", photos?.Count ?? 0);
                 if (photos == null || photos.Count == 0)
                 {
-                    if (!photoPicker.GalleryAvailable) StartCoroutine(CaptureThenConfirm()); // editor / no plugin
+                    if (!photoPicker.GalleryAvailable) OpenCamera(); // editor / no plugin
                     return;
                 }
+                confirmFromCamera = false;
                 ShowConfirm(photos);
             });
         }
 
-        IEnumerator CaptureThenConfirm()
+        // ---------- camera ("지금 촬영하기") ----------
+
+        /// <summary>Live camera (the AR camera feed shows through) with a hint and a round shutter button.</summary>
+        void BuildCamera(Transform root)
         {
-            canvas.gameObject.SetActive(false);                      // the camera frame must not include our UI
+            cameraPage = R("Camera", root);   // transparent: the camera shows through
+            float barY = -TopInset - BarHeight / 2f;
+            var back = BackButton(cameraPage, () => Show(Page.Home));
+            var brt = (RectTransform)back.transform;
+            brt.anchorMin = brt.anchorMax = new Vector2(0, 1); brt.pivot = new Vector2(0, 0.5f);
+            brt.anchoredPosition = new Vector2(Margin, barY);
+            DesignKit.AddShadow(back.targetGraphic, 4f);
+
+            var hint = UiKit.Rect("Hint", cameraPage, new Vector2(0, 1), new Vector2(1, 1), new Vector2(Margin, 0), new Vector2(-Margin, 0));
+            hint.pivot = new Vector2(0.5f, 1); hint.anchoredPosition = new Vector2(0, -276);
+            DesignKit.AddShadow(DesignKit.Box(hint, DesignKit.Glass, 31f), 3f);
+            UiKit.Column(hint, 0f, 0).padding = new RectOffset(40, 40, 28, 28);
+            hint.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            DesignKit.Label("Text", hint, "강아지 몸 전체가 화면에 들어오게 찍어 주세요", 36, DesignKit.Ink, 0, TextAnchor.MiddleCenter);
+
+            // shutter: white ring around a white disc
+            var shutter = UiKit.Rect("Shutter", cameraPage, new Vector2(0.5f, 0), new Vector2(0.5f, 0), new Vector2(-110, 160), new Vector2(110, 380));
+            DesignKit.Ring(shutter, Color.white);
+            var disc = UiKit.Rect("Disc", shutter, Vector2.zero, Vector2.one, new Vector2(42, 42), new Vector2(-42, -42));
+            var discImg = disc.gameObject.AddComponent<Image>();
+            discImg.sprite = DesignKit.CircleSprite(); discImg.color = Color.white;
+            DesignKit.AddShadow(discImg, 4f);
+            DesignKit.MakeButton(disc, discImg, () => { if (!capturing) StartCoroutine(TakePhoto()); });
+        }
+
+        void OpenCamera()
+        {
+            if (photoPicker == null) return;
+            Show(Page.Camera);
+        }
+
+        IEnumerator TakePhoto()
+        {
+            capturing = true;
+            canvas.gameObject.SetActive(false);                      // the photo must not include our UI
             yield return new WaitForEndOfFrame();
             Photo? captured = null;
             photoPicker.CaptureScreen("camera.jpg", p => captured = p);
             while (captured == null) yield return null;
             canvas.gameObject.SetActive(true);
+            capturing = false;
+            confirmFromCamera = true;
             ProductEvents.PhotosSelected("camera", 1);
             ShowConfirm(new List<Photo> { captured.Value });
+        }
+
+        /// <summary>Hides the pets placed in AR while the camera page is open (their renderers and fur, not the
+        /// objects: SpawnLimiter forgets inactive objects), and shows them again afterwards.</summary>
+        void SetPetsHidden(bool hide)
+        {
+            if (!hide)
+            {
+                foreach (var r in hiddenPetRenderers) if (r != null) r.enabled = true;
+                foreach (var f in hiddenPetFur) if (f != null) f.enabled = true;
+                hiddenPetRenderers.Clear(); hiddenPetFur.Clear();
+                return;
+            }
+            if (hiddenPetRenderers.Count > 0 || hiddenPetFur.Count > 0) return;   // already hidden
+            var pets = new List<GameObject>();
+            if (limiter != null) pets.AddRange(limiter.PlacedModels);
+            else if (spawner != null) foreach (Transform c in spawner.transform) pets.Add(c.gameObject);
+            foreach (var go in pets)
+            {
+                if (go == null) continue;
+                foreach (var r in go.GetComponentsInChildren<Renderer>()) if (r.enabled) { r.enabled = false; hiddenPetRenderers.Add(r); }
+                foreach (var f in go.GetComponentsInChildren<ShellFurRenderer>()) if (f.enabled) { f.enabled = false; hiddenPetFur.Add(f); }
+            }
         }
 
         void ShowConfirm(List<Photo> photos)
@@ -1021,6 +1161,7 @@ namespace Beside.UI.Designed
                 }
             }
             confirmCount.text = $"선택한 사진 {photos.Count}장 · 최대 {ApiV1Routes.MaxPhotos}장";
+            confirmAgainLabel.text = confirmFromCamera ? "다시 찍기" : "다시 고르기";
             Show(Page.Confirm);
             SyncGoWait();   // first frame already locked; Update keeps it in step
         }
@@ -1064,13 +1205,14 @@ namespace Beside.UI.Designed
             ClearThumbs();
             SetPendingHero(null);
             SetHero(null, null);
+            if (arThumbTex != null) Destroy(arThumbTex);
+            foreach (var t in libThumbs) if (t != null) Destroy(t);
         }
 
         void EnterAR()
         {
-            instructionDismissed = false;   // a new AR session starts with the hint visible
-            bottomHidden = false;           // ...and with the buttons visible
-            Show(Page.AR);
+            bottomHidden = false;           // a new AR session starts with the buttons visible
+            Show(Page.AR);                  // the hint is reset per model (OnModelReady), not per visit
         }
 
         void PlaceAtCenter()
@@ -1085,25 +1227,6 @@ namespace Beside.UI.Designed
             // remove the placed model, then wait for a new tap
             ClearPlacedModels();
             SetPlaced(false);
-        }
-
-        IEnumerator SavePhoto()
-        {
-            canvas.gameObject.SetActive(false);
-            yield return new WaitForEndOfFrame();
-            var shot = ScreenCapture.CaptureScreenshotAsTexture();
-            canvas.gameObject.SetActive(true);
-            byte[] png = shot.EncodeToPNG(); Destroy(shot);
-            string name = $"Beside_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
-#if BESIDE_NATIVEGALLERY && (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
-            NativeGallery.SaveImageToGallery(png, "Beside", name);
-            ShowToast("갤러리에 저장했어요", 2.5f);
-#else
-            string dir = Path.Combine(Application.persistentDataPath, "photos"); Directory.CreateDirectory(dir);
-            File.WriteAllBytes(Path.Combine(dir, name), png);
-            ShowToast("사진을 저장했어요", 2.5f);
-#endif
-            ProductEvents.Track("photo_saved");
         }
 
         void ToggleFur() { furOn = !furOn; SetFur(furOn); ProductEvents.Track("fur_toggle", ("on", furOn)); }
@@ -1124,6 +1247,7 @@ namespace Beside.UI.Designed
             DeleteHeroFiles();
             SetPendingHero(null);
             SetHero(null, null);
+            SetModelIdentity(null);
             Show(Page.Home);
         }
 
@@ -1192,7 +1316,7 @@ namespace Beside.UI.Designed
             if (tex == null) heroUnsaved = false;
             if (resumeThumb != null) DesignKit.SetCover(resumeThumb, tex);
             if (progressPhoto != null) DesignKit.SetCover(progressPhoto, tex);
-            if (arThumb != null) DesignKit.SetCover(arThumb, tex);
+            RefreshArThumb();
         }
 
         void SetPendingHero(Texture2D tex)
@@ -1217,6 +1341,365 @@ namespace Beside.UI.Designed
             RenderTexture.ReleaseTemporary(rt);
             tex.wrapMode = TextureWrapMode.Clamp;
             return tex;
+        }
+
+        // ---------- saved models (ModelLibrary) ----------
+
+        void BuildLibrary(Transform root)
+        {
+            library = BuildPage("Library", root, 0, out var body, out _);
+            var bar = DesignKit.Row("TopBar", body, BarHeight, 16, false);
+            BackButton(bar, CloseLibrary);
+            libSub = TitleBlock(body, "저장한 강아지", "");
+
+            // shown when a new model is waiting for a free slot
+            libFullNotice = DesignKit.Card("Full", body, 62f, 52, 46, 20f, DesignKit.DangerSoft);
+            DesignKit.Label("Title", libFullNotice, "저장 공간이 가득 찼어요", 42, DesignKit.Danger, 0, TextAnchor.MiddleLeft, true);
+            DesignKit.Label("Body", libFullNotice, $"강아지는 {ModelLibrary.MaxItems}마리까지 저장할 수 있어요. 하나를 지우면 방금 만든 강아지가 저장돼요.", 36, DesignKit.Ink, 0);
+            DesignKit.SecondaryButton("Skip", libFullNotice, "저장하지 않고 계속", SkipPendingSave, DesignKit.CardBg, 130f);
+
+            libList = R("List", body);
+            UiKit.Column(libList, 26f, 0);
+        }
+
+        void OpenLibrary(Page from)
+        {
+            if (libLoading) return;
+            libReturnPage = from;
+            libDeleteMode = false;
+            Show(Page.Library);
+        }
+
+        void CloseLibrary()
+        {
+            if (libDeleteMode) { SkipPendingSave(); return; }
+            Show(libReturnPage);
+        }
+
+        void RefreshLibrary()
+        {
+            foreach (Transform c in libList) { c.gameObject.SetActive(false); Destroy(c.gameObject); }
+            foreach (var t in libThumbs) if (t != null) Destroy(t);
+            libThumbs.Clear();
+
+            var items = ModelLibrary.Items;
+            libFullNotice.gameObject.SetActive(libDeleteMode);
+            libSub.text = libDeleteMode ? "지울 강아지를 골라 주세요"
+                : items.Count == 0 ? "만든 강아지가 자동으로 여기에 저장돼요"
+                : $"{items.Count}/{ModelLibrary.MaxItems} · 눌러서 불러오기";
+            if (items.Count == 0)
+            {
+                var empty = DesignKit.Card("Empty", libList, 62f, 52, 60, 16f);
+                DesignKit.Label("Text", empty, "아직 저장한 강아지가 없어요", 40, DesignKit.Ink, 0, TextAnchor.MiddleCenter, true);
+                DesignKit.Label("Sub", empty, "사진으로 강아지를 만들면 자동으로 저장돼요", 34, DesignKit.InkSoft, 0, TextAnchor.MiddleCenter);
+                return;
+            }
+            for (int i = items.Count - 1; i >= 0; i--) LibraryRow(items[i]);   // newest first
+        }
+
+        void LibraryRow(ModelLibrary.Entry e)
+        {
+            var row = R("Item", libList);
+            var bg = DesignKit.Box(row, DesignKit.CardBg, 62f);
+            if (!libDeleteMode) DesignKit.MakeButton(row, bg, () => LoadFromLibrary(e));
+            var h = UiKit.Row(row, 31f);
+            h.padding = new RectOffset(42, 36, 36, 36);
+            h.childForceExpandWidth = false; h.childForceExpandHeight = false; h.childAlignment = TextAnchor.MiddleLeft;
+
+            var thumb = R("Thumb", row);
+            DesignKit.MaskBox(thumb, DesignKit.AccentSoft, 36f);
+            DesignKit.Fixed(thumb, 166, 166);
+            DesignKit.Icon("cube", thumb, 68, DesignKit.Accent);           // shows when there is no photo
+            var photo = ModelLibrary.LoadPhoto(e);
+            if (photo != null) { libThumbs.Add(photo); DesignKit.SetCover(DesignKit.CoverImage(thumb), photo); }
+
+            var texts = R("Texts", row);
+            UiKit.Column(texts, 6f, 0).childAlignment = TextAnchor.MiddleLeft;
+            DesignKit.Flex(texts);
+            DesignKit.Label("Name", texts, e.name, 40, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
+            string info = $"키 {e.ShownHeightCm}cm" + (e.heightCm > 0 ? "" : " (자동)") + $" · {e.CreatedLocal:M월 d일}";
+            if (e.id == currentEntryId && readyTemplate != null) info += " · 보는 중";
+            DesignKit.Label("Info", texts, info, 32, DesignKit.InkSoft, 0);
+            if (!string.IsNullOrEmpty(e.memo)) DesignKit.Label("Memo", texts, e.memo, 32, DesignKit.InkMuted, 0);
+
+            var buttons = R("Buttons", row);
+            UiKit.Column(buttons, 14f, 0);
+            var le = buttons.gameObject.AddComponent<LayoutElement>();
+            le.minWidth = le.preferredWidth = 170f;
+            if (!libDeleteMode) SmallButton(buttons, "수정", DesignKit.Ground, DesignKit.Ink, () => EditEntry(e));
+            SmallButton(buttons, "삭제", DesignKit.DangerSoft, DesignKit.Danger, () => ConfirmDelete(e));
+        }
+
+        static Button SmallButton(Transform parent, string label, Color bg, Color fg, System.Action onClick)
+            => DesignKit.RoundedButton(label, parent, label, bg, fg, onClick, 96f, 34, true, 30f);
+
+        void LoadFromLibrary(ModelLibrary.Entry e)
+        {
+            if (libLoading || e == null) return;
+            if (jobManager.IsBusy) { ShowPageToast("강아지를 만드는 중에는 불러올 수 없어요", 3f); return; }
+            if (modelLoader == null) { ShowPageToast("불러올 수 없어요", 3f); return; }
+            StartCoroutine(LoadFromLibraryRoutine(e));
+        }
+
+        IEnumerator LoadFromLibraryRoutine(ModelLibrary.Entry e)
+        {
+            string path = ModelLibrary.GlbPath(e);
+            byte[] bytes = null;
+            try { bytes = File.ReadAllBytes(path); }
+            catch (System.Exception ex) { Debug.LogWarning("[DesignedUI] could not read the saved model: " + ex.Message); }
+            if (bytes == null) { ShowPageToast("저장한 강아지 파일을 읽지 못했어요", 3f); yield break; }
+
+            libLoading = true;
+            ShowPageToast($"'{e.name}' 불러오는 중…", 60f);
+            ClearPlacedModels();   // the spawner slot frees the previous model only when no copy of it is placed
+            readyTemplate = null; placed = false;
+            var task = modelLoader.LoadAndRegister(bytes, "lib_" + e.id);
+            yield return new WaitUntil(() => task.IsCompleted);
+            libLoading = false;
+            pageToast.gameObject.SetActive(false);
+
+            GameObject template = task.IsCompletedSuccessfully ? task.Result : null;
+            if (template == null) { ShowPageToast("강아지를 열지 못했어요", 3f); yield break; }
+            readyTemplate = template; placed = false;
+            instructionDismissed = false;   // another model: the AR hint shows again
+            ApplyHeight(template, e.heightCm);
+            FillStats(template, path);
+            SetFur(furOn);
+            SetModelIdentity(e);
+            Show(Page.Preview);
+        }
+
+        void ConfirmDelete(ModelLibrary.Entry e)
+        {
+            ShowDialog("강아지를 지울까요?", $"'{e.name}'을(를) 지우면 되돌릴 수 없어요.", "지우기", DesignKit.Danger, () =>
+            {
+                if (e.id == currentEntryId) currentEntryId = null;   // the model on screen stays until another one is loaded
+                ModelLibrary.Remove(e);
+                if (libDeleteMode) { TrySavePending(); return; }
+                RefreshLibrary();
+                ShowPageToast("지웠어요", 2f);
+            });
+        }
+
+        void EditEntry(ModelLibrary.Entry e)
+        {
+            ClearDialog();
+            DesignKit.Label("Title", dialogCard, "강아지 정보", 47, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
+            var name = Field(dialogCard, "이름", e.name, "예: 초코", InputField.ContentType.Standard, 20);
+            var height = Field(dialogCard, "키 (cm)", e.heightCm > 0 ? e.heightCm.ToString() : "",
+                $"비우면 자동 ({e.autoHeightCm}cm)", InputField.ContentType.IntegerNumber, 3);
+            var memo = Field(dialogCard, "메모", e.memo, "견종, 나이 등", InputField.ContentType.Standard, 60);
+            var status = DesignKit.Label("Status", dialogCard, "", 32, DesignKit.Danger, 0);
+            var row = DesignKit.Row("Buttons", dialogCard, 130, 21);
+            DesignKit.SecondaryButton("Cancel", row, "취소", CloseDialog, DesignKit.Ground, 130f);
+            DesignKit.RoundedButton("Ok", row, "저장", DesignKit.Accent, Color.white,
+                () => SaveEntryEdit(e, name.text, height.text, memo.text, status), 130f, 40, true);
+            OpenDialog();
+        }
+
+        /// <summary>Label and a gray one-line input under it (the settings URL field's style).</summary>
+        InputField Field(Transform parent, string label, string value, string placeholder, InputField.ContentType type, int limit)
+        {
+            DesignKit.Label(label, parent, label, 32, DesignKit.InkSoft, 0, TextAnchor.MiddleLeft, true);
+            var field = R(label + "Field", parent);
+            var bg = DesignKit.Box(field, DesignKit.Ground, 36f);
+            field.gameObject.AddComponent<RectMask2D>();   // long text stays inside the box
+            UiKit.Height(field, 120);
+            var text = DesignKit.Text("Text", field, "", 38, DesignKit.Ink);
+            text.rectTransform.offsetMin = new Vector2(36, 0); text.rectTransform.offsetMax = new Vector2(-36, 0);
+            text.supportRichText = false; text.horizontalOverflow = HorizontalWrapMode.Overflow;
+            var ph = DesignKit.Text("Placeholder", field, placeholder, 38, DesignKit.InkMuted);
+            ph.rectTransform.offsetMin = new Vector2(36, 0); ph.rectTransform.offsetMax = new Vector2(-36, 0);
+            var input = field.gameObject.AddComponent<InputField>();
+            input.targetGraphic = bg; input.textComponent = text; input.placeholder = ph;
+            input.contentType = type;                         // IntegerNumber also opens the number pad
+            input.lineType = InputField.LineType.SingleLine;
+            input.characterLimit = limit;
+            input.shouldHideMobileInput = false;              // type in the keyboard's own text box (stable on Android)
+            input.text = value ?? "";
+            return input;
+        }
+
+        void SaveEntryEdit(ModelLibrary.Entry e, string name, string height, string memo, Text status)
+        {
+            name = (name ?? "").Trim();
+            if (name.Length == 0) { status.text = "이름을 입력해 주세요"; return; }
+            int cm = 0;
+            height = (height ?? "").Trim();
+            if (height.Length > 0 && (!int.TryParse(height, out cm) || cm < 5 || cm > 200))
+            {
+                status.text = "키는 5~200 사이 숫자(cm)로 넣어 주세요. 비우면 자동 크기예요.";
+                return;
+            }
+            e.name = name; e.heightCm = cm; e.memo = (memo ?? "").Trim();
+            ModelLibrary.SaveChanges();
+            if (e.id == currentEntryId && readyTemplate != null)   // the model on screen: new size and name now
+            {
+                ApplyHeight(readyTemplate, cm);
+                FillStats(readyTemplate, ModelLibrary.GlbPath(e));
+                SetModelIdentity(e);
+            }
+            CloseDialog();
+            RefreshLibrary();
+            ShowPageToast("저장했어요", 2f);
+        }
+
+        /// <summary>After a slot was freed in the "full" library: saves the model that was waiting, then shows it.</summary>
+        void TrySavePending()
+        {
+            ModelLibrary.Entry entry = null;
+            if (!string.IsNullOrEmpty(pendingSaveJobId) && !ModelLibrary.IsFull)
+                entry = ModelLibrary.Add(pendingSaveJobId, pendingSavePath, pendingSavePhoto, NextDefaultName(), pendingSaveAutoCm);
+            ClearPendingSave();
+            libDeleteMode = false;
+            if (entry != null)
+            {
+                if (readyTemplate != null) SetModelIdentity(entry);   // the waiting model is the one on screen
+                ShowPageToast($"방금 만든 강아지를 저장했어요 · {ModelLibrary.Count}/{ModelLibrary.MaxItems}", 3f);
+            }
+            else ShowPageToast("강아지를 저장하지 못했어요", 3f);
+            Show(readyTemplate != null ? Page.Preview : Page.Home);
+        }
+
+        void SkipPendingSave()
+        {
+            ClearPendingSave();
+            libDeleteMode = false;
+            Show(readyTemplate != null ? Page.Preview : Page.Home);
+        }
+
+        void ClearPendingSave()
+        {
+            pendingSaveJobId = pendingSavePath = null;
+            pendingSavePhoto = null;
+            pendingSaveAutoCm = 0;
+        }
+
+        /// <summary>"우리 아이 n" with the smallest n no saved model uses.</summary>
+        static string NextDefaultName()
+        {
+            var used = new HashSet<string>();
+            foreach (var e in ModelLibrary.Items) used.Add(e.name);
+            for (int n = 1; ; n++)
+            {
+                string s = "우리 아이 " + n;
+                if (!used.Contains(s)) return s;
+            }
+        }
+
+        /// <summary>Name and photo of the model on screen in the AR sheet (null = not a saved model).</summary>
+        void SetModelIdentity(ModelLibrary.Entry e)
+        {
+            currentEntryId = e?.id;
+            if (arName != null) arName.text = e != null ? Ellipsize(e.name, 10) : "우리 아이";
+            if (arThumbTex != null) Destroy(arThumbTex);
+            arThumbTex = e != null ? ModelLibrary.LoadPhoto(e) : null;
+            RefreshArThumb();
+        }
+
+        /// <summary>AR sheet photo: the saved model's photo, else the job's photo.</summary>
+        void RefreshArThumb()
+        {
+            if (arThumb != null) DesignKit.SetCover(arThumb, arThumbTex != null ? arThumbTex : heroTex);
+        }
+
+        static string Ellipsize(string s, int max) => string.IsNullOrEmpty(s) || s.Length <= max ? s : s.Substring(0, max) + "…";
+
+        /// <summary>Model height in meters as it is now (the loaded GLB's BoxCollider, with the template's scale).</summary>
+        static float ModelHeightM(GameObject template)
+        {
+            var box = template != null ? template.GetComponentInChildren<BoxCollider>(true) : null;
+            return box != null ? box.size.y * box.transform.lossyScale.y : 0f;
+        }
+
+        /// <summary>Scales the model to cm tall (0 = the size the loader fitted). Copies already on the floor follow by
+        /// the same ratio, so a size the user pinched stays relative.</summary>
+        void ApplyHeight(GameObject template, int cm)
+        {
+            if (template == null) return;
+            float oldK = template.transform.localScale.x;
+            template.transform.localScale = Vector3.one;
+            float autoM = ModelHeightM(template);
+            float k = cm > 0 && autoM > 1e-4f ? cm / 100f / autoM : 1f;
+            template.transform.localScale = Vector3.one * k;
+            if (limiter == null || oldK <= 1e-6f || Mathf.Approximately(k, oldK)) return;
+            foreach (var go in limiter.PlacedModels)
+                if (go != null && go.name.StartsWith(template.name, System.StringComparison.Ordinal))
+                    go.transform.localScale *= k / oldK;
+        }
+
+        /// <summary>Small JPG of the job's photo for the saved model (null without a photo).</summary>
+        static byte[] EncodeThumb(Texture2D tex)
+        {
+            if (tex == null) return null;
+            var small = Shrink(tex, 360);
+            byte[] jpg = small.EncodeToJPG(85);
+            Destroy(small);
+            return jpg;
+        }
+
+        // ---------- page toast and dialog ----------
+
+        void BuildPageToast(Transform root)
+        {
+            pageToast = UiKit.Rect("PageToast", root, Vector2.zero, new Vector2(1, 0), new Vector2(62, 330), new Vector2(-62, 330));
+            pageToast.pivot = new Vector2(0.5f, 0);
+            DesignKit.Box(pageToast, DesignKit.ToastBg, 40f).raycastTarget = false;
+            UiKit.Column(pageToast, 0f, 0).padding = new RectOffset(44, 44, 30, 30);
+            pageToast.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            pageToastText = DesignKit.Label("Text", pageToast, "", 36, Color.white, 0, TextAnchor.MiddleCenter);
+            pageToast.gameObject.SetActive(false);
+        }
+
+        void ShowPageToast(string text, float seconds)
+        {
+            pageToastText.text = text;
+            pageToast.gameObject.SetActive(true);
+            pageToast.SetAsLastSibling();
+            pageToastUntil = Time.unscaledTime + seconds;
+        }
+
+        void BuildDialog(Transform root)
+        {
+            dialogRoot = R("Dialog", root);
+            dialogRoot.gameObject.AddComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);   // dims and blocks the page
+            dialogCard = DesignKit.Card("Card", dialogRoot, 62f, 52, 52, 22f);
+            // near the top, so the keyboard does not cover the fields
+            dialogCard.anchorMin = new Vector2(0, 1); dialogCard.anchorMax = new Vector2(1, 1); dialogCard.pivot = new Vector2(0.5f, 1);
+            dialogCard.offsetMin = new Vector2(Margin, 0); dialogCard.offsetMax = new Vector2(-Margin, 0);
+            dialogCard.anchoredPosition = new Vector2(0, -TopInset - 40);
+            dialogCard.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            dialogRoot.gameObject.SetActive(false);
+        }
+
+        void ShowDialog(string title, string body, string okLabel, Color okColor, System.Action onOk)
+        {
+            ClearDialog();
+            DesignKit.Label("Title", dialogCard, title, 47, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
+            if (!string.IsNullOrEmpty(body)) DesignKit.Label("Body", dialogCard, body, 36, DesignKit.InkSoft, 0);
+            var row = DesignKit.Row("Buttons", dialogCard, 130, 21);
+            DesignKit.SecondaryButton("Cancel", row, "취소", CloseDialog, DesignKit.Ground, 130f);
+            DesignKit.RoundedButton("Ok", row, okLabel, okColor, Color.white, () => { CloseDialog(); onOk?.Invoke(); }, 130f, 40, true);
+            OpenDialog();
+        }
+
+        void OpenDialog()
+        {
+            dialogRoot.gameObject.SetActive(true);
+            dialogRoot.SetAsLastSibling();
+        }
+
+        void ClearDialog()
+        {
+            if (dialogCard == null) return;
+            foreach (Transform c in dialogCard) { c.gameObject.SetActive(false); Destroy(c.gameObject); }
+        }
+
+        void CloseDialog()
+        {
+            if (dialogRoot == null) return;
+            ClearDialog();
+            dialogRoot.gameObject.SetActive(false);
         }
 
         // ---------- helpers ----------
