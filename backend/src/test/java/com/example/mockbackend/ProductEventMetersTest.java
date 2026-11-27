@@ -22,10 +22,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureObservability(tracing = false)
 class ProductEventMetersTest {
-    /** docs/METRICS.md §6.1, written out on purpose. */
+    /** docs/METRICS.md §6.1, written out on purpose (app_error, saved_dog_open, saved_dog_change: 2026-11-27). */
     private static final List<String> NAMES = List.of("screen_view", "photos_selected", "generate_tap", "job_cancel_tap",
             "job_failed_shown", "model_ready", "fur_toggle", "ar_issue_shown", "model_placed", "animation_play",
-            "photo_saved", "start_over");
+            "photo_saved", "start_over", "app_error", "saved_dog_open", "saved_dog_change");
     private static final List<String> REASONS = List.of("unknown_name", "invalid", "duplicate", "rate_limited", "bad_prop");
 
     @LocalManagementPort
