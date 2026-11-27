@@ -6,7 +6,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { classify, statusClass } from './classify.js';
-import { uuid4 } from './config.js';
+import { requestId, uuid4 } from './config.js';
 import * as m from './metrics.js';
 
 const CALLBACKS = {};
@@ -62,8 +62,8 @@ export function call(ctx, endpoint, name, method, url, body, opts) {
     responseType: o.responseType || 'none',
     responseCallback: callbackFor(expected),
     timeout: o.timeout || ctx.requestTimeout,
+    headers: Object.assign({ 'X-Request-Id': requestId(ctx.cfg.runId) }, o.headers || {}),
   };
-  if (o.headers) params.headers = o.headers;
   const res = http.request(method, url, body === undefined ? null : body, params);
   const kind = classify(res.status, expected, typeof res.body === 'string' ? res.body : null);
   m.errorRatio.add(kind === 'error' ? 1 : 0, tags);

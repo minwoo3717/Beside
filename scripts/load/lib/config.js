@@ -160,5 +160,11 @@ export function uuid4() {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
 }
 
+// X-Request-Id of a k6 request: lt-<RUN_ID>-<8 hex>, at most 52 characters (RUN_ID <= 40, the server keeps 64).
+// Caddy and backend log it, so Grafana finds a run's requests by lt-<RUN_ID>- and the Caddy alerts leave them out.
+export function requestId(runId) {
+  return `lt-${runId}-${uuid4().slice(0, 8)}`;
+}
+
 export const ENV = RAW_ENV;
 export const CONFIG = parseConfig(RAW_ENV);

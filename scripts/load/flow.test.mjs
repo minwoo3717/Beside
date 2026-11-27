@@ -15,6 +15,9 @@ test('flow: healthz -> create -> poll every 2 s -> asset, tagged, prefixed', asy
   state.requests.forEach((r) => assert.ok(r.tags.name && r.tags.name.indexOf('0000') < 0, `name tag without ids: ${r.tags.name}`));
   const create = state.requests[1];
   assert.match(create.headers['Idempotency-Key'], /^lt-unit1-[0-9a-f-]{36}$/);
+  // every measured request names the run in X-Request-Id (Caddy/backend logs, Grafana 'Beside 로그' 부하 시험 행)
+  state.requests.forEach((r) => assert.match(r.headers['X-Request-Id'], /^lt-unit1-[0-9a-f]{8}$/, r.tags.endpoint));
+  assert.equal(new Set(state.requests.map((r) => r.headers['X-Request-Id'])).size, state.requests.length);
   const job = Object.values(server.jobs)[0];
   assert.deepEqual(job.filenames, ['lt-unit1-1.png', 'lt-unit1-2.png']);
   assert.equal(samples('load_flowOkRatio')[0].value, 1);
@@ -248,4 +251,30 @@ test('setup + handleSummary write the summary file entry and a text report', asy
   assert.equal(doc.meta.runId, 'unit1');
   assert.match(out.stdout, /RTT_base candidate\) 1\.25 ms/);
   assert.doesNotMatch(out.stdout, /not_run/);
+});
+
+test('marker: setup ends and teardown runs with one healthz carrying lt-<RUN_ID>-begin|end, outside every threshold', async () => {
+  // every entry script marks the start and the end of the load in the Caddy log (Grafana annotation, 부하 시험 행)
+  for (const script of ['smoke.js', 'api_staged.js', 'upload.js', 'gpu_queue.js', 'asset.js', 'poll_saturation.js', 'failure/f3_uploads.js']) {
+    const src = (await import('node:fs')).readFileSync(join(HERE, script), 'utf8');
+    assert.match(src, /mark\(CONFIG, 'begin'\)/, `${script} marks begin`);
+    assert.match(src, /mark\(CONFIG, 'end'\)/, `${script} marks end`);
+  }
+  const mod = await load('smoke.js', {}, { clock: 0 });
+  state.handler = fakeServer();
+  mod.setup();
+  const begin = state.requests[state.requests.length - 1];
+  assert.equal(begin.url, `${BASE_ENV.BASE_URL}/api/v1/healthz`);
+  assert.equal(begin.headers['X-Request-Id'], 'lt-unit1-begin');
+  assert.deepEqual(begin.tags, { endpoint: 'marker', name: 'marker' });
+  assert.equal(begin.params.timeout, '5s');
+  const before = samples('load_errorRatio').length;
+  state.handler = () => { throw new Error('connection refused'); };   // never fails the run
+  mod.teardown();
+  assert.equal(state.requests[state.requests.length - 1].headers['X-Request-Id'], 'lt-unit1-end');
+  assert.equal(samples('load_errorRatio').length, before, 'a mark is not a measured request');
+
+  const marker = await lib('marker.js');
+  assert.equal(marker.markerId('a1-end', 'begin'), 'lt-a1-end-begin');
+  assert.ok(marker.markerId('x'.repeat(40), 'begin').length <= 64, 'the server keeps X-Request-Id up to 64 characters');
 });

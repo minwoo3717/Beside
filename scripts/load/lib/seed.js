@@ -2,7 +2,7 @@
 // count toward the measured endpoints or load_errorRatio.
 import http from 'k6/http';
 import { sleep } from 'k6';
-import { uuid4 } from './config.js';
+import { requestId, uuid4 } from './config.js';
 
 export function preflight(cfg) {
   const res = http.get(`${cfg.baseUrl}/api/v1/healthz`, { tags: { endpoint: 'setup', name: '/api/v1/healthz' }, responseType: 'text' });
@@ -104,7 +104,8 @@ export function seedJobs(cfg, multipart, n, opts) {
         url: `${cfg.baseUrl}/api/v1/jobs`,
         body: multipart.body,
         params: {
-          headers: { 'Content-Type': multipart.contentType, 'Idempotency-Key': `lt-${cfg.runId}-${uuid4()}` },
+          headers: { 'Content-Type': multipart.contentType, 'Idempotency-Key': `lt-${cfg.runId}-${uuid4()}`,
+            'X-Request-Id': requestId(cfg.runId) },
           tags: { endpoint: 'seed', name: '/api/v1/jobs' },
           responseType: 'text',
           timeout: '120s',
@@ -127,7 +128,7 @@ export function seedJobs(cfg, multipart, n, opts) {
       const res = http.batch(chunk.map((id) => ({
         method: 'GET',
         url: `${cfg.baseUrl}/api/v1/jobs/${id}`,
-        params: { tags: { endpoint: 'seed', name: '/api/v1/jobs/{id}' }, responseType: 'text' },
+        params: { headers: { 'X-Request-Id': requestId(cfg.runId) }, tags: { endpoint: 'seed', name: '/api/v1/jobs/{id}' }, responseType: 'text' },
       })));
       res.forEach((r, k) => {
         const status = r.status === 200 ? jsonField(r, 'status') : null;
