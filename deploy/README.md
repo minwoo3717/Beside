@@ -35,7 +35,7 @@
 |---|---|
 | 프로젝트 | `beside-514511`(무료 체험 결제 계정에 연결) |
 | VM | `beside-vm` — `asia-northeast3-a`(서울), e2-standard-2(2 vCPU · 8GB), Ubuntu 24.04 LTS, 균형 디스크 50GB, 삭제 방지 켬 |
-| 대기 VM | `beside-standby` — `asia-northeast3-b`, e2-standard-2, 삭제 방지 켬. 2026-11-25 17:22~17:40 UTC 에 운영 디스크 스냅샷 `beside-vm-standby-20261125-172254`(main `d5f4a32`, 배포 창 1 직후)로 만들었다([gcp/clone_vm.sh](gcp/clone_vm.sh) → [standby/clone_init.sh](standby/clone_init.sh)). 서비스 계정 `beside-backup@`(아래 '서비스 계정·백업 버킷' 행과 같은 범위)과 임시 외부 IP 가 붙어 있다(2026-11-26 `gcloud` 확인). 2026-11-26 13:17~13:20 UTC [scripts/sync_standby.sh](../scripts/sync_standby.sh) 로 코드·이미지를 운영과 같은 `a44b3ed` 에 맞췄다(시작은 안 함, [준비 기록](../docs/ops/data/2026-11-26_failover-prep/README.md)). Tailscale 은 로그인 승인 대기다. 전환 훈련은 [계획]이다(절차 [RUNBOOK](../docs/ops/RUNBOOK.md) '대기 서버로 넘기기·되돌리기') |
+| 대기 VM | `beside-standby` — `asia-northeast3-b`, e2-standard-2, 삭제 방지 켬. 2026-11-25 17:22~17:40 UTC 에 운영 디스크 스냅샷 `beside-vm-standby-20261125-172254`(main `d5f4a32`, 배포 창 1 직후)로 만들었다([gcp/clone_vm.sh](gcp/clone_vm.sh) → [standby/clone_init.sh](standby/clone_init.sh)). 서비스 계정 `beside-backup@`(아래 '서비스 계정·백업 버킷' 행과 같은 범위)이 붙어 있다(2026-11-26 `gcloud` 확인). 2026-11-26 13:17~13:20 UTC [scripts/sync_standby.sh](../scripts/sync_standby.sh) 로 코드·이미지를 운영과 같은 `a44b3ed` 에 맞췄다(시작은 안 함, [준비 기록](../docs/ops/data/2026-11-26_failover-prep/README.md)). Tailscale 은 2026-11-26 15:27 UTC 무렵 로그인했다(`beside-standby`, `100.84.254.122`, 운영 VM 과 내부 IP 로 직접 연결). 같은 날 15:48~16:01 UTC 계획 전환 훈련 D-1(운영 → 대기)·D-3(되돌리기)을 했다 [실험 결과] ([기록](../docs/ops/2026-11-26_failover-drills.md), 절차 [RUNBOOK](../docs/ops/RUNBOOK.md) '대기 서버로 넘기기·되돌리기'). 지금은 다시 대기다: 외부 IP 없음(다음 동기화 전에 `bash deploy/gcp/clone_vm.sh ip standby`), tailnet offline, `.env` 는 운영 것(웹훅 있음, 처음 것은 `.env.standby`)이라 compose 를 손으로 켜지 않는다 |
 | 주소 | 고정 IP `beside-ip` 34.64.91.254 → `https://beside-team.duckdns.org` |
 | 방화벽 | `beside-allow-web`: tcp 80·443, udp 443 → 네트워크 태그 `beside-web`. SSH 22 는 기본 네트워크의 `default-allow-ssh`(키 인증만) |
 | SSH | 사용자 `beside`, 개발 PC 의 키 `~/.ssh/beside-vm.key`, `~/.ssh/config` 별칭 `beside-gcp` |
@@ -139,7 +139,7 @@ tailscale ip -4                          # VM 의 100.x 주소
 - Runpod Pod: 아래 'Runpod Pod 쪽'. Pod 안에서 스크립트가 Tailscale 을 받아 띄우고 로그인 링크를 한 번 보여 준다.
 - GPU PC(대안): 추론 서비스가 **WSL2 안**에서 돌면 Tailscale 도 **WSL 안**에 설치하고 로그인한다(위와 같은 명령. WSL 에 systemd 가 꺼져 있으면 `/etc/wsl.conf` 에 `[boot]` `systemd=true` 를 넣고 PowerShell 에서 `wsl --shutdown` 뒤 다시 연다). 그 WSL 의 `tailscale ip -4` 가 `.env` 의 `INFERENCE_BASE_URL` 과 GPU PC 쪽 `BESIDE_HOST` 가 된다.
 - 연결 확인: VM 에서 `tailscale ping <Pod 또는 GPU PC 의 100.x>`.
-- (선택) Tailscale 관리 콘솔의 Access controls 에서 VM → GPU 쪽 추론 포트(Pod 8002, GPU PC 8001)만 허용하면 tailnet 안의 다른 기기는 추론 서비스에 못 붙는다. userspace 모드의 Pod 는 tailnet 에서 오는 연결을 **모든 포트**에 대해 127.0.0.1 로 넘기므로(Jupyter 8888, sshd 22, nginx 포트 포함), 팀원 노트북·폰을 tailnet 에 넣기 전에는 꼭 건다.
+- (선택) Tailscale 관리 콘솔의 Access controls 에서 VM → GPU 쪽 추론 포트(Pod 8002, GPU PC 8001)만 허용하면 tailnet 안의 다른 기기는 추론 서비스에 못 붙는다. 이때 VM 에는 대기 VM `beside-standby` 도 넣는다(넘긴 뒤 그 VM 이 Pod 를 부른다, [RUNBOOK](../docs/ops/RUNBOOK.md) '대기 서버로 넘기기·되돌리기' 준비 3). userspace 모드의 Pod 는 tailnet 에서 오는 연결을 **모든 포트**에 대해 127.0.0.1 로 넘기므로(Jupyter 8888, sshd 22, nginx 포트 포함), 팀원 노트북·폰을 tailnet 에 넣기 전에는 꼭 건다.
 
 ### 4. 리포와 `.env`
 

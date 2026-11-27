@@ -9,6 +9,7 @@ AnimalLift 베이스라인 재현부터 품질·속도 개선까지 모든 실�
 
 | 날짜 | 파일 | 한 줄 결론 |
 |---|---|---|
+| 2026-11-27 (검사) | [2026-11-27_glb-validator.md](2026-11-27_glb-validator.md) | **[실험 결과]** 운영 GLB 3종(정적·털 맵·리깅)이 gltf-validator 2.0.0-dev.3.10 오류 0·경고 0, GLB_SPEC 기준 7개 통과. INFO 는 털 맵 미참조(설계대로), HINT 는 변환기의 bufferView.target 누락(정적·털 맵만) |
 | 2026-11-26 (계획) | [2026-11-26_exp-04_ab-input-texture.md](2026-11-26_exp-04_ab-input-texture.md) | **[계획]** exp-02 베이스라인 품질, exp-03 입력 3안, exp-04 텍스처 패딩을 한 세션으로(11/27 Pod 생성, 11/28 블라인드 채점). 주 지표를 미리 정함. 도구 `tools/eval_*.py` 는 [구현됨] |
 | 2026-11-17 | [2026-11-17_exp-01_baseline-runpod.md](2026-11-17_exp-01_baseline-runpod.md) | **[실험 결과]** 베이스라인 1건: A40 에서 inferMs 3.9~5.7 s, convertMs 0.85~1.1 s, gpuPeakMB 5,120, 삼각형 7,774, GLB 약 1.3 MB(표본 4건). 공개 주소 전체 12~16 s 중 5~7 s 는 VM ↔ Pod 중계 전송. 품질 채점은 [계획] |
 | 2026-11-05 (틀만) | [2026-11-05_exp-03_input-preprocess.md](2026-11-05_exp-03_input-preprocess.md) | **[계획]** 원본(늘림) / 크롭+패딩 / 크롭+배경 제거 3D 비교 — 절차와 표만, 실행 전. 실행은 2026-11-26 기록의 세션으로 옮김 |

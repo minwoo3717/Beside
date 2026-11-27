@@ -1,0 +1,189 @@
+[
+  {
+    "file": "static-d798b743.glb",
+    "bytes": 1170480,
+    "validatorVersion": "2.0.0-dev.3.10",
+    "errors": 0,
+    "warnings": 0,
+    "infos": 0,
+    "hints": 4,
+    "messages": [
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/POSITION bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/TEXCOORD_0 bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/NORMAL bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/indices bufferView.target should be set for vertex or index data."
+    ],
+    "generator": "https://github.com/mikedh/trimesh",
+    "triangles": 7774,
+    "vertices": 4310,
+    "animations": 0,
+    "skins": false,
+    "materials": 1,
+    "drawCalls": 1,
+    "extensionsUsed": [],
+    "buffers": 1,
+    "externalBuffer": false,
+    "images": [
+      {
+        "name": "(body)",
+        "mime": "image/png",
+        "size": [
+          1024,
+          1024
+        ]
+      }
+    ],
+    "hairMapsReferencedByTexture": false,
+    "extrasBeside": [],
+    "animationNames": [],
+    "spec": {
+      "validator errors 0": true,
+      "size <= 10 MB": true,
+      "one buffer, no external uri": true,
+      "no extensions": true,
+      "triangles <= 20000": true,
+      "textures <= 2048": true,
+      "hair maps not used by a texture": true
+    }
+  },
+  {
+    "file": "furmaps-dd7af771.glb",
+    "bytes": 1760968,
+    "validatorVersion": "2.0.0-dev.3.10",
+    "errors": 0,
+    "warnings": 0,
+    "infos": 2,
+    "hints": 4,
+    "messages": [
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/POSITION bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/TEXCOORD_0 bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/attributes/NORMAL bufferView.target should be set for vertex or index data.",
+      "HINT BUFFER_VIEW_TARGET_MISSING /meshes/0/primitives/0/indices bufferView.target should be set for vertex or index data.",
+      "INFO UNUSED_OBJECT /images/1 This object may be unused.",
+      "INFO UNUSED_OBJECT /images/2 This object may be unused."
+    ],
+    "generator": "https://github.com/mikedh/trimesh",
+    "triangles": 7774,
+    "vertices": 4310,
+    "animations": 0,
+    "skins": false,
+    "materials": 1,
+    "drawCalls": 1,
+    "extensionsUsed": [],
+    "buffers": 1,
+    "externalBuffer": false,
+    "images": [
+      {
+        "name": "(body)",
+        "mime": "image/png",
+        "size": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "name": "hair_length",
+        "mime": "image/png",
+        "size": [
+          512,
+          512
+        ]
+      },
+      {
+        "name": "hair_flow",
+        "mime": "image/png",
+        "size": [
+          512,
+          512
+        ]
+      }
+    ],
+    "hairMapsReferencedByTexture": false,
+    "extrasBeside": [
+      "hairLengthImage",
+      "hairFlowImage",
+      "furLength"
+    ],
+    "animationNames": [],
+    "spec": {
+      "validator errors 0": true,
+      "size <= 10 MB": true,
+      "one buffer, no external uri": true,
+      "no extensions": true,
+      "triangles <= 20000": true,
+      "textures <= 2048": true,
+      "hair maps not used by a texture": true
+    }
+  },
+  {
+    "file": "rigged-35b357d7.glb",
+    "bytes": 2100924,
+    "validatorVersion": "2.0.0-dev.3.10",
+    "errors": 0,
+    "warnings": 0,
+    "infos": 2,
+    "hints": 0,
+    "messages": [
+      "INFO UNUSED_OBJECT /images/1 This object may be unused.",
+      "INFO UNUSED_OBJECT /images/2 This object may be unused."
+    ],
+    "generator": "Beside rig_animallift.py",
+    "triangles": 7774,
+    "vertices": 4310,
+    "animations": 5,
+    "skins": true,
+    "materials": 1,
+    "drawCalls": 1,
+    "extensionsUsed": [],
+    "buffers": 1,
+    "externalBuffer": false,
+    "images": [
+      {
+        "name": "uv",
+        "mime": "image/png",
+        "size": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "name": "hair_length",
+        "mime": "image/png",
+        "size": [
+          512,
+          512
+        ]
+      },
+      {
+        "name": "hair_flow",
+        "mime": "image/png",
+        "size": [
+          512,
+          512
+        ]
+      }
+    ],
+    "hairMapsReferencedByTexture": false,
+    "extrasBeside": [
+      "hairLengthImage",
+      "hairFlowImage",
+      "furLength"
+    ],
+    "animationNames": [
+      "Idle",
+      "Walk",
+      "TailWag",
+      "HeadTilt",
+      "Sit"
+    ],
+    "spec": {
+      "validator errors 0": true,
+      "size <= 10 MB": true,
+      "one buffer, no external uri": true,
+      "no extensions": true,
+      "triangles <= 20000": true,
+      "textures <= 2048": true,
+      "hair maps not used by a texture": true
+    }
+  }
+]

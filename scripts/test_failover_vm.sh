@@ -2,7 +2,9 @@
 # Test of scripts/failover_vm.sh --planned without GCP or VMs: fake gcloud (VM state in files), fake ssh (logs the VM
 # by its HostKeyAlias and the host it was sent to, and the remote command), fake curl. Checks: refuses, without stopping
 # prod, when the static IP is not on FROM, TO runs a backend, misses an image, cannot list its images, has no build
-# marker for FROM's commit (or a 'pending' one), or is not on the tailnet (BESIDE_ALLOW_NO_TAILNET=1 goes on); the steps
+# marker for FROM's commit (or a 'pending' one), or is not on the tailnet (BESIDE_ALLOW_NO_TAILNET=1 goes on), or FROM
+# has jobs waiting or running (BESIDE_ALLOW_QUEUE=1 goes on; an unreadable count only warns); the newest backup zip is
+# copied with the data; the steps
 # run in order (stop -> copy -> start -> IP detach -> attach -> public check -> roles); the static IP leaves FROM before
 # it reaches TO and TO's temporary IP is dropped; SSH goes to the holder of the static IP directly and to the other VM
 # on its internal IP; step 6 leaves FROM a marker so the way back passes; DRY_RUN changes nothing; a failed stop and a
@@ -61,6 +63,8 @@ printf 'ssh %s: %s\n' "$alias" "$cmd" >> "$FAKE/calls"
 printf '%s %s\n' "$alias" "$host" >> "$FAKE/hosts"
 in_list() { [[ " $2 " == *" $1 "* ]]; }
 case "$cmd" in
+  *"actuator/prometheus"*)   # the queue of FROM, summed by the remote awk (the fake prints the sum)
+    [[ -n "${FAKE_QUEUE_UNKNOWN:-}" ]] || printf '%s' "${FAKE_QUEUE:-0}" ;;
   *healthz*)
     if [[ "$alias" == "${FAKE_UNHEALTHY:-none}" ]]; then echo '{"status":"down"}'; else echo '{"status":"ok"}'; fi ;;
   *"docker ps -q"*) [[ "$alias" == "${FAKE_TO_RUNNING:-none}" ]] && echo abc123 || true ;;
@@ -72,7 +76,7 @@ case "$cmd" in
   *"compose"*"stop backend"*) [[ "$alias" == "${FAKE_STOP_FAIL:-none}" ]] && exit 1 || true ;;
   *"rev-parse HEAD"*) echo 1234567890abcdef ;;
   *"tailscale status"*) if in_list "$alias" "${FAKE_NO_TAILNET:-}"; then echo "Logged out."; else echo "100.70.1.2 $alias"; fi ;;
-  *"tar -C"*"-cf -"*) printf 'DATA' ;;
+  *"-cf -"*) printf 'DATA' ;;
   *"tar -C"*"-xf -"*) cat > "$FAKE/received-$alias" ;;
   *"cat ~/Beside/deploy/.env"*) printf 'NOTIFY_WEBHOOK_URL=https://secret\n' ;;
   *"cat > ~/Beside/deploy/.env.new"*) cat > "$FAKE/env-$alias" ;;
@@ -120,7 +124,8 @@ for c in "FAKE_TO_RUNNING=beside-standby|the target runs a backend" \
          "FAKE_BUILT_FOR=deadbeefdeadbeef|the target images were built for another commit" \
          "FAKE_BUILT_FOR=pending|the sync of the target was not finished" \
          "FAKE_MARKED=none|the target has no build marker" \
-         "FAKE_NO_TAILNET=beside-standby|the target is not on the tailnet"; do
+         "FAKE_NO_TAILNET=beside-standby|the target is not on the tailnet" \
+         "FAKE_QUEUE=2|jobs are waiting or running on the source"; do
   reset
   if env "${c%%|*}" bash "$FO" --planned beside-vm beside-standby > "$WORK/out.txt" 2>&1; then fail "ran although ${c#*|}"; fi
   stopped_prod && fail "a refused run (${c#*|}) stopped prod"
@@ -138,10 +143,23 @@ FAKE_NO_TAILNET=beside-standby DRY_RUN=1 bash "$FO" --planned beside-vm beside-s
   || fail "dry run without tailnet"
 grep -q "would STOP" "$WORK/out.txt" || fail "dry run did not say a real run would stop without tailnet"
 
+# ---- queue on FROM: jobs there would end as INTERNAL_ERROR; a person may go on, a dry run says it would stop, an
+# unreadable count only warns
+reset
+FAKE_QUEUE=2 BESIDE_ALLOW_QUEUE=1 bash "$FO" --planned beside-vm beside-standby > "$WORK/out.txt" 2>&1 \
+  || fail "BESIDE_ALLOW_QUEUE=1 did not go on"
+reset
+FAKE_QUEUE=2 DRY_RUN=1 bash "$FO" --planned beside-vm beside-standby > "$WORK/out.txt" 2>&1 || fail "dry run with a queue"
+grep -q "would STOP.*2 job" "$WORK/out.txt" || fail "dry run did not say a real run would stop for the queue"
+grep -q "the other checks passed" "$WORK/out.txt" || fail "dry run with a queue claimed that every check passed"
+reset
+FAKE_QUEUE_UNKNOWN=1 bash "$FO" --planned beside-vm beside-standby > "$WORK/out.txt" 2>&1 || fail "unknown queue stopped"
+grep -q "queue on beside-vm: unknown" "$WORK/out.txt" || fail "unknown queue not reported"
+
 # ---- dry run: read-only checks only
 reset
 DRY_RUN=1 bash "$FO" --planned beside-vm beside-standby > "$WORK/out.txt" 2>&1 || fail "dry run"
-grep -E "access-config|stop backend|tar -C|> ~/.beside-built|rm -f ~/.beside-built" "$WORK/calls" && fail "dry run changed something: $(cat "$WORK/calls")"
+grep -E "access-config|stop backend|tar -C|-cf -|> ~/.beside-built|rm -f ~/.beside-built" "$WORK/calls" && fail "dry run changed something: $(cat "$WORK/calls")"
 grep -q "add-access-config beside-standby" "$WORK/out.txt" || fail "dry run did not print the IP move"
 ls "$WORK"/failover-*.tsv > /dev/null 2>&1 && fail "dry run wrote a timeline"
 
@@ -155,6 +173,11 @@ before 'delete-access-config beside-vm' 'add-access-config beside-standby' || fa
 before 'delete-access-config beside-standby' 'add-access-config beside-standby' || fail "temporary IP kept"
 grep -q -- "--address=34.64.91.254" <<<"$(grep 'add-access-config beside-standby' <<<"$calls")" || fail "static IP not attached"
 [[ "$(cat "$WORK/received-beside-standby")" == DATA ]] || fail "data not copied to the target"
+# the newest H2 zip of backup/ goes along, so the target's first off-VM backup is not refused as stale (2026-11-26
+# drill finding 1); the whole folder does not
+grep -q 'ssh beside-vm: sudo sh -c .*tar --numeric-owner -cf - db uploads results preprocessed events.jsonl $(ls -1 backup/beside-\*.zip 2>/dev/null | sort | tail -n 1)' <<<"$calls" \
+  || fail "the newest backup zip is not copied with the data"
+grep -q "ok: queue on beside-vm empty" "$WORK/out.txt" || fail "queue of the source not checked"
 grep -q "secret" "$WORK/env-beside-standby" || fail ".env not copied"
 grep -q "secret" "$WORK/out.txt" && fail ".env printed"
 grep -q "ssh beside-standby: printf 'active.*rm -f ~/.beside-built" <<<"$calls" || fail "target role / build marker removal"
@@ -199,4 +222,4 @@ grep -q "add-access-config beside-standby" <<<"$calls" && fail "IP moved althoug
 grep -q "ssh beside-vm: docker compose .* up -d backend" <<<"$calls" || fail "prod backend not restarted"
 grep -q "ssh beside-standby: docker compose .* stop" <<<"$calls" || fail "target not stopped"
 [[ "$(cat "$WORK/vm/ip-user")" == *beside-vm ]] || fail "IP left prod"
-echo "failover_vm: refusals (backend, images, marker, tailnet), order, IP move, routing, copy, roles, way back, dry run and rollbacks ok"
+echo "failover_vm: refusals (backend, images, marker, tailnet, queue), order, IP move, routing, copy (+ newest backup zip), roles, way back, dry run and rollbacks ok"

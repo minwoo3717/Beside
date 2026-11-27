@@ -92,23 +92,24 @@
 2. 스냅샷 시각에 돌던 설정으로 뜬다(훈련 때는 부하 덮어쓰기). `cd ~/Beside && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d backend` 로 운영 설정에 맞춘다.
 3. 고정 IP `beside-ip` 를 새 VM 에 옮기거나, DuckDNS A 레코드를 바꾼다. `caddy_data` 는 스냅샷에 들어 있어 인증서를 새로 받지 않는다.
 4. healthz·공개 경로 확인(`bash scripts/check_public_routes.sh`, 2026-11-26 부터 63개). 스냅샷 뒤에 생긴 작업은 VM 밖 백업 zip(5분마다)으로 DB 를 더 최근으로 돌릴 수 있다(위 'DB 복구' 2번의 버킷 순서).
-- 3~4번(진짜 전환)은 연습하지 않았다 [계획]. 운영 VM 이 살아 있을 때의 계획 전환은 아래 '대기 서버로 넘기기·되돌리기'.
+- 3~4번(진짜 전환)은 연습하지 않았다 [계획]. 운영 VM 이 살아 있을 때의 계획 전환은 아래 '대기 서버로 넘기기·되돌리기'(2026-11-26 훈련, 고정 IP 옮기기 포함 [실험 결과]).
 
-### 대기 서버로 넘기기·되돌리기 (계획 전환, REDUNDANCY 1-5) — 스크립트 [구현됨], 훈련 [계획]
+### 대기 서버로 넘기기·되돌리기 (계획 전환, REDUNDANCY 1-5) — 스크립트 [구현됨], 훈련 2026-11-26 [실험 결과]
 운영 VM `beside-vm`(zone a)이 살아 있을 때 대기 VM `beside-standby`(zone b)로 넘기고 되돌린다. 대기 VM 은 켜져 있지만 서비스는 멈춰 있다. 개발 PC 에서 한다(소유자 `gcloud` 로그인, `~/.ssh/beside-vm.key`, Git Bash 면 `gcloud` 를 PATH 에). 운영 VM 이 죽었으면 위 'VM 다시 세우기'.
 - 대기 VM 에 SSH: `ssh -i ~/.ssh/beside-vm.key -o HostKeyAlias=beside-standby -o ProxyCommand="ssh -i ~/.ssh/beside-vm.key beside@34.64.91.254 -W %h:%p" beside@<대기 VM 내부 IP>`(외부 IP 를 쓰지 않는다. 내부 IP 는 `gcloud compute instances list`).
 - 준비 기록: [2026-11-26 준비](data/2026-11-26_failover-prep/README.md).
+- 훈련 기록: [2026-11-26 D-1·D-3](2026-11-26_failover-drills.md). 바깥에서 잰 끊김은 약 65 s·63 s 다. 그중 약 2/3~3/4 가 대상 기동(`compose up` → healthz 45~47 s)이다.
 
 **준비** (훈련 전날까지. 운영은 읽기만 한다)
 1. 대기 VM 에 서비스 계정 `beside-backup@`(storage-rw)이 붙어 있는지 본다: `gcloud compute instances describe beside-standby --zone=asia-northeast3-b --format="value(serviceAccounts[0].email)"`. 없으면 넘긴 뒤 VM 밖 백업이 실패한다. 이미 있는 VM 은 멈춤 → `set-service-account`(위 'VM 다시 세우기' 1번의 값) → 시작.
 2. 대기 VM 에 임시 외부 IP 가 있어야 한다(git·이미지·Tailscale 이 밖으로 나간다). 없으면 `bash deploy/gcp/clone_vm.sh ip standby`. 전환 4단계가 이 IP 를 뗀다.
 3. Tailscale 로그인: 대기 VM 에서 `sudo systemctl enable --now tailscaled`(`clone_init.sh` 가 꺼 둔다) → `sudo tailscale up --hostname=beside-standby --accept-dns=false`(운영 VM 과 같은 옵션, [deploy/README.md](../../deploy/README.md) 'Tailscale').
    - 나온 주소를 팀 tailnet 계정으로 사람이 열어 승인한다. 관리 화면에 `beside-vm`·`beside-standby` 두 노드가 따로 보이고 "Duplicate node key" 가 없어야 한다. ACL 이 `beside-standby` 를 막지 않는지도 본다.
-   - Pod 가 켜져 있으면 대기 VM 에서 `tailscale ping <Pod 의 100.x>` 로 닿는지 본다.
+   - Pod 가 켜져 있으면 대기 VM 에서 `tailscale ping <Pod 의 100.x>` 로 닿는지 보고, 추론 포트도 본다: `timeout 3 bash -c '</dev/tcp/<Pod 의 100.x>/8002' && echo open`. ping 이 되어도 ACL 이 8002 번을 막을 수 있다(ACL 로 운영 VM → Pod 8002 만 허용했다면 `beside-standby` 도 넣는다, [deploy/README.md](../../deploy/README.md) 'Tailscale'). 막히면 넘긴 뒤 작업이 PENDING 으로 기다린다.
    - 복사본에서 `tailscale logout` 은 하지 않는다.
    - 승인이 안 되면 훈련을 미룬다. `failover_vm.sh` 가 멈추고(`BESIDE_ALLOW_NO_TAILNET=1` 로만 넘어간다), 넘기면 GPU Pod 에 닿지 않아 작업이 PENDING 으로 기다리다 30분 뒤 `INFERENCE_UNAVAILABLE` 로 끝난다.
 4. `bash scripts/sync_standby.sh`: 대기 VM 을 운영 커밋으로 빨리 감고, 모델·이미지를 빌드·받는다. 아무것도 시작하지 않는다. 끝나면 `~/.beside-built` 에 커밋을 남긴다(도중에는 `pending`). 운영을 다시 배포하면 이것도 다시 돌린다.
-5. `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`: 점검만 한다. 같은 커밋, 대상 이미지가 다 있음, 빌드 표시, tailnet 을 본다. `would STOP` 줄이 있으면 진행하지 않는다.
+5. `DRY_RUN=1 bash scripts/failover_vm.sh --planned beside-vm beside-standby`: 점검만 한다. 같은 커밋, 대상 이미지가 다 있음, 빌드 표시, tailnet, 원본 대기열(2026-11-27 부터)을 본다. `would STOP` 줄이 있으면 진행하지 않는다.
 6. 공지:
    - 1시간 창이고, 끊김은 수 분이다(목표 ≤ 3분 [제안값]).
    - 그때 진행 중인 작업은 `INTERNAL_ERROR` 로 끝나니 앱에서 다시 시도한다.
@@ -120,6 +121,7 @@
    - 그 Pod 에서 다음을 켜 둔다:
      `python3 drill_client.py run --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1 --interval 20 --duration 3600`
      기본값 그대로면 10분 뒤 멈춘다. GPU Pod 를 켜지 않았으면 `--no-jobs` 로 healthz 만 잰다.
+   - GPU Pod 를 켰으면 넘기기 전에 대기 VM 에서 준비 3 의 ping·8002 번 TCP 를 한 번 더 본다.
    - 개발 PC 에서 `export BESIDE_TIMELINE_DIR=docs/ops/data/<날짜>_failover-drills` 를 해 둔다. 타임라인 TSV 가 그 폴더에 생긴다.
 2. Grafana 화면을 캡처한다(넘긴 뒤에는 대기 VM 의 Prometheus·Loki·Tempo 가 스냅샷 시점 기록부터 이어진다).
 3. 표지 작업 A 를 만든다: `python3 drill_client.py mark --base https://beside-team.duckdns.org --photo dog.jpg --out out/d1 --run d1a --count 1`(id 는 `out/d1/marked-d1a.txt`).
@@ -132,7 +134,11 @@
 6. 넘긴 뒤 확인:
    - `python3 drill_client.py check --base https://beside-team.duckdns.org --ids out/d1/marked-d1a.txt`(B 는 `marked-d1b.txt`)로 A·B 가 404 가 아닌지 본다.
    - 진행 중이던 작업은 `POST /api/v1/jobs/{id}/retry` 로 다시 보낸다(drill_client 에는 다시 보내기가 없다). Pod 를 켰다면 전환 뒤 1건이 COMPLETED 인지 본다.
+     - 넘길 때 PENDING 이던 작업도 대상 backend 가 켜질 때 `INTERNAL_ERROR`("Interrupted by a server restart while PENDING")가 된다(2026-11-26 표지 작업 4건 모두).
+     - 2026-11-27 부터 `failover_vm.sh` 0단계가 원본 대기열(PENDING·PROCESSING)이 0 이 아니면 멈춘다. 비워질 때까지 기다리거나, 잃어도 되면 `BESIDE_ALLOW_QUEUE=1` 로 넘긴다 [구현됨]. 표지 작업을 GPU 없이 만들면 대기열에 남으므로, 그때는 `BESIDE_ALLOW_QUEUE=1` 이 필요하다.
    - Tailscale 관리 화면을 본다.
+   - 2026-11-26 훈련에서는 넘긴 직후 대상의 VM 밖 백업 1~2번이 실패했고, 감시가 '🗄️ VM 밖 백업(R1)이 멈췄어요' 를 보냈다(15:51 알림 → 15:58 성공). 전환이 볼륨의 `backup/` 을 복사하지 않아 대상의 가장 새 zip 이 오래됐기 때문이다. 2026-11-27 부터 2단계가 가장 새 zip 1개도 복사한다 [구현됨, 실제 전환으로는 아직 확인 전]. 그래도 알림이 오면 backend 의 첫 5분 백업 뒤 '✅ 다시 성공' 이 오는지 본다.
+   - 대상 Grafana 는 자기 디스크에 저장된 옛 알림 상태로 켜진다. 몇 분 동안 해결된 알림을 다시 보낼 수 있다.
 7. SSH: 고정 IP 가 대기 VM 에 있는 동안 `ssh beside-gcp` 는 호스트 키가 달라 실패한다. 그동안은 `ssh -o HostKeyAlias=beside-standby beside-gcp` 를 쓴다.
    - 옛 운영 VM 은 외부 IP 가 없어 Tailscale 이 오프라인이다.
    - 6단계가 옛 운영 VM 에 빌드 표시(그 VM 이 돌리던 커밋)를 남긴다. 그래서 되돌리기 점검을 통과한다.
@@ -141,6 +147,7 @@
    - 끝나면 대기 VM 은 다시 standby 가 되고 외부 IP 가 없다. 데이터·`.env` 는 넘긴 시점 것이다. 그래서 다음 전환 전에 준비 2~5번을 다시 한다.
    - D-3 뒤에는 다시 그냥 `ssh beside-gcp` 를 쓴다.
    - 대기 VM 디스크에 붙은 스냅샷 일정은 남는다. 떼려면 `gcloud compute disks remove-resource-policies beside-standby-boot --zone=asia-northeast3-b --resource-policies=beside-daily-snapshot`.
+   - 대기 VM 의 `.env` 는 이제 운영 것(웹훅 있음)이다. 처음 것은 `.env.standby` 에 남는다. 대기 VM 에서 compose 를 손으로 켜지 않는다(켜면 팀 채널로 알림이 간다).
 9. Runpod CPU Pod(그리고 켰다면 GPU Pod)를 지운다.
 10. 결과를 `docs/ops/<날짜>_failover-drills.md` 에 REDUNDANCY 1-5 의 DoD 대로 적는다.
 

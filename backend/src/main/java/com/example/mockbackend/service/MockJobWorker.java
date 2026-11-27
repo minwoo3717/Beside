@@ -21,7 +21,8 @@ import java.util.Locale;
  * After the PENDING time it starts the job only if it is still PENDING in the dispatched attempt (JobTransitions),
  * so a job canceled (or canceled and retried) meanwhile is not touched.
  * Separate bean so calls from JobServiceImpl pass through Spring's async proxy. Runs end through JobFinisher; an
- * interrupted worker (shutdown) or an unexpected error ends the run with INTERNAL_ERROR.
+ * interrupted worker (shutdown) or an unexpected error ends the run with INTERNAL_ERROR. Both waits end at once when
+ * the server stops ({@link ShutdownSignal}): Spring's executor waits for running tasks during the stop.
  */
 @Service
 @Profile("mock")
@@ -30,18 +31,21 @@ public class MockJobWorker implements JobWorker {
     private final JobFinisher jobFinisher;
     /** Each run is a trace of its own, as in the real worker: beside.job.run with the two waits as stages. */
     private final JobTracing tracing;
+    private final ShutdownSignal shutdown;
     private final Logger log = LoggerFactory.getLogger(MockJobWorker.class);
 
     /** Without tracing (tests that build the worker themselves). */
     public MockJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher) {
-        this(jobTransitions, jobFinisher, JobTracing.NOOP);
+        this(jobTransitions, jobFinisher, JobTracing.NOOP, new ShutdownSignal());
     }
 
     @Autowired
-    public MockJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher, JobTracing tracing) {
+    public MockJobWorker(JobTransitions jobTransitions, JobFinisher jobFinisher, JobTracing tracing,
+                         ShutdownSignal shutdown) {
         this.jobTransitions = jobTransitions;
         this.jobFinisher = jobFinisher;
         this.tracing = tracing;
+        this.shutdown = shutdown;
     }
 
     @Value("${storage.result.sample:storage/results/sample-dog.glb}")
@@ -71,7 +75,7 @@ public class MockJobWorker implements JobWorker {
         MDC.put(RealJobWorker.MDC_ATTEMPT, String.valueOf(attempt));
         try {
             try (JobTracing.Scoped pending = tracing.stage("beside.job.mock-pending")) {
-                Thread.sleep(pendingMs);
+                shutdown.sleep(pendingMs);
             }
             Job job = jobTransitions.start(jobId, attempt, 0.5).orElse(null);
             if (job == null) {
@@ -82,7 +86,7 @@ public class MockJobWorker implements JobWorker {
             log.info("jobId={} stage=PROCESSING traceId={}", jobId, trace.traceId());
 
             try (JobTracing.Scoped processing = tracing.stage("beside.job.mock-processing")) {
-                Thread.sleep(processingMs);
+                shutdown.sleep(processingMs);
             }
             if (shouldFail(job)) {
                 jobFinisher.fail(job, ErrorCode.INFERENCE_FAILED,
@@ -102,7 +106,7 @@ public class MockJobWorker implements JobWorker {
             } catch (RuntimeException databaseClosing) {
                 log.warn("jobId={} interrupted during shutdown; InterruptedJobRecovery fails it at the next startup", jobId);
             } finally {
-                Thread.currentThread().interrupt();
+                ShutdownSignal.restoreInterrupt(e);   // not for the stop signal: the thread was never interrupted
             }
         } catch (RuntimeException unexpected) {
             // Escaping the @Async method would leave the job PENDING or PROCESSING until the next restart.

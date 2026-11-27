@@ -1,0 +1,105 @@
+Command outputs read during the 2026-11-26 failover drill (UTC), trimmed to the relevant lines. They back the
+[실험 결과] statements of docs/ops/2026-11-26_failover-drills.md that are not in the logs/TSV/CSV of this folder.
+The team tailnet account name is replaced by <team>. Times are UTC unless a zip name says otherwise (zip names are KST).
+
+=== 15:42 Runpod reads before creating anything (Runpod MCP)
+list-pods: 8 GPU pods, all EXITED, all on network volume z4kgw4v5zi, EU-SE-1.
+get-gpu-type "NVIDIA A40" (POD, SECURE, minCuda 12.4, minVcpuPerGpu 4, minRamPerGpu 24): availability LOW (EU-SE-1 LOW, US-MO-1 LOW), price secure 0.59.
+create-pod A40 (EU-SE-1, volume z4kgw4v5zi), twice: 400 "There are no longer any instances available with the requested specifications."
+create-pod cpu3g x4 US-CA-2 image runpod/base:1.0.2-ubuntu2404: id 1x8994f740gsg5, cost 0.16, createdAt 2026-11-26T15:42:31.163Z.
+After the drill: delete-pod 1x8994f740gsg5 -> 204; get-pod -> 404 "pod not found".
+
+=== Probe pod
+15:43:15 Python 3.12.3; files from raw.githubusercontent.com/minwoo3717/Beside/32c5e4e/ (sha256 equal to `git show 32c5e4e:<file>`):
+  drill_client.py 9253 B dc96635b2d7ccdd925c2ed9af2800e782f1f46defe5b02d633ee6dd003229eb5
+  dog.jpg 169451 B 1379af6a185762c7581af578b91e0eaa0d6482af55c0a26f0eb5721a2d7f998c
+15:43:30.266 run fo start (run --base https://beside-team.duckdns.org --photo dog.jpg --out out/fo --run fo --no-jobs --duration 5400)
+16:04:41.855 run fo done (stopped by hand)
+probe.jsonl: rows 1256, 15:43:30.739 .. 16:04:41.709, codes {200: 1142, 502: 111, 0: 3}
+  200 ms: min 417.6, p50 470.9, p95 477.8, p99 513.1, max 3524.0
+  outages (response end times): 15:49:14.779 -> 15:50:22.849 (68.07 s, 54 x 502, 2 x timeout); 15:59:08.093 -> 16:00:12.208 (64.115 s, 57 x 502, 1 x timeout)
+
+=== 15:43:01 Prometheus on beside-vm before the drill
+beside_jobs_queue{state=pending} 0, {state=processing} 0, beside_inference_state{state=DOWN} 1, up{job=beside-backend} 1
+
+=== Markers (drill_client mark; then GET /api/v1/jobs/{id})
+15:43:35.984 foa POST 202 5caadcc7-aca3-40d3-af00-3ac5f7110108
+15:48:21.915 fob POST 202 d8c13f6b-0404-4822-9027-6440cc7741c4
+15:53:20.291 foc POST 202 e431ee27-49b3-4be5-9d81-9bbe03e6180a
+15:58:14.866 fod POST 202 6f0ca0ce-1a58-47c2-9544-2c9283b05748
+15:51:13 check: 5caadcc7 http 200 FAILED; d8c13f6b http 200 FAILED
+  error INTERNAL_ERROR "Interrupted by a server restart while PENDING; retry with POST /api/v1/jobs/{id}/retry", updatedAt 15:50:00.07 / 15:50:00.28
+16:01:07-09 check: all four http 200 FAILED
+standby backend log 15:50:00.276 / .304: "jobId=<A|B> was PENDING when the server stopped -> FAILED (INTERNAL_ERROR)" (InterruptedJobRecovery)
+beside-vm backend log 15:59:57.554 / .604: same for A2 / B2
+15:52:16 standby volume: 2 files for each of A and B under uploads/ + preprocessed/
+
+=== Offsite backup (journalctl -u beside-backup.service)
+beside-vm 15:48:00 db: 1 new backup(s) sent, newest handled: beside-20261127-004500-000.zip (= 15:45 UTC)
+beside-vm 15:48:01 files: 1 new file(s) sent, 0 failed, 72 in the bucket; Deactivated successfully
+standby   15:50:46 db: 1 new backup(s) sent, newest handled: beside-20261126-022000-001.zip (= 2026-11-25 17:20 UTC, "already in the bucket, kept as it is")
+standby   15:50:46 the newest H2 backup beside-20261126-022000-001.zip is 1350 min old (limit 20): the backend's ...
+standby   15:50:47 files: 4 new file(s) sent, 0 failed, 73 in the bucket; Failed with result 'exit-code'
+standby   15:53:00 db: 0 new backup(s) sent; the newest H2 backup ... is 1353 min old (limit 20): the backend's H2 backup has stopped
+standby   15:53:00 files: 0 new file(s) sent, 0 failed, 73 in the bucket; Failed with result 'exit-code'
+standby   15:58:01 db: 1 new backup(s) sent, newest handled: beside-20261127-005500-001.zip (= 15:55 UTC)
+standby   15:58:01 files: 1 new file(s) sent, 0 failed, 74 in the bucket; Deactivated successfully
+beside-vm 16:00:35 db: 0 new backup(s) sent, newest handled: beside-20261127-004500-000.zip; files: 3 new, 75 in the bucket; Deactivated successfully
+beside-vm 16:03:00 db: 1 new backup(s) sent; files: 0 new; Deactivated successfully
+
+=== Webhooks
+standby watchdog (journalctl -u beside-watchdog, between 15:50 and 16:01):
+  15:51:17 sent: 🗄️ VM 밖 백업(R1)이 멈췄어요 (VM 감시 · beside-standby...)
+  (later, time not captured) sent: ✅ VM 밖 백업이 다시 성공했어요 (VM 감시 · beside-standby...)
+  ('sent:' is logged only after the curl -f to NOTIFY_WEBHOOK_URL succeeded, deploy/watchdog/beside-watchdog.sh)
+standby backend: 0 log lines containing "webhook" (failures are logged at WARN; success is not logged at INFO)
+beside-vm backend after D-3:
+  16:00:02.637 webhook not sent: HttpConnectTimeoutException; 0 GPU and 1 job messages waiting, next try in 5000 ms
+  16:00:12.643 webhook not sent: HttpConnectTimeoutException; 0 GPU and 1 job messages waiting, next try in 10000 ms
+  (no later "webhook not sent" line; the static IP was attached at 16:00:09.8)
+
+=== Backend stop (docker inspect, standby, after D-3)
+beside-backend-1 exit=137 oom=false started=2026-11-26T15:49:22.33Z finished=2026-11-26T15:59:09.08Z
+(the stop began 15:58:57.3; backend/Dockerfile ENTRYPOINT is exec form ["java", ...]; compose has no stop_grace_period, Docker default 10 s)
+No backend log lines after 15:58:40 in that container. The D-1 stop of beside-vm's backend was not inspected (the container restarted at D-3).
+
+=== States after D-1 (15:51:38)
+standby: /etc/beside-role active, no maintenance mark, no ~/.beside-built, beside-watchdog.timer / beside-backup.timer / tailscaled active,
+  7 containers Up (backend healthy)
+  tailscale status: 100.84.254.122 beside-standby <team>@ linux - ; 100.83.86.62 beside-gpu offline, last seen 7h ago ;
+  100.98.76.5 beside-vm offline, last seen 1m ago (3 lines, no warning lines)
+beside-vm: role standby, maintenance mark present, ~/.beside-built "a44b3ed7f107e7e3b5f8ae848ec18e2f93150e5d 2026-11-26T15:50:53Z",
+  timers inactive, only the beside-stub container (outside compose) running, tailscale self "100.98.76.5 beside-vm <team>@ linux -"
+H2 files: standby db/beside-real.mv.db 86016 B (mtime 15:51:57); beside-vm db/beside-real.mv.db 167936 B (mtime 15:48:22)
+
+=== H2 copies (dev PC, H2 2.2.224, ACCESS_MODE_DATA=r; the copies stay outside the repo)
+oldprod-at-d1.mv.db 167936 B sha256 7d4bb4f8e8a149925d663d5c8f8af70cb123b703d388c1db656b0df450429852 (stopped beside-vm, copied 15:52-15:53)
+standby-at-d3.mv.db 131072 B sha256 6c447d5be24f004f49c1ffddb5bd4bb14dd48c5457a13195eec12ae852c3ddec (stopped standby, mtime 15:58:14, copied ~16:02)
+row counts old | standby: CLIENT_METRICS 0|0, IDEMPOTENCY_KEYS 31|33, JOBS 38|40, JOB_RATINGS 0|0, JOB_RUNS 36|38, PETS 0|0, PRODUCT_EVENTS 0|0, SHARE_LINKS 0|0
+diff of "SELECT ID, STATUS, ERROR_CODE FROM JOBS ORDER BY ID" (ids shortened):
+  5caadcc7 PENDING null -> FAILED INTERNAL_ERROR
+  d8c13f6b PENDING null -> FAILED INTERNAL_ERROR
+  + 6f0ca0ce PENDING null
+  + e431ee27 PENDING null
+  (no other line differs)
+The DB of beside-vm after D-3 was not copied or compared.
+
+=== Grafana
+standby (read after D-3 from a copy of grafana.db; container stopped):
+  log rule_uid=beside-backend-down "Sending alerts to local notifier" count=1 at 15:51:11, 15:52:11, ..., 15:58:11 (8 lines)
+  alert_instance beside-backend-down: current_state Pending since 15:59:10, resolved_at 15:51:10, last_sent_at 15:58:10
+  no log lines with notify / webhook / discord
+beside-vm (after D-3):
+  log rule_uid=beside-gpu-down-with-jobs "Sending alerts to local notifier" count=1 at 16:00:13, 16:01:13, 16:02:13, 16:03:13
+  alert_instance beside-gpu-down-with-jobs: Normal since 15:50:10, resolved_at 15:50:10, last_sent_at 16:03:10
+(epoch seconds converted with the timeline: epoch ms 1795708136701 = 15:48:56.663)
+
+=== States after D-3 (16:01:10)
+beside-vm: role active, no maintenance mark, no build marker, timers active, 7 compose containers Up (backend healthy) + beside-stub,
+  repo a44b3ed, tailscale 3 lines (beside-vm -, beside-gpu offline, beside-standby -), `diff -q .env .env.standby` equal
+standby: role standby, maintenance mark present, ~/.beside-built "a44b3ed... 2026-11-26T16:00:42Z", timers inactive, 0 containers,
+  tailscale self "100.84.254.122 beside-standby <team>@ linux -"
+gcloud: beside-vm RUNNING with external IP; beside-standby RUNNING without; beside-ip 34.64.91.254 used by beside-vm
+  disk resource policies: beside-vm [beside-daily-snapshot]; beside-standby-boot [beside-daily-snapshot] -> removed by hand
+  (gcloud compute disks remove-resource-policies, between 16:04:41 and 16:06:24) -> []
+16:06:24 dev PC: bash scripts/check_public_routes.sh -> healthz ok, "== 63 passed, 0 failed"; Prometheus on beside-vm: queue 0 / 0, up backend 1

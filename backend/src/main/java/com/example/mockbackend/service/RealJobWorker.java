@@ -66,6 +66,12 @@ import java.util.List;
  * worker (shutdown) or an unexpected error ends it with INTERNAL_ERROR, so the app never polls a run that cannot end;
  * that includes an error before PROCESSING (reading the job, the cutout, the inference-service check, the PROCESSING
  * save), which used to leave the job PENDING until the next restart.
+ * <p>
+ * Server stop ({@link ShutdownSignal}, failover drill 2026-11-26 finding 4): every wait of a run looks at the signal —
+ * at dispatch, the cutout's permit, the slot line (woken at once), the offline wait's sleep and each poll of a request
+ * in flight (the watch, every 250 ms) — and the run ends FAILED INTERNAL_ERROR "Real worker interrupted (server
+ * shutting down)" while the database is still open. Spring's executor waits for running tasks during the stop, so a
+ * run that kept waiting held the stop past Docker's 10 s (SIGKILL, H2 not closed).
  */
 @Service
 @Profile("real")
@@ -92,6 +98,7 @@ public class RealJobWorker implements JobWorker {
     private final long offlineWaitMs;
     private final long offlinePollMs;
     private final JobTracing tracing;
+    private final ShutdownSignal shutdown;
     private final Logger log = LoggerFactory.getLogger(RealJobWorker.class);
 
     /** Without tracing (tests that build the worker themselves). */
@@ -99,7 +106,7 @@ public class RealJobWorker implements JobWorker {
                          InferenceClient inferenceClient, InferenceHealthMonitor healthMonitor, CutoutStage cutoutStage,
                          String resultDir, int maxConcurrency, long offlineWaitMs, long offlinePollMs, long slotRecheckMs) {
         this(jobRepository, jobTransitions, jobFinisher, inferenceClient, healthMonitor, cutoutStage, resultDir,
-                maxConcurrency, offlineWaitMs, offlinePollMs, slotRecheckMs, JobTracing.NOOP);
+                maxConcurrency, offlineWaitMs, offlinePollMs, slotRecheckMs, JobTracing.NOOP, new ShutdownSignal());
     }
 
     @Autowired
@@ -110,8 +117,9 @@ public class RealJobWorker implements JobWorker {
                          @Value("${inference.offline-wait-ms:0}") long offlineWaitMs,
                          @Value("${inference.offline-poll-ms:5000}") long offlinePollMs,
                          @Value("${inference.slot-recheck-ms:1000}") long slotRecheckMs,
-                         JobTracing tracing) {
+                         JobTracing tracing, ShutdownSignal shutdown) {
         this.tracing = tracing;
+        this.shutdown = shutdown;
         this.jobRepository = jobRepository;
         this.jobTransitions = jobTransitions;
         this.jobFinisher = jobFinisher;
@@ -120,6 +128,8 @@ public class RealJobWorker implements JobWorker {
         this.cutoutStage = cutoutStage;
         this.resultDir = Path.of(resultDir);
         this.inferenceSlots = new InferenceSlots(maxConcurrency, slotRecheckMs);
+        // jobs waiting in the slot line ask again at once (and leave it) when the server stops
+        shutdown.onClose(inferenceSlots::wakeAll);
         this.offlineWaitMs = Math.max(0, offlineWaitMs);
         this.offlinePollMs = Math.max(10, offlinePollMs);
     }
@@ -153,6 +163,8 @@ public class RealJobWorker implements JobWorker {
         MDC.put(MDC_JOB_ID, jobId);
         MDC.put(MDC_ATTEMPT, String.valueOf(attempt));
         try {
+            // A dispatch that only starts while the server stops (queued behind busy threads) ends at once.
+            shutdown.check();
             try (JobTracing.Scoped cutout = tracing.stage("beside.job.cutout")) {
                 photo = prepare(jobId, attempt);
                 cutout.tag("preprocess.result", photo.result());
@@ -161,10 +173,12 @@ public class RealJobWorker implements JobWorker {
             // retried into a newer attempt) gives its place and thread back instead of holding them until its turn.
             boolean acquired;
             try (JobTracing.Scoped waiting = tracing.stage("beside.job.slot-wait")) {
-                acquired = inferenceSlots.acquire(place, () -> jobTransitions.isPending(jobId, attempt));
+                acquired = inferenceSlots.acquire(place,
+                        () -> !shutdown.stopping() && jobTransitions.isPending(jobId, attempt));
                 waiting.tag("acquired", String.valueOf(acquired));
             }
             if (!acquired) {
+                shutdown.check();   // left the line because the server stops: ends INTERNAL_ERROR below
                 trace.notStarted();
                 logNotStarted(jobId, attempt);
                 return;
@@ -182,7 +196,7 @@ public class RealJobWorker implements JobWorker {
             } catch (RuntimeException databaseClosing) {
                 log.warn("jobId={} interrupted during shutdown; InterruptedJobRecovery fails it at the next startup", jobId);
             } finally {
-                Thread.currentThread().interrupt();
+                ShutdownSignal.restoreInterrupt(e);   // not for the stop signal: the thread was never interrupted
             }
         } catch (RuntimeException unexpected) {
             // Outside run()'s own handling: reading the job, the cutout, the inference-service check, the PROCESSING
@@ -212,6 +226,7 @@ public class RealJobWorker implements JobWorker {
 
     private void run(String jobId, int attempt, Instant start, PreparedPhoto photo, long offlineDeadline,
                      JobTracing.Run trace) throws InterruptedException {
+        shutdown.check();
         Awaited waited = awaitInferenceService(jobId, attempt, offlineDeadline);
         if (waited.end() == Wait.TIMED_OUT) {
             failUnavailable(jobId, attempt, photo, trace);
@@ -231,7 +246,7 @@ public class RealJobWorker implements JobWorker {
             // attempt goes out as X-Request-Id <jobId>-<attempt>, so the service's log tells retries apart; the
             // client spans' traceparent goes with it (InferenceClient, JobTracing)
             InferenceClient.Result result = inferenceClient.infer(jobId, attempt, photo.paths(imagePaths(job)),
-                    photo.names(filenames(job)), restartWatch(waited.ready()));
+                    photo.names(filenames(job)), untilStopping(restartWatch(waited.ready())));
             StoredGlb stored;
             try (JobTracing.Scoped storing = tracing.stage("beside.job.store")) {
                 try {
@@ -335,6 +350,7 @@ public class RealJobWorker implements JobWorker {
         // Always a fresh reading (one /healthz call per job): the scheduled one can be up to 15 s old.
         boolean logged = false;
         while (true) {
+            shutdown.check();
             if (!jobTransitions.isPending(jobId, attempt)) {
                 return new Awaited(Wait.NOT_PENDING, null);
             }
@@ -354,8 +370,17 @@ public class RealJobWorker implements JobWorker {
                         status.detail(), leftMs / 1000);
                 logged = true;
             }
-            Thread.sleep(Math.min(offlinePollMs, leftMs));
+            // ends at once when the server stops (prod's 30 min wait held the whole stop, failover drill finding 4)
+            shutdown.sleep(Math.min(offlinePollMs, leftMs));
         }
+    }
+
+    /** {@code watch}, and the request in flight is given up as interrupted (within 250 ms) when the server stops. */
+    private InferenceClient.Watch untilStopping(InferenceClient.Watch watch) {
+        return () -> {
+            shutdown.check();
+            return watch.lostBecause();
+        };
     }
 
     /**
