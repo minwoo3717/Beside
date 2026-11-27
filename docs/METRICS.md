@@ -245,6 +245,7 @@ jobId,modelVersion,rater,faceShape,ears,bodyProportion,furColor,pattern,textureA
 | `hikaricp_connections_active`, `hikaricp_connections_pending`, `hikaricp_connections_acquire_seconds_*` | DB 커넥션 풀 |
 | `executor_active_threads`, `executor_queued_tasks` (`name="applicationTaskExecutor"`) | 워커가 쓰는 `@Async` 풀 |
 | `disk_free_bytes` | 저장소 디스크 여유 |
+| `up{job="loki"}`, `up{job="alloy"}`, `up{job="tempo"}` | (2026-11-27, Prometheus 가 스스로 만드는 값) 로그·트레이스 수집기가 살아 있는지. 0 이 5분 이어지면 알림(`deploy/monitoring/grafana/provisioning/alerting/rules.yml`). Alloy 가 Loki 에 못 쓴 줄은 `loki_write_dropped_entries_total`(Alloy 자체 지표) |
 
 ### 5.3 멘토 지표 5종 → PromQL
 

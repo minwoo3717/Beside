@@ -84,7 +84,13 @@ v1.2 의 웹용 엔드포인트(앱은 쓰지 않음, 형태는 [openapi.yaml](a
 - 요청 헤더 `X-Request-Id`(선택): 앱은 요청마다 보낸다(`BesideApiClient.Prepare`). 서버는 1~64자의 `A-Z a-z 0-9 . _ : -` 만 그대로 쓴다. 없거나 규칙 밖이면 새 UUID 를 만든다.
 - 응답 헤더 `X-Request-Id`: backend(Spring)가 쓰는 모든 응답에 붙는다(오류·v0·웹 페이지 포함). 값은 서버가 그 요청에 쓴 id 다. backend 까지 오지 않는 응답에는 없다: Caddy 가 직접 답하는 404(막은 경로)·401(Basic 인증)·413(25 MB 초과), Tomcat 이 답하는 잘못된 요청의 400, 관리 포트.
 - 서버 로그는 이 id 로 찾는다(텍스트 로그 `rid=`, prod JSON 로그 필드 `requestId`, [ops/RUNBOOK.md](ops/RUNBOOK.md) '먼저 볼 곳'). 앱은 응답 헤더를 읽지 않아도 된다. 모르는 헤더는 무시한다(필드 추가와 같은 규칙).
-- [api/openapi.yaml](api/openapi.yaml) 에는 아직 없다. 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만). 다음 태그 때 openapi 에 옮긴다 [계획].
+- [api/openapi.yaml](api/openapi.yaml) 에는 2026-11-27 에 옮겼다(`info.description`, `components/headers/XRequestId`, 작업 접수 202 와 공통 오류 응답). 계약 테스트는 헤더를 비교하지 않는다(경로·method·상태 코드·스키마·enum 만).
+
+### 추적 헤더 `traceparent` (v1.3 후보, 2026-11-27) — 서버·앱 [구현됨], 운영 적용·기기 확인 [계획]
+
+- 요청 헤더 W3C `traceparent`(선택): `00-<trace id 32자 hex>-<span id 16자 hex>-<flags>`. 앱은 작업 업로드·retry·cancel·GLB 내려받기에만 붙인다(trace id = 그 흐름의 `X-Request-Id`, 32자 소문자 hex 일 때만). 상태 조회(폴링)·이벤트·healthz 에는 붙이지 않는다(30분 대기면 trace 하나에 span 이 수백 개가 된다). retry 는 retry 가 만든 id 를 이어지는 폴링·GLB 내려받기가 그대로 쓴다.
+- 서버는 그 trace 에 이어 붙인다: 서버 요청 span 의 부모가 되고, 그 요청이 시작한 작업 실행(`beside.job.run`)도 같은 trace 에서 요청 span 의 자식이다(§6). flags `00` 이면 서버도 기록하지 않고 작업 실행은 따로 된 trace(링크)다. 형식이 틀리면 없는 것으로 본다. 응답은 그대로다.
+- 앱은 span 을 보내지 않는다. 그래서 Tempo 에는 서버 요청 span 의 부모가 '없음'으로 보인다(정상). 앱 오류 화면의 '문의 번호'(흐름 id 앞 8자)로 Grafana 'Beside 로그' 에서 그 요청을 찾는다.
 
 ### Mock 서버 동작 (profile `mock`, 기본)
 
