@@ -67,6 +67,8 @@ class LoggingFormatTest {
         assertThat(line.path("traceId").asText()).isEqualTo(TRACE_ID);
         assertThat(line.path("spanId").asText()).isEqualTo("00f067aa0ba902b7");
         assertThat(line.has("notLogged")).as("only the five MDC keys").isFalse();
+        // env (2026-11-27, obs-wave3 A4): management.metrics.tags.env, so Loki's alerts can leave load tests out
+        assertThat(line.path("env").asText()).isEqualTo("local");
         assertThat(line.path("level").asText()).isEqualTo("ERROR");
         assertThat(line.path("logger_name").asText()).isEqualTo(LoggingFormatTest.class.getName());
         assertThat(line.path("message").asText()).isEqualTo("Internal error: GET /api/v1/jobs/job-json-1\nsecond line");
