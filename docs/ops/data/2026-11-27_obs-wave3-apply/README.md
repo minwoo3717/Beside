@@ -97,15 +97,14 @@ Tempo `/api/traces/<id>` 로 읽은 trace(id = 앱의 `X-Request-Id` `8c9289ded3
 - E4 의 'GPU 서버 안 빈 4.2 s' 는 이 작업에는 없었다(사진 저장 → 모델 락이 바로 이어짐). 그래서 Pod 가 뜬 뒤 첫 작업에만 생기는 준비 시간으로 본다 [가설].
 - `app_error` 는 이 시험에서 0건(앱 오류가 나지 않음).
 
-## 털 설정 `BESIDE_HAIR_META` 켬 (15:57) **[적용: 이 Pod]**
+## 털 설정 `BESIDE_HAIR_META` 켬 (15:57) **[적용: 이 Pod]**, 기기에서 코·눈 털 없음 확인 **[실험 결과]**
 
 - 팀원 지적: 기기에서 본 서버 모델에 코·눈처럼 털이 없어야 할 곳에 털이 났다. 고침 코드는 이미 있다 — 변환기의 가이드 털 맵(가이드가 닿는 곳에만 털, 코·발바닥은 비움, `generation/tools/convert_asset.py` `_from_guides`·`_hairless_mask`)이 `BESIDE_HAIR_META` 가 있을 때만 켜지는데(기본 꺼짐), 지금까지 Pod 에 이 변수를 준 적이 없었다.
 - Pod 에 파일(`/workspace/AnimalLift/assets/hair_map_meta_uvanchor.npz`·`base_texture.png`)과 scipy 1.15.3 이 있음을 확인하고 Pod env 에 `BESIDE_HAIR_META=/workspace/AnimalLift/assets/hair_map_meta_uvanchor.npz` 를 더했다(`update-pod`, 컨테이너 재시작, 15:57:58 `LOADING -> UP`, 서비스 프로세스 환경에 값 있음).
-- 확인 작업 `73214f52…`: 변환 경고(`base_texture.png not used`) 없음, convert 1,377 ms·GLB 1,781,656 B(켜기 전 작업은 1,032 ms·2,100,924 B). 털 모양이 실제로 고쳐졌는지는 기기에서 다시 볼 것 [사람].
+- 확인 작업 `73214f52…`: 변환 경고(`base_texture.png not used`) 없음, convert 1,377 ms·GLB 1,781,656 B(켜기 전 작업은 1,032 ms·2,100,924 B). 팀원이 켠 뒤 만든 모델을 SM-S947N 에서 다시 보고 코·눈에 털이 나지 않는 것을 확인했다(2026-11-28 KST 보고).
 - 시연 Pod 에도 같은 변수를 넣도록 RUNBOOK '발표 당일 GPU 절차' 의 env 에 더했다.
 
 ## 남은 것
 
-- 기기에서 털 모양 다시 확인(`BESIDE_HAIR_META` 켠 뒤) [사람].
-- Pod 를 지운다(이 기록 뒤, 기기 확인 끝나면).
+- Pod `8p1zx5e83e92nq` 는 기기 확인 뒤 지웠다(get-pod 404, 대기열 0 확인 뒤). 켠 시간 약 15:23~16:1x UTC, $0.59/h.
 - `scripts/check_public_routes.sh` 에 3500·4320 바깥 시간 초과 항목, README '배포 창 3 순서' 의 `deploy_vm.sh` 부르는 곳 고침 [계획].
