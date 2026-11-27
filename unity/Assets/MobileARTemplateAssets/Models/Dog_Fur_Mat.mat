@@ -131,12 +131,15 @@ Material:
     - _RootDarkness: 0.6
     - _ScreenSpaceReflections: 1
     - _ScreenSpaceReflectionsContributeTransparent: 1
+    - _SheenPower: 6
+    - _SheenScale: 0.5
     - _ShellH: 0
     - _Smoothness: 0.5
     - _SmoothnessTextureChannel: 0
     - _SpecPower: 48
     - _SpecShift: 0.1
     - _SpecStrength: 0.35
+    - _SpecTint: 0.7
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1

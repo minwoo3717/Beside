@@ -2,6 +2,21 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-27 (기기 확인 피드백)
+
+기기(SM-S947N)에서 확인하며 고친 것. 작업은 브랜치 fix/unity-metrics-one-row 를 복사한 로컬 프로젝트에서 하고 이 브랜치로 옮겼다. 옮긴 코드는 컴파일(오류 0, FurLab StructLayout 오탐 제외)만 다시 확인했다.
+
+- 미리보기(`ModelPreview`): 화면 크기에 맞춘 렌더 텍스처(최대 1280), FOV 기준 화면 85% 채우기, 쉘 털 전체 겹, 그림자 끔(`showShadow` 기본 false). 털 자글거림 완화
+- 쉘 털(`ShellFur.shader`): 털 패스 `ColorMask RGB`(알파가 미리보기 합성에 새던 문제), 광택 `_SpecTint`·`_SheenPower`·`_SheenScale` 로 회색 번들거림 줄임. TANGENT 가 없는 GLB(glTFast 는 노멀맵이 없으면 TANGENT 를 만들지 않음)에서 엉터리 TANGENT 로 빗질하던 문제: `_UseTangents`(로더가 메시에 TANGENT 가 있을 때만 1) + TANGENT 없을 때 `_NoTangentComb`·`_NoTangentCombDir` 로 아래·뒤쪽으로 살짝 눕힘. 눈·코 털 다시 안 남, 털이 수직으로 서던 것 완화
+- 털 길이 이음매(`RuntimeModelLoader.WeldSeamFurLength`): UV 이음매의 같은 위치 정점들이 털 길이 맵 값을 평균해 uv2 에 넣는다(머리·등 척추선의 털 빠진 줄)
+- AR 안내 문구는 모델마다 한 번(× 를 누르면 같은 모델에서는 다시 안 뜸, 새 모델이면 다시 뜸). `reshowOnNewMessage` 0
+- 홈·생성 중 화면이 손가락을 따라 위아래로 움직이던 문제: 스크롤 `Clamped` + `DesignKit.ScrollWhenOverflow`(내용이 넘칠 때만 스크롤)
+- 그림자 계단 현상: URP-Performant 메인 라이트 그림자 2048, Soft Shadow High
+- 저장한 강아지(새 `Library/ModelLibrary.cs`): 만든 강아지를 최대 5마리까지 폰에 자동 저장(`persistentDataPath/library`: index.json, GLB 복사본, 사진). 이름(20자)·키(5~200cm, 비우면 자동)·메모(60자) 편집, 키를 바꾸면 모델 크기에 반영. 꽉 차면 지울 강아지를 고르거나 저장 건너뛰기. 홈 카드 "저장한 강아지", AR 의 "사진 찍기" 타일을 "불러오기"로 바꿈 — **`photo_saved` 이벤트는 더 이상 나가지 않는다**
+- "지금 촬영하기": 바로 찍던 것을 카메라 화면(안내 문구 + 셔터 버튼)으로 바꿈. 찍는 동안 AR 에 놓인 강아지는 숨김. 카메라로 찍은 사진의 확인 화면 버튼은 "다시 찍기"
+- 아이콘·예시 이미지 `.meta` 17개를 Sprite 로(홈 버튼 아이콘이 안 보이던 문제). 씬의 `FurBenchmark`·`FpsOverlay` 끔
+- 알아둘 것: 서버 `ProductEventCatalog.SCREENS` 에 `library`·`camera` 가 없어 이 두 화면의 `screen_view` 는 서버에서 버려진다 [계획: 서버 목록에 추가]
+
 ## 2026-11-26 (제품 이벤트, 안건 #24)
 
 - `Metrics/ProductEvents.cs`(새 파일, `.meta` GUID 새로 매김): 화면 보기·버튼 누름을 `POST /api/v1/events`(서버 "다음 태그 전 추가", [docs/METRICS.md](../docs/METRICS.md) §6)로 보낸다. `installId` = PlayerPrefs `beside.installId` 의 난수 GUID(기기 ID 아님), `sessionId` = 실행마다 새 GUID, `appVersion` = `Application.version`(`[0-9A-Za-z._+-]` 32자로 다듬음), platform `android`(에디터 포함). 메모리 큐 + `persistentDataPath/metrics/events.jsonl`(오프라인 보관, 최대 500줄), 30초마다·20개가 쌓이면·`OnApplicationPause(true)` 에 보냄. 2xx·4xx 는 지우고, 연결 오류·5xx 는 남겨 5·10·20초 뒤 다시, 그 뒤는 30초마다. 서버 주소는 `JobManager.BaseUrl`, 요청은 `BesideApiClient.PostEvents`(`X-Request-Id` 같은 헤더). 로그 `[BesideEvent]`
@@ -18,6 +33,10 @@ Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연
 - 홈 서버 상태: 주소를 바꾸면 옛 주소로 보낸 healthz 응답을 버린다(세대 번호 `healthGen`). 늦게 온 옛 '연결 안 됨' 이 새 주소에 남던 문제
 - 웹 재현 `serve.py`: `/res/` 경로가 `BesideUI` 폴더 안인지 `commonpath` 로 확인(문자열 앞부분 비교라 `../BesideUI.meta` 가 열렸다)
 - 확인: Unity 6000.6.0f1 의 Roslyn 으로 Assembly-CSharp 컴파일 오류 0, 경고 39(2026-11-21 기준과 같은 수). 에디터 Play·기기 확인은 [계획]
+
+## 2026-11-23
+
+- `metrics.csv` 작업당 한 줄(METRICS §3, 코드 리뷰 보고 남은 1건): 이미 적힌 jobId 는 다시 쓰지 않고(재개·다시 시도·캐시 실행) 30초 FPS 측정도 건너뜀. 같은 세션에서 올린 작업을 이어 받으면 그때 잰 uploadMs 를 씀
 
 ## 2026-11-22
 

@@ -223,12 +223,14 @@ namespace Beside.UI.Designed
             return rt;
         }
 
-        /// <summary>Vertical column inside a vertical ScrollRect (content sized to fit). Spacers have no effect inside it.</summary>
+        /// <summary>Vertical column inside a vertical ScrollRect (content sized to fit). Spacers have no effect inside it.
+        /// Clamped: the page moves only when its content is taller than the screen (Elastic let a short page be dragged
+        /// up and down and spring back, 2026-11-25).</summary>
         public static RectTransform ScrollColumn(string name, Transform parent, RectOffset padding, float spacing)
         {
             var rt = UiKit.Rect(name, parent, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             var sr = rt.gameObject.AddComponent<ScrollRect>();
-            sr.horizontal = false; sr.vertical = true; sr.movementType = ScrollRect.MovementType.Elastic; sr.scrollSensitivity = 40f;
+            sr.horizontal = false; sr.vertical = true; sr.movementType = ScrollRect.MovementType.Clamped; sr.scrollSensitivity = 40f;
             var vp = UiKit.Rect("Viewport", rt, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             vp.gameObject.AddComponent<RectMask2D>();
             vp.gameObject.AddComponent<Image>().color = Color.clear;   // catches drags on empty space
@@ -237,7 +239,28 @@ namespace Beside.UI.Designed
             var v = UiKit.Column(content, spacing, 0); v.padding = padding;
             content.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             sr.viewport = vp; sr.content = content;
+            rt.gameObject.AddComponent<ScrollWhenOverflow>();
             return content;
+        }
+
+        /// <summary>Turns a page's scrolling off while its content is at most its bottom padding (plus a little) taller
+        /// than the view: such a page moved a few px under the finger even with Clamped (2026-11-25). Only the empty
+        /// bottom padding is cut then; a page that really overflows (small phone, long text) still scrolls.</summary>
+        public class ScrollWhenOverflow : MonoBehaviour
+        {
+            public float extraSlack = 40f;
+            ScrollRect sr; VerticalLayoutGroup v;
+
+            void LateUpdate()
+            {
+                if (sr == null) { sr = GetComponent<ScrollRect>(); if (sr == null || sr.content == null) return; v = sr.content.GetComponent<VerticalLayoutGroup>(); }
+                if (sr.content == null || sr.viewport == null) return;
+                float slack = (v != null ? v.padding.bottom : 0) + extraSlack;
+                bool scroll = sr.content.rect.height > sr.viewport.rect.height + slack;
+                if (sr.vertical == scroll) return;
+                sr.vertical = scroll;
+                if (!scroll) { sr.StopMovement(); sr.verticalNormalizedPosition = 1f; }   // back to the top
+            }
         }
 
         /// <summary>White rounded card stacking its children; its height follows the content.</summary>

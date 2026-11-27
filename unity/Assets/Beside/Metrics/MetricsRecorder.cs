@@ -36,7 +36,23 @@ namespace Beside.Metrics
         /// <summary>Call when the model is ready/placed. Samples FPS, fills memMB and device, then appends the row.</summary>
         public void Complete(Row row)
         {
+            if (HasRow(row.jobId)) return;   // already recorded: no 30 s FPS sampling either
             StartCoroutine(SampleAndWrite(row));
+        }
+
+        /// <summary>METRICS §3: one row per job. A resumed, retried or cached run of a job already in the file is not written again.</summary>
+        public bool HasRow(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return false;
+            try
+            {
+                if (!File.Exists(CsvPath)) return false;
+                string prefix = jobId + ",";
+                foreach (string line in File.ReadLines(CsvPath))
+                    if (line.StartsWith(prefix, StringComparison.Ordinal)) return true;
+            }
+            catch (Exception e) { Debug.LogWarning($"[BesideMetric] metrics.csv read failed: {e.Message}"); }
+            return false;
         }
 
         IEnumerator SampleAndWrite(Row row)
@@ -60,6 +76,7 @@ namespace Beside.Metrics
 
         public void Append(Row r)
         {
+            if (HasRow(r.jobId)) { Debug.Log($"[BesideMetric] job {r.jobId} already in metrics.csv: not written again"); return; }
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(CsvPath));

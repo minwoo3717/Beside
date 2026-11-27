@@ -119,7 +119,7 @@ JSON 역직렬화는 Newtonsoft 를 쓴다. `JsonUtility` 는 `progress`(nullabl
 | `XR Origin (AR Rig)` | `ARPlaneManager` | **Detection Mode = Horizontal** (벽 인식 안 함) |
 | `XR Origin > Camera Offset > Object Spawner` | `ObjectSpawner` | **Apply Random Angle At Spawn 해제** (정면이 카메라를 향함) |
 | 같은 오브젝트 | `ARInteractorSpawnTrigger` | **Require Horizontal Up Surface 체크** |
-| `FurLab`, `Beside` (측정용) | `FurBenchmark`, `FpsOverlay` | 씬에 붙어 켜져 있다(FPS 표시는 시작부터 보임). 네 손가락 탭 = 털 측정 패널, 세 손가락 탭 = FPS 표시. **발표·배포 빌드에서는 두 컴포넌트를 끈다.** 설정은 [FurLab/README.md](Assets/Beside/FurLab/README.md) |
+| `FurLab`, `Beside` (측정용) | `FurBenchmark`, `FpsOverlay` | 씬에 붙어 있지만 꺼져 있다(2026-11-27). 측정할 때 Inspector 에서 켠다: 네 손가락 탭 = 털 측정 패널, 세 손가락 탭 = FPS 표시. 설정은 [FurLab/README.md](Assets/Beside/FurLab/README.md) |
 
 `RuntimeShell` 은 템플릿 샘플 프리팹에서 모델(`Visuals`)·콜라이더(`Cube_COL`)·**Interaction Affordance** 를 뺀 껍데기(XR Grab Interactable, AR Transformer 만 남김)다. Interaction Affordance 를 남기면 지워진 `Visuals` 를 찾느라 매 프레임 NullReferenceException 이 난다. 로더가 이 안에 GLB 를 넣어 스포너에 등록한다. `Dog_Fur_Mat` 의 Shader 는 `Custom/ShellFur`, `ShadowCatcher_Mat` 은 `Custom/ShadowCatcher` 여야 한다.
 

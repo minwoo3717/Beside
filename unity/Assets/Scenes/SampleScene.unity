@@ -3612,7 +3612,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 958625290}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d36ad283aeb8887459e27042500c2cdd, type: 3}
   m_Name: 
@@ -3748,6 +3748,13 @@ MonoBehaviour:
   rounds: 3
   warmupSeconds: 5
   measureSeconds: 30
+  loadRepeat: 0
+  boundFactor: 2
+  loadRepeatLimit: 128
+  coolStartC: 45
+  coolStopC: 43
+  coolMaxSeconds: 90
+  unlockArFrameRate: 1
   quickWarmupSeconds: 3
   quickMeasureSeconds: 12
   animationClip: Idle
@@ -7601,6 +7608,7 @@ MonoBehaviour:
   baseUrl: http://localhost:8080
   pollingIntervalSeconds: 2
   maxWaitSeconds: 600
+  resumeOnStart: 1
   modelLoader: {fileID: 0}
   metrics: {fileID: 0}
 --- !u!4 &2046210313
@@ -7681,7 +7689,8 @@ MonoBehaviour:
   centerPlacer: {fileID: 0}
   modelLoader: {fileID: 0}
   font: {fileID: 0}
-  heroImage: {fileID: 0}
+  fontBold: {fileID: 0}
+  offerResumeOnHome: 1
   showARInstructions: 1
   reshowOnNewMessage: 0
   scanOnlyInAR: 1
@@ -7729,7 +7738,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2046210309}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b15a5fe2ad4713641b0ab9f338968b57, type: 3}
   m_Name: 

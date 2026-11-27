@@ -86,6 +86,8 @@ namespace Beside.Job
         Stopwatch waitClock;
         ObjectSpawner spawner;
         MetricsRecorder.Row pendingRow;      // waits for the first placement to record e2eMs
+        // uploadMs of jobs uploaded in this session: a resumed / retried run of the same job writes the real value
+        readonly System.Collections.Generic.Dictionary<string, long> uploadMsByJob = new System.Collections.Generic.Dictionary<string, long>();
         Stopwatch pendingE2e;
 
         void Awake()
@@ -313,12 +315,14 @@ namespace Beside.Job
 
                 lastPhotos = null;   // accepted: later retries go through the jobId
                 CurrentJobId = jobId;
+                if (jobId != null) uploadMsByJob[jobId] = row.uploadMs;
                 PlayerPrefs.SetString(JobIdPrefKey, jobId);
                 PlayerPrefs.Save();
             }
             else
             {
                 CurrentJobId = existingJobId;
+                if (existingJobId != null && uploadMsByJob.TryGetValue(existingJobId, out long up)) row.uploadMs = up;
             }
             row.jobId = CurrentJobId;
 
