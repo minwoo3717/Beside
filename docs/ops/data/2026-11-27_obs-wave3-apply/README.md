@@ -72,8 +72,40 @@ Tempo `/api/traces/<id>` 로 읽은 trace(id = 앱의 `X-Request-Id` `8c9289ded3
 - **trace 로 처음 보인 것 [가설]**: GPU 서버에서 사진 저장(6.03 s) 뒤 모델 락(10.26 s)까지 약 4.2 s 가 어느 span 에도 없다. 모델 입력 준비로 보이나 확인하지 않았다. `POST /infer/upload` 서버 span 시작(4.66 s)과 사진 저장(6.03 s) 사이 1.4 s 는 본문(사진) 받기다.
 - Grafana 화면으로 본 것은 아니다(API 로 읽음). 캡처는 [사람].
 
+## 기기 확인 E2 (15:44~15:51, 팀원 SM-S947N) **[실험 결과]**
+
+- 앱: main `e222ec1` 로 만든 APK, 설정 화면에서 서버를 `https://beside-team.duckdns.org` 로 저장(로그 `[JobManager] server -> https://beside-team.duckdns.org`). 그 전 첫 전송 2번은 옛 주소라 `Cannot resolve destination host` 로 실패했고, 저장 뒤 `sent 3: accepted 3, dropped 0` 로 남은 것까지 보냈다(오프라인 보관·다시 보내기가 기기에서 동작).
+- **앱에서 받은 이벤트 0건 → 43건**(관리 API `GET /api/v1/admin/events`, 15:40~16:10, 모두 `platform=android`, dropped 0):
+
+| 이벤트 | 건수 | 확인한 값 |
+|---|---|---|
+| screen_view | 24 | home·settings·confirm·progress·preview·ar·library·camera·error (`library`·`camera` 도 저장됨) |
+| photos_selected | 3 | gallery 2, camera 1 |
+| generate_tap | 2 | mode new |
+| model_ready | 1 | cached false, loadMs 153, waitMs 12609 |
+| fur_toggle | 2 | off → on |
+| model_placed | 4 | job 첫 배치 again false, 다시 배치 again true, 불러온 강아지 source library 2번 |
+| animation_play | 1 | TailWag |
+| saved_dog_change | 1 | saved, count 1 |
+| saved_dog_open | 2 | ok true, from ar·home, loadMs 101·148 |
+| job_failed_shown | 1 | NO_ANIMAL_DETECTED, retryable false |
+| start_over | 2 | from preview·error |
+
+- 퍼널(`GET /api/v1/admin/funnel`, 같은 구간): 세션 2. 본 퍼널 home 2 → photos_selected 1(이탈 1) → generate_tap 1 → model_ready 1 → ar 1 → model_placed 1. 불러오기 퍼널 home 2 → library 2 → saved_dog_open 2 → ar 2 → model_placed 2. 작업 완료율 created 1·completed 1(100 %). `lastScreens`·`dropReasons` 는 비었다(두 번째 세션의 마지막 이벤트가 조회 시각 30분 안이라 이탈 분석에서 빠짐 — 정의대로).
+- 기기 작업 `5d4ec42f…` 의 trace: backend 로그의 `requestId` = `traceId` = 앱 흐름 id `42338276f2204ccba748afc57c59713e`. Tempo 에 span 21개(backend·inference), 작업 실행 12.1 s(크롭 2.0 s, `POST /infer/upload` 6.7 s 중 predict 3.95 s·convert 1.02 s·rig 0.12 s, GLB 받기 2.7 s).
+- 오류 화면 문의 번호 `930d812c`: Loki 에서 `930d812c` 로 backend 줄 2개(`photo check refused NO_ANIMAL_DETECTED`, `POST /api/v1/jobs NO_ANIMAL_DETECTED (HTTP 400)`, requestId `930d812c86d04e438d969de06fd30199`)와 Caddy 400 줄 1개가 바로 나왔다. 앱 화면의 8자로 서버 원인까지 간다.
+- E4 의 'GPU 서버 안 빈 4.2 s' 는 이 작업에는 없었다(사진 저장 → 모델 락이 바로 이어짐). 그래서 Pod 가 뜬 뒤 첫 작업에만 생기는 준비 시간으로 본다 [가설].
+- `app_error` 는 이 시험에서 0건(앱 오류가 나지 않음).
+
+## 털 설정 `BESIDE_HAIR_META` 켬 (15:57) **[적용: 이 Pod]**
+
+- 팀원 지적: 기기에서 본 서버 모델에 코·눈처럼 털이 없어야 할 곳에 털이 났다. 고침 코드는 이미 있다 — 변환기의 가이드 털 맵(가이드가 닿는 곳에만 털, 코·발바닥은 비움, `generation/tools/convert_asset.py` `_from_guides`·`_hairless_mask`)이 `BESIDE_HAIR_META` 가 있을 때만 켜지는데(기본 꺼짐), 지금까지 Pod 에 이 변수를 준 적이 없었다.
+- Pod 에 파일(`/workspace/AnimalLift/assets/hair_map_meta_uvanchor.npz`·`base_texture.png`)과 scipy 1.15.3 이 있음을 확인하고 Pod env 에 `BESIDE_HAIR_META=/workspace/AnimalLift/assets/hair_map_meta_uvanchor.npz` 를 더했다(`update-pod`, 컨테이너 재시작, 15:57:58 `LOADING -> UP`, 서비스 프로세스 환경에 값 있음).
+- 확인 작업 `73214f52…`: 변환 경고(`base_texture.png not used`) 없음, convert 1,377 ms·GLB 1,781,656 B(켜기 전 작업은 1,032 ms·2,100,924 B). 털 모양이 실제로 고쳐졌는지는 기기에서 다시 볼 것 [사람].
+- 시연 Pod 에도 같은 변수를 넣도록 RUNBOOK '발표 당일 GPU 절차' 의 env 에 더했다.
+
 ## 남은 것
 
-- 에디터·기기에서 앱 이벤트·`traceparent` 확인(E2) [사람]. 이 Pod 를 켜 둔 채 진행.
+- 기기에서 털 모양 다시 확인(`BESIDE_HAIR_META` 켠 뒤) [사람].
 - Pod 를 지운다(이 기록 뒤, 기기 확인 끝나면).
 - `scripts/check_public_routes.sh` 에 3500·4320 바깥 시간 초과 항목, README '배포 창 3 순서' 의 `deploy_vm.sh` 부르는 곳 고침 [계획].

@@ -192,7 +192,7 @@
    - 설정은 A40 SECURE, EU-SE-1, 볼륨 `z4kgw4v5zi` → `/workspace` 다.
    - GPU 조건은 `gpu.minCudaVersion 12.4`, `minVcpuCountPerGpu 4`, `minRamPerGpu 24` 다.
    - 컨테이너 디스크 20 GB, 포트 없음.
-   - env 는 `BESIDE_INFERENCE_TOKEN={{ RUNPOD_SECRET_beside_inference_token }}` 다.
+   - env 는 `BESIDE_INFERENCE_TOKEN={{ RUNPOD_SECRET_beside_inference_token }}`, `BESIDE_HAIR_META=/workspace/AnimalLift/assets/hair_map_meta_uvanchor.npz`(코·눈·발바닥에 털이 나지 않게 — 2026-11-27 기기 확인에서 찾음, 없으면 변환기는 옛 털 맵), `BESIDE_TELEMETRY_VM=100.98.76.5`·`BESIDE_TELEMETRY_ENV=prod`(Pod 로그·span 을 VM 으로) 다.
    - 이미지는 `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, 시작 명령은 1번의 고정본이다.
    - 같은 볼륨의 다른 Pod 는 모두 꺼져 있어야 한다(위 3번).
    - 리허설: 생성부터 VM 이 `LOADING` 을 본 때까지 43.8 s, `UP` 까지 89.6 s [실험 결과, 1회, Pod `j0g1iqr40i0gxk`·코드 `d6e25d1` 고정].
