@@ -177,8 +177,9 @@
           <a id="events-csv-link" class="primary-button" href="/api/v1/admin/events?format=csv" download="product_events.csv"><span>이벤트 CSV 받기</span><span aria-hidden="true">↓</span></a>
         </div>
       </div>
-      <p class="hint">앱과 공유 뷰어가 보낸 화면 보기·버튼 누름(<code>POST /api/v1/events</code>)을 세션별로 묶어, 새로 만들기 흐름의 단계마다 이른 세션 수를 셉니다. 세션마다 앞 단계 뒤에 처음 나온 이벤트만 세고, 시간은 앞 단계에서 걸린 시간의 중앙값입니다. 기간은 서버가 받은 시각 기준, 30초마다 갱신. 이름과 속성은 docs/METRICS.md §6.</p>
+      <p class="hint">앱과 공유 뷰어가 보낸 화면 보기·버튼 누름(<code>POST /api/v1/events</code>)을 세션별로 묶어, 새로 만들기 흐름의 단계마다 이른 세션 수를 셉니다. 세션마다 앞 단계 뒤에 처음 나온 이벤트만 세고, 시간은 앞 단계에서 걸린 시간의 중앙값입니다. 마지막 단계는 작업으로 만든 모델의 배치만 셉니다(저장한 강아지를 놓은 것은 아래 '불러오기 퍼널'). 기간은 서버가 받은 시각 기준, 30초마다 갱신. 이름과 속성은 docs/METRICS.md §6.</p>
       <p id="funnel-summary" class="sub">—</p>
+      <p id="funnel-jobs" class="sub">—</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -189,12 +190,45 @@
               <th scope="col" class="num">처음 대비</th>
               <th scope="col" class="num">앞 단계 대비</th>
               <th scope="col" class="num">걸린 시간(중앙값)</th>
+              <th scope="col" class="num">이탈</th>
             </tr>
           </thead>
           <tbody id="funnel-body"></tbody>
         </table>
       </div>
       <p id="funnel-empty" class="empty" hidden>이 기간에 받은 제품 이벤트가 없어요.</p>
+      <h3>이탈한 세션</h3>
+      <p class="hint">홈까지 왔지만 AR 에 놓지 못한 세션 중 마지막 이벤트가 30분 넘게 지난 세션입니다(아직 쓰는 중일 수 있는 세션은 뺍니다). 사유는 그 세션에 있었던 이벤트이고, 한 세션이 여러 줄에 들어갈 수 있습니다. 작업 완료율은 이 기간에 만든 작업을 지금 상태로 센 값(취소 제외)이라 실행마다 세는 성공률과 다릅니다.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">이탈 직전 화면</th><th scope="col" class="num">세션</th></tr></thead>
+          <tbody id="funnel-screens-body"></tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">이탈 사유</th><th scope="col" class="num">세션</th></tr></thead>
+          <tbody id="funnel-reasons-body"></tbody>
+        </table>
+      </div>
+      <p id="funnel-drops-empty" class="empty" hidden>분석할 이탈 세션이 없어요.</p>
+      <h3>불러오기 퍼널 (저장한 강아지)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">단계</th>
+              <th scope="col">세는 이벤트</th>
+              <th scope="col" class="num">세션</th>
+              <th scope="col" class="num">처음 대비</th>
+              <th scope="col" class="num">앞 단계 대비</th>
+              <th scope="col" class="num">걸린 시간(중앙값)</th>
+              <th scope="col" class="num">이탈</th>
+            </tr>
+          </thead>
+          <tbody id="library-funnel-body"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 
