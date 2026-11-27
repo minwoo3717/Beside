@@ -34,7 +34,7 @@
 
 **관측 도구 자체의 감시 (2026-11-27 더함)** — 규칙 파일 [구현됨], 운영 적용은 배포 창 3 [계획]
 - 왜: 로그·트레이스 수집기가 죽으면 로그 알림이 조용해질 뿐 아무도 모른다(지금까지 수집기가 죽어도 알림이 없었다).
-- 알림 4개(SLI 가 아니라 도구 감시라 위 표에 넣지 않는다). 규칙은 13개 → 17개.
+- 알림 4개(SLI 가 아니라 도구 감시라 위 표에 넣지 않는다). 규칙은 13개 → 17개. 같은 날 GPU Pod 의 ERROR 로그 알림 1개를 더해 18개(아래 표 마지막 줄).
 
 | 알림 (Grafana) | 질의 | 울리는 조건 |
 |---|---|---|
@@ -42,10 +42,12 @@
 | `Alloy 지표 수집 실패 (로그 수집 멈춤)` | `up{job="alloy"}` | 1 미만이 5분 |
 | `Tempo 지표 수집 실패 (트레이스 저장 멈춤)` | `up{job="tempo"}` | 1 미만이 5분 |
 | `Alloy 로그 전송 실패 (Loki 에 못 쓴 줄)` | `sum(increase(loki_write_dropped_entries_total[10m]))` | 0 초과 |
+| `추론 서비스(GPU Pod) ERROR 로그` | `sum(count_over_time({service="inference", env="prod", level="ERROR"} [5m]))` (Loki) | 0 초과 |
 
 - `up` 은 Prometheus 가 세 컨테이너의 `/metrics` 를 읽어 만든다([prometheus.yml](../../deploy/monitoring/prometheus.yml) 의 job `loki`·`alloy`·`tempo`).
 - 로그가 0줄 들어오는 것을 보는 규칙은 두지 않는다. 조용한 밤에도 울리기 때문이다(VM 감시 `beside-watchdog.sh` 도 `docker exec` 로 backend 컨테이너 안의 Actuator health(관리 포트 8081)를 물어 Caddy 줄을 만들지 않는다).
 - 같은 날 로그 알림이 부하 시험에 울리지 않게 고쳤다. backend 로그 알림 2개는 env 라벨이 `loadtest`·`local` 인 줄을 뺀다(env 가 없는 옛 줄은 계속 본다). 앞단 응답 알림은 k6 요청(`X-Request-Id` 가 `lt-` 로 시작)을 뺀다. 이 Caddy 질의를 실제 Caddy 줄로 확인하는 것은 [계획]이다.
+- GPU Pod 알림은 Pod 의 `ship_logs.py` 가 tailnet 으로 VM 의 Alloy(3500)에 보낸 줄을 본다. Alloy 가 `service="inference"` 로 고정하고 수준을 줄 맨 앞에서 읽는다(`WARNING`→`WARN`, `CRITICAL`→`ERROR`). env 는 Pod 의 `BESIDE_TELEMETRY_ENV`(기본 `prod`)라 부하 시험 Pod 는 `loadtest` 로 두거나 아예 보내지 않는다. 운영 Pod 에서 줄이 들어오는 것을 보는 것은 [계획](E4).
 
 **아직 하지 않은 것** [계획]
 - SLI 를 기간 단위로 보여 주는 대시보드 패널

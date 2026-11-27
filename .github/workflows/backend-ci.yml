@@ -82,6 +82,20 @@ jobs:
           for f in deploy/runpod/*.sh; do bash -n "$f"; done
           bash deploy/runpod/test_start_pod_supervisor.sh
 
+      # GPU Pod Python (2026-11-27): the log shipper is standard library only and runs on the Pod's own python3; the
+      # inference service tests stub the model (no torch) and need only FastAPI's test stack. 3.10 = the Pod's conda env.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Pod log shipper (deploy/runpod/ship_logs.py against a fake Loki push server)
+        run: python -I deploy/runpod/test_ship_logs.py
+
+      - name: inference service (generation/inference_service test_app, model stubbed)
+        run: |
+          python -m pip install --disable-pip-version-check -q fastapi httpx python-multipart
+          python -I -m unittest discover -s generation/inference_service -p test_app.py
+
   docker:
     name: docker build + compose/Caddy config
     runs-on: ubuntu-24.04
@@ -186,13 +200,20 @@ jobs:
 
           base, mon, lt, capped, lt_capped, nobackup = (json.load(open(path)) for path in sys.argv[1:7])
           # only caddy publishes to the network: backend 8080/8081 (Actuator) and grafana 3000 stay internal,
-          # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py)
+          # prometheus 9090 is bound to the VM loopback only (SSH tunnel for scripts/load/collect.py), and alloy publishes
+          # exactly the two GPU Pod receivers (2026-11-27): 3500 Loki push and 4320 OTLP/HTTP. The Pod reaches them over the
+          # tailnet; from the internet the GCP firewall drops them (only tcp 22/80/443 and udp 443 are open to 0.0.0.0/0,
+          # deploy/gcp/create_vm.sh). Its own 12345 (/metrics, debug UI) stays internal
           for name, svc in mon["services"].items():
               ports = svc.get("ports") or []
               if name == "caddy":
                   continue
               if name == "prometheus":
                   assert ports and all(p.get("host_ip") == "127.0.0.1" for p in ports), f"prometheus publishes {ports}"
+                  continue
+              if name == "alloy":
+                  got = sorted((int(p["target"]), str(p.get("published"))) for p in ports)
+                  assert got == [(3500, "3500"), (4320, "4320")], f"alloy publishes {ports}"
                   continue
               assert not ports, f"{name} publishes {ports}"
           assert mon["services"]["backend"]["environment"]["METRICS_ENV"] == "prod"
@@ -374,11 +395,115 @@ jobs:
           want="$(grep -c '^      - uid: ' deploy/monitoring/grafana/provisioning/alerting/rules.yml)"
           test "$n" = "$want" || { docker logs ci-grafana | tail -50; echo "alert rules loaded: $n, in the file: $want"; exit 1; }
           # the count the docs name (deploy/README.md '로그 · 알림', docker-compose.yml, .env.example, docs/ops/SLO.md): 13 rules of
-          # 2026-11-26 + 4 collector rules of 2026-11-27 (up of loki/alloy/tempo, Alloy write drops). Change the docs with this line
-          test "$want" = 17 || { echo "rules.yml has $want rules; the docs say 17"; exit 1; }
+          # 2026-11-26 + 4 collector rules of 2026-11-27 (up of loki/alloy/tempo, Alloy write drops) + the GPU Pod ERROR rule of the
+          # same day. Change the docs with this line
+          test "$want" = 18 || { echo "rules.yml has $want rules; the docs say 18"; exit 1; }
           docker logs ci-grafana 2>&1 | grep -iE 'level=error.*provision' && exit 1 || true
           docker rm -f ci-grafana > /dev/null
           echo "loki, alloy, tempo and grafana provisioning ok ($n alert rules)"
+
+      - name: Alloy takes GPU Pod logs and spans (push 3500 -> Loki as service="inference", OTLP/HTTP 4320 -> Tempo)
+        run: |
+          # B2 (2026-11-27): the VM's images and configs on one Docker network, with the compose service names as aliases.
+          # 'alloy fmt' above checks syntax only; this runs loki.source.api, loki.process "pod" and the otelcol components.
+          img() { grep -m1 -oE "$1:[^\"[:space:]]+" deploy/docker-compose.yml; }
+          names=(ci-pod-alloy ci-pod-loki ci-pod-tempo)
+          cleanup() {
+            rc=$?
+            if [ "$rc" -ne 0 ]; then for c in "${names[@]}"; do echo "== $c"; docker logs --tail 40 "$c" 2>&1 || true; done; fi
+            docker rm -f "${names[@]}" > /dev/null 2>&1 || true
+            docker network rm ci-pod > /dev/null 2>&1 || true
+            docker volume rm ci-pod-loki ci-pod-tempo > /dev/null 2>&1 || true
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          docker network create ci-pod > /dev/null
+          docker volume create ci-pod-loki > /dev/null
+          docker volume create ci-pod-tempo > /dev/null
+          docker run -d --name ci-pod-loki --network ci-pod --network-alias loki -p 127.0.0.1:3102:3100 \
+            -v "$PWD/deploy/monitoring/loki/loki.yml:/etc/loki/loki.yml:ro" -v ci-pod-loki:/loki \
+            "$(img grafana/loki)" -config.file=/etc/loki/loki.yml > /dev/null
+          docker run -d --name ci-pod-tempo --network ci-pod --network-alias tempo -p 127.0.0.1:3203:3200 \
+            -v "$PWD/deploy/monitoring/tempo/tempo.yml:/etc/tempo/tempo.yml:ro" -v ci-pod-tempo:/var/tempo \
+            "$(img grafana/tempo)" -config.file=/etc/tempo/tempo.yml > /dev/null
+          # Loki's ingester reports ready only some 15 s after it starts: wait up to 2 minutes for each
+          for _ in $(seq 1 60); do curl -fs http://127.0.0.1:3102/ready > /dev/null && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3102/ready > /dev/null || { echo "loki not ready"; exit 1; }
+          for _ in $(seq 1 60); do curl -fs http://127.0.0.1:3203/ready > /dev/null && break; sleep 2; done
+          curl -fsS http://127.0.0.1:3203/ready > /dev/null || { echo "tempo not ready"; exit 1; }
+          # as compose runs it: root (the VM's Docker log folder is root-only), its HTTP server on 0.0.0.0:12345
+          docker run -d --name ci-pod-alloy --network ci-pod --user 0 \
+            -p 127.0.0.1:12346:12345 -p 127.0.0.1:3500:3500 -p 127.0.0.1:4320:4320 \
+            -v "$PWD/deploy/monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            "$(img grafana/alloy)" run --storage.path=/var/lib/alloy/data --server.http.listen-addr=0.0.0.0:12345 \
+            /etc/alloy/config.alloy > /dev/null
+          for _ in $(seq 1 60); do
+            curl -fs http://127.0.0.1:12346/-/ready > /dev/null && curl -fs http://127.0.0.1:3500/ready > /dev/null && break
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:12346/-/ready > /dev/null || { echo "alloy not ready"; exit 1; }
+          curl -fsS http://127.0.0.1:3500/ready > /dev/null || { echo "alloy push API on 3500 not ready"; exit 1; }
+
+          # logs: an app.py ERROR line with its stack joined (as deploy/runpod/ship_logs.py sends it) and an uvicorn WARNING
+          # line, pushed with labels that pose as backend and one label that must not survive (job)
+          now="$(date +%s%N)"
+          python3 - "$now" > push.json <<'PY'
+          import json
+          import sys
+
+          now = int(sys.argv[1])
+          lines = [
+              "2026-11-27T01:02:03.456Z ERROR beside.inference ci-pod-probe failed rid=j-1 trace=0af7651916cd43dd8448eb211c80319c"
+              "\nTraceback (most recent call last):\n  File \"app.py\", line 1, in _run",
+              "WARNING:  ci-pod-probe uvicorn line",
+          ]
+          stream = {"service": "backend", "job": "spoof", "file": "inference.log", "host": "ci-pod", "env": "prod"}
+          print(json.dumps({"streams": [{"stream": stream, "values": [[str(now + i), line] for i, line in enumerate(lines)]}]}))
+          PY
+          curl -fsS -X POST http://127.0.0.1:3500/loki/api/v1/push -H 'Content-Type: application/json' --data-binary @push.json
+          q() {
+            curl -fsS -G http://127.0.0.1:3102/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=10 \
+              --data-urlencode "start=$((now - 300000000000))" --data-urlencode "end=$((now + 300000000000))"
+          }
+          for _ in $(seq 1 30); do grep -q ci-pod-probe <<< "$(q '{service="inference"} |= "ci-pod-probe"')" && break; sleep 1; done
+          q '{service="inference"} |= "ci-pod-probe"' > pod-got.json
+          q '{service="backend"} |= "ci-pod-probe"' > pod-spoof.json
+          python3 - pod-got.json pod-spoof.json <<'PY'
+          import json
+          import sys
+
+          got = json.load(open(sys.argv[1]))["data"]["result"]
+          spoof = json.load(open(sys.argv[2]))["data"]["result"]
+          assert not spoof, f"a push posed as backend: {spoof}"
+          by_level = {}
+          for stream in got:
+              labels = stream["stream"]
+              assert labels["service"] == "inference", labels
+              assert (labels.get("file"), labels.get("host"), labels.get("env")) == ("inference.log", "ci-pod", "prod"), labels
+              assert "job" not in labels, f"label_keep let a pushed label through: {labels}"
+              for _, line in stream["values"]:
+                  by_level[labels.get("level")] = line
+          # WARNING -> WARN like backend; the stack stays in the ERROR line's entry
+          assert set(by_level) == {"ERROR", "WARN"}, by_level
+          assert "ci-pod-probe failed" in by_level["ERROR"] and "Traceback" in by_level["ERROR"], by_level
+          assert by_level["WARN"].startswith("WARNING:"), by_level
+          print("pod lines in loki:", {level: line.splitlines()[0][:70] for level, line in by_level.items()})
+          PY
+
+          # spans: one OTLP/JSON span as generation/inference_service sends it (lowercase hex ids, kind and status as numbers)
+          trace=4bf92f3577b34da6a3ce929d0e0e4736
+          span='{"traceId":"'"$trace"'","spanId":"00f067aa0ba902b7","parentSpanId":"b7ad6b7169203331","name":"POST /infer/upload","kind":2,"startTimeUnixNano":"'"$now"'","endTimeUnixNano":"'"$((now + 2000000))"'","status":{"code":2},"attributes":[{"key":"bytes","value":{"intValue":"123"}}]}'
+          curl -fsS -X POST http://127.0.0.1:4320/v1/traces -H 'Content-Type: application/json' \
+            -d '{"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"beside-inference"}}]},"scopeSpans":[{"spans":['"$span"']}]}]}' > /dev/null
+          for _ in $(seq 1 60); do
+            grep -q 'POST /infer/upload' <<< "$(curl -fs "http://127.0.0.1:3203/api/traces/$trace" || true)" && break
+            sleep 1
+          done
+          grep -q 'POST /infer/upload' <<< "$(curl -fsS "http://127.0.0.1:3203/api/traces/$trace")" || { echo "pod span not in tempo"; exit 1; }
+
+          # memory with this little traffic (the VM cap is 384m for each; compose step above checks the caps)
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' "${names[@]}"
+          echo "alloy pod receivers ok: logs -> loki as service=\"inference\", span -> tempo"
 
       - name: Caddy route rules (404 / 401 / public / 413)
         run: bash deploy/test_caddy_routes.sh
