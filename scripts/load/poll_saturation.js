@@ -39,6 +39,7 @@ import { checkIds, joinIdLists, preflight, sampleIds, seedJobs } from './lib/see
 import { sequentialScenarios } from './lib/stages.js';
 import { errorThresholds, latencyThresholds, merge } from './lib/thresholds.js';
 import { markReady, summaryOutputs } from './lib/summary.js';
+import { mark } from './lib/marker.js';
 
 const TIERS = JSON.parse(open('./tiers.json'));
 const A2 = TIERS.load.a2;
@@ -241,6 +242,7 @@ export function setup() {
     if (FROM_FILE.completed.length + FROM_FILE.pending.length === 0) throw new Error(`setup: IDS_FILE ${IDS_FILE} has no completed or pending ids`);
     const found = requireStates(FROM_FILE, 'IDS_FILE ids');
     logPendingAge(found.pendingAgeS);
+    mark(CONFIG, 'begin');
     return markReady(Object.assign(info, { completed: [], pending: [], seeded: false, idsChecked: found.checked, pendingAgeS: found.pendingAgeS }));
   }
   const done = seedJobs(CONFIG, BODIES.body(), SEED_COMPLETED, { wait: true, waitS: SEED_WAIT_S });
@@ -259,6 +261,7 @@ export function setup() {
     }
   }
   if (done.completed.length === 0 && pend.created.length === 0) throw new Error('setup: no job could be seeded');
+  mark(CONFIG, 'begin');
   return markReady(Object.assign(info, {
     completed: done.completed.map((j) => j.id),
     pending: pend.created,
@@ -291,8 +294,13 @@ export function guard() {
 
 // Up to 20 pending ids again: a pending-ms that ran out during the run (or a restart) turned the jobState=pending polls
 // into polls of other states part of the way, which setup could not see. Another state or a 404 counts as left; an
-// answer that tells nothing (no response, 5xx) is not counted either way.
+// answer that tells nothing (no response, 5xx) is not counted either way. Then the end mark (lib/marker.js).
 export function teardown(data) {
+  recheckPending(data);
+  mark(CONFIG, 'end');
+}
+
+function recheckPending(data) {
   if (SEED_ONLY || !data) return;
   const ids = sampleIds(IDS_FILE ? FROM_FILE.pending : data.pending || [], 20);
   if (ids.length === 0) return;

@@ -274,7 +274,8 @@ test('teardown: pending ids that left PENDING during the run fail load_pendingLe
   state.samples = [];
   mod.teardown(data);
   assert.deepEqual(samples('load_pendingLeft').map((s) => s.value), [2]);
-  assert.ok(state.requests.slice(-5).every((r) => r.tags.endpoint === 'setup'));
+  // the re-checks, then the end mark (lib/marker.js)
+  assert.ok(state.requests.filter((r) => r.tags.endpoint !== 'marker').slice(-5).every((r) => r.tags.endpoint === 'setup'));
   // an answer that tells nothing (5xx, no response) is neither PENDING nor left: it is not counted as re-checked
   state.samples = [];
   state.handler = (req) => (req.url.endsWith(P(4)) ? { status: 503, body: '' } : server(req));
