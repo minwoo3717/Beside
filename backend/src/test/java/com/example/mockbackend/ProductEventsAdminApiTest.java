@@ -1,5 +1,9 @@
 package com.example.mockbackend;
 
+import com.example.mockbackend.domain.Job;
+import com.example.mockbackend.domain.JobStatus;
+import com.example.mockbackend.domain.ProductEventRow;
+import com.example.mockbackend.repository.JobRepository;
 import com.example.mockbackend.repository.ProductEventRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +56,9 @@ class ProductEventsAdminApiTest {
 
     @Autowired
     ProductEventRepository events;
+
+    @Autowired
+    JobRepository jobRepository;
 
     @BeforeEach
     void clean() {
@@ -165,12 +173,14 @@ class ProductEventsAdminApiTest {
         assertThat(steps.get(4).path("event").asText()).isEqualTo("screen_view(screen=ar)");
 
         long[] sessions = {5, 3, 3, 2, 1, 1};
+        long[] dropped = {0, 2, 0, 1, 1, 0};
         double[] conversion = {100, 60, 60, 40, 20, 20};
         Double[] fromPrev = {null, 60.0, 100.0, 200.0 / 3, 50.0, 100.0};
         Double[] median = {null, 20.0, 10.0, 60.0, 10.0, 10.0};
         for (int i = 0; i < 6; i++) {
             JsonNode step = steps.get(i);
             assertThat(step.path("sessions").asLong()).as("sessions of %s", names.get(i)).isEqualTo(sessions[i]);
+            assertThat(step.path("droppedSessions").asLong()).as("dropped at %s", names.get(i)).isEqualTo(dropped[i]);
             assertThat(step.path("conversionPct").asDouble()).as("conversion of %s", names.get(i)).isCloseTo(conversion[i], within(0.001));
             if (fromPrev[i] == null) {
                 assertThat(step.path("fromPrevPct").isNull()).isTrue();
@@ -182,6 +192,94 @@ class ProductEventsAdminApiTest {
             } else {
                 assertThat(step.path("medianSecondsFromPrev").asDouble()).as("median of %s", names.get(i)).isCloseTo(median[i], within(0.001));
             }
+        }
+        // every session's last event came in just now: it may still be in use, so no drop analysis yet
+        assertThat(funnel.path("lastScreens")).isEmpty();
+        assertThat(funnel.path("dropReasons")).isEmpty();
+        assertThat(funnel.path("librarySteps")).hasSize(5);
+        assertThat(funnel.path("jobs").path("created").isIntegralNumber()).isTrue();
+    }
+
+    @Test
+    void droppedSessionsShowTheirLastScreenAndReasonsAndTheLibraryHasItsOwnFunnel() throws Exception {
+        Instant old = Instant.now().minus(Duration.ofHours(2));
+        Instant fresh = Instant.now();
+        // D1 closes the gallery without a photo.
+        store(old, "D1", row("screen_view", 0, "home", null), row("photos_selected", 1, "home", "{\"source\":\"gallery\",\"count\":0}"));
+        // D2 gives up in the queue.
+        store(old, "D2", row("screen_view", 0, "home", null), row("photos_selected", 1, null, "{\"count\":1}"),
+                row("generate_tap", 2, null, "{\"mode\":\"new\"}"), row("screen_view", 3, "progress", null),
+                row("job_cancel_tap", 4, "progress", "{\"stage\":\"queued\",\"elapsedSec\":40}"));
+        // D3 sees a failure and the app throws.
+        store(old, "D3", row("screen_view", 0, "home", null), row("photos_selected", 1, null, "{\"count\":2}"),
+                row("generate_tap", 2, null, null), row("screen_view", 3, "error", null),
+                row("job_failed_shown", 4, "error", "{\"code\":\"INFERENCE_TIMEOUT\",\"retryable\":true}"),
+                row("app_error", 5, "error", "{\"kind\":\"exception\",\"sig\":12345}"));
+        // D4 goes all the way with its own job.
+        store(old, "D4", row("screen_view", 0, "home", null), row("photos_selected", 1, null, "{\"count\":1}"),
+                row("generate_tap", 2, null, null), row("model_ready", 3, null, null), row("screen_view", 4, "ar", null),
+                row("model_placed", 5, "ar", "{\"method\":\"tap\",\"source\":\"job\"}"));
+        // D5 opens a saved dog from the library and places it: the library funnel, not the main one.
+        store(old, "D5", row("screen_view", 0, "home", null), row("screen_view", 5, "library", null),
+                row("saved_dog_open", 10, "library", "{\"ok\":true,\"from\":\"home\",\"count\":2}"),
+                row("screen_view", 12, "preview", null), row("screen_view", 15, "ar", null),
+                row("model_placed", 20, "ar", "{\"method\":\"center\",\"source\":\"library\",\"again\":false}"));
+        // D6 is like D1 but its last event came in just now: maybe still choosing, not a drop yet.
+        store(fresh, "D6", row("screen_view", 0, "home", null), row("photos_selected", 1, "home", "{\"count\":0}"));
+        // D7 makes a model but only places a saved dog: the main funnel stops before its last step.
+        store(old, "D7", row("screen_view", 0, "home", null), row("photos_selected", 1, null, "{\"count\":1}"),
+                row("generate_tap", 2, null, null), row("model_ready", 3, null, null), row("screen_view", 4, "ar", null),
+                row("model_placed", 5, "ar", "{\"source\":\"library\"}"), row("app_error", 6, "ar", "{\"kind\":\"exception\"}"));
+        // D8 cannot open its saved dog.
+        store(old, "D8", row("screen_view", 0, "home", null), row("screen_view", 1, "library", null),
+                row("saved_dog_open", 2, "library", "{\"ok\":false,\"from\":\"home\",\"count\":1}"));
+
+        JsonNode funnel = json(mvc.perform(get("/api/v1/admin/funnel")).andExpect(status().isOk()).andReturn());
+        assertThat(longs(funnel.path("steps"), "sessions")).containsExactly(8L, 4L, 4L, 2L, 2L, 1L);
+        assertThat(longs(funnel.path("steps"), "droppedSessions")).containsExactly(0L, 4L, 0L, 2L, 0L, 1L);
+
+        // D1, D2, D3, D5, D7, D8 (not D4 that finished, not D6 that is too fresh)
+        assertThat(funnel.path("lastScreens").toString()).isEqualTo(objectMapper.readTree("""
+                [{"screen":"ar","sessions":2},{"screen":"error","sessions":1},{"screen":"home","sessions":1},
+                 {"screen":"library","sessions":1},{"screen":"progress","sessions":1}]""").toString());
+        assertThat(funnel.path("dropReasons").toString()).isEqualTo(objectMapper.readTree("""
+                [{"event":"app_error","key":"kind","value":"exception","sessions":2},
+                 {"event":"job_cancel_tap","key":"stage","value":"queued","sessions":1},
+                 {"event":"job_failed_shown","key":"code","value":"INFERENCE_TIMEOUT","sessions":1},
+                 {"event":"photos_selected","key":"count","value":"0","sessions":1}]""").toString());
+
+        JsonNode library = funnel.path("librarySteps");
+        List<String> names = new ArrayList<>();
+        library.forEach(step -> names.add(step.path("step").asText()));
+        assertThat(names).containsExactly("home", "library", "saved_dog_open", "ar", "model_placed");
+        assertThat(library.get(2).path("event").asText()).isEqualTo("saved_dog_open(ok=true)");
+        assertThat(library.get(4).path("event").asText()).isEqualTo("model_placed(source=library)");
+        assertThat(longs(library, "sessions")).containsExactly(8L, 2L, 1L, 1L, 1L);
+        assertThat(longs(library, "droppedSessions")).containsExactly(0L, 6L, 1L, 0L, 0L);
+        assertThat(library.get(4).path("medianSecondsFromPrev").asDouble()).isCloseTo(5.0, within(0.001));
+    }
+
+    @Test
+    void jobCompletionCountsTheJobsCreatedInTheRangeByWhereTheyAreNow() throws Exception {
+        Instant from = Instant.parse("2001-01-01T00:00:00Z");
+        List<String> ids = new ArrayList<>();
+        try {
+            for (String state : List.of("COMPLETED", "COMPLETED", "COMPLETED", "FAILED:INFERENCE_FAILED", "FAILED:CANCELED",
+                    "PENDING", "PROCESSING")) {
+                ids.add(job(from.plusSeconds(ids.size() * 60L), state));
+            }
+            ids.add(job(from.plus(Duration.ofDays(2)), "COMPLETED"));   // created after the range
+            JsonNode jobs = json(mvc.perform(get("/api/v1/admin/funnel")
+                            .param("from", from.toString()).param("to", from.plus(Duration.ofDays(1)).toString()))
+                    .andExpect(status().isOk()).andReturn()).path("jobs");
+            assertThat(jobs.path("created").asLong()).isEqualTo(7);
+            assertThat(jobs.path("completed").asLong()).isEqualTo(3);
+            assertThat(jobs.path("failed").asLong()).as("a cancel is not a failure").isEqualTo(1);
+            assertThat(jobs.path("canceled").asLong()).isEqualTo(1);
+            assertThat(jobs.path("inProgress").asLong()).isEqualTo(2);
+            assertThat(jobs.path("completionPct").asDouble()).as("3 of the 6 not canceled").isCloseTo(50.0, within(0.001));
+        } finally {
+            jobRepository.deleteAllById(ids);
         }
     }
 
@@ -197,9 +295,52 @@ class ProductEventsAdminApiTest {
             assertThat(step.path("conversionPct").asDouble()).isZero();
             assertThat(step.path("medianSecondsFromPrev").isNull()).isTrue();
         });
+        assertThat(funnel.path("lastScreens")).isEmpty();
+        assertThat(funnel.path("dropReasons")).isEmpty();
+        assertThat(funnel.path("librarySteps")).hasSize(5);
+        assertThat(funnel.path("jobs").path("created").asLong()).isZero();
+        assertThat(funnel.path("jobs").path("completionPct").asDouble()).isZero();
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** One stored row as the collector would write it, received at {@code receivedAt}. */
+    private record Row(String name, int second, String screen, String propsJson) {
+    }
+
+    private static Row row(String name, int second, String screen, String propsJson) {
+        return new Row(name, second, screen, propsJson);
+    }
+
+    /** Stores a session's rows directly, so their receivedAt can lie in the past (the drop analysis waits 30 minutes). */
+    private void store(Instant receivedAt, String label, Row... rows) {
+        String session = UUID.nameUUIDFromBytes(label.getBytes(StandardCharsets.UTF_8)).toString();
+        int seq = 0;
+        for (Row row : rows) {
+            events.save(ProductEventRow.of(receivedAt, INSTALL, session, "0.5.0", "android", row.name(),
+                    T0.plusSeconds(row.second()), seq++, null, row.screen(), row.propsJson(), "local"));
+        }
+    }
+
+    /** A job created at {@code createdAt} that is now in {@code state} (STATUS or FAILED:CODE). */
+    private String job(Instant createdAt, String state) {
+        String[] parts = state.split(":");
+        Job job = new Job();
+        job.setId(UUID.randomUUID().toString());
+        job.setStatus(JobStatus.valueOf(parts[0]));
+        job.setErrorCode(parts.length > 1 ? parts[1] : null);
+        job.setCreatedAt(createdAt);
+        job.setUpdatedAt(createdAt);
+        job.setQueuedAt(createdAt);
+        job.setAttempt(1);
+        return jobRepository.save(job).getId();
+    }
+
+    private static List<Long> longs(JsonNode array, String field) {
+        List<Long> values = new ArrayList<>();
+        array.forEach(node -> values.add(node.path(field).asLong()));
+        return values;
+    }
 
     private void send(String session, String platform, ObjectNode... list) throws Exception {
         ObjectNode batch = objectMapper.createObjectNode()
