@@ -23,7 +23,7 @@ AnimalLift가 만든 강아지 모델(정점 4,310개, 삼각형 7,774개, 색 �
 형식의 기준은 [GLB_SPEC §4.1](../../docs/asset/GLB_SPEC.md)(2026-11-21 결정 #14)이다. 아래는 앱 쪽에서 알아 둘 점이다.
 
 - **털 길이 맵**(R): 0~1, `furLength` 에 곱한다. 코·발바닥 털을 0으로 만드는 것은 변환기 선택 기능 `--hair-meta`(추론 서비스 `BESIDE_HAIR_META`, **기본 꺼짐**)일 때만이다. 기본 출력은 `hair.npz` 그대로라 코·발바닥에도 털이 있을 수 있다.
-- **털 결 맵**(RG): 털이 누운 방향. UV 공간의 접선 기준이라 셸 털 v2 는 메시의 TANGENT 로 방향을 잡는다. **main 의 변환기는 TANGENT 를 넣지 않는다.** TANGENT 가 없으면 v2 는 털 결(빗질)을 끄고(`comb * hasTangent`) 털을 법선 쪽으로 세운다. 브랜치 `Unity` 의 서버는 TANGENT 를 넣고(`add_tangents()`) G 부호를 뒤집지 않았지만, main 의 §4.1 은 G 부호를 뒤집는다. TANGENT 를 넣을지(서버 또는 앱의 `RecalculateTangents`)와 G 부호는 계약 결정·기기 나란히 비교가 먼저다 **[계획]**.
+- **털 결 맵**(RG): 털이 누운 방향. UV 공간의 접선 기준이라 셸 털 v2 는 메시의 TANGENT 로 방향을 잡는다. **main 의 변환기는 TANGENT 를 넣지 않는다.** TANGENT 가 없으면 v2 는 결 맵 빗질을 끄고, 정해진 방향(`_NoTangentComb`·`_NoTangentCombDir`, 아래·뒤쪽)으로 살짝 눕힌다(2026-11-27; 로더가 메시에 TANGENT 가 있을 때만 `_UseTangents`=1). 브랜치 `Unity` 의 서버는 TANGENT 를 넣고(`add_tangents()`) G 부호를 뒤집지 않았지만, main 의 §4.1 은 G 부호를 뒤집는다. TANGENT 를 넣을지(서버 또는 앱의 `RecalculateTangents`)와 G 부호는 계약 결정·기기 나란히 비교가 먼저다 **[계획]**.
 - AnimalLift의 털 정보는 가이드 털이 있는 텍셀(UV의 약 21%)에만 학습된 값이 있다. 가우시안 정규화 합성곱으로 가이드만으로 맵을 다시 채우는 것도 `--hair-meta` 선택 기능이다(기본은 원래 맵).
 - GLB에 털 맵이 없으면 Inspector의 `fallbackHairLength`/`fallbackHairFlow`를 쓰고(`SampleScene` 에서는 비어 있음), 그것도 없으면 털을 그리지 않는다. Test Glb Url 로 연 GLB 는 안의 털 맵을 읽지 않는다(GLB_SPEC §4.1).
 
