@@ -1,6 +1,7 @@
 package com.example.mockbackend.service;
 
 import com.example.mockbackend.api.v1.dto.AdminDisk;
+import com.example.mockbackend.api.v1.dto.AdminJobCompletion;
 import com.example.mockbackend.api.v1.dto.AdminJobList;
 import com.example.mockbackend.api.v1.dto.AdminJobSummary;
 import com.example.mockbackend.api.v1.dto.AdminOverview;
@@ -305,6 +306,38 @@ public class AdminService {
     }
 
     private record GroupKey(String modelVersion, String workerType) {
+    }
+
+    // ------------------------------------------------------------------ job completion (admin funnel)
+
+    /**
+     * The jobs created in [from, to) by where each is now (openapi AdminJobCompletion): one number per job however
+     * often it was retried, unlike the per-run successRate of {@link #stats}. Canceled = FAILED with CANCELED.
+     */
+    public AdminJobCompletion jobCompletion(Instant from, Instant to) {
+        long completed = 0;
+        long failed = 0;
+        long canceled = 0;
+        long inProgress = 0;
+        for (Object[] row : jobRepository.countCreatedByState(from, to)) {
+            JobStatus status = (JobStatus) row[0];
+            long count = ((Number) row[2]).longValue();
+            switch (status) {
+                case COMPLETED -> completed += count;
+                case FAILED -> {
+                    if (ErrorCode.CANCELED.name().equals(row[1])) {
+                        canceled += count;
+                    } else {
+                        failed += count;
+                    }
+                }
+                default -> inProgress += count;
+            }
+        }
+        long created = completed + failed + canceled + inProgress;
+        long notCanceled = created - canceled;
+        return new AdminJobCompletion(created, completed, failed, canceled, inProgress,
+                notCanceled == 0 ? 0.0 : 100.0 * completed / notCanceled);
     }
 
     // ------------------------------------------------------------------ recent jobs
