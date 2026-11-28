@@ -146,7 +146,7 @@ namespace Beside.UI
         void OnModelPlaced(string jobId, GameObject instance)
         {
             placed = true;
-            RenderState(JobManager.State.Ready, "배치 완료! 손가락으로 옮기거나 두 손가락으로 돌리고 키울 수 있어요");
+            RenderState(JobManager.State.Ready, "배치 완료! 손가락으로 옮기거나 두 손가락으로 돌릴 수 있어요");
         }
 
         void OnGuidance(ARGuidance.Issue issue, string text, bool showSettings)

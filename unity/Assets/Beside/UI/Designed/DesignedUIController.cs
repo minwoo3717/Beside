@@ -289,7 +289,7 @@ namespace Beside.UI.Designed
             if (value)
             {
                 SetStatus("배치됨", DesignKit.Success);
-                SetHint("한 손가락으로 옮기고, 두 손가락으로 돌리거나 크기를 바꿀 수 있어요");
+                SetHint("한 손가락으로 옮기고, 두 손가락으로 돌릴 수 있어요");
             }
         }
 
@@ -382,10 +382,10 @@ namespace Beside.UI.Designed
             var ex = DesignKit.Card("Examples", body, 62f, 52, 52, 0f);
             DesignKit.Label("Title", ex, "이런 사진이 잘 나와요", 42, DesignKit.Ink, 0, TextAnchor.MiddleLeft, true);
             DesignKit.Gap(ex, 31);
-            var photos = DesignKit.Row("Photos", ex, 0, 21);
-            Example(photos, "example_1", "몸 전체가 보여요", true);
-            Example(photos, "example_2", "밝고 선명해요", true);
-            Example(photos, "example_3", "몸이 잘렸어요", false);
+            var tips = DesignKit.Row("Tips", ex, 0, 21);
+            Example(tips, "dog_full", "몸 전체가 보여요", true);
+            Example(tips, "dog_bright", "밝고 선명해요", true);
+            Example(tips, "dog_cropped", "몸이 잘렸어요", false);
 
             DesignKit.Gap(body, 4);
             BuildServerRow(body);
@@ -439,15 +439,18 @@ namespace Beside.UI.Designed
             DesignKit.Icon("chevron_right", homeLibCard, 52, DesignKit.InkMuted);
         }
 
-        static void Example(Transform row, string photo, string caption, bool good)
+        /// <summary>One "이런 사진이 잘 나와요" tip: a dog picture on a tinted tile (blue = good, red = avoid) with a ✓/✕ badge
+        /// in the corner and the caption below (2026-11-28: icons instead of the example photos, design option A).
+        /// The pictures are full-color PNGs (two colors in "dog_bright"), so they are drawn untinted.</summary>
+        static void Example(Transform row, string icon, string caption, bool good)
         {
-            var fig = R("Example_" + photo, row);
+            var fig = R("Example_" + icon, row);
             UiKit.Column(fig, 16f, 0);
             DesignKit.Equal(fig);
             var pic = R("Pic", fig);
-            DesignKit.MaskBox(pic, DesignKit.Ground, 31f);
+            DesignKit.Box(pic, good ? DesignKit.AccentSoft : DesignKit.DangerSoft, 31f);
             UiKit.Height(pic, 260);
-            DesignKit.SetCover(DesignKit.CoverImage(pic), DesignKit.Photo(photo));
+            DesignKit.Icon(icon, pic, 196, Color.white);
             var badge = UiKit.Rect("Badge", pic, Vector2.one, Vector2.one, new Vector2(-68, -68), new Vector2(-16, -16));
             DesignKit.Circle(badge, good ? DesignKit.Success : DesignKit.Danger);
             DesignKit.Icon(good ? "check" : "close", badge, good ? 31 : 29, Color.white);
@@ -539,7 +542,7 @@ namespace Beside.UI.Designed
 
             var tip = DesignKit.Card("Tip", body, 62f, 52, 47, 16f);
             DesignKit.Label("Title", tip, "기다리는 동안", 34, DesignKit.Accent, 0, TextAnchor.MiddleLeft, true);
-            DesignKit.Label("Body", tip, "AR은 무늬가 적고 밝은 바닥에서 잘 인식돼요. 배치한 뒤 두 손가락으로 크기를 바꿀 수 있어요.", 36, DesignKit.Ink, 0).lineSpacing = 1.1f;
+            DesignKit.Label("Body", tip, "AR은 무늬가 적고 밝은 바닥에서 잘 인식돼요. 크기는 '저장한 강아지'에서 키를 입력해 바꿀 수 있어요.", 36, DesignKit.Ink, 0).lineSpacing = 1.1f;
 
             DesignKit.Label("Note", bottom, "앱을 닫아도 계속 만들어요", 34, DesignKit.InkSoft, 60, TextAnchor.MiddleCenter);
         }
@@ -1034,6 +1037,7 @@ namespace Beside.UI.Designed
 
         void OnModelPlaced(string jobId, GameObject instance)
         {
+            LockScale(instance);   // the size comes from the saved dog's height, not a pinch
             if (arOverlay.gameObject.activeSelf) SetPlaced(true);
             else placed = true;
         }
@@ -1645,7 +1649,7 @@ namespace Beside.UI.Designed
         }
 
         /// <summary>Scales the model to cm tall (0 = the size the loader fitted). Copies already on the floor follow by
-        /// the same ratio, so a size the user pinched stays relative.</summary>
+        /// the same ratio and stay locked at their new size (<see cref="LockScale"/>).</summary>
         void ApplyHeight(GameObject template, int cm)
         {
             if (template == null) return;
@@ -1657,7 +1661,25 @@ namespace Beside.UI.Designed
             if (limiter == null || oldK <= 1e-6f || Mathf.Approximately(k, oldK)) return;
             foreach (var go in limiter.PlacedModels)
                 if (go != null && go.name.StartsWith(template.name, System.StringComparison.Ordinal))
+                {
                     go.transform.localScale *= k / oldK;
+                    LockScale(go);
+                }
+        }
+
+        /// <summary>Turns off pinch-to-scale on a placed pet (2026-11-28): the size is set by the saved dog's height.
+        /// ARTransformer has no switch for scaling alone (it also moves and turns the pet), and it keeps the scale
+        /// between MinScale and MaxScale, so both are set to the pet's current scale. This also stops it from pulling
+        /// a height outside the old 0.3~2x range back into that range on the first touch.</summary>
+        static void LockScale(GameObject pet)
+        {
+            if (pet == null) return;
+            float s = pet.transform.localScale.x;
+            foreach (var t in pet.GetComponentsInChildren<UnityEngine.XR.Interaction.Toolkit.Transformers.ARTransformer>(true))
+            {
+                t.minScale = s;
+                t.maxScale = s;
+            }
         }
 
         /// <summary>Small JPG of the job's photo for the saved model (null without a photo).</summary>

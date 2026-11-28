@@ -138,7 +138,7 @@ Runpod 사용 예상: Pod 세션·리허설·발표 당일을 합쳐 약 15 h ×
 | 1 | 서버 꺼짐/404/409/413 문구 | [ ] | 문구 코드는 있음(`ErrorMessages.cs`), 실기기 미확인 | UN |
 | 1 | `metrics.csv` 5열 10회 [실험 결과] | [ ] | 기록 코드 있음(`MetricsRecorder.cs`), 데이터 0건 | UN |
 | 2 | 30초 `avgFps` ≥ 30 [실험 결과] | [ ] | 측정 0건 | UN · 기기 |
-| 2 | 스케일·회전·재배치 | [ ] | 증빙 없음. 핀치 범위가 PLAN(0.2~1.5)과 프리팹(`m_MinScale` 0.3)에서 다름 | UN |
+| 2 | 스케일·회전·재배치 | [ ] | 증빙 없음. 핀치 범위가 PLAN(0.2~1.5)과 프리팹(`m_MinScale` 0.3)에서 다름 → 2026-11-28 핀치 확대를 없애고 크기는 저장한 강아지의 키로 정함(unity/CHANGELOG) | UN |
 | 2 | `metrics.csv` 10열, 기기 2종 이상 | [ ] | 데이터 0건. minSdk 34 라 Android 14 이상만 설치됨(`ProjectSettings.asset:184`) | UN · 기기 |
 | 3 | exp-01 ~ 04 기록 | [ ] | ~~기록 0건~~ → 2026-11-25 확인: `generation/experiments/` 에 기록 5개. exp-01(2026-11-17, A40 베이스라인) **[실험 결과]**, Unity 트랙 조사 3개(모델 비교·방해 요소·같은 개 일관성, RTX 4060 Ti) **[실험 결과]**, exp-03 은 틀만 **[계획]**(실행 전). ~~exp-02·exp-04 는 없음~~ → 2026-11-26: exp-02·03·04 를 한 세션으로 묶은 [exp-04 계획](../generation/experiments/2026-11-26_exp-04_ab-input-texture.md) 문서와 도구 `generation/tools/eval_*.py`(시험 `test_eval3d.py`) 가 있다. 도구는 **[구현됨]**, 계획 문서의 실행은 아래처럼 [계획]. 실제 실행은 0건 **[계획]**(11/27 Pod·11/28 채점) | GEN · Runpod |
 | 3 | 베이스라인 수치·환경 | [ ] | ~~측정 0건~~ → 2026-11-25 확인(exp-01): A40 에서 inferMs 3.9~5.7 s, gpuPeakMB 5,120, 환경 표 **[실험 결과]**(CC0 사진 3장, 표본 4건 + 2차 부하 시험 539건). 우리 사진 3마리 이상(exp-02)은 [계획] | GEN |
@@ -173,7 +173,7 @@ Runpod 사용 예상: Pod 세션·리허설·발표 당일을 합쳐 약 15 h ×
 
 ### Unity (UN)
 - [x] 재시도 버그(위 2-6) — 2026-11-25 확인: 2026-11-20 `a7063bf` 로 코드 고침. 기기 확인은 0절 S7.
-- [ ] 빌드 기본 서버 주소: 코드 `http://192.168.0.10:8080`(`JobManager.cs:25`), 씬 `http://localhost:8080` → VM 이 생겼다: `https://beside-team.duckdns.org`(2026-11-13). ~~추론은 아직 샘플 GLB 를 돌려주는 스텁~~ → 2026-11-17 부터 Runpod A40 Pod 의 실제 AnimalLift 다(Pod 는 쓸 때만 켬, 2026-11-25 VM 은 main `625c2a5`, real·prod). 앱의 서버 설정 화면에서 먼저 시험. 시연 빌드는 0절 M6.
+- [ ] 빌드 기본 서버 주소: 코드 `http://192.168.0.10:8080`(`JobManager.cs:25`), 씬 `http://localhost:8080` → VM 이 생겼다: `https://beside-team.duckdns.org`(2026-11-13). ~~추론은 아직 샘플 GLB 를 돌려주는 스텁~~ → 2026-11-17 부터 Runpod A40 Pod 의 실제 AnimalLift 다(Pod 는 쓸 때만 켬, 2026-11-25 VM 은 main `625c2a5`, real·prod). 앱의 서버 설정 화면에서 먼저 시험. 시연 빌드는 0절 M6. → 2026-11-28 씬 기본값을 `https://beside-team.duckdns.org` 로 바꿈(unity/CHANGELOG).
 - [ ] HTTP 허용 설정 정리: `insecureHttpOption` 이 Always allowed(`ProjectSettings.asset`), README 는 "릴리스 전 Not allowed". VM HTTPS 뒤 정리.
 - [ ] minSdk 34 가 의도인지 확인(README 는 24).
 - [x] 커밋 안 된 `unity/ProjectSettings` 변경 정리(URP 전역 설정 목록이 비워짐, 나머지는 줄바꿈만 다름) — 담당자가 판단. → 2026-11-25 확인: 루트 체크아웃과 이 worktree 의 `git status` 에 `unity/ProjectSettings` 변경이 없다.

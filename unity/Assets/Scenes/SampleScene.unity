@@ -7605,7 +7605,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 899766bc0ca99ec4eb0f12dcf41a75a2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Beside.Job.JobManager
-  baseUrl: http://localhost:8080
+  baseUrl: https://beside-team.duckdns.org
   pollingIntervalSeconds: 2
   maxWaitSeconds: 600
   resumeOnStart: 1

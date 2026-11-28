@@ -157,7 +157,7 @@
     setClip("idle");
     if (value) {
       setStatus("배치됨", COLORS.success);
-      setHint("한 손가락으로 옮기고, 두 손가락으로 돌리거나 크기를 바꿀 수 있어요");
+      setHint("한 손가락으로 옮기고, 두 손가락으로 돌릴 수 있어요");
     }
   }
   function setFound(found) {
