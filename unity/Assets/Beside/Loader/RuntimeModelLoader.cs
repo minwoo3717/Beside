@@ -222,6 +222,8 @@ public class RuntimeModelLoader : MonoBehaviour
         if (baseMaterialTemplate != null)
             ReplaceMaterials(modelRoot, gltf, model.owned);
 
+        AddRestPose(modelRoot, model.owned);   // before anything plays: the template sits under the inactive holder
+
         modelRoot.localRotation = FacingToPlusZ(modelFacing);   // head -> +Z (faces the camera on spawn)
 
         if (!FitModel(template.transform, modelRoot))
@@ -532,6 +534,56 @@ public class RuntimeModelLoader : MonoBehaviour
         model.owned.Clear();
         imports.Remove(model.gltf);
         model.gltf.Dispose();
+    }
+
+    /// <summary>
+    /// Adds a still clip holding every skin bone's rest pose (<see cref="Beside.Pet.PetAnimationPlayer.RestClip"/>).
+    /// The GLB clips move only some bones (e.g. TailWag 13 of 36), and the legacy Animation leaves the bones a clip does
+    /// not move where the last clip left them: a Sit cut short stayed half-sat under the next clip (2026-11-28).
+    /// PetAnimationPlayer plays this clip on layer 0 under the real clips, so those bones fade back to rest.
+    /// Read right after import, before any clip has played. Placed copies get it with the Animation component.
+    /// </summary>
+    static void AddRestPose(Transform modelRoot, List<UnityEngine.Object> owned)
+    {
+        var anim = modelRoot.GetComponentInChildren<Animation>(true);
+        if (anim == null) return;
+        var bones = new HashSet<Transform>();
+        foreach (var smr in modelRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            foreach (var b in smr.bones) if (b != null) bones.Add(b);
+
+        var clip = new AnimationClip { legacy = true, name = Beside.Pet.PetAnimationPlayer.RestClip, wrapMode = WrapMode.Loop };
+        int count = 0;
+        foreach (var b in bones)
+        {
+            string path = RelativePath(anim.transform, b);
+            if (path == null) continue;
+            Vector3 p = b.localPosition, s = b.localScale; Quaternion r = b.localRotation;
+            Hold(clip, path, "localPosition.x", p.x); Hold(clip, path, "localPosition.y", p.y); Hold(clip, path, "localPosition.z", p.z);
+            Hold(clip, path, "localRotation.x", r.x); Hold(clip, path, "localRotation.y", r.y);
+            Hold(clip, path, "localRotation.z", r.z); Hold(clip, path, "localRotation.w", r.w);
+            Hold(clip, path, "localScale.x", s.x); Hold(clip, path, "localScale.y", s.y); Hold(clip, path, "localScale.z", s.z);
+            count++;
+        }
+        if (count == 0) { Destroy(clip); return; }
+        anim.AddClip(clip, clip.name);
+        owned.Add(clip);
+        Debug.Log($"[RuntimeModelLoader] Rest pose clip: {count} bones");
+    }
+
+    static void Hold(AnimationClip clip, string path, string property, float value) =>
+        clip.SetCurve(path, typeof(Transform), property, AnimationCurve.Constant(0f, 1f, value));
+
+    /// <summary>Path of <paramref name="t"/> below <paramref name="root"/> ("" for root itself), or null if it is not below it.</summary>
+    static string RelativePath(Transform root, Transform t)
+    {
+        if (t == root) return "";
+        string path = t.name;
+        for (var p = t.parent; p != null; p = p.parent)
+        {
+            if (p == root) return path;
+            path = p.name + "/" + path;
+        }
+        return null;
     }
 
     /// <summary>Spawned copies are named "{template}(Clone)"; templates themselves sit under the inactive holder.</summary>

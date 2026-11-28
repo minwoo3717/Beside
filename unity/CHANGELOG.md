@@ -2,6 +2,16 @@
 
 Unity 앱의 변경을 날짜순으로 적는다. 2026-10-29~11-17 작업은 연구용 프로젝트(Beside_Reserch)에서 하고 11-17에 이 폴더로 옮겼다. 앱에 영향을 주는 서버 쪽 변경은 "서버"로 표시했다. 그 전 내용은 git 기록을 본다.
 
+## 2026-11-28 (홈 예시 아이콘, 핀치 확대 제거, 동작 끊김 자세, 기본 서버, 앱 아이콘)
+
+기기(SM-S947N)에서 확인했다.
+
+- 홈 "이런 사진이 잘 나와요": 예시 사진 대신 그림(`Icons/dog_full`·`dog_bright`·`dog_cropped`, 256×205 색이 든 PNG — 다른 아이콘과 달리 코드에서 색을 입히지 않는다). 칸 배경은 좋은 예 `AccentSoft`, 피할 예 `DangerSoft`, 모서리 ✓/✕ 배지는 그대로. `Examples/example_1~3.jpg` 는 쓰지 않지만 남겨 둠. 웹 미리보기(`docs/ui-preview`)는 아직 사진을 보인다 [계획]
+- 두 손가락 확대·축소 제거: 크기는 '저장한 강아지'의 키로 정한다. `ARTransformer` 는 확대만 끄는 설정이 없어(옮기기·돌리기도 같은 컴포넌트) 놓을 때(`OnModelPlaced`)와 키를 바꿀 때(`ApplyHeight`) `minScale = maxScale = 지금 크기`로 묶는다(`LockScale`). 키가 예전 0.3~2배 밖이면 처음 만질 때 그 범위로 끌려가던 문제도 함께 없어짐. 안내 문구에서 "크기를 바꿀 수 있어요"를 뺌
+- 동작 끊김 자세: GLB 클립이 뼈 일부만 움직여(36개 중 Idle 14·Walk 28·Sit 22·TailWag 13·HeadTilt 11) 앉기 도중 다른 동작을 누르면 반쯤 앉은 채로 남았다(Legacy `Animation` 은 클립이 안 건드리는 뼈를 그대로 둔다). 로더가 불러온 직후 뼈의 원래 자세로 정지 클립 `Rest` 를 만들어 넣고(`AddRestPose`), `PetAnimationPlayer` 가 Rest 를 레이어 0, 나머지를 레이어 1 에 둬 안 건드리는 뼈가 원래 자세로 페이드한다
+- 씬 `JobManager.baseUrl` 기본값 `http://localhost:8080` → `https://beside-team.duckdns.org`(앱 서버 설정에 저장한 값이 있으면 그것이 우선). Product Name `BesideApp` → `Beside`
+- 앱 아이콘: Android 적응형(`Assets/Beside/AppIcon/AppIcon_Background`·`AppIcon_Foreground`, 1024px). 원본 한 장(`AppIcon_Source`, 둥근 모서리 밖이 흰색)에서 배경 그라데이션과 흰 그림을 나누고, 원형 마스크에서도 프레임이 잘리지 않게 그림을 줄였다. `AppIcon_Legacy`·`AppIcon_Round` 는 만들어 두었지만 Player 설정에는 적응형만 넣음
+
 ## 2026-11-27 (관측 보강 트랙 D — 추적 헤더·문의 번호·불러오기 이벤트)
 
 멘토링 '로깅·트레이싱·모니터링' 보강 계획의 트랙 D. 계약은 openapi v1.3 후보(C0, `609e84c`): 요청 헤더 `traceparent`, 이벤트 `saved_dog_open`·`saved_dog_change`·`app_error`, 화면 `library`·`camera`, `model_placed` 새 정의(모든 배치 + `again`·`source`).

@@ -16,6 +16,10 @@ namespace Beside.Pet
     /// </summary>
     public class PetAnimationPlayer : MonoBehaviour
     {
+        /// <summary>The rest-pose clip RuntimeModelLoader adds: played on layer 0 under every clip, so the bones a clip
+        /// does not move go back to rest instead of keeping the last clip's pose (a Sit cut short stayed half-sat).</summary>
+        public const string RestClip = "Rest";
+
         public string idleClip = "Idle";
         public string[] loopClips = { "Idle", "Walk", "TailWag" };
         public string[] oneShotClips = { "Sit", "HeadTilt" };
@@ -84,7 +88,7 @@ namespace Beside.Pet
                 if (list.Count == 0) return null;
                 string best = null; float bestWeight = 0f;
                 foreach (AnimationState st in list[0])
-                    if (st.enabled && st.weight > bestWeight) { bestWeight = st.weight; best = st.name; }
+                    if (st.name != RestClip && st.enabled && st.weight > bestWeight) { bestWeight = st.weight; best = st.name; }
                 if (best == null) return null;
                 int q = best.IndexOf(" - Queued Clone", StringComparison.Ordinal);
                 return q >= 0 ? best.Substring(0, q) : best;
@@ -109,6 +113,7 @@ namespace Beside.Pet
         {
             AnimationState state = anim[clip];
             if (state == null) return false;
+            EnsureRestLayer(anim);
 
             bool oneShot = Array.IndexOf(oneShotClips, clip) >= 0;
             state.wrapMode = oneShot ? WrapMode.Once : WrapMode.Loop;
@@ -120,6 +125,19 @@ namespace Beside.Pet
                 anim.CrossFadeQueued(idleClip, fadeSeconds, QueueMode.CompleteOthers);   // back to Idle when done
             }
             return true;
+        }
+
+        /// <summary>Rest on layer 0 (always playing), every other clip on layer 1. A layer-1 clip gets the full weight on
+        /// the bones it moves; the bones it does not move fall through to Rest. CrossFade stops only its own layer.</summary>
+        static void EnsureRestLayer(Animation anim)
+        {
+            var rest = anim[RestClip];
+            if (rest == null) return;   // a model loaded without it: clips play as before
+            foreach (AnimationState st in anim) if (st.name != RestClip) st.layer = 1;
+            rest.layer = 0;
+            rest.wrapMode = WrapMode.Loop;
+            if (!anim.IsPlaying(RestClip)) anim.Play(RestClip, PlayMode.StopSameLayer);
+            rest.weight = 1f;
         }
 
         void Update()
